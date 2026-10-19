@@ -607,7 +607,7 @@ class Forecast extends MY_Controller {
             $fname = $xl->filename($label, 'planned_availability');
         }
 
-        $tmp = sys_get_temp_dir() . '/' . $fname;
+        $tmp = wms_temp_path($fname);
         $xl->save($sheets, $tmp);
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

@@ -60,14 +60,12 @@ class Dashboard extends MY_Controller {
         $data['fleet_kpi_by_type'] = $this->Dashboard_model->get_fleet_kpi_by_type();
 
         // --- Recent WOs ---
-        $data['recent_wo'] = $this->db
-            ->select('w.*,e.registration_no,u.first_name AS assigned_name')
-            ->from('work_orders w')
-            ->join('equipment e','e.id=w.equipment_id','left')
-            ->join('users u','u.id=w.assigned_to','left')
-            ->order_by('w.created_at','DESC')
-            ->limit(5)
-            ->get()->result();
+        // `assigned_to` is a CSV of user IDs, so joining `users` on it only ever
+        // matched the first technician (MySQL coerces '3,5' to 3) and could
+        // print the wrong name. The model resolves the whole list after the
+        // query; the card itself shows machine + status, not the assignee.
+        $this->load->model('Workorder_model');
+        $data['recent_wo'] = $this->Workorder_model->get_recent(5);
 
         // --- Due PM ---
         $data['due_pm'] = $this->db

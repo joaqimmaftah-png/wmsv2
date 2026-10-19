@@ -27,10 +27,13 @@ class Backlog extends MY_Controller {
             'filter'     => $filter,
             'available'  => $this->Backlog_model->available(),
             'can_write'  => $this->can_write(),
+            // The view only offers "Close (verify)" to a supervisor. This was
+            // assigned AFTER render(), so it never reached the view and the
+            // button never appeared (K-06).
+            'is_supervisor' => $this->is_supervisor(),
             'page_title' => 'Backlog Register',
         );
         $this->render('backlog/index', $data);
-        $data['is_supervisor'] = $this->is_supervisor();
     }
 
     /* ── CREATE ────────────────────────────────────────── */
@@ -197,7 +200,7 @@ class Backlog extends MY_Controller {
         }
 
         $name = 'Backlog_'.date('Ymd_His').'.xlsx';
-        $tmp  = sys_get_temp_dir().'/'.$name;
+        $tmp  = wms_temp_path($name);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$name.'"');

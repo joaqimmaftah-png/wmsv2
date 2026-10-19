@@ -1,5 +1,5 @@
 <?php
-$status_colors = ['Open'=>'b-open','In Progress'=>'b-progress','Waiting Parts'=>'b-waiting','Completed'=>'b-completed','Closed'=>'b-closed'];
+$status_colors = ['Open'=>'b-open','In Progress'=>'b-progress','Waiting Parts'=>'b-waiting','Waiting Tools'=>'b-waiting','Completed'=>'b-completed','Closed'=>'b-closed'];
 $prio_colors   = ['Critical'=>'b-critical','High'=>'b-high','Medium'=>'b-medium','Low'=>'b-low'];
 // W0.1: the breakdown badge follows the is_breakdown flag (see application/helpers/wo_helper.php)
 $type_colors   = ['Preventive Maintenance'=>'b-primary','Incident'=>'b-warning'];
@@ -8,10 +8,14 @@ $sc = (isset($status_colors[$wo->status]) ? $status_colors[$wo->status] : 'b-sec
 $pc = (isset($prio_colors[$wo->priority]) ? $prio_colors[$wo->priority] : 'b-secondary');
 $tc = (wo_is_breakdown($wo) ? 'b-danger' : (isset($type_colors[$wo->type]) ? $type_colors[$wo->type] : 'b-secondary'));
 
+// Every status the enum offers must have a way out of itself: `Waiting Tools`
+// was missing here, so a work order parked on it rendered no transition
+// options and could only be moved through the edit form.
 $status_next = [
-  'Open'          => ['In Progress','Waiting Parts','Closed'],
-  'In Progress'   => ['Waiting Parts','Completed','Closed'],
-  'Waiting Parts' => ['In Progress','Completed','Closed'],
+  'Open'          => ['In Progress','Waiting Parts','Waiting Tools','Closed'],
+  'In Progress'   => ['Waiting Parts','Waiting Tools','Completed','Closed'],
+  'Waiting Parts' => ['In Progress','Waiting Tools','Completed','Closed'],
+  'Waiting Tools' => ['In Progress','Waiting Parts','Completed','Closed'],
   'Completed'     => ['Closed'],
   'Closed'        => [],
 ];

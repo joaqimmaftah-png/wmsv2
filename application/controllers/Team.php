@@ -125,14 +125,37 @@ class Team extends MY_Controller {
                     return;
                 }
 
-                $this->db->replace('attendance', array(
-                    'user_id'    => (int)$user_id,
-                    'date'       => $date,
+                /*
+                 * REPLACE deletes the row and inserts a new one: the id changes,
+                 * `hours_worked` is reset, and any note is lost — including the
+                 * marker an approved leave wrote, which would then survive its
+                 * own rejection. Update the existing day instead (the table has
+                 * UNIQUE(user_id, date)).
+                 */
+                $existing = $this->db->select('id, notes')
+                    ->where('user_id', (int)$user_id)->where('date', $date)
+                    ->get('attendance')->row();
+
+                $row = array(
                     'status'     => $record['status'],
                     'check_in'   => $check_in,
                     'check_out'  => $check_out,
                     'created_by' => $this->user_id,
-                ));
+                );
+
+                if ($existing) {
+                    // The day is no longer Leave, so it must no longer be
+                    // claimed by the leave request: clear only its marker.
+                    if ($record['status'] !== 'Leave'
+                        && strpos((string)$existing->notes, Team_model::LEAVE_ATTENDANCE_PREFIX) === 0) {
+                        $row['notes'] = NULL;
+                    }
+                    $this->db->where('id', $existing->id)->update('attendance', $row);
+                } else {
+                    $row['user_id'] = (int)$user_id;
+                    $row['date']    = $date;
+                    $this->db->insert('attendance', $row);
+                }
             }
 
             if ($this->db->trans_status() === FALSE) {

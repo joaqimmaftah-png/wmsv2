@@ -1320,9 +1320,11 @@ POST (many also render a form on GET); POST-only endpoints return 405 on GET.
 | forecast | `index` (`?week=`), `generate` POST, `create_inspection_rounds` POST, `save_cell` POST, `publish` POST, `jobs`, `save_job` POST, `delete_job` POST, `plan_vs_actual`, `rolling`, `parts(id)`, `save_part` POST, `delete_part` POST, `export([planned\|rolling])`, `spares`, `allowances` |
 | reports | `index`, `daily`, `weekly`, `monthly`, `mttr_mtbf`, `availability_forecast`, `monthly_plan`, `export_monthly_plan_xlsx`, `lube_compliance`, `lube_compliance_yearly`, `store_analytics`, `asset_register`, `export_asset_register_xlsx`, `asset_template_xlsx`, `import_asset_register` POST, `asset_import_report(token)`, `annual_report`, `export_annual_report_xlsx`, `annual_plan`, `export_annual_plan_xlsx`, `service_kits`, `export_service_kits_xlsx`, `equipment_history(id)`, `materials_movement`, `export_materials_xlsx`, `workshop_weekly`, `export_workshop_weekly_xlsx`, `export_workshop_weekly_pdf` (print HTML), `workshop_daily`, `export_workshop_daily_xlsx`, `export_workshop_daily_pdf` (print HTML), `export_excel(workorders\|attendance\|lubricants)` **CSV** despite the name, `pdf_daily` (print HTML), `issue_register`, `export_issue_register_xlsx`, `receipt_register`, `export_receipt_register_xlsx`, `reorder`, `export_reorder_xlsx`, `weekly_targets`, `weekly_targets_save/bulk/copy/delete` POST, `weekly_w36`, `weekly_report_name` POST, `export_weekly_w36_xlsx`, `export_weekly_w36_pdf` (print HTML, `?live=1`, `?noauto=1`), `publish_weekly_w36` POST |
 
-**Dead routes** (defined, target missing → 404): `maintenance/*` (no
-`Maintenance` controller; the *views* folder `views/maintenance/` is used by
-workorders/equipment/pm), `dashboard/kpi_data` (no such method).
+**Dead routes removed** (K-07): `maintenance/*` (there is no `Maintenance`
+controller; the *views* folder `views/maintenance/` is used by
+workorders/equipment/pm) and `dashboard/kpi_data` (no such method). Nothing
+linked to either; both only ever produced a 404 through a route that resolved
+to nothing.
 
 Report inventory (all under `reports`, roles Supervisor + Manager):
 daily / weekly / monthly operational reports; MTTR-MTBF (3–24 months);
@@ -1372,6 +1374,7 @@ equipment history (WOs + KPIs + lube); W36 weekly (§7.9) + weekly targets.
 | `helpers/wo_helper.php` | Breakdown classification (`wo_is_breakdown`, `wo_bucket(s)`) and the five hold codes with labels |
 | `helpers/equip_helper.php` | Equipment-status predicates/colours — the single interpretation of `equipment.status` values (the enum's `In Maintenance`, not `Maintenance`) |
 | `helpers/csrf_helper.php` | `csrf_field()` for hand-written forms (token name from the Security class) |
+| `helpers/tmp_helper.php` | `wms_temp_path()` — private temp path for a generated download (random token + the offered filename), so concurrent exports cannot overwrite each other (K-19) |
 
 Models not yet mentioned: `Store_model` (issue/receipt registers, register
 totals, allocation consumption, monthly movement; feature-detects the movement
@@ -1460,7 +1463,7 @@ backlog closure/inspection-link columns, and `security_events`.
 | `uploads/tmp/` | generated workbooks (deleted after send), uploaded import files (deleted after processing), parked import-report JSON (24 h) | Materials, Reports | **Denied** (`uploads/tmp/.htaccess`) |
 | `uploads/documents/` | certification documents (`cert_<user_id>_<ts>`), pdf/jpg/png ≤ 8 MB | Team | Direct (script-blocked); deleting the certificate removes its file |
 | `uploads/logoam.png` | company logo embedded in W36 outputs | manual | Direct |
-| PHP temp dir | forecast + backlog workbooks (deleted after send) | Forecast, Backlog | n/a |
+| PHP temp dir | generated workbooks (`wms_<random>_<name>`, deleted after send) | Forecast, Backlog, Reports | n/a |
 
 Deleting DB rows does not delete files (except attachment delete, which
 removes the file first — see `Workorder_model::delete_attachment`), and
@@ -1546,11 +1549,22 @@ Two previously-unused paths are live now: `uploads/documents/` stores
 certification documents, and `Workorder_model::get_lube_consumption()` is
 called by the work-order detail page.
 
+**Also fixed in this revision (register §18):** the backlog
+supervisor close button that never rendered (K-06); three dead routes
+(K-07); the WO-create path that flashed success over a failed insert (the WO
+half of K-09); the last null-dereference write paths (K-10, now resolved);
+the dashboard's CSV assignee join (K-12); and colliding temp-file names in
+all eleven workbook exports (K-19). The dashboard's **Failures** and
+**Downtime** cards now come from the KPI engine — the same 30-day window,
+the same breakdown-event grouping and the same open-hour clipping as W36 —
+instead of a raw count/sum of `work_orders`; the fleet window is computed
+once per request instead of three times.
+
 **Present but dead/unused:** `kpi_log` and `excel_migration_log` tables (no
-code references); `views/layouts/header-apple.php`; routes `maintenance/*`,
-`dashboard/kpi_data`; model methods with no callers in controllers/views
+code references); `views/layouts/header-apple.php`; model methods with no
+callers in controllers/views
 (e.g. `Dashboard_model::count_overdue_pm_count`,
-`Dashboard_model::get_wo_ratio`, `Workorder_model::get_recent`); inspection
+`Dashboard_model::get_wo_ratio`); inspection
 `status='draft'` (schema allows, UI always submits); CodeIgniter's Encryption
 library (configured key, never loaded).
 
@@ -1578,20 +1592,20 @@ are to the reviewed commit.
 | K-03 | Medium | Runtime logs committed (`application/logs/log-2026-10-19.php`, `php_errors.log`) — reveal absolute server paths and operational details. | Untrack and ignore `application/logs/*` (keep `.gitkeep`). |
 | K-04 | **Resolved** | Attachment/document **downloads fatal-errored**: `force_download()` is called in `Workorders::download_attachment()` and `Orders::download_document()` but CodeIgniter's `download` helper was never loaded. Uploads work; downloads returned 500. Files remain reachable by direct URL under `uploads/…` (names are timestamp-based, i.e. guessable — a confidentiality consideration for incident evidence). | Fixed in this revision: `download` added to `$autoload['helper']`. |
 | K-05 | **Resolved** | PM completion never recorded the meter reading for `Km`-interval schedules: `Pm::complete()` checked `['Hours','Kilometres']` but the enum value is `Km`. Hours schedules worked. | Fixed in this revision: the handler compares `Hours`/`Km` and translates to `Kilometres` only for the meter writer (`Pm.php`). |
-| K-06 | Medium | The backlog list's supervisor **"Close (verify)" button never renders**: `Backlog::index()` sets `$data['is_supervisor']` **after** `$this->render(...)`. The endpoint itself works; supervisors must close via the work order (or POST directly). | `application/controllers/Backlog.php::index()`, `views/backlog/index.php` (`$is_supervisor`). |
-| K-07 | Low | Dead routes: `maintenance/*` (no controller) and `dashboard/kpi_data` (no method) → 404. | `application/config/routes.php`. |
+| K-06 | **Resolved** | The backlog list's supervisor **"Close (verify)" button never rendered**: `Backlog::index()` set `$data['is_supervisor']` **after** `$this->render(...)`. | Fixed in this revision: the flag is part of the render data. A sweep of every controller found no other `render()`-before-data site. |
+| K-07 | **Resolved** | Dead routes: `maintenance/*` (no controller) and `dashboard/kpi_data` (no method) → 404. | Fixed in this revision: both removed from `routes.php`; no view or controller linked to them. |
 | K-08 | **Resolved** | Onboarding references were broken: the built-in setup pages and code comments pointed to at least a dozen files that didn't exist in the repo, including the import file named in the "Database Setup Required" page. All such references have been rewritten (§17) — messages now name the shipped dump and comments describe the probed table/column, so a fresh clone can be installed by following the in-app text and `README.md`. | `MY_Controller::_show_db_config_error()`, `Auth::__construct()`, various comments. |
-| K-09 | Medium | Weak server-side validation on several write paths. WO create/edit have no form-validation rules and `create()` doesn't check the insert result before flashing success and saving child rows; `Team::create/edit` skip the uniqueness/min-length checks that `Users` enforces and flash success unconditionally. With non-strict SQL modes, invalid enum values can be silently coerced — *to verify at runtime* against the production `sql_mode` (connection sets `stricton = FALSE`). | `Workorders::create/edit`, `Team::create/edit`, `application/config/database.php`. |
-| K-10 | Low | Null dereferences on crafted input: `Lubricants::record()` used `$eq->equipment_type_id` without checking the equipment exists; `Orders::create()` does the same with the supplier. Normal UI flow always sends valid IDs. | **Lubricants fixed** in this revision (guarded, plus the optional work-order link is validated against the machine); `Orders.php` still open. |
+| K-09 | Medium | Weak server-side validation on several write paths. `Team::create/edit` skip the uniqueness/min-length checks that `Users` enforces and flash success unconditionally. With non-strict SQL modes, invalid enum values can be silently coerced — *to verify at runtime* against the production `sql_mode` (connection sets `stricton = FALSE`). | **WO create fixed** in this revision: machine, type, status and title are validated and a failed insert aborts before any child row is written. `Team::create/edit` and WO edit still open. |
+| K-10 | **Resolved** | Null dereferences on crafted input: `Lubricants::record()` used `$eq->equipment_type_id` without checking the equipment exists; `Orders::create()` did the same with the supplier. | Fixed in this revision: both guard the lookup and flash a message; the optional lubricant work-order link is also validated against the machine. |
 | K-11 | Low | Currency handling is inconsistent: seeded `settings.currency='USD'` is never read; suppliers/orders default to `TZS`; material prices are `unit_price_ugx`/`unit_price_usd`; manual goods receipts hard-code `UGX`. Order spend totals (CEO dashboard, store analytics) sum `total_cost` as recorded per order with no currency conversion — meaningful only if all orders share a currency. | §7.5, §7.7. |
-| K-12 | Low | Dashboard "recent work orders" resolves the assignee by joining `users.id = work_orders.assigned_to`, but `assigned_to` is a CSV — at best the first technician matches (MySQL coercion); multi-technician names can be blank/wrong there. List/detail pages resolve via `Workorder_model` correctly. Display-only. | `Dashboard::index()`. |
+| K-12 | **Resolved** | Dashboard "recent work orders" resolved the assignee by joining `users.id = work_orders.assigned_to`, but `assigned_to` is a CSV — at best the first technician matched (MySQL coercion). | Fixed in this revision: the card reads `Workorder_model::get_recent()`, which resolves every technician through the CSV parser; the CSV column is never joined again. |
 | K-13 | Medium | No migrations, seeders, or tests in the repository — the dump is the only schema artifact. The defensive table/field probes (§13) mask schema drift instead of failing loudly, so a partially-updated database can silently lose features (e.g. register fields, closure evidence). | Whole repo. |
 | K-14 | Low | `Settings_model::save_many()`'s comment says `settings` has no unique index on `setting_key`; the dump defines one (`UNIQUE KEY setting_key`). Behaviour (select-then-upsert) is correct either way — comment only. | `Settings_model.php` vs dump. |
 | K-15 | **Resolved** | `Team::_make_transparent()` called GD functions without an availability guard → fatal error on hosts without `gd` when a signature image is uploaded. | Fixed in this revision: the function copies the upload unchanged when `gd` is absent. The per-pixel loop is still slow for very large images. |
 | K-16 | Low | Inspection defect priority depends on substring matching of free-text item categories (`no-go`, `go & fix`, FR variants). Renaming a template category in the DB silently changes P1/P2 behaviour. | `Inspection_model::_inspection_item_verdict()`. |
 | K-17 | Info | `base_url` is derived from the request `Host` header; behind a proxy or with host-header manipulation, generated URLs follow the supplied host. Pin `base_url` in `config.local.php` for production hardening. | `config.php`. |
 | K-18 | Low | The whole user row (including password hash) is stored in the DB-backed session (`user_data`) — hashes at rest in `ci_sessions` for every signed-in user. | `Auth::login()`. |
-| K-19 | Low | Forecast/backlog workbook exports write to `sys_get_temp_dir()` under deterministic (label/timestamp) names — simultaneous exports of the same week can collide. Other exports use `uploads/tmp/` with per-second names. | `Forecast::export()`, `Backlog::export_xlsx()`. |
+| K-19 | **Resolved** | Workbook exports wrote to `sys_get_temp_dir()` under deterministic (label/timestamp) names — simultaneous exports of the same week shared one path, so a download could be truncated or contain another user's file. | Fixed in this revision: all 11 export sites use `wms_temp_path()` (`helpers/tmp_helper.php`), which prefixes a random token while keeping the offered filename. `uploads/tmp/` exports still use per-second names. |
 | K-20 | Info | Duplicate unique indexes on `material_transactions.import_key` (`uq_mt_import_key`, `uq_txn_import_key`) — harmless, double write cost on that column. | Dump. |
 | K-21 | Info | `README.md` in the original upload was a 20-byte UTF-16 placeholder ("# wmsv2"); replaced by the current `README.md`. | Git history. |
 

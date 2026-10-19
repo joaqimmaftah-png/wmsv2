@@ -111,12 +111,19 @@ class Workorder_model extends CI_Model {
     }
 
     public function get_recent($limit = 5) {
-        return $this->db
+        $rows = $this->db
             ->select('wo.*, e.registration_no')
             ->from('work_orders wo')
             ->join('equipment e','e.id = wo.equipment_id')
             ->order_by('wo.created_at','DESC')
             ->limit($limit)->get()->result();
+
+        // `assigned_to` is a CSV; resolve every technician through the same
+        // helper the list and detail screens use, never a JOIN on the column.
+        foreach ($rows as $wo) {
+            $wo->assigned_name = $this->_resolve_tech_names($wo->assigned_to);
+        }
+        return $rows;
     }
 
     /**

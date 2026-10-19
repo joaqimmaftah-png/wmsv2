@@ -35,7 +35,14 @@ class Orders extends MY_Controller {
     /* ── CREATE ─────────────────────────────────────────── */
     public function create() {
         if ($this->input->method() === 'post') {
-            $supplier = $this->Supplier_model->get_by_id($this->input->post('supplier_id', TRUE));
+            $supplier = $this->Supplier_model->get_by_id((int)$this->input->post('supplier_id', TRUE));
+            // A crafted/stale supplier_id used to dereference null two lines
+            // later — a 500 instead of a message (K-10).
+            if (!$supplier) {
+                $this->session->set_flashdata('error', 'The selected supplier was not found. The order was not created.');
+                redirect('orders/create');
+                return;
+            }
             $shipping_method = $this->input->post('shipping_method', TRUE);
             $order_date = $this->input->post('order_date', TRUE) ?: date('Y-m-d');
 

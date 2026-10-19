@@ -79,7 +79,33 @@ class Workorders extends MY_Controller {
                 );
             }
 
+            /*
+             * The form posts without server-side rules, so a required field
+             * missing (or an enum value outside the column) used to reach the
+             * INSERT, whose failure was ignored: the page flashed success,
+             * every child row was written against a non-existent work order,
+             * and the user landed on a 404. Validate here and stop before
+             * anything is written (K-09).
+             */
+            $required_ok = $insert['equipment_id'] > 0
+                && trim((string)$insert['title']) !== ''
+                && in_array($insert['type'], array('Corrective Maintenance', 'Preventive Maintenance', 'Incident'), TRUE)
+                && in_array($insert['status'], array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools', 'Completed', 'Closed'), TRUE);
+            if (!$required_ok) {
+                $this->session->set_flashdata('error',
+                    'A work order needs a machine, a type, a status and a title. Nothing was saved.');
+                redirect('workorders/create');
+                return;
+            }
+
             $wo_id = $this->Workorder_model->create($insert);
+            if (!$wo_id) {
+                $this->session->set_flashdata('error',
+                    'The work order could not be saved. Nothing was written — please check the form and try again.');
+                redirect('workorders/create');
+                return;
+            }
+
             $this->Workorder_model->save_spare_parts($wo_id, $this->input->post('spares'));
             $this->Workorder_model->save_oil_records($wo_id,  $this->input->post('lubes'));
 

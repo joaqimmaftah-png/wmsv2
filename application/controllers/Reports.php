@@ -477,7 +477,7 @@ class Reports extends MY_Controller {
         }
 
         $fname = 'Monthly_Plan_'.str_replace('-','_',$plan['month']).'.xlsx';
-        $tmp   = sys_get_temp_dir().'/'.$fname;
+        $tmp   = wms_temp_path($fname);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$fname.'"');
@@ -604,7 +604,7 @@ class Reports extends MY_Controller {
         }
 
         $fname='Annual_Report_'.$year.'.xlsx';
-        $tmp=sys_get_temp_dir().'/'.$fname;
+        $tmp=wms_temp_path($fname);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$fname.'"');
@@ -664,7 +664,7 @@ class Reports extends MY_Controller {
         }
 
         $fname='Annual_Maintenance_Plan_'.$year.'.xlsx';
-        $tmp=sys_get_temp_dir().'/'.$fname;
+        $tmp=wms_temp_path($fname);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$fname.'"');
@@ -752,7 +752,7 @@ class Reports extends MY_Controller {
         }
 
         $fname='Service_Kit_Recommendations_'.date('Ymd').'.xlsx';
-        $tmp=sys_get_temp_dir().'/'.$fname;
+        $tmp=wms_temp_path($fname);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$fname.'"');
@@ -897,7 +897,7 @@ class Reports extends MY_Controller {
         }
 
         $filename = 'Materials_Movement_'.date('Ymd').'.xlsx';
-        $tmp      = sys_get_temp_dir().'/'.$filename;
+        $tmp      = wms_temp_path($filename);
         $xlsx->save($tmp);
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -1455,7 +1455,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         $xlsx->mergeCells("A{$rowNum}", "P{$rowNum}");
 
         $filename = 'Workshop_Weekly_Report_'.date('Ymd',strtotime($week_start)).'_'.date('Ymd',strtotime($week_end)).'.xlsx';
-        $tmp      = sys_get_temp_dir().'/'.$filename;
+        $tmp      = wms_temp_path($filename);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$filename.'"');
@@ -1971,7 +1971,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         $xlsx->mergeCells("A{$rowNum}", "P{$rowNum}");
 
         $filename = 'Workshop_Daily_Report_'.date('Ymd', strtotime($date)).'.xlsx';
-        $tmp      = sys_get_temp_dir().'/'.$filename;
+        $tmp      = wms_temp_path($filename);
         $xlsx->save($tmp);
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -2243,7 +2243,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         }
 
         $name = ($isIssue ? 'Issue_Register_' : 'Receipt_Register_').date('Ymd_His').'.xlsx';
-        $tmp  = sys_get_temp_dir().'/'.$name;
+        $tmp  = wms_temp_path($name);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$name.'"');
@@ -2345,7 +2345,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         }
 
         $name = 'Reorder_Report_'.date('Ymd_His').'.xlsx';
-        $tmp  = sys_get_temp_dir().'/'.$name;
+        $tmp  = wms_temp_path($name);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$name.'"');
