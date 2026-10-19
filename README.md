@@ -32,10 +32,15 @@ this repository is **public**:
   Read [`SECURITY.md`](SECURITY.md) — it is a step-by-step runbook (rotate the
   MySQL password, replace the key, purge the history, verify the old password
   no longer works).
-- `database/yzzme_43038742_aml.sql` is a **full production database dump**,
-  including real staff accounts (most password hashes are legacy **MD5**),
-  the equipment fleet, and ≈12,700 stock movements (K-02, still open).
-- `application/logs/` contains committed runtime log files (K-03, still open).
+- A **full production database dump** (`database/yzzme_43038742_aml.sql`,
+  66 staff accounts, most hashes legacy **MD5**, the fleet and the stock
+  ledger) was tracked until this revision. It is now untracked and ignored;
+  the repository ships `database/schema.sql`, which creates the same 59 tables
+  with reference data only. The old dump is still in public history — every
+  account that existed in it must be treated as password-compromised
+  (K-02; `SECURITY.md` §5).
+- `application/logs/` contained committed runtime log files; they are untracked
+  and ignored now (K-03).
 
 Do not import the dump into a public environment without resetting all
 passwords. See [`SYSTEM.md` §18](SYSTEM.md) for the full register.
@@ -102,7 +107,7 @@ required) for an on-screen environment check.
 │   ├── cache/                 must be writable
 │   └── logs/                  must be writable (CI logs + php_errors.log)
 ├── database/
-│   └── yzzme_43038742_aml.sql The ONLY schema/seed artifact — full production dump (59 tables)
+│   └── schema.sql              Schema + reference data only (59 tables, no staff/fleet/stock)
 └── uploads/                   User files (web-served, script execution blocked by .htaccess)
     ├── photos/                equipment & user photos
     ├── signatures/            drawn/uploaded signatures
@@ -140,22 +145,27 @@ Point the web server document root at the repository root (where `index.php`
 is). `base_url` is auto-detected from the request host, so no URL edit is
 normally needed.
 
-### 3. Create the database and import the dump
+### 3. Create the database and import the schema
 
 ```bash
 mysql -u <user> -p -e "CREATE DATABASE <dbname> CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -u <user> -p <dbname> < database/yzzme_43038742_aml.sql
+mysql -u <user> -p <dbname> < database/schema.sql
 ```
 
 Notes:
 
-- The dump contains **no** `CREATE DATABASE`, `USE`, or `DROP TABLE`
+- The file contains **no** `CREATE DATABASE`, `USE`, or `DROP TABLE`
   statements — import it into an empty database; importing twice will fail on
   existing tables.
 - It creates all 59 tables including `ci_sessions` (required before first
-  sign-in) and loads reference data (roles, settings, inspection templates,
-  report groups/sites, equipment types…) **plus production operational data**
-  (66 user accounts, 116 machines, ≈1,700 stock items, ≈12,700 movements).
+  sign-in) and loads the reference data the application needs: roles,
+  equipment types, lubricant types, report groups/sites, shift definitions and
+  settings. It contains **no staff accounts, no password hashes, no fleet, no
+  suppliers and no stock records** — those belong to a live installation and
+  are not distributed with the code.
+- The production dump that used to live in this repository is *not* part of a
+  fresh install. Create the first account in step 6, then add the fleet and
+  stock through the UI or the Excel importers.
 - On cPanel: create the database and user under *MySQL Databases*, grant the
   user **ALL PRIVILEGES** on it, then import the file with phpMyAdmin.
 
@@ -192,18 +202,14 @@ The PHP process must be able to write to:
 application/logs/  application/cache/  uploads/ (and every subdirectory)
 ```
 
-Import/export workbooks are generated in `uploads/tmp/`; several Forecast and
-Backlog exports use the PHP system temp directory instead.
+Import/export workbooks are generated in `uploads/tmp/`; the Forecast, Backlog
+and Reports exports are written to the PHP system temp directory under a
+random, collision-free name (`wms_temp_path()`, `application/helpers/tmp_helper.php`).
 
 ### 6. First sign-in
 
-Open the site root — you are redirected to `/login`. After importing the
-production dump, the accounts are the production staff accounts (their
-passwords are not documented anywhere and most hashes are MD5 — the sign-in
-screen still accepts legacy MD5/SHA1 hashes and upgrades them to bcrypt on
-first successful sign-in; see `legacy_password_login` below).
-
-For a fresh/cleaned database, create a supervisor directly:
+Open the site root — you are redirected to `/login`. A fresh install from
+`database/schema.sql` has no accounts, so create a supervisor directly:
 
 ```bash
 php -r "echo password_hash('Pick-A-Strong-Password', PASSWORD_DEFAULT), PHP_EOL;"
@@ -215,9 +221,11 @@ VALUES (1, 'ADMIN001', 'System', 'Admin', 'admin@example.com', '<paste-bcrypt-ha
 ```
 
 Then manage all further accounts under **Users** in the UI (Supervisor only).
-To retire legacy hashes once everyone has a bcrypt hash, set
+The Users screen counts and marks any account still carrying a legacy MD5/SHA1
+hash; once that count is zero, retire legacy sign-in by setting
 `$config['legacy_password_login'] = FALSE;` in `config.local.php` (or the
-`WMS_LEGACY_PASSWORD_LOGIN=0` environment variable).
+`WMS_LEGACY_PASSWORD_LOGIN=0` environment variable). A hash copied out of a
+database dump stays usable until its password is reset — see `SECURITY.md` §5.
 
 ## Configuration reference
 
@@ -306,7 +314,7 @@ dashboard cards — they intentionally share one KPI engine
 
 | Symptom | Likely cause / fix |
 |---|---|
-| "🗄️ Database Setup Required" page | `database.local.php` missing or host/user/database empty. Create it from the `.example` file, then import `database/yzzme_43038742_aml.sql` |
+| "🗄️ Database Setup Required" page | `database.local.php` missing or host/user/database empty. Create it from the `.example` file, then import `database/schema.sql` |
 | Sign-in page loads but every login says the database is not answering | DB reachable by config but schema not imported (or user lacks SELECT). Import the dump |
 | Blank/500 page right after sign-in | `ci_sessions` or `settings` table missing — re-import; check `application/logs/php_errors.log` and the dated CI log in the same folder |
 | "The action you have requested is not allowed" (403) on submit | CSRF token missing/expired — reload the form and resubmit; do not open the same form in two tabs for a long time (tokens regenerate) |

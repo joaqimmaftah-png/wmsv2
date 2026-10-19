@@ -98,7 +98,7 @@ class MY_Controller extends CI_Controller {
         echo htmlspecialchars("<?php\ndefined('BASEPATH') OR exit('No direct script access allowed');\n\n\$db['default']['hostname'] = 'localhost';\n\$db['default']['username'] = 'cpaneluser_dbuser';\n\$db['default']['password'] = 'your_password';\n\$db['default']['database'] = 'cpaneluser_dbname';\n");
         echo '</pre></li>';
         echo '<li>cPanel > MySQL Databases: Create DB + User + <strong>Add user to DB with ALL PRIVILEGES</strong></li>';
-        echo '<li>cPanel > phpMyAdmin: Import <code>database/yzzme_43038742_aml.sql</code></li>';
+        echo '<li>cPanel > phpMyAdmin: Import <code>database/schema.sql</code></li>';
         echo '</ol>';
         echo '<p><strong>cPanel credentials format:</strong><br>';
         echo 'Username: <code>cpaneluser_dbuser</code> (cPanel prefixes your username)<br>';

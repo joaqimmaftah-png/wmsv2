@@ -314,6 +314,32 @@ class Users extends MY_Controller {
         $by_role  = $this->db->select('r.name, COUNT(u.id) as cnt')
             ->from('users u')->join('roles r', 'r.id = u.role_id')
             ->group_by('u.role_id')->get()->result();
-        return array('total' => $total, 'active' => $active, 'inactive' => $inactive, 'by_role' => $by_role);
+
+        /*
+         * Accounts still storing an MD5/SHA1 hash (K-02). The sign-in screen
+         * upgrades one on its owner's next successful login, but a hash that
+         * has been copied out of the database stays usable until it is reset.
+         * Counting them here makes the reset campaign measurable, which is the
+         * precondition for turning `legacy_password_login` off.
+         *
+         * password_get_info() reports algo = 0/null for anything that is not a
+         * bcrypt/argon2 hash, so this needs no SQL pattern matching.
+         */
+        $legacy_ids = array();
+        foreach ($this->db->select('id, password')->get('users')->result() as $u) {
+            $info = password_get_info((string)$u->password);
+            if (empty($info['algo'])) {
+                $legacy_ids[(int)$u->id] = TRUE;
+            }
+        }
+
+        return array(
+            'total'      => $total,
+            'active'     => $active,
+            'inactive'   => $inactive,
+            'by_role'    => $by_role,
+            'legacy'     => count($legacy_ids),
+            'legacy_ids' => $legacy_ids,
+        );
     }
 }

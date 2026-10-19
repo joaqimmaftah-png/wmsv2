@@ -210,7 +210,7 @@ class Orders extends MY_Controller {
         if (!$this->Order_model->receipts_ready()) {
             $this->session->set_flashdata('error',
                 'The goods-receipt tables are not installed yet. Import the database dump '
-                .'shipped with this repository (database/yzzme_43038742_aml.sql), then receive the order again. Nothing was saved.');
+                .'shipped with this repository (database/schema.sql), then receive the order again. Nothing was saved.');
             redirect('orders/view/'.$id);
             return;
         }

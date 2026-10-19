@@ -1,9 +1,10 @@
-# Security — exposed database credential and encryption key (K-01)
+# Security — exposed credentials, dump and logs (K-01…K-03)
 
-> **Status: the leak is out of the repository's current tree, but the values
-> are still in public git history. Rotating them is the only fix, and that is a
-> host-side action.** This document is the runbook. Everything that can be done
-> from inside the repository is already done (see “What was changed” below).
+> **Status: the material is out of the repository's current tree, but it is
+> still in public git history. Rotating the credentials and resetting the
+> exposed passwords is the only fix, and those are host-side actions.** This
+> document is the runbook. Everything that can be done from inside the
+> repository is already done (see “What was changed” below).
 
 ## 1. What was exposed
 
@@ -23,10 +24,14 @@ commit built on it.
 continuously scraped by automated tooling; “nobody knows the URL” is not a
 control.
 
-The database **user name** also appears in the README, `SYSTEM.md`, two
-install-time help screens and the runtime log (K-03). A user name alone does
-not grant access, but combined with a leaked password it identifies exactly
-what to try.
+The database **user name** also appears in the README, `SYSTEM.md` and two
+install-time help screens. A user name alone does not grant access, but
+combined with a leaked password it identifies exactly what to try.
+
+Two more artefacts were public until this revision and are covered below:
+the **production database dump** (66 staff accounts, 63 unsalted MD5 hashes,
+names, e-mails, phones — §5) and the **runtime log files** (absolute server
+paths — removed from the tree, K-03).
 
 ## 2. What was changed in the repository (done)
 
@@ -44,10 +49,19 @@ what to try.
   downloadable copy of the staff table.
 - `scripts/purge-secrets.sh` performs the history rewrite safely (mirror clone,
   verify, no push) for when you are ready to do it.
+- The **production dump** is untracked and ignored (`.gitignore`:
+  `database/*.sql` except `database/schema.sql`). `database/schema.sql` — all
+  59 tables, indexes, foreign keys and the reference data, with no staff,
+  fleet, supplier, stock, session or inspection rows — is the install artifact
+  that replaced it (K-02).
+- The committed **runtime logs** are removed from the tree and ignored
+  (K-03).
+- The Users screen counts and marks accounts that still authenticate with a
+  legacy MD5/SHA1 hash, so the reset campaign in §5 can be tracked.
 
 **Not done, and not doable from here:** changing the password on your MySQL
-server, replacing the key on your server, and force-pushing rewritten history
-to GitHub.
+server, resetting the staff accounts, replacing the key on your server, and
+force-pushing rewritten history to GitHub.
 
 ## 3. Rotate the database password — do this first
 
@@ -147,12 +161,64 @@ by removing the local file. Do not flip it to `FALSE` until every account that
 still has an MD5 hash has signed in once (each sign-in upgrades the hash to
 bcrypt), or those users will be locked out.
 
-## 5. Purge the values from git history
+## 5. Reset the staff passwords that were in the dump (K-02)
+
+The production dump `database/yzzme_43038742_aml.sql` was tracked in this public
+repository until this revision and is **still in history**. It contains 66
+staff accounts: 63 unsalted **MD5** hashes, plus names, e-mail addresses and
+phone numbers. MD5 over a known address list cracks in minutes on a single GPU;
+the handful of bcrypt hashes may fall to a dictionary attack. **Every account
+that appears in that dump must be treated as compromised**, whatever its hash
+format.
+
+1. **See who is affected.** The Users screen now counts them and marks each row
+   with an amber `legacy hash` badge. The same list in SQL:
+
+   ```sql
+   SELECT id, employee_id, email, last_login
+   FROM users
+   WHERE password NOT LIKE '$2y$%'
+     AND password NOT LIKE '$2a$%'
+     AND password NOT LIKE '$2b$%'
+     AND password NOT LIKE '$argon2%';
+   ```
+
+2. **Reset each one.** Users → key icon → set a new password (≥ 8 characters)
+   and pass it to the person out of band. Do not bulk-assign one shared
+   password: that recreates the same problem with a weaker secret.
+
+3. **Do not rely on the automatic upgrade.** The sign-in screen converts an
+   MD5/SHA1 hash to bcrypt the first time the owner logs in — but anyone
+   holding the cracked hash can trigger exactly the same upgrade. Only an
+   explicit reset closes the account.
+
+4. **Close accounts you cannot reach** (former staff) by setting the status to
+   `Inactive` in Users. An MD5 hash that the application refuses to authenticate
+   is harmless, but the account should be retired anyway.
+
+5. **When the badge count reaches zero**, set this in
+   `application/config/config.local.php`:
+
+   ```php
+   $config['legacy_password_login'] = FALSE;
+   ```
+
+   or `WMS_LEGACY_PASSWORD_LOGIN=0` in the environment. From then on only
+   bcrypt/argon2 hashes authenticate.
+
+6. If you ever import that dump into a staging environment, `TRUNCATE
+   ci_sessions` afterwards: it carried two session rows. They expired within
+   two hours (7200 s), so they are dead — but do not copy them around.
+
+The new `database/schema.sql` contains none of this: it creates the tables and
+seeds the reference data, and stops there.
+
+## 6. Purge the values from git history
 
 Rotating makes the old values worthless; the purge stops future clones from
 carrying them.
 
-### 5.1 Preferred: the script in this repository
+### 6.1 Preferred: the script in this repository
 
 ```bash
 # once, if git-filter-repo is not installed:
@@ -165,7 +231,7 @@ It clones the repository into a temporary directory, removes both paths from
 every commit on every ref, verifies the result, and **prints** the push command.
 It never touches your working copy and never pushes.
 
-### 5.2 Manually
+### 6.2 Manually
 
 ```bash
 git clone --mirror https://github.com/joaqimmaftah-png/wmsv2.git wms-rewrite.git
@@ -186,7 +252,7 @@ git filter-branch --force --prune-empty --index-filter \
   --tag-name-filter cat -- --all
 ```
 
-### 5.3 What a rewrite does and does not achieve
+### 6.3 What a rewrite does and does not achieve
 
 - Every commit id changes. Collaborators must delete their clones and re-clone.
   Open pull requests can be reopened from the rewritten branch (`#2` is one).
@@ -199,7 +265,7 @@ git filter-branch --force --prune-empty --index-filter \
   deleting and recreating the repository is the only way to be certain — it
   also discards its PRs and issues.
 
-## 6. Prevent recurrence
+## 7. Prevent recurrence
 
 - `.gitignore` now covers the local configuration files, logs, uploads and
   extra dumps. `git status` should never show a `.local.php` file as untracked.
@@ -224,7 +290,7 @@ git filter-branch --force --prune-empty --index-filter \
 
   This is a mitigation, not a fix: the history already contains the values.
 
-## 7. Checklist
+## 8. Checklist
 
 - [ ] MySQL password changed on the host
 - [ ] `database.local.php` (server only) updated and site verified
@@ -232,6 +298,9 @@ git filter-branch --force --prune-empty --index-filter \
 - [ ] Other consumers of the database user found and updated
 - [ ] Access logs checked for the config file and the SQL dump
 - [ ] Encryption key replaced in `config.local.php`
+- [ ] Every account from the old dump reset (Users → `legacy hash` badge count = 0)
+- [ ] Unreachable accounts set to `Inactive`
+- [ ] `legacy_password_login = FALSE` once the count is zero
 - [ ] History rewritten and force-pushed — or consciously deferred
 - [ ] GitHub Support asked to purge unreachable objects
 - [ ] Secret scanning push protection confirmed on

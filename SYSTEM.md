@@ -264,18 +264,26 @@ are assigned to (CSV match on `assigned_to`).
 
 ### 5.1 Overview
 
-One MySQL/MariaDB database, 59 tables, `utf8mb4`. The **only** schema artifact
-in the repo is `database/yzzme_43038742_aml.sql` — a phpMyAdmin dump
-(2026-10-19, MariaDB 11.4) containing the complete schema **and
-production data** (≈66 users, 116 equipment, 1,697 materials, 12,721 material
-transactions, 630 inspection items over 14 templates; 39 tables are empty in
-the dump, including `work_orders`, `pm_schedules` and `spare_orders`).
-There are no `CREATE DATABASE`/`USE`/`DROP TABLE` statements.
+One MySQL/MariaDB database, 59 tables, `utf8mb4`. The schema artifact in the
+repo is `database/schema.sql`: all 59 tables with their indexes and foreign
+keys, plus the master data the application needs to start (5 roles,
+21 equipment types, 7 lubricant types, 17 report groups, 35 report sites,
+19 settings rows, 3 shifts). It contains **no staff, fleet, supplier, stock,
+session or inspection records**.
 
-There are no migration files in this repository — the dump **is** the
-schema. Schema evolution is therefore unmanaged: any change must be applied
-manually and the dump re-exported (K-13). §13 lists the runtime schema
-probes that let screens degrade gracefully on an older database.
+The production dump it was derived from (`database/yzzme_43038742_aml.sql`,
+phpMyAdmin, MariaDB 11.4, 2026-10-19) held 66 users, 116 equipment,
+1,697 materials, 12,721 material transactions and 630 inspection items over
+14 templates; 39 tables were empty in it, including `work_orders`,
+`pm_schedules` and `spare_orders`. That file is no longer tracked (K-02) and
+must not be re-added — it is a data export, not source.
+
+There are no `CREATE DATABASE`/`USE`/`DROP TABLE` statements in either file.
+
+There are no migration files in this repository — `database/schema.sql` **is**
+the schema. Schema evolution is therefore unmanaged: any change must be applied
+manually and the file re-exported (K-13). §13 lists the runtime schema probes
+that let screens degrade gracefully on an older database.
 
 Conventions: surrogate `INT` auto-increment PKs (except `ci_sessions`);
 statuses are MySQL `ENUM`s (the authoritative value lists are in §5.3);
@@ -1613,8 +1621,8 @@ are to the reviewed commit.
 | ID | Sev | Issue | Evidence / notes |
 |---|---|---|---|
 | K-01 | **Critical — rotation outstanding** | The live MySQL password and the application `encryption_key` were committed in `application/config/database.local.php` and `config.local.php` in the first commit. The repository is **public**, so both values must be treated as compromised regardless of what happens next. | **Fixed in the tree:** both files removed from the index (still on disk for the running install), `.gitignore` now excludes `*.local.php`/`.env*`/logs/uploads, `.githooks/pre-commit` refuses them, and `database/.htaccess` closes direct HTTP access to the dump. `scripts/purge-secrets.sh` performs and verifies the history rewrite without pushing. **Operator action still required:** rotate the DB password and the key on the host and force-push the rewritten history — [`SECURITY.md`](SECURITY.md) is the step-by-step runbook. Nothing is encrypted with the old key (the Encryption library is never loaded), so its rotation needs no re-encryption. |
-| K-02 | **Critical** | The committed dump `database/yzzme_43038742_aml.sql` exposes 66 staff accounts — 63 with unsalted **MD5** hashes (fast to crack) — plus names/e-mails/phones, and the committed local config keeps `legacy_password_login = TRUE`, so those hashes remain directly usable knowledge for credential attacks. | Dump analysis (hash formats counted, values not reproduced here). **Remediation:** treat all passwords as compromised — force resets (there is no bulk-reset script in the repo; use Users → Reset Password per account or a one-off SQL), then set `legacy_password_login = FALSE`; move the dump out of git. |
-| K-03 | Medium | Runtime logs committed (`application/logs/log-2026-10-19.php`, `php_errors.log`) — reveal absolute server paths and operational details. | Untrack and ignore `application/logs/*` (keep `.gitkeep`). |
+| K-02 | **Critical — resets outstanding** | The production dump (`database/yzzme_43038742_aml.sql`) was tracked in a **public** repository. It exposed 66 staff accounts — 63 with unsalted **MD5** hashes — plus names, e-mails and phones, and the committed local config kept `legacy_password_login = TRUE`, so a cracked hash was directly usable. | **Fixed in the tree:** the dump is untracked and ignored; `database/schema.sql` (59 tables + master data, no people/fleet/stock) is the install artifact, and every "import the dump" message now names it. The Users screen counts and marks accounts still on a legacy hash so the reset campaign is measurable. **Operator action:** treat every account in that dump as compromised — reset each password (Users → Reset Password), then set `legacy_password_login = FALSE` in `config.local.php`; see `SECURITY.md` §5. The hashes are still in public history until the K-01 purge is run. |
+| K-03 | **Resolved** | Runtime logs were committed (`application/logs/log-2026-10-19.php`, `php_errors.log`), revealing absolute server paths and operational details. | Fixed in this revision: both files removed from the tree, `application/logs/*` ignored (`.gitkeep` kept), and `.gitignore` covers `*.log`. They remain in history — the K-01 purge covers that. |
 | K-04 | **Resolved** | Attachment/document **downloads fatal-errored**: `force_download()` is called in `Workorders::download_attachment()` and `Orders::download_document()` but CodeIgniter's `download` helper was never loaded. Uploads work; downloads returned 500. Files remain reachable by direct URL under `uploads/…` (names are timestamp-based, i.e. guessable — a confidentiality consideration for incident evidence). | Fixed in this revision: `download` added to `$autoload['helper']`. |
 | K-05 | **Resolved** | PM completion never recorded the meter reading for `Km`-interval schedules: `Pm::complete()` checked `['Hours','Kilometres']` but the enum value is `Km`. Hours schedules worked. | Fixed in this revision: the handler compares `Hours`/`Km` and translates to `Kilometres` only for the meter writer (`Pm.php`). |
 | K-06 | **Resolved** | The backlog list's supervisor **"Close (verify)" button never rendered**: `Backlog::index()` set `$data['is_supervisor']` **after** `$this->render(...)`. | Fixed in this revision: the flag is part of the render data. A sweep of every controller found no other `render()`-before-data site. |
@@ -1624,7 +1632,7 @@ are to the reviewed commit.
 | K-10 | **Resolved** | Null dereferences on crafted input: `Lubricants::record()` used `$eq->equipment_type_id` without checking the equipment exists; `Orders::create()` did the same with the supplier. | Fixed in this revision: both guard the lookup and flash a message; the optional lubricant work-order link is also validated against the machine. |
 | K-11 | Low | Currency handling is inconsistent: seeded `settings.currency='USD'` is never read; suppliers/orders default to `TZS`; material prices are `unit_price_ugx`/`unit_price_usd`; manual goods receipts hard-code `UGX`. Order spend totals (CEO dashboard, store analytics) sum `total_cost` as recorded per order with no currency conversion — meaningful only if all orders share a currency. | §7.5, §7.7. |
 | K-12 | **Resolved** | Dashboard "recent work orders" resolved the assignee by joining `users.id = work_orders.assigned_to`, but `assigned_to` is a CSV — at best the first technician matched (MySQL coercion). | Fixed in this revision: the card reads `Workorder_model::get_recent()`, which resolves every technician through the CSV parser; the CSV column is never joined again. |
-| K-13 | Medium | No migrations, seeders, or tests in the repository — the dump is the only schema artifact. The defensive table/field probes (§13) mask schema drift instead of failing loudly, so a partially-updated database can silently lose features (e.g. register fields, closure evidence). | Whole repo. |
+| K-13 | Medium | No migrations, seeders, or tests in the repository — `database/schema.sql` is the only schema artifact. The defensive table/field probes (§13) mask schema drift instead of failing loudly, so a partially-updated database can silently lose features (e.g. register fields, closure evidence). | Whole repo. |
 | K-14 | Low | `Settings_model::save_many()`'s comment says `settings` has no unique index on `setting_key`; the dump defines one (`UNIQUE KEY setting_key`). Behaviour (select-then-upsert) is correct either way — comment only. | `Settings_model.php` vs dump. |
 | K-15 | **Resolved** | `Team::_make_transparent()` called GD functions without an availability guard → fatal error on hosts without `gd` when a signature image is uploaded. | Fixed in this revision: the function copies the upload unchanged when `gd` is absent. The per-pixel loop is still slow for very large images. |
 | K-16 | Low | Inspection defect priority depends on substring matching of free-text item categories (`no-go`, `go & fix`, FR variants). Renaming a template category in the DB silently changes P1/P2 behaviour. | `Inspection_model::_inspection_item_verdict()`. |

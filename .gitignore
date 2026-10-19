@@ -31,9 +31,14 @@ uploads/**
 !uploads/**/.gitkeep
 !uploads/logoam.png
 
-# --- Extra database dumps ---------------------------------------------------
-# The shipped schema is database/yzzme_43038742_aml.sql. Any additional or
-# compressed copy is a data export and stays out of the repository.
+# --- Database exports ------------------------------------------------------
+# Only the schema + master-data file is source. A dump of a real database
+# contains staff, hashes, fleet and stock rows; it belongs in a backup, not in
+# a public repository (K-02).
+database/*.sql
+!database/schema.sql
+database/*.sql.gz
+database/*.sql.bak
 database/*.sql.gz
 database/*.sql.bak
 database/*.dump

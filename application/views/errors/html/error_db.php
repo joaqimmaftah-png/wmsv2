@@ -39,7 +39,7 @@ body{background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
         <br><code>password = your password</code>
       </li>
       <li>In cPanel > MySQL Databases, ensure you <strong>added user to database</strong> with ALL PRIVILEGES</li>
-      <li>Import <code>database/yzzme_43038742_aml.sql</code> via phpMyAdmin if tables missing</li>
+      <li>Import <code>database/schema.sql</code> via phpMyAdmin if tables missing</li>
     </ol>
   </div>
 
