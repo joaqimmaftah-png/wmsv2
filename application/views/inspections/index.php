@@ -343,14 +343,23 @@ foreach ($templates as $t) {
       </div>
     </div>
 
-    <!-- Language Selector -->
-    <div class="insp-lang-toggle">
-      <a href="<?= base_url('inspections?lang=en'); ?>" class="insp-lang-btn <?= $lang === 'en' ? 'active' : ''; ?>">
-        🇬🇧 English
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <?php if (!empty($can_manage)): ?>
+      <a href="<?= base_url('inspections/templates'); ?>"
+         style="padding:8px 14px;border-radius:8px;font-size:12px;text-decoration:none;color:var(--t2);background:var(--surface);border:1px solid var(--sep);">
+        ⚙ <?= $L('Manage Templates', 'Gérer les modèles'); ?>
       </a>
-      <a href="<?= base_url('inspections?lang=fr'); ?>" class="insp-lang-btn <?= $lang === 'fr' ? 'active' : ''; ?>">
-        🇫🇷 Français
-      </a>
+      <?php endif; ?>
+
+      <!-- Language Selector -->
+      <div class="insp-lang-toggle">
+        <a href="<?= base_url('inspections?lang=en'); ?>" class="insp-lang-btn <?= $lang === 'en' ? 'active' : ''; ?>">
+          🇬🇧 English
+        </a>
+        <a href="<?= base_url('inspections?lang=fr'); ?>" class="insp-lang-btn <?= $lang === 'fr' ? 'active' : ''; ?>">
+          🇫🇷 Français
+        </a>
+      </div>
     </div>
   </div>
 

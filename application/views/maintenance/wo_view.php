@@ -26,6 +26,11 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
       <span class="badge <?= $sc ?>"><?= $wo->status ?></span>
       <span class="badge <?= $pc ?>"><?= $wo->priority ?></span>
       <span class="badge <?= $tc ?>"><?= $wo->type ?></span>
+      <?php if (!empty($wo->hold_code)): ?>
+      <span class="badge b-waiting" title="Hold code — why the work is waiting">
+        ⏸ <?= htmlspecialchars($wo->hold_code) ?><?= wo_hold_label($wo->hold_code) ? ' — '.htmlspecialchars(wo_hold_label($wo->hold_code)) : '' ?>
+      </span>
+      <?php endif; ?>
     </div>
     <div style="font-size:14px;font-weight:500;color:var(--t1);"><?= htmlspecialchars($wo->title) ?></div>
   </div>
@@ -332,15 +337,143 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
       <div class="ch">
         <div><div class="ct">Oil / Coolant Top Up</div><div class="cs"><?= count($oil_records); ?> entries</div></div>
       </div>
-      <table class="tbl" style="margin-top:0;">
-        <thead><tr><th>System / Location</th><th>Oil / Fluid Type</th><th>Grade</th><th>Qty (L)</th></tr></thead>
+      <div class="cs" style="padding:10px 22px 0;font-size:11.5px;color:var(--t3);">
+        Lines marked <strong style="color:var(--green);">in lubricant ledger</strong> were also posted to
+        Lubricants → consumption for this work order. Unmatched lines stay on the job card only.
+      </div>
+      <table class="tbl" style="margin-top:6px;">
+        <thead><tr><th>System / Location</th><th>Oil / Fluid Type</th><th>Grade</th><th>Qty (L)</th><th>Lubricant Ledger</th></tr></thead>
         <tbody>
-          <?php foreach ($oil_records as $oil): ?>
+          <?php
+          // Match the posted consumption rows back to the lines for display.
+          // A queue per quantity: two lines with the same quantity each get
+          // their own ledger row instead of the last one hiding the first.
+          $lc_by_qty = array();
+          if (!empty($lube_consumption)) {
+              foreach ($lube_consumption as $lc) {
+                  // Only rows this work order posted itself; a top-up recorded
+                  // by hand against the same job is a separate fact.
+                  if (strpos((string)$lc->notes, 'Auto: oil line') !== 0) continue;
+                  $q = (string)round((float)$lc->quantity_used, 2);
+                  if (!isset($lc_by_qty[$q])) $lc_by_qty[$q] = array();
+                  $lc_by_qty[$q][] = $lc;
+              }
+          }
+          foreach ($oil_records as $oil):
+            $q = isset($oil->quantity) ? (string)round((float)$oil->quantity, 2) : '';
+            $posted = (!empty($lc_by_qty[$q])) ? array_shift($lc_by_qty[$q]) : null;
+          ?>
           <tr>
             <td style="font-weight:500;"><?= htmlspecialchars(isset($oil->system_location) ? $oil->system_location : ''); ?></td>
             <td><?= htmlspecialchars(isset($oil->oil_type) ? $oil->oil_type : ''); ?></td>
             <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars(isset($oil->grade) ? $oil->grade : ''); ?></td>
             <td class="mono fw-600"><?= isset($oil->quantity) && $oil->quantity ? number_format($oil->quantity,1) : '—'; ?> <span style="color:var(--t4);font-size:10px;">L</span></td>
+            <td>
+              <?php if ($posted): ?>
+                <span class="badge b-success" style="font-size:10px;">✓ <?= htmlspecialchars($posted->lube_name) ?></span>
+                <?php if ($posted->recommended_qty !== null): ?>
+                <span style="font-size:10px;color:var(--t3);"> var. <?= ($posted->variance > 0 ? '+' : '') . number_format((float)$posted->variance, 1) ?> L</span>
+                <?php endif; ?>
+              <?php else: ?>
+                <span style="font-size:10.5px;color:var(--t4);">not matched</span>
+              <?php endif; ?>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <?php endif; ?>
+
+    <!-- Breakdown event (one failure, several work orders) -->
+    <?php
+    $be_group = isset($breakdown_event) ? $breakdown_event : array();
+    $be_candidates = isset($breakdown_candidates) ? $breakdown_candidates : array();
+    // The event root is the row with no `breakdown_event_id` (it IS the event).
+    $be_root = null;
+    foreach ($be_group as $g) {
+        if (empty($g->breakdown_event_id)) { $be_root = (int)$g->id; break; }
+    }
+    ?>
+    <?php if (function_exists('wo_is_breakdown') && wo_is_breakdown($wo)): ?>
+    <div class="card mb-3" style="animation-delay:.33s;border-left:3px solid var(--amber);">
+      <div class="ch">
+        <div>
+          <div class="ct">Breakdown Event</div>
+          <div class="cs">
+            <?php if (count($be_group) > 1): ?>
+              <?= count($be_group) ?> work orders grouped as one failure — the KPIs count the group once.
+            <?php else: ?>
+              This work order is its own breakdown event.
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+      <div style="padding:14px 22px;">
+        <?php if (count($be_group) > 1): ?>
+        <div style="margin-bottom:14px;">
+          <?php foreach ($be_group as $g): ?>
+          <div class="row-list-item" style="padding:8px 0;border-bottom:1px solid var(--sep);">
+            <div style="width:7px;height:7px;border-radius:50%;background:<?= ((int)$g->id === (int)$wo->id) ? 'var(--blue)' : 'var(--t4)' ?>;flex-shrink:0;"></div>
+            <div style="flex:1;">
+              <div style="font-size:12px;font-weight:600;color:var(--t1);">
+                <?php if ((int)$g->id === (int)$wo->id): ?>
+                  <?= htmlspecialchars($g->wo_number) ?> <span style="font-weight:400;color:var(--t3);">(this one)</span>
+                <?php else: ?>
+                  <a href="<?= base_url('workorders/view/'.$g->id) ?>" style="color:var(--blue);text-decoration:none;"><?= htmlspecialchars($g->wo_number) ?></a>
+                <?php endif; ?>
+                <?php if ($be_root !== null && (int)$g->id === $be_root): ?>
+                  <span class="badge b-secondary" style="font-size:9.5px;margin-left:6px;">event start</span>
+                <?php endif; ?>
+              </div>
+              <div style="font-size:10.5px;color:var(--t3);"><?= htmlspecialchars($g->title) ?> · <?= htmlspecialchars($g->status) ?></div>
+            </div>
+            <div class="mono" style="font-size:10px;color:var(--t4);">
+              <?= $g->start_datetime ? date('d M y H:i', strtotime($g->start_datetime)) : '' ?>
+            </div>
+          </div>
+          <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
+        <?php $can_link = isset($role_id) && in_array((int)$role_id, array(1,2), TRUE); ?>
+        <?php if ($can_link): ?>
+        <?= form_open('workorders/link_breakdown_event/'.$wo->id, array('class' => 'flex ai-c gap-10', 'style' => 'flex-wrap:wrap;')) ?>
+          <label style="font-size:11.5px;color:var(--t3);">Group this work order with:</label>
+          <select name="breakdown_event_id" class="form-select" style="width:auto;min-width:280px;font-size:12px;padding:5px 8px;">
+            <option value="0">— no other work order (stand alone) —</option>
+            <?php foreach ($be_candidates as $cand): ?>
+            <option value="<?= (int)$cand->id ?>" <?= ($be_root !== null && (int)$cand->id === $be_root && count($be_group) > 1) ? 'selected' : '' ?>>
+              <?= htmlspecialchars($cand->wo_number) ?> — <?= htmlspecialchars($cand->title) ?>
+              (<?= htmlspecialchars($cand->status) ?><?= $cand->start_datetime ? ', '.date('d M Y', strtotime($cand->start_datetime)) : '' ?>)
+            </option>
+            <?php endforeach; ?>
+          </select>
+          <button type="submit" class="btn btn-ghost btn-sm">Apply</button>
+          <span style="font-size:10.5px;color:var(--t4);">Only other breakdown work orders on this machine are offered.</span>
+        <?= form_close() ?>
+        <?php endif; ?>
+      </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- PM services recorded under this work order -->
+    <?php if (!empty($pm_completions)): ?>
+    <div class="card mb-3" style="animation-delay:.335s;">
+      <div class="ch">
+        <div><div class="ct">PM Services Completed</div><div class="cs"><?= count($pm_completions) ?> schedule(s) logged against this work order</div></div>
+      </div>
+      <table class="tbl" style="margin-top:0;">
+        <thead><tr><th>Schedule</th><th>Interval</th><th>Completed</th><th>Meter</th></tr></thead>
+        <tbody>
+          <?php foreach ($pm_completions as $pmc): ?>
+          <tr>
+            <td class="fw-500"><?= htmlspecialchars((string)$pmc->schedule_name) ?></td>
+            <td style="font-size:12px;color:var(--t3);">
+              <?= htmlspecialchars((string)$pmc->interval_type) ?> / <?= (int)$pmc->interval_value ?>
+            </td>
+            <td class="mono" style="font-size:12px;"><?= $pmc->completed_date ? date('d M Y', strtotime($pmc->completed_date)) : '—' ?></td>
+            <td class="mono" style="font-size:12px;"><?= $pmc->completed_hours !== null ? number_format((float)$pmc->completed_hours, 1) : '—' ?></td>
           </tr>
           <?php endforeach; ?>
         </tbody>
@@ -499,6 +632,17 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
             A supervisor verifies the repair and closes the work order.
           </div>
           <?php endif; ?>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="form-label">Hold Code <span style="font-weight:400;color:var(--t3);">(why the work waits — cleared when finished)</span></label>
+          <select name="hold_code" class="form-select">
+            <option value="">— none —</option>
+            <?php foreach (wo_hold_codes() as $code => $label): ?>
+            <option value="<?= $code ?>" <?= (isset($wo->hold_code) && (string)$wo->hold_code === $code) ? 'selected' : '' ?>>
+              <?= $code ?> — <?= htmlspecialchars($label) ?>
+            </option>
+            <?php endforeach; ?>
+          </select>
         </div>
         <?php if ($is_supervisor): ?>
         <div style="margin-bottom:12px;">

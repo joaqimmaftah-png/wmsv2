@@ -56,7 +56,7 @@
           <td><span class="badge <?= $sc ?>" style="font-size:10px;"><?= $stat ?></span></td>
           <td>
             <div class="flex ai-c gap-10">
-              <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;" onclick="markDone(<?= $pm->id ?>)">✓ Done</button>
+              <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;" onclick="markDone(<?= $pm->id ?>, <?= (int)$pm->equipment_id ?>)">✓ Done</button>
               <a href="<?= base_url('pm/edit/'.$pm->id) ?>" class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;">Edit</a>
               <a href="<?= base_url('forecast/parts/'.$pm->id) ?>" class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;"
                  title="Parts this service consumes — feeds the PM spare-parts forecast">Parts</a>
@@ -79,11 +79,23 @@
     <input type="hidden" name="pm_id" id="doneId">
     <div class="field" style="margin-bottom:16px;">
       <label class="form-label">Completion Date</label>
-      <input type="date" name="completion_date" class="form-control" value="<?= date('Y-m-d') ?>">
+      <input type="date" name="completed_date" class="form-control" value="<?= date('Y-m-d') ?>">
+    </div>
+    <div class="field" style="margin-bottom:16px;">
+      <label class="form-label">Meter Reading <span style="font-weight:400;color:var(--t3);">(hours or km per the schedule)</span></label>
+      <input type="number" name="completed_hours" class="form-control" step="0.1" placeholder="Hour / odometer reading">
     </div>
     <div class="field" style="margin-bottom:20px;">
-      <label class="form-label">Current Hours</label>
-      <input type="number" name="current_hours" class="form-control" step="0.1" placeholder="Hour meter reading">
+      <label class="form-label">Work Order <span style="font-weight:400;color:var(--t3);">(optional — the job that did the service)</span></label>
+      <select name="work_order_id" class="form-select">
+        <option value="">— not linked to a work order —</option>
+        <?php if (isset($open_wos)): foreach ($open_wos as $w): ?>
+        <option value="<?= (int)$w->id ?>" data-equipment="<?= (int)$w->equipment_id ?>">
+          <?= htmlspecialchars($w->wo_number) ?> — <?= htmlspecialchars((string)$w->registration_no) ?> — <?= htmlspecialchars($w->title) ?>
+        </option>
+        <?php endforeach; endif; ?>
+      </select>
+      <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">Only a work order on the schedule's machine is accepted.</div>
     </div>
     <div class="field" style="margin-bottom:20px;">
       <label class="form-label">Notes</label>
@@ -98,8 +110,21 @@
 </div>
 
 <script>
-function markDone(id) {
+function markDone(id, equipmentId) {
   document.getElementById('doneId').value = id;
+  // Offer only work orders on this schedule's machine; the server rejects a
+  // mismatch, but the modal should never present one in the first place.
+  var sel = document.querySelector('#doneModal select[name="work_order_id"]');
+  if (sel) {
+    for (var i = 0; i < sel.options.length; i++) {
+      var opt = sel.options[i];
+      var eq  = opt.getAttribute('data-equipment');
+      var off = (eq !== null && eq !== '' && String(eq) !== String(equipmentId));
+      opt.hidden = off;
+      opt.disabled = off;
+    }
+    sel.value = '';
+  }
   document.getElementById('doneModal').style.display = 'flex';
 }
 </script>

@@ -67,6 +67,7 @@ class Workorders extends MY_Controller {
                 'workplace'           => $this->input->post('workplace',       TRUE) ?: NULL,
                 'purchase_order'      => $this->input->post('purchase_order',  TRUE) ?: NULL,
                 'machine_status'      => $this->input->post('machine_status',  TRUE) ?: 'Operational',
+                'hold_code'           => $this->_valid_hold_code($this->input->post('hold_code', TRUE)),
                 'planner'             => $this->input->post('planner',         TRUE) ?: NULL,
                 'equipment_systems'   => $sys_csv,
                 'created_by'          => $this->user_id,
@@ -82,16 +83,22 @@ class Workorders extends MY_Controller {
             $this->Workorder_model->save_spare_parts($wo_id, $this->input->post('spares'));
             $this->Workorder_model->save_oil_records($wo_id,  $this->input->post('lubes'));
 
+            // Oil lines are also consumption: post them to the lubricant
+            // ledger so the Lubricants screens see them (idempotent).
+            $lube = $this->Workorder_model->sync_lube_consumption($wo_id, $this->user_id);
+
             if ($insert['type'] === 'Incident') {
                 $this->_save_incident_details($wo_id);
                 $this->_save_evidence_uploads($wo_id);
             }
 
-            if ($insert['type'] === 'Corrective Maintenance') {
-                $this->Equipment_model->update_status($insert['equipment_id'], 'Breakdown');
-            }
+            // Equipment status automation: a corrective WO takes the machine
+            // down (Breakdown); a planned job takes it into maintenance only
+            // when the work actually starts. A retired machine is never moved.
+            $this->_sync_equipment_status($insert['equipment_id'], $insert['type'], $insert['status'], $wo_id);
 
-            $this->session->set_flashdata('success', "Work Order {$wo_number} created.");
+            $this->session->set_flashdata('success',
+                "Work Order {$wo_number} created." . $this->_lube_sync_note($lube));
             if ($this->input->post('save_and_print')) {
                 redirect("workorders/jobcard/{$wo_id}?autoprint=1");
             }
@@ -121,6 +128,16 @@ class Workorders extends MY_Controller {
         $data['parts_summary']      = $avail['summary'];
         $data['oil_records'] = $this->Workorder_model->get_oil_records($id);
         $data['lubes']       = $this->Workorder_model->get_oil_records($id);
+        // The same oil lines after they were posted to the lubricant ledger.
+        $data['lube_consumption'] = $this->Workorder_model->get_lube_consumption($id);
+        $data['pm_completions']   = $this->Workorder_model->get_pm_completions($id);
+        // Breakdown events (one failure → several work orders): show the group
+        // and let a technician attach this work order to another event on the
+        // same machine, or detach it.
+        if (function_exists('wo_is_breakdown') ? wo_is_breakdown($wo) : !empty($wo->is_breakdown)) {
+            $data['breakdown_event'] = $this->Workorder_model->get_breakdown_event_group($id);
+            $data['breakdown_candidates'] = $this->Workorder_model->get_breakdown_event_candidates($wo->equipment_id, $id);
+        }
         $data['history']     = $this->Workorder_model->get_status_history($id);
         $data['technicians'] = $this->Team_model->get_technicians();
         $data['sessions']     = $this->Workorder_model->get_sessions($id);
@@ -169,10 +186,30 @@ class Workorders extends MY_Controller {
                 'workplace'          => $this->input->post('workplace',      TRUE) ?: NULL,
                 'purchase_order'     => $this->input->post('purchase_order', TRUE) ?: NULL,
                 'machine_status'     => $this->input->post('machine_status', TRUE) ?: NULL,
+                'hold_code'          => $this->_valid_hold_code($this->input->post('hold_code', TRUE)),
                 'planner'            => $this->input->post('planner',        TRUE) ?: NULL,
                 'equipment_systems'  => $sys_csv,
             );
             if ($op_sig) $update['operator_signature'] = $op_sig;
+
+            /*
+             * Closing is a supervisor's verification, whichever screen is used
+             * (SYSTEM.md §7.1 / §17). The quick status form already enforced
+             * this; the edit form could silently set "Closed" without a
+             * verifier, so the same rule is applied here.
+             */
+            if ($update['status'] === 'Closed' && $wo->status !== 'Closed' && !$this->is_supervisor()) {
+                $this->session->set_flashdata('error',
+                    'A work order is closed by a supervisor after checking the repair. '
+                    .'Set it to Completed — the supervisor then verifies and closes it.');
+                redirect("workorders/view/{$id}");
+                return;
+            }
+            if ($update['status'] === 'Closed' && $wo->status !== 'Closed') {
+                $update['verified_by']        = $this->user_id;
+                $update['verified_at']        = date('Y-m-d H:i:s');
+                $update['verification_notes'] = $this->input->post('verification_notes', TRUE) ?: NULL;
+            }
 
             if ($update['start_datetime'] && $update['end_datetime']) {
                 $update['downtime_hours'] = round(
@@ -180,13 +217,21 @@ class Workorders extends MY_Controller {
                 );
             }
 
-            if (in_array($update['status'], array('Completed','Closed')) && !$wo->completed_by) {
-                $update['completed_by'] = $this->user_id;
+            if (in_array($update['status'], array('Completed','Closed'))) {
+                if (!$wo->completed_by) {
+                    $update['completed_by'] = $this->user_id;
+                }
+                // The quick form stamps the end when work is completed; do the
+                // same here so a WO completed through the edit form has one.
+                if ($update['status'] === 'Completed' && empty($update['end_datetime'])) {
+                    $update['end_datetime'] = date('Y-m-d H:i:s');
+                }
             }
 
             $this->Workorder_model->update($id, $update);
             $this->Workorder_model->save_spare_parts($id, $this->input->post('spares'));
             $this->Workorder_model->save_oil_records($id,  $this->input->post('lubes'));
+            $lube = $this->Workorder_model->sync_lube_consumption($id, $this->user_id);
 
             // Transitioning to Completed/Closed consumes whatever stock was
             // still reserved for this WO (Pending Spare Parts Tracking).
@@ -200,7 +245,11 @@ class Workorders extends MY_Controller {
                 $this->_save_evidence_uploads($id);
             }
 
-            $this->session->set_flashdata('success', 'Work Order updated.');
+            // Keep the machine's status in step with the work order's new
+            // status (this path used to change the WO only).
+            $this->_sync_equipment_status($wo->equipment_id, $update['type'], $update['status'], $id);
+
+            $this->session->set_flashdata('success', 'Work Order updated.' . $this->_lube_sync_note($lube));
             redirect("workorders/view/{$id}");
         }
 
@@ -243,6 +292,18 @@ class Workorders extends MY_Controller {
         $status = $this->input->post('status', TRUE);
         $notes  = $this->input->post('notes',  TRUE);
         $update = array('status' => $status);
+
+        /*
+         * Hold code: why work is waiting (WSP/WQT/WCF/UD/UR, rule BR-28).
+         * The column existed and the weekly report printed it, but no screen
+         * ever wrote it. The quick form now offers it for waiting statuses;
+         * a finished work order can never keep one.
+         */
+        if (in_array($status, array('Completed','Closed'), TRUE)) {
+            $update['hold_code'] = NULL;
+        } elseif ($this->input->post('hold_code') !== NULL) {
+            $update['hold_code'] = $this->_valid_hold_code($this->input->post('hold_code', TRUE));
+        }
 
         /*
          * Two-stage closure (Wave 3, Q5 / F-08).
@@ -294,7 +355,8 @@ class Workorders extends MY_Controller {
             if ($wo->start_datetime) {
                 $update['downtime_hours'] = round((time() - strtotime($wo->start_datetime)) / 3600, 2);
             }
-            $this->Equipment_model->update_status($wo->equipment_id, 'Available');
+            // -> Available (the helper also refuses to revive a Retired machine)
+            $this->_sync_equipment_status($wo->equipment_id, $wo->type, $status, $id);
 
             // Pending Spare Parts Tracking: anything still reserved for this WO
             // is treated as consumed — book the ISSUE movements automatically.
@@ -733,6 +795,23 @@ class Workorders extends MY_Controller {
         redirect('workorders/view/'.$id);
     }
 
+    /* ─────────────────────────────────────────────────────
+       BREAKDOWN EVENT — group repair work orders of one failure
+    ───────────────────────────────────────────────────── */
+    public function link_breakdown_event($id) {
+        if (!$this->require_post()) return;
+
+        $wo = $this->Workorder_model->get_by_id($id);
+        if (!$wo) show_404();
+
+        $result = $this->Workorder_model->link_breakdown_event(
+            $id, $this->input->post('breakdown_event_id', TRUE)
+        );
+
+        $this->session->set_flashdata($result['ok'] ? 'success' : 'error', $result['message']);
+        redirect("workorders/view/{$id}");
+    }
+
     public function download_attachment($attachment_id) {
         $att = $this->Workorder_model->get_attachment($attachment_id);
         if (!$att) show_404();
@@ -861,5 +940,95 @@ class Workorders extends MY_Controller {
             $seq = (int)$num + 1;
         }
         return $prefix . str_pad($seq, 3, '0', STR_PAD_LEFT);
+    }
+
+    /* ─────────────────────────────────────────────────────
+       STATUS / LEDGER helpers
+    ───────────────────────────────────────────────────── */
+
+    /** A posted hold code, or NULL. Only the five approved codes are stored. */
+    private function _valid_hold_code($value) {
+        $value = strtoupper(trim((string)$value));
+        if ($value === '') return NULL;
+        $codes = wo_hold_codes();
+        return isset($codes[$value]) ? $value : NULL;
+    }
+
+    /**
+     * Keep `equipment.status` in step with the work order.
+     *
+     * Rules (SYSTEM.md §7.1):
+     *   corrective WO open / in progress  → Breakdown
+     *   planned (PM / incident) in progress → In Maintenance
+     *   Completed / Closed                → Available
+     *   planned WO still Open             → unchanged (not down yet)
+     *
+     * `Equipment_model::update_status()` refuses to revive a Retired machine.
+     */
+    private function _sync_equipment_status($equipment_id, $type, $status, $exclude_wo_id = NULL) {
+        $equipment_id = (int)$equipment_id;
+        if ($equipment_id <= 0) return;
+
+        $is_breakdown = (strcasecmp((string)$type, 'Corrective Maintenance') === 0);
+
+        if (in_array($status, array('Completed','Closed'), TRUE)) {
+            $target = 'Available';
+        } elseif ($status === 'In Progress') {
+            $target = $is_breakdown ? 'Breakdown' : 'In Maintenance';
+        } elseif (in_array($status, array('Open','Waiting Parts','Waiting Tools'), TRUE) && $is_breakdown) {
+            $target = 'Breakdown';
+        } else {
+            $target = NULL;
+        }
+
+        if ($target === NULL) return;
+
+        /*
+         * One machine, several work orders: finishing this job does not make
+         * the machine Available while another open job still has it down.
+         * The machine's status therefore follows the strongest open claim:
+         * an open breakdown wins over an open planned job, and only when
+         * nothing is open does it become Available.
+         */
+        if ($target === 'Available' || $target === 'In Maintenance') {
+            $this->db->select('id, is_breakdown, type')
+                ->where('equipment_id', $equipment_id)
+                ->where_in('status', array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools'));
+            // This work order may not have been written yet (quick status
+            // change writes after this call), so exclude it explicitly.
+            if ($exclude_wo_id) $this->db->where('id !=', (int)$exclude_wo_id);
+            $open = $this->db->get('work_orders')->result();
+
+            $has_open_breakdown = FALSE;
+            $has_open_planned   = FALSE;
+            foreach ($open as $o) {
+                if (function_exists('wo_is_breakdown') ? wo_is_breakdown($o) : !empty($o->is_breakdown)) {
+                    $has_open_breakdown = TRUE;
+                } else {
+                    $has_open_planned = TRUE;
+                }
+            }
+            if ($has_open_breakdown) {
+                $target = 'Breakdown';
+            } elseif ($target === 'Available' && $has_open_planned) {
+                $target = 'In Maintenance';
+            }
+        }
+
+        $this->Equipment_model->update_status($equipment_id, $target);
+    }
+
+    /** Flash-message suffix describing what the lubricant sync did. */
+    private function _lube_sync_note($result) {
+        if (!is_array($result)) return '';
+        $note = '';
+        if (!empty($result['posted'])) {
+            $note .= ' '.$result['posted'].' oil line(s) posted to lubricant consumption.';
+        }
+        if (!empty($result['unmatched'])) {
+            $note .= ' '.$result['unmatched'].' oil line(s) not matched to a lubricant type — '
+                   . 'record them under Lubricants if they should count.';
+        }
+        return $note;
     }
 }

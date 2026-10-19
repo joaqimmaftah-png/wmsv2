@@ -10,6 +10,11 @@ class Team extends MY_Controller {
 
     public function index() {
         $data['workers']    = $this->Team_model->get_all();
+        // Leave requests waiting for a decision (supervisors only — the
+        // approve/reject action is guarded as well, this just hides the panel).
+        $data['pending_leave'] = $this->is_supervisor()
+            ? $this->Team_model->get_pending_leave_requests()
+            : array();
         $data['page_title'] = 'Team Management';
         $this->render('team/index', $data);
     }
@@ -61,9 +66,17 @@ class Team extends MY_Controller {
     public function view($id) {
         $data['worker']       = $this->Team_model->get_by_id($id);
         if (!$data['worker']) show_404();
+
+        // Stored cert status is refreshed from the expiry date on every view,
+        // so "Valid" can never outlive the certificate.
+        $this->Team_model->refresh_cert_status($id);
+
         $data['attendance']   = $this->Team_model->get_attendance_history($id, 30);
         $data['certifications'] = $this->Team_model->get_certifications($id);
         $data['leave_history']= $this->Team_model->get_leave_history($id);
+        $data['leave_balance']= $this->Team_model->get_leave_balance($id);
+        $data['leave_year']   = (int)date('Y');
+        $data['cert_alert_days'] = $this->_cert_alert_days();
         $data['page_title']   = $data['worker']->first_name . ' ' . $data['worker']->last_name;
         $this->render('team/view', $data);
     }
@@ -151,26 +164,62 @@ class Team extends MY_Controller {
 
     public function leave_request() {
         if ($this->input->post()) {
-            $start = $this->input->post('start_date', TRUE);
-            $end   = $this->input->post('end_date', TRUE);
-            $days  = (strtotime($end) - strtotime($start)) / 86400 + 1;
+            $start = $this->_valid_date($this->input->post('start_date', TRUE));
+            $end   = $this->_valid_date($this->input->post('end_date', TRUE));
 
-            $data = [
+            if (!$start || !$end) {
+                $this->session->set_flashdata('error', 'Please give both a valid start date and end date.');
+                redirect('team/leave_request');
+                return;
+            }
+            if (strtotime($end) < strtotime($start)) {
+                $this->session->set_flashdata('error', 'The end date cannot be before the start date.');
+                redirect('team/leave_request');
+                return;
+            }
+
+            $leave_type = $this->input->post('leave_type', TRUE);
+            if (!in_array($leave_type, Team_model::LEAVE_TYPES, TRUE)) {
+                $this->session->set_flashdata('error', 'Please choose a valid leave type.');
+                redirect('team/leave_request');
+                return;
+            }
+
+            if ($this->Team_model->has_overlapping_leave($this->user_id, $start, $end)) {
+                $this->session->set_flashdata('error',
+                    'You already have a pending or approved leave request covering part of '
+                    .date('d M Y', strtotime($start)).' – '.date('d M Y', strtotime($end)).'.');
+                redirect('team/leave_request');
+                return;
+            }
+
+            $days = (int)floor((strtotime($end) - strtotime($start)) / 86400) + 1;
+
+            // Check the balance BEFORE inserting: once this request is a row,
+            // its own days are already subtracted and comparing it with itself
+            // would warn about requests that actually fit.
+            // A request is never blocked on the balance (a supervisor may still
+            // approve an exception), so the warning rides on the success flash.
+            $warning = $this->_leave_balance_warning($this->user_id, $leave_type, $days);
+
+            $this->db->insert('leave_requests', [
                 'user_id'    => $this->user_id,
-                'leave_type' => $this->input->post('leave_type', TRUE),
+                'leave_type' => $leave_type,
                 'start_date' => $start,
                 'end_date'   => $end,
                 'days_count' => max(1, $days),
                 'reason'     => $this->input->post('reason', TRUE),
                 'status'     => 'Pending',
-            ];
+            ]);
 
-            $this->db->insert('leave_requests', $data);
-            $this->session->set_flashdata('success', 'Leave request submitted.');
+            $this->session->set_flashdata('success',
+                'Leave request submitted.' . ($warning ? ' ' . $warning : ''));
             redirect('team');
         }
 
-        $data['page_title'] = 'Leave Request';
+        $data['balances']    = $this->Team_model->get_leave_balance($this->user_id);
+        $data['leave_year']  = (int)date('Y');
+        $data['page_title']  = 'Leave Request';
         $this->render('team/leave_form', $data);
     }
 
@@ -242,6 +291,11 @@ class Team extends MY_Controller {
         $info = @getimagesize($src);
         if (!$info) { copy($src, $dst); return; }
 
+        // GD is optional on shared hosting. Without this guard the upload path
+        // fatal-errored on a host without it (K-15); the signature is then
+        // simply stored as uploaded, without the transparent conversion.
+        if (!function_exists('imagecreatefromjpeg')) { copy($src, $dst); return; }
+
         if ($info['mime'] === 'image/jpeg' || $info['mime'] === 'image/jpg') {
             $img = imagecreatefromjpeg($src);
         } elseif ($info['mime'] === 'image/png') {
@@ -286,54 +340,249 @@ class Team extends MY_Controller {
             redirect('team');
         }
 
+        $leave = $this->Team_model->get_leave_request($id);
+        if (!$leave) {
+            $this->session->set_flashdata('error', 'Leave request not found.');
+            redirect('team');
+        }
+
         $status = $this->input->post('status', TRUE);
+        if (!in_array($status, array('Pending', 'Approved', 'Rejected'), TRUE)) {
+            $this->session->set_flashdata('error', 'Invalid leave decision.');
+            redirect('team');
+        }
+
+        // Deciding leave and writing the attendance days are one action: an
+        // approval that fails to reach attendance would leave the person
+        // looking absent for the whole period.
+        $this->db->trans_begin();
+
         $this->db->update('leave_requests', [
             'status'      => $status,
             'approved_by' => $this->user_id,
             'approved_at' => date('Y-m-d H:i:s'),
             'notes'       => $this->input->post('notes', TRUE),
-        ], ['id' => $id]);
+        ], ['id' => (int)$id]);
 
-        $this->session->set_flashdata('success', "Leave request {$status}.");
+        $days_written = 0;
+        $days_removed = 0;
+
+        if ($status === 'Approved') {
+            $leave->status = 'Approved';
+            $days_written  = $this->Team_model->apply_leave_to_attendance($leave, $this->user_id);
+        } else {
+            // A request that was approved before and is now rejected/pending
+            // takes its auto-written attendance rows back out.
+            $days_removed = $this->Team_model->revert_leave_attendance($leave);
+        }
+
+        if ($this->db->trans_status() === FALSE) {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('error', 'The leave decision could not be saved. No changes were made.');
+            redirect('team');
+            return;
+        }
+        $this->db->trans_commit();
+
+        $note = '';
+        if ($days_written > 0) $note = " Attendance marked as Leave for {$days_written} day(s).";
+        elseif ($days_removed > 0) $note = " {$days_removed} automatic Leave attendance row(s) removed.";
+
+        $this->session->set_flashdata('success', "Leave request {$status}." . $note);
         redirect('team');
     }
 
     public function certifications($user_id = NULL) {
         if ($this->input->post() && $user_id) {
-            $exp = $this->input->post('expiry_date', TRUE);
-            $status = 'Valid';
-            if ($exp && strtotime($exp) < time()) $status = 'Expired';
-            elseif ($exp && strtotime($exp) < strtotime('+30 days')) $status = 'Expiring Soon';
+            $worker = $this->Team_model->get_by_id($user_id);
+            if (!$worker) show_404();
+
+            $name = trim((string)$this->input->post('cert_name', TRUE));
+            if ($name === '') {
+                $this->session->set_flashdata('error', 'A certificate name is required.');
+                redirect("team/view/{$user_id}");
+                return;
+            }
+
+            $issued = $this->_valid_date($this->input->post('issued_date', TRUE));
+            $expiry = $this->_valid_date($this->input->post('expiry_date', TRUE));
+            if ($issued && $expiry && strtotime($expiry) < strtotime($issued)) {
+                $this->session->set_flashdata('error', 'The expiry date cannot be before the issue date.');
+                redirect("team/view/{$user_id}");
+                return;
+            }
+
+            $document = $this->_save_cert_document($user_id);
 
             $data = [
-                'user_id'      => $user_id,
-                'cert_name'    => $this->input->post('cert_name', TRUE),
-                'cert_number'  => $this->input->post('cert_number', TRUE),
-                'issued_date'  => $this->input->post('issued_date', TRUE) ?: NULL,
-                'expiry_date'  => $exp ?: NULL,
-                'issuing_body' => $this->input->post('issuing_body', TRUE),
-                'status'       => $status,
+                'user_id'      => (int)$user_id,
+                'cert_name'    => $name,
+                'cert_number'  => $this->input->post('cert_number', TRUE) ?: NULL,
+                'issued_date'  => $issued,
+                'expiry_date'  => $expiry,
+                'issuing_body' => $this->input->post('issuing_body', TRUE) ?: NULL,
+                'document'     => $document,
+                'status'       => 'Valid',      // refreshed from the date below
             ];
 
-            $this->db->insert('certifications', $data);
-            $this->session->set_flashdata('success', 'Certification added.');
+            $this->Team_model->add_certification($data);
+            $this->Team_model->refresh_cert_status($user_id);
+
+            $note = $document ? ' The document was attached.' : '';
+            $this->session->set_flashdata('success', 'Certification added.' . $note);
             redirect("team/view/{$user_id}");
         }
 
+        // The tracker recomputes every stored status before listing, so it and
+        // the 60-day window below always agree.
+        $this->Team_model->refresh_cert_status();
+        $days = $this->_cert_alert_days();
+
         $data['workers']    = $this->Team_model->get_all_active();
-        $data['certs']      = $this->Team_model->get_expiring_certs(60);
+        $data['certs']      = $this->Team_model->get_expiring_certs($days);
+        $data['cert_alert_days'] = $days;
         $data['page_title'] = 'Certifications Tracker';
         $this->render('team/certifications', $data);
     }
 
+    /** Remove a certification record (supervisor only). */
+    public function delete_certification($id = NULL) {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) {
+            $this->session->set_flashdata('error', 'Access denied.');
+            redirect('team');
+        }
+
+        $cert = $id ? $this->Team_model->get_certification($id) : NULL;
+        if (!$cert) {
+            $this->session->set_flashdata('error', 'Certification not found.');
+            redirect('team/certifications');
+        }
+
+        // The stored document lives under uploads/; remove it with the record
+        // rather than leaving an orphan file behind.
+        if (!empty($cert->document)) {
+            $path = FCPATH . ltrim($cert->document, '/');
+            if (is_file($path)) @unlink($path);
+        }
+
+        $this->Team_model->delete_certification($id);
+        $this->session->set_flashdata('success', 'Certification deleted.');
+        redirect('team/view/' . (int)$cert->user_id);
+    }
+
+    /* ─────────────────────────────────────────────────────
+       SHIFT ROSTER — week view + shift types + assignments
+    ───────────────────────────────────────────────────── */
+
     public function shift_roster() {
-        $week = $this->input->get('week') ?: date('Y-m-d', strtotime('monday this week'));
-        $data['workers']    = $this->Team_model->get_all_active();
-        $data['shifts']     = $this->db->get('shifts')->result();
-        $data['assignments']= $this->Team_model->get_shift_assignments($week);
-        $data['week_start'] = $week;
-        $data['page_title'] = 'Shift Roster';
+        $week = $this->_roster_week($this->input->get('week'));
+
+        $data['workers']     = $this->Team_model->get_all_active();
+        $data['shifts']      = $this->Team_model->get_shifts();
+        $data['assignment_counts'] = $this->Team_model->get_shift_assignment_counts();
+        $data['assignments'] = $this->Team_model->get_shift_assignments($week);
+        $data['week_start']  = $week;
+        $data['can_edit']    = $this->is_supervisor();
+        $data['page_title']  = 'Shift Roster';
         $this->render('team/shift_roster', $data);
+    }
+
+    /** Create or update a shift type. */
+    public function shift_save() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) {
+            $this->session->set_flashdata('error', 'Access denied.');
+            redirect('team/shift_roster');
+        }
+
+        $id    = (int)$this->input->post('shift_id');
+        $name  = trim((string)$this->input->post('name', TRUE));
+        $start = trim((string)$this->input->post('start_time', TRUE));
+        $end   = trim((string)$this->input->post('end_time', TRUE));
+        $desc  = trim((string)$this->input->post('description', TRUE));
+        $week  = $this->_roster_week($this->input->post('week'));
+
+        $err = '';
+        if ($name === '') {
+            $err = 'The shift needs a name.';
+        } elseif (!$this->_valid_time($start) || !$this->_valid_time($end)) {
+            $err = 'Start and end time must be HH:MM.';
+        } elseif ($start === $end) {
+            $err = 'A shift cannot start and end at the same time.';
+        }
+
+        if ($err !== '') {
+            $this->session->set_flashdata('error', $err);
+            redirect('team/shift_roster?week=' . $week);
+            return;
+        }
+
+        // times are stored as HH:MM(:SS) — the time column accepts either
+        $this->Team_model->save_shift(array(
+            'name'        => substr($name, 0, 50),
+            'start_time'  => substr($start, 0, 5) . ':00',
+            'end_time'    => substr($end, 0, 5) . ':00',
+            'description' => $desc !== '' ? substr($desc, 0, 200) : NULL,
+        ), $id ?: NULL);
+
+        $this->session->set_flashdata('success', $id ? 'Shift updated.' : 'Shift created.');
+        redirect('team/shift_roster?week=' . $week);
+    }
+
+    /** Delete a shift type that is not assigned to anybody. */
+    public function shift_delete($id = NULL) {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) {
+            $this->session->set_flashdata('error', 'Access denied.');
+            redirect('team/shift_roster');
+        }
+
+        $week = $this->_roster_week($this->input->post('week'));
+        $shift = $id ? $this->Team_model->get_shift($id) : NULL;
+        if (!$shift) {
+            $this->session->set_flashdata('error', 'Shift not found.');
+            redirect('team/shift_roster?week=' . $week);
+        }
+
+        if (!$this->Team_model->delete_shift($id)) {
+            $this->session->set_flashdata('error',
+                'This shift is still assigned on the roster. Clear the assignments first.');
+        } else {
+            $this->session->set_flashdata('success', 'Shift deleted.');
+        }
+        redirect('team/shift_roster?week=' . $week);
+    }
+
+    /** Assign one worker to a shift for the displayed week (empty = clear). */
+    public function assign_shift() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) {
+            $this->session->set_flashdata('error', 'Access denied.');
+            redirect('team/shift_roster');
+        }
+
+        $week     = $this->_roster_week($this->input->post('week'));
+        $user_id  = (int)$this->input->post('user_id');
+        $shift_id = (int)$this->input->post('shift_id');
+
+        $worker = $user_id ? $this->Team_model->get_by_id($user_id) : NULL;
+        if (!$worker) {
+            $this->session->set_flashdata('error', 'Worker not found.');
+            redirect('team/shift_roster?week=' . $week);
+        }
+
+        if ($shift_id > 0 && !$this->Team_model->get_shift($shift_id)) {
+            $this->session->set_flashdata('error', 'Shift not found.');
+            redirect('team/shift_roster?week=' . $week);
+        }
+
+        $this->Team_model->set_shift_assignment($user_id, $shift_id ?: NULL, $week);
+        $this->session->set_flashdata('success',
+            $shift_id
+                ? 'Roster updated for ' . $worker->first_name . ' ' . $worker->last_name . '.'
+                : 'Shift cleared for ' . $worker->first_name . ' ' . $worker->last_name . '.');
+        redirect('team/shift_roster?week=' . $week);
     }
 
     public function report() {
@@ -343,5 +592,112 @@ class Team extends MY_Controller {
         $data['month']      = $month;
         $data['page_title'] = 'Attendance Report';
         $this->render('team/report', $data);
+    }
+
+    /* ─────────────────────────────────────────────────────
+       PRIVATE helpers
+    ───────────────────────────────────────────────────── */
+
+    /** 'Y-m-d' or NULL; rejects impossible dates such as 2026-02-30. */
+    private function _valid_date($value) {
+        if (!is_string($value) || !preg_match('/^([0-9]{4})-([0-9]{2})-([0-9]{2})$/D', $value, $m)) {
+            return NULL;
+        }
+        if (!checkdate((int)$m[2], (int)$m[3], (int)$m[1])) return NULL;
+        return $value;
+    }
+
+    /** HH:MM (optionally HH:MM:SS) — the time inputs post the first form. */
+    private function _valid_time($value) {
+        return is_string($value)
+            && preg_match('/^(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9])?$/D', $value);
+    }
+
+    /**
+     * The roster's week start: accepts the date form ('2026-10-19') and the
+     * HTML week-input form ('2026-W42'), which is what the week picker posts.
+     * Always normalised to the ISO Monday the assignments are keyed by.
+     */
+    private function _roster_week($value) {
+        $value = is_string($value) ? trim($value) : '';
+        if ($value !== '' && preg_match('/^([0-9]{4})-?[Ww]([0-9]{1,2})$/D', $value, $m)) {
+            $week = (int)$m[2];
+            if ($week >= 1 && $week <= 53) {
+                try {
+                    $d = new DateTime();
+                    $d->setISODate((int)$m[1], $week, 1);
+                    if ($d->format('o-\WW') === sprintf('%04d-W%02d', (int)$m[1], $week)) {
+                        return $this->Team_model->week_start_date($d->format('Y-m-d'));
+                    }
+                } catch (Exception $e) {
+                    // fall through to "this week"
+                }
+            }
+        }
+        if ($value !== '' && preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/D', $value)) {
+            return $this->Team_model->week_start_date($value);
+        }
+        return $this->Team_model->week_start_date();
+    }
+
+    /** `cert_alert_days` setting (seeded at 30 days, previously unread). */
+    private function _cert_alert_days() {
+        $this->load->model('Settings_model');
+        $v = (int)$this->Settings_model->get('cert_alert_days', 30);
+        return ($v > 0 && $v <= 365) ? $v : 30;
+    }
+
+    /**
+     * "This request exceeds your balance" text, or '' when it fits or the
+     * type is not tracked. Never blocks the request.
+     */
+    private function _leave_balance_warning($user_id, $leave_type, $days) {
+        foreach ($this->Team_model->get_leave_balance($user_id) as $row) {
+            if ($row['type'] !== $leave_type) continue;
+            if ($row['entitled'] === NULL) return '';
+            if ($row['remaining'] < $days) {
+                return sprintf(
+                    'Note: this request (%d day(s)) exceeds the remaining %s balance (%s day(s) of %s). '
+                    . 'The supervisor can still approve it.',
+                    $days, $leave_type,
+                    rtrim(rtrim(number_format((float)$row['remaining'], 2, '.', ''), '0'), '.'),
+                    rtrim(rtrim(number_format((float)$row['entitled'], 2, '.', ''), '0'), '.')
+                );
+            }
+            return '';
+        }
+        return '';
+    }
+
+    /**
+     * Store an optional certificate document under uploads/documents/ and
+     * return its repository-relative path, or NULL when none was posted.
+     * Mirrors the upload rules used for equipment photos and user signatures.
+     */
+    private function _save_cert_document($user_id) {
+        if (empty($_FILES['document']['name'])) return NULL;
+
+        if (!is_dir('./uploads/documents/')) {
+            @mkdir('./uploads/documents/', 0755, true);
+        }
+
+        $config = array(
+            'upload_path'   => './uploads/documents/',
+            'allowed_types' => 'pdf|jpg|jpeg|png',
+            'max_size'      => 8000,                       // 8 MB, as other attachments
+            'file_name'     => 'cert_' . (int)$user_id . '_' . time(),
+        );
+        // initialize() rather than load->library(): CI ignores the config when
+        // the Upload class was already loaded earlier in the same request.
+        $this->load->library('upload');
+        $this->upload->initialize($config);
+
+        if (!$this->upload->do_upload('document')) {
+            $this->session->set_flashdata('error',
+                'The certification was saved without its document: ' . $this->upload->display_errors('', ''));
+            return NULL;
+        }
+
+        return 'uploads/documents/' . $this->upload->data('file_name');
     }
 }

@@ -65,9 +65,43 @@ foreach ($attendance as $a) {
       </div>
     </div>
 
+    <!-- Leave Balance (current year) -->
+    <?php if (!empty($leave_balance)): ?>
+    <div class="wms-card mb-3">
+      <div class="card-head">
+        <i class="bi bi-calendar-range text-primary me-1"></i>Leave Balance <?= isset($leave_year) ? (int)$leave_year : date('Y') ?>
+      </div>
+      <div class="card-body p-0">
+        <table class="table wms-table mb-0" style="font-size:12px;">
+          <thead><tr><th>Type</th><th style="text-align:right;">Entitled</th><th style="text-align:right;">Approved</th><th style="text-align:right;">Pending</th><th style="text-align:right;">Remaining</th></tr></thead>
+          <tbody>
+            <?php foreach ($leave_balance as $lb): ?>
+            <?php if ($lb['entitled'] === null && $lb['approved'] <= 0 && $lb['pending'] <= 0) continue; ?>
+            <tr>
+              <td><?= htmlspecialchars($lb['type']) ?></td>
+              <td class="mono" style="text-align:right;"><?= $lb['entitled'] === null ? '—' : rtrim(rtrim(number_format($lb['entitled'], 1), '0'), '.') ?></td>
+              <td class="mono" style="text-align:right;"><?= rtrim(rtrim(number_format($lb['approved'], 1), '0'), '.') ?></td>
+              <td class="mono" style="text-align:right;color:#b45309;"><?= rtrim(rtrim(number_format($lb['pending'], 1), '0'), '.') ?></td>
+              <td class="mono fw-600" style="text-align:right;color:<?= ($lb['remaining'] !== null && $lb['remaining'] < 0) ? '#dc2626' : '#16a34a' ?>;">
+                <?= $lb['remaining'] === null ? '—' : rtrim(rtrim(number_format($lb['remaining'], 1), '0'), '.') ?>
+              </td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+        <div style="font-size:10.5px;color:#94a3b8;padding:8px 12px;">
+          Entitlements are configured under Settings → <code>leave_entitlements</code>. A dash means the type is not tracked.
+        </div>
+      </div>
+    </div>
+    <?php endif; ?>
+
     <!-- Leave History -->
     <div class="wms-card">
-      <div class="card-head"><i class="bi bi-calendar-x text-primary me-1"></i>Leave History</div>
+      <div class="card-head">
+        <i class="bi bi-calendar-x text-primary me-1"></i>Leave History
+        <a href="<?= base_url('team/leave_request') ?>" class="btn btn-sm btn-outline-primary ms-auto" style="font-size:11px;">Request Leave</a>
+      </div>
       <div class="card-body p-0">
         <?php if (empty($leave_history)): ?>
           <div class="text-center py-3 text-muted" style="font-size:13px;">No leave records</div>
@@ -103,26 +137,42 @@ foreach ($attendance as $a) {
           <div class="text-center py-3 text-muted" style="font-size:13px;">No certifications recorded</div>
         <?php else: ?>
         <table class="table wms-table mb-0">
-          <thead><tr><th>Certificate</th><th>Number</th><th>Issued By</th><th>Expiry</th><th>Status</th></tr></thead>
+          <thead><tr><th>Certificate</th><th>Number</th><th>Issued By</th><th>Expiry</th><th>Status</th><th>Document</th><th></th></tr></thead>
           <tbody>
             <?php foreach ($certifications as $c): ?>
             <?php
-            $days_left = $c->expiry_date ? round((strtotime($c->expiry_date) - time()) / 86400) : null;
+            $days_left = $c->expiry_date ? (int)floor((strtotime($c->expiry_date) - strtotime(date('Y-m-d'))) / 86400) : null;
             $cert_status_badge = $c->status == 'Valid' ? 'bg-success' : ($c->status == 'Expiring Soon' ? 'bg-warning text-dark' : 'bg-danger');
+            $alert_days = isset($cert_alert_days) ? (int)$cert_alert_days : 30;
             ?>
             <tr>
-              <td class="fw-500"><?= $c->cert_name ?></td>
-              <td style="font-size:12px;"><?= $c->cert_number ?: '—' ?></td>
-              <td style="font-size:12px;color:#64748b;"><?= $c->issuing_body ?: '—' ?></td>
+              <td class="fw-500"><?= htmlspecialchars($c->cert_name) ?></td>
+              <td style="font-size:12px;"><?= htmlspecialchars((string)($c->cert_number ?: '—')) ?></td>
+              <td style="font-size:12px;color:#64748b;"><?= htmlspecialchars((string)($c->issuing_body ?: '—')) ?></td>
               <td style="font-size:12px;">
                 <?= $c->expiry_date ? date('d M Y', strtotime($c->expiry_date)) : '—' ?>
-                <?php if ($days_left !== null && $days_left >= 0 && $days_left <= 60): ?>
+                <?php if ($days_left !== null && $days_left >= 0 && $days_left <= $alert_days): ?>
                   <div style="font-size:10px;color:#f59e0b;"><?= $days_left ?> days left</div>
                 <?php elseif ($days_left !== null && $days_left < 0): ?>
                   <div style="font-size:10px;color:#dc2626;"><?= abs($days_left) ?> days expired</div>
                 <?php endif; ?>
               </td>
-              <td><span class="badge <?= $cert_status_badge ?>"><?= $c->status ?></span></td>
+              <td><span class="badge <?= $cert_status_badge ?>"><?= htmlspecialchars((string)$c->status) ?></span></td>
+              <td style="font-size:11.5px;">
+                <?php if (!empty($c->document)): ?>
+                  <a href="<?= base_url(htmlspecialchars($c->document, ENT_QUOTES, 'UTF-8')) ?>" target="_blank" rel="noopener">Open</a>
+                <?php else: ?>
+                  <span style="color:#94a3b8;">—</span>
+                <?php endif; ?>
+              </td>
+              <td style="text-align:right;">
+                <?php if (isset($role_id) && (int)$role_id === 1): ?>
+                <?= form_open('team/delete_certification/'.$c->id, array('style' => 'display:inline;')) ?>
+                  <button type="submit" class="btn btn-sm btn-outline-danger" style="font-size:10.5px;padding:2px 8px;"
+                          onclick="return confirm('Delete this certification? The attached document is removed too.');">Delete</button>
+                <?= form_close() ?>
+                <?php endif; ?>
+              </td>
             </tr>
             <?php endforeach; ?>
           </tbody>
@@ -169,7 +219,7 @@ foreach ($attendance as $a) {
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title">Add Certification</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-      <?= form_open('team/certifications/' . $worker->id) ?>
+      <?= form_open_multipart('team/certifications/' . $worker->id) ?>
       <div class="modal-body">
         <div class="row g-2">
           <div class="col-12"><label class="form-label">Certificate Name *</label><input type="text" name="cert_name" class="form-control" required placeholder="e.g. Forklift Operator License"></div>
@@ -177,6 +227,10 @@ foreach ($attendance as $a) {
           <div class="col-6"><label class="form-label">Issuing Body</label><input type="text" name="issuing_body" class="form-control"></div>
           <div class="col-6"><label class="form-label">Issued Date</label><input type="date" name="issued_date" class="form-control"></div>
           <div class="col-6"><label class="form-label">Expiry Date</label><input type="date" name="expiry_date" class="form-control"></div>
+          <div class="col-12">
+            <label class="form-label">Document <span style="font-weight:400;color:#94a3b8;">(PDF / JPG / PNG, max 8 MB)</span></label>
+            <input type="file" name="document" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+          </div>
         </div>
       </div>
       <div class="modal-footer">

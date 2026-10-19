@@ -46,14 +46,14 @@ without resetting all passwords.
 | Dashboard | Operational KPI dashboard (30-day availability/MTTR/MTBF, open WOs, overdue PM, attendance, pending-spares board) and a separate read-only Executive Summary for the CEO role |
 | Work Orders | Corrective / Preventive / Incident work orders with printable job cards, multi-technician labour sessions, spare-part and oil lines, incident (HSE) details with photo/PDF evidence, drawn operator signature, two-stage close (Completed → supervisor-verified Closed) |
 | Equipment | Asset register with types, meter readings (hours/km) with validation and history, report grouping/site classification, manufacturer spec sheets, per-machine KPIs |
-| PM Planner | Preventive-maintenance schedules (Hours/Km/Days/Months intervals), completion recording, 12-month calendar forecast, per-service spare-part requirements |
-| Inspections | 14 seeded bilingual (EN/FR) checklist templates; signed inspection records; failed items automatically raise/annotate/close backlog defects; real PDF output |
+| PM Planner | Preventive-maintenance schedules (Hours/Km/Days/Months intervals), completion recording linked to the work order that did the service, 12-month calendar forecast, per-service spare-part requirements |
+| Inspections | 14 seeded bilingual (EN/FR) checklist templates plus a supervisor template editor (create/edit/delete, usage-guarded); signed inspection records; failed items automatically raise/annotate/close backlog defects; real PDF output |
 | Backlog | Defect register (P1–P3) with Excel export mirroring the legacy "Backlog on going / done" sheets; planning a defect pushes a job into the maintenance plan |
 | Inventory (Materials) | Stock items with a movement ledger (receive/issue), reorder data, Excel export/template/**import with dry-run validation and per-row error report** |
 | Pending Spare Parts | Matches parts requested on open work orders against stock; Allocate → Issue reservations; in-app availability alerts when stock arrives |
 | Suppliers & Orders | Supplier master with contacts and part catalogue; purchase-order pipeline with measured lead-time estimates; partial deliveries, GRN (goods receipt note) per delivery, order documents |
 | Lubricants | Lube types, per-equipment-type specifications, consumption recording with variance, monthly budget, PM-driven requirement vs actual compliance |
-| Team | Staff list on the same `users` table, daily attendance, leave requests/approval, certifications with expiry tracking, monthly attendance report, shift-roster display |
+| Team | Staff list on the same `users` table, daily attendance, leave requests/approval with automatic attendance days and per-type balances, certifications with expiry refresh and document upload, monthly attendance report, editable shift roster (shift types + weekly assignments) |
 | Users & Settings | Role-based user administration (Supervisor only); system settings; sign-in security screen (throttling policy + security events) |
 | Reports | Daily/weekly/monthly reports, MTTR/MTBF, lube compliance, store registers (issue/receipt/reorder), asset register (+ Excel import), annual report/plan, service-kit recommendations, workshop daily/weekly reports, and the W36 weekly fleet report (screen, Excel, print, publish/freeze) |
 | Forecast | Planned-availability week planner (PM placement, maintenance jobs, weekly inspection rounds, standing/unplanned allowances), publish/freeze with revisions, plan-vs-actual, rolling 3-week plan, PM spare-parts forecast |
@@ -310,7 +310,7 @@ dashboard cards — they intentionally share one KPI engine
 | Photos/signatures return 403/404 on nginx | `.htaccess` is ignored on nginx — apply the uploads rules in the server block (see `uploads/.htaccess` footer) |
 | Availability figures look wrong after changing open hours | **Settings** values (`daily_open_hours`, `weekly_open_hours`, target, week start) drive every KPI screen; reports already *published* (forecast baselines, W36 snapshots) stay frozen by design |
 | Account "locked" after wrong passwords | Wait 15 minutes or sign in successfully from the account+IP pair; supervisors can review events under **Settings → Sign-in Security** |
-| Attachment / order-document **download** returns 500 | Known bug K-04 (`SYSTEM.md` §18): the `download` helper is never loaded. Files remain in `uploads/wo_attachments/` / `uploads/order_docs/` |
+| Attachment / order-document **download** returns 500 | The `download` helper is loaded in `autoload.php` now; if it still fails, check the file exists under `uploads/wo_attachments/` / `uploads/order_docs/` and that the path is readable |
 
 ## Documentation
 

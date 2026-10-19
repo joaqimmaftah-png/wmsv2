@@ -3,6 +3,14 @@
     <div style="font-size:13px;color:var(--t3);"><?= isset($workers) ? count($workers) : 0 ?> workers</div>
   </div>
   <div class="flex ai-c gap-10">
+    <a href="<?= base_url('team/shift_roster') ?>" class="btn btn-ghost btn-sm btn-icon">
+      <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+      Shift Roster
+    </a>
+    <a href="<?= base_url('team/certifications') ?>" class="btn btn-ghost btn-sm btn-icon">
+      <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="8" r="5"/><polyline points="8.5 13 7 22 12 19 17 22 15.5 13"/></svg>
+      Certifications
+    </a>
     <a href="<?= base_url('team/attendance') ?>" class="btn btn-ghost btn-sm btn-icon">
       <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
       Attendance
@@ -17,6 +25,52 @@
     </a>
   </div>
 </div>
+
+<?php if (!empty($pending_leave)): ?>
+<!-- Leave requests waiting for a decision (supervisors only) -->
+<div class="card mb-4">
+  <div class="ch">
+    <div>
+      <div class="ct">Leave Requests Awaiting Approval</div>
+      <div class="cs"><?= count($pending_leave) ?> pending — approving marks the days as Leave on attendance</div>
+    </div>
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="tbl" style="margin-top:12px;">
+      <thead>
+        <tr><th>Worker</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Reason</th><th style="text-align:right;">Decision</th></tr>
+      </thead>
+      <tbody>
+        <?php foreach ($pending_leave as $lr): ?>
+        <tr>
+          <td class="fw-600" style="font-size:12.5px;">
+            <?= htmlspecialchars($lr->worker_name) ?>
+            <div style="font-size:10.5px;color:var(--t3);font-weight:400;"><?= htmlspecialchars((string)$lr->employee_id) ?></div>
+          </td>
+          <td><span class="badge b-primary" style="font-size:10px;"><?= htmlspecialchars($lr->leave_type) ?></span></td>
+          <td class="mono" style="font-size:11.5px;"><?= date('d M Y', strtotime($lr->start_date)) ?></td>
+          <td class="mono" style="font-size:11.5px;"><?= date('d M Y', strtotime($lr->end_date)) ?></td>
+          <td class="mono fw-600"><?= (int)$lr->days_count ?></td>
+          <td style="font-size:12px;color:var(--t3);max-width:260px;"><?= htmlspecialchars((string)$lr->reason) ?></td>
+          <td>
+            <div class="flex ai-c gap-10" style="justify-content:flex-end;flex-wrap:wrap;">
+              <?= form_open('team/approve_leave/'.$lr->id, array('style' => 'display:inline-flex;gap:6px;align-items:center;')) ?>
+                <input type="text" name="notes" class="form-control" placeholder="Decision note (optional)"
+                       style="width:170px;font-size:11.5px;padding:4px 8px;">
+                <button type="submit" name="status" value="Approved" class="btn btn-primary btn-sm"
+                        style="font-size:11px;padding:4px 12px;">Approve</button>
+                <button type="submit" name="status" value="Rejected" class="btn btn-ghost btn-sm"
+                        style="font-size:11px;padding:4px 12px;color:var(--red);">Reject</button>
+              <?= form_close() ?>
+            </div>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+<?php endif; ?>
 
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;">
   <?php

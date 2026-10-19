@@ -60,6 +60,15 @@ class Settings_model extends CI_Model {
         'unplanned_allowance_default_hours'=> '1',
         'unplanned_allowance_lookback_weeks' => '12',
         'forecast_show_excel_reference'    => '1',
+
+        /* ── team / leave (previously hard-coded or absent) ── */
+        // Seeded as 30 in the dump; kept here so a database created without
+        // that row still has the value the certification screens expect.
+        'cert_alert_days'                  => '30',
+        // Days per leave type per year. A type missing from the map is not
+        // tracked (shown as "—"), which is how Maternity/Paternity/Training
+        // behave until the business sets a figure.
+        'leave_entitlements'               => '{"Annual Leave":21,"Sick Leave":10,"Emergency":3}',
     );
 
     const DESCRIPTIONS = array(
@@ -82,6 +91,9 @@ class Settings_model extends CI_Model {
         'unplanned_allowance_default_hours' => 'flat mode: planned breakdown allowance per day (hours). The historical workbook typed 1 h/day on 85 of 103 machines',
         'unplanned_allowance_lookback_weeks'=> 'derived mode: how many weeks of history the per-machine allowance is computed from',
         'forecast_show_excel_reference'     => 'D29/D30: 1 = also show the historical Excel figures (24-hour calendar availability, unweighted group mean) as labelled reference columns; 0 = system figures only',
+
+        'cert_alert_days'                   => 'Days before a certification expiry at which it is flagged "Expiring Soon" (the tracker also lists already-expired certificates)',
+        'leave_entitlements'                => 'Leave days per type per year, as JSON keyed by the leave type, e.g. {"Annual Leave":21,"Sick Leave":10,"Emergency":3}. A type not listed is not tracked (shown as "—")',
     );
 
     const BREAKDOWN_COUNT_MODES = array('start_in_period', 'overlapping');
@@ -400,6 +412,28 @@ class Settings_model extends CI_Model {
 
             case 'forecast_show_excel_reference':
                 return ((string)$value === '1' || $value === true || $value === 1) ? '1' : '0';
+
+            /* ── team / leave ─────────────────────────────────────────── */
+
+            case 'cert_alert_days':
+                $v = (int)$value;
+                return (string)(($v > 0 && $v <= 365) ? $v : 30);
+
+            case 'leave_entitlements':
+                // must stay a JSON object of type => whole/half days; a
+                // malformed value would silently zero every balance.
+                $j = json_decode((string)$value, true);
+                if (!is_array($j)) return '{}';
+                $clean = array();
+                foreach ($j as $type => $days) {
+                    if (!is_string($type) || trim($type) === '') continue;
+                    if (!is_numeric($days)) continue;
+                    $d = (float)$days;
+                    if ($d < 0)   $d = 0;
+                    if ($d > 365) $d = 365;
+                    $clean[trim($type)] = round($d, 1);
+                }
+                return $clean ? json_encode($clean) : '{}';
         }
         return $value;
     }

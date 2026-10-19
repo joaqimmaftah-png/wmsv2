@@ -33,10 +33,6 @@
             <input type="number" name="settings[pm_alert_days]" class="form-control" value="<?= (isset($s['pm_alert_days']) ? $s['pm_alert_days']->setting_value : '7') ?>">
           </div>
         </div>
-        <div>
-          <label class="form-label">Certification Expiry Alert (days)</label>
-          <input type="number" name="settings[cert_alert_days]" class="form-control" value="<?= (isset($s['cert_alert_days']) ? $s['cert_alert_days']->setting_value : '30') ?>">
-        </div>
       </div>
 
       <?php
@@ -189,6 +185,26 @@
         </div>
       </div>
       <?php endif; ?>
+
+      <?php /* ── Team / leave — the values the Team screens read ── */ ?>
+      <div class="ch" style="margin-top:26px;"><div><div class="ct">Team &amp; Leave</div>
+        <div class="cs">Certification alerting and the leave balances shown on the Team screens</div></div></div>
+      <div class="form-grid cols-1" style="gap:16px;margin-bottom:24px;">
+        <div class="form-grid cols-2">
+          <div>
+            <label class="form-label">Certification Expiry Alert (days)</label>
+            <input type="number" min="1" max="365" name="settings[cert_alert_days]" class="form-control"
+                   value="<?= htmlspecialchars($rval('cert_alert_days', $rdef['cert_alert_days'])) ?>">
+            <div class="cs" style="margin-top:4px;"><?= $rdesc['cert_alert_days'] ?></div>
+          </div>
+        </div>
+        <div>
+          <label class="form-label">Leave Entitlements (days per year, JSON)</label>
+          <textarea name="settings[leave_entitlements]" class="form-control" rows="3" spellcheck="false"
+                    style="font-family:ui-monospace,monospace;font-size:12px;"><?= htmlspecialchars($rval('leave_entitlements', $rdef['leave_entitlements'])) ?></textarea>
+          <div class="cs" style="margin-top:4px;"><?= $rdesc['leave_entitlements'] ?></div>
+        </div>
+      </div>
 
       <div class="flex ai-c gap-10" style="justify-content:flex-end;">
         <button type="submit" class="btn btn-primary">Save Settings</button>

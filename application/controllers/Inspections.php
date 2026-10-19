@@ -26,8 +26,254 @@ class Inspections extends MY_Controller {
         $data['templates']     = $this->Inspection_model->get_templates();
         $data['record_counts'] = $this->Inspection_model->get_record_counts();
         $data['lang']          = $lang;
+        $data['can_manage']    = $this->is_supervisor();
         $data['page_title']    = ($lang === 'fr' ? 'Formulaires d’inspection' : 'Inspection Forms');
         $this->render('inspections/index', $data);
+    }
+
+    /* ─────────────────────────────────────────────────────
+       TEMPLATE MANAGEMENT (supervisor)
+
+       The seeded checklist templates could only be changed in the database.
+       These screens make the template and its bilingual rows editable, while
+       protecting submitted records: a row or template that a record already
+       uses can never be deleted.
+    ───────────────────────────────────────────────────── */
+
+    public function templates() {
+        if (!$this->is_supervisor()) {
+            $this->session->set_flashdata('error', 'Only a supervisor can manage inspection templates.');
+            redirect('inspections');
+        }
+
+        $data['templates']     = $this->Inspection_model->get_all_templates();
+        $data['record_counts'] = $this->Inspection_model->get_record_counts();
+        $data['page_title']    = 'Inspection Templates';
+        $this->render('inspections/templates', $data);
+    }
+
+    /** Create (no id) or edit (id) a template and its checklist rows. */
+    public function template_edit($id = NULL) {
+        if (!$this->is_supervisor()) {
+            $this->session->set_flashdata('error', 'Only a supervisor can manage inspection templates.');
+            redirect('inspections');
+        }
+
+        $template = $id ? $this->Inspection_model->get_template($id) : NULL;
+        if ($id && !$template) show_404();
+
+        if ($this->input->post()) {
+            $post   = $this->input->post();
+            $parsed = $this->_parse_template_post($post, $template);
+
+            if (empty($parsed['errors'])) {
+                // The template row and its checklist rows are one unit: a
+                // failure in the rows must not leave a half-saved template
+                // behind (the row writer runs its own nested transaction).
+                $this->db->trans_begin();
+                $new_id = $this->Inspection_model->save_template(
+                    $parsed['data'], $template ? (int)$template->id : NULL
+                );
+                $result = $new_id ? $this->Inspection_model->save_template_items($new_id, $parsed['items'])
+                                  : array('failed' => TRUE, 'saved' => 0, 'kept' => 0);
+
+                if (!empty($result['failed']) || $this->db->trans_status() === FALSE) {
+                    $this->db->trans_rollback();
+                    // Fall through to the re-render below so the posted rows
+                    // are not lost.
+                    $parsed['errors'][] = 'The template could not be saved. No changes were written.';
+                } else {
+                    $this->db->trans_commit();
+
+                    $msg = 'Template saved — ' . $result['saved'] . ' checklist row(s).';
+                    if ($result['kept'] > 0) {
+                        $msg .= ' ' . $result['kept'] . ' row(s) could not be removed because a submitted '
+                              . 'inspection record uses them; deactivate the template instead.';
+                    }
+                    $this->session->set_flashdata('success', $msg);
+                    redirect('inspections/template_edit/' . (int)$new_id);
+                }
+            }
+
+            // Re-render what was posted so a validation error never throws away
+            // a supervisor's edits.
+            $data['template'] = $this->_template_from_post($post, $template);
+            $data['items']    = $this->_items_from_post($post);
+            $data['errors']   = $parsed['errors'];
+        } else {
+            $data['template'] = $template;
+            $data['items']    = $template ? $this->Inspection_model->get_items($template->id) : array();
+            $data['errors']   = array();
+        }
+
+        $data['record_count'] = $template ? $this->Inspection_model->template_record_count($template->id) : 0;
+        $data['page_title']   = $template
+            ? 'Edit Template — ' . $template->name_en
+            : 'New Inspection Template';
+        $this->render('inspections/template_form', $data);
+    }
+
+    /** Delete a template that has never been used. */
+    public function template_delete($id = NULL) {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) {
+            $this->session->set_flashdata('error', 'Only a supervisor can manage inspection templates.');
+            redirect('inspections');
+        }
+
+        $template = $id ? $this->Inspection_model->get_template($id) : NULL;
+        if (!$template) {
+            $this->session->set_flashdata('error', 'Template not found.');
+            redirect('inspections/templates');
+        }
+
+        if ($this->Inspection_model->template_record_count($template->id) > 0) {
+            $this->session->set_flashdata('error',
+                'The template has submitted records and cannot be deleted. Set it inactive instead.');
+            redirect('inspections/templates');
+        }
+
+        // No records exist, so no inspection_record_items can reference its rows.
+        $this->db->where('template_id', (int)$template->id)->delete('inspection_items');
+        $this->Inspection_model->delete_template($template->id);
+
+        $this->session->set_flashdata('success', 'Template deleted.');
+        redirect('inspections/templates');
+    }
+
+    /**
+     * Validate a posted template and normalise its checklist rows.
+     *
+     * @return array{data:array,items:array,errors:string[]}
+     */
+    private function _parse_template_post($post, $template = NULL) {
+        $id = $template ? (int)$template->id : 0;
+        $errors = array();
+
+        $code = strtolower(trim(isset($post['code']) ? $post['code'] : ''));
+        if ($code === '' || !preg_match('/^[a-z0-9_]{2,50}$/D', $code)) {
+            $errors[] = 'The code must be 2–50 characters: lower-case letters, digits and underscores only.';
+        } elseif ($this->Inspection_model->template_code_taken($code, $id ?: NULL)) {
+            $errors[] = 'Another template already uses the code "' . $code . '".';
+        }
+
+        $name_en = trim(isset($post['name_en']) ? $post['name_en'] : '');
+        $name_fr = trim(isset($post['name_fr']) ? $post['name_fr'] : '');
+        if ($name_en === '' || $name_fr === '') {
+            $errors[] = 'Both the English and the French template name are required.';
+        }
+
+        $layout = (isset($post['layout_type']) && $post['layout_type'] === 'matrix') ? 'matrix' : 'compliance';
+
+        $columns_json = NULL;
+        if ($layout === 'matrix') {
+            $raw = trim(isset($post['columns_json']) ? (string)$post['columns_json'] : '');
+            $cols = json_decode($raw, TRUE);
+            if (!is_array($cols) || empty($cols)) {
+                $errors[] = 'A matrix template needs a non-empty columns JSON array '
+                          . '(each entry: {"key":"H","label_en":"Excavator","label_fr":"Excavatrice"}).';
+            } else {
+                $clean = array();
+                foreach ($cols as $c) {
+                    if (!is_array($c)) continue;
+                    $key = isset($c['key']) ? trim((string)$c['key']) : '';
+                    if ($key === '') continue;
+                    $clean[] = array(
+                        'key'      => substr($key, 0, 10),
+                        'label_en' => isset($c['label_en']) ? trim((string)$c['label_en']) : $key,
+                        'label_fr' => isset($c['label_fr']) ? trim((string)$c['label_fr']) : $key,
+                    );
+                }
+                if (empty($clean)) {
+                    $errors[] = 'Every column needs a non-empty "key".';
+                } else {
+                    $columns_json = json_encode($clean);
+                }
+            }
+        }
+
+        $rows  = isset($post['items']) && is_array($post['items']) ? $post['items'] : array();
+        $items = array();
+        foreach ($rows as $r) {
+            if (!is_array($r)) continue;
+            $row_type = (isset($r['row_type']) && $r['row_type'] === 'section') ? 'section' : 'item';
+            $text_en  = trim(isset($r['text_en']) ? (string)$r['text_en'] : '');
+            $text_fr  = trim(isset($r['text_fr']) ? (string)$r['text_fr'] : '');
+            if ($text_en === '' && $text_fr === '') continue;   // blank spare row
+
+            $items[] = array(
+                'id'          => isset($r['id']) ? (int)$r['id'] : 0,
+                'row_type'    => $row_type,
+                'item_no'     => isset($r['item_no']) ? $r['item_no'] : '',
+                'category_en' => isset($r['category_en']) ? $r['category_en'] : '',
+                'category_fr' => isset($r['category_fr']) ? $r['category_fr'] : '',
+                'text_en'     => $text_en,
+                'text_fr'     => $text_fr,
+                'na_columns'  => isset($r['na_columns']) ? $r['na_columns'] : '',
+            );
+        }
+        if (empty($items)) {
+            $errors[] = 'The checklist needs at least one row.';
+        }
+
+        $data = array(
+            'code'          => $code,
+            'name_en'       => $name_en,
+            'name_fr'       => $name_fr,
+            'category_en'   => trim(isset($post['category_en']) ? $post['category_en'] : '') ?: 'General',
+            'category_fr'   => trim(isset($post['category_fr']) ? $post['category_fr'] : '') ?: 'Général',
+            'layout_type'   => $layout,
+            'columns_json'  => $columns_json,
+            'meter_label_en'=> substr(trim(isset($post['meter_label_en']) ? $post['meter_label_en'] : 'SMR') ?: 'SMR', 0, 20),
+            'meter_label_fr'=> substr(trim(isset($post['meter_label_fr']) ? $post['meter_label_fr'] : 'SMR') ?: 'SMR', 0, 20),
+            'active'        => !empty($post['active']) ? 1 : 0,
+        );
+
+        return array('data' => $data, 'items' => $items, 'errors' => $errors);
+    }
+
+    /** Rebuild a template-shaped object from a rejected POST. */
+    private function _template_from_post($post, $template = NULL) {
+        return (object) array(
+            'id'             => $template ? (int)$template->id : 0,
+            'code'           => isset($post['code']) ? (string)$post['code'] : '',
+            'name_en'        => isset($post['name_en']) ? (string)$post['name_en'] : '',
+            'name_fr'        => isset($post['name_fr']) ? (string)$post['name_fr'] : '',
+            'category_en'    => isset($post['category_en']) ? (string)$post['category_en'] : 'General',
+            'category_fr'    => isset($post['category_fr']) ? (string)$post['category_fr'] : 'Général',
+            'layout_type'    => (isset($post['layout_type']) && $post['layout_type'] === 'matrix') ? 'matrix' : 'compliance',
+            'columns_json'   => isset($post['columns_json']) ? (string)$post['columns_json'] : '',
+            'meter_label_en' => isset($post['meter_label_en']) ? (string)$post['meter_label_en'] : 'SMR',
+            'meter_label_fr' => isset($post['meter_label_fr']) ? (string)$post['meter_label_fr'] : 'SMR',
+            'active'         => !empty($post['active']) ? 1 : 0,
+            'columns'        => array(),
+        );
+    }
+
+    /** Rebuild item objects from a rejected POST (so nothing is lost). */
+    private function _items_from_post($post) {
+        $rows  = isset($post['items']) && is_array($post['items']) ? $post['items'] : array();
+        $items = array();
+        $i = 0;
+        foreach ($rows as $r) {
+            if (!is_array($r)) continue;
+            $text_en = isset($r['text_en']) ? (string)$r['text_en'] : '';
+            $text_fr = isset($r['text_fr']) ? (string)$r['text_fr'] : '';
+            if (trim($text_en) === '' && trim($text_fr) === '') continue;
+            $i++;
+            $items[] = (object) array(
+                'id'          => isset($r['id']) ? (int)$r['id'] : 0,
+                'sort_order'  => $i,
+                'row_type'    => (isset($r['row_type']) && $r['row_type'] === 'section') ? 'section' : 'item',
+                'item_no'     => isset($r['item_no']) ? $r['item_no'] : NULL,
+                'category_en' => isset($r['category_en']) ? (string)$r['category_en'] : '',
+                'category_fr' => isset($r['category_fr']) ? (string)$r['category_fr'] : '',
+                'text_en'     => $text_en,
+                'text_fr'     => $text_fr,
+                'na_columns'  => isset($r['na_columns']) ? (string)$r['na_columns'] : '',
+            );
+        }
+        return $items;
     }
 
     /* ─────────────────────────────────────────────────────

@@ -116,6 +116,143 @@ class Inspection_model extends CI_Model {
                          ->get('inspection_items')->result();
     }
 
+    /* ---------- Template management ----------
+       The 14 seeded templates were fully usable but could only be changed in
+       the database. These methods let a supervisor create/edit a template and
+       its bilingual checklist rows from the UI.
+
+       Deleting a row that a submitted record already references would break
+       the FK from inspection_record_items.item_id, so such a row is kept and
+       reported instead of failing the whole save. */
+
+    /** All templates, active and inactive (the picker only shows active ones). */
+    public function get_all_templates() {
+        return $this->get_templates(FALSE);
+    }
+
+    public function template_record_count($template_id) {
+        return (int)$this->db->where('template_id', (int)$template_id)
+            ->count_all_results('inspection_records');
+    }
+
+    public function item_usage_count($item_id) {
+        return (int)$this->db->where('item_id', (int)$item_id)
+            ->count_all_results('inspection_record_items');
+    }
+
+    /** Is this code free? (case-insensitive; $exclude_id for an edit) */
+    public function template_code_taken($code, $exclude_id = NULL) {
+        $this->db->where('code', $code);
+        if ($exclude_id) $this->db->where('id !=', (int)$exclude_id);
+        return $this->db->count_all_results('inspection_templates') > 0;
+    }
+
+    public function save_template($data, $id = NULL) {
+        if ($id) {
+            $this->db->where('id', (int)$id)->update('inspection_templates', $data);
+            return (int)$id;
+        }
+        $this->db->insert('inspection_templates', $data);
+        return (int)$this->db->insert_id();
+    }
+
+    public function delete_template($id) {
+        $this->db->where('id', (int)$id)->delete('inspection_templates');
+        return $this->db->affected_rows() > 0;
+    }
+
+    /**
+     * Replace a template's rows with what the editor posted.
+     *
+     * Each row: id (existing) | row_type | item_no | category_en/fr |
+     *           text_en/fr | na_columns
+     *
+     * @param  int   $template_id
+     * @param  array $rows
+     * @return array{saved:int,kept:int}  kept = rows that could not be deleted
+     *                                    because a submitted record uses them
+     */
+    public function save_template_items($template_id, $rows) {
+        $template_id = (int)$template_id;
+        $existing = array();
+        foreach ($this->get_items($template_id) as $it) {
+            $existing[(int)$it->id] = $it;
+        }
+
+        $seen = array();
+        $keep = array();
+        $saved = 0;
+        $order = 0;
+
+        $this->db->trans_begin();
+
+        foreach ((array)$rows as $row) {
+            if (!is_array($row)) continue;
+
+            $row_type = (isset($row['row_type']) && $row['row_type'] === 'section') ? 'section' : 'item';
+            $text_en  = isset($row['text_en']) ? trim((string)$row['text_en']) : '';
+            $text_fr  = isset($row['text_fr']) ? trim((string)$row['text_fr']) : '';
+            $cat_en   = isset($row['category_en']) ? trim((string)$row['category_en']) : '';
+            $cat_fr   = isset($row['category_fr']) ? trim((string)$row['category_fr']) : '';
+            $na       = isset($row['na_columns']) ? trim((string)$row['na_columns']) : '';
+            $item_no  = (isset($row['item_no']) && $row['item_no'] !== '' && is_numeric($row['item_no']))
+                ? (int)$row['item_no'] : NULL;
+
+            // a completely blank row is ignored (the editor leaves one spare)
+            if ($text_en === '' && $text_fr === '' && $cat_en === '' && $cat_fr === '') continue;
+
+            $order++;
+            $id = (isset($row['id']) && (int)$row['id'] > 0) ? (int)$row['id'] : 0;
+
+            if ($row_type === 'section') {
+                $item_no = NULL;
+                $cat_en  = '';
+                $cat_fr  = '';
+                $na      = '';
+            }
+
+            $data = array(
+                'template_id'   => $template_id,
+                'sort_order'    => $order,
+                'row_type'      => $row_type,
+                'item_no'       => $item_no,
+                'category_en'   => $cat_en !== '' ? $cat_en : NULL,
+                'category_fr'   => $cat_fr !== '' ? $cat_fr : NULL,
+                'text_en'       => $text_en !== '' ? $text_en : NULL,
+                'text_fr'       => $text_fr !== '' ? $text_fr : NULL,
+                'na_columns'    => $na !== '' ? $na : NULL,
+            );
+
+            if ($id > 0 && isset($existing[$id])) {
+                $this->db->where('id', $id)->update('inspection_items', $data);
+                $seen[$id] = TRUE;
+            } else {
+                $this->db->insert('inspection_items', $data);
+                $new_id = (int)$this->db->insert_id();
+                if ($new_id) $seen[$new_id] = TRUE;
+            }
+            $saved++;
+        }
+
+        // Rows removed from the editor: delete only those no record uses.
+        foreach ($existing as $id => $it) {
+            if (isset($seen[$id])) continue;
+            if ($this->item_usage_count($id) > 0) {
+                $keep[] = $it;
+                continue;
+            }
+            $this->db->where('id', $id)->delete('inspection_items');
+        }
+
+        if ($this->db->trans_status() === FALSE) {
+            $this->db->trans_rollback();
+            return array('saved' => 0, 'kept' => 0, 'failed' => TRUE);
+        }
+        $this->db->trans_commit();
+
+        return array('saved' => $saved, 'kept' => count($keep), 'failed' => FALSE);
+    }
+
     /* ---------- Records ---------- */
 
     public function create_record($record, $items) {

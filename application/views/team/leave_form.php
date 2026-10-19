@@ -6,6 +6,53 @@
   <a href="<?= base_url('team') ?>" class="btn btn-ghost">← Back to Team</a>
 </div>
 
+<?php
+$tracked = array();
+if (!empty($balances)) {
+    foreach ($balances as $b) {
+        if ($b['entitled'] !== null) $tracked[] = $b;
+    }
+}
+$fmt_days = function ($n) { return rtrim(rtrim(number_format((float)$n, 1, '.', ''), '0'), '.'); };
+?>
+
+<?php if ($tracked): ?>
+<div style="max-width:520px;margin-bottom:16px;">
+  <div class="card" style="padding:18px 22px;">
+    <div style="font-size:12px;font-weight:600;color:var(--t2);margin-bottom:10px;">
+      Your leave balance <?= isset($leave_year) ? (int)$leave_year : date('Y') ?>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead>
+        <tr style="text-align:left;color:var(--t3);font-size:11px;">
+          <th style="padding:4px 0;">Type</th>
+          <th style="text-align:right;">Entitled</th>
+          <th style="text-align:right;">Used</th>
+          <th style="text-align:right;">Pending</th>
+          <th style="text-align:right;">Remaining</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($tracked as $b): ?>
+        <tr style="border-top:1px solid var(--sep);">
+          <td style="padding:5px 0;"><?= htmlspecialchars($b['type']) ?></td>
+          <td class="mono" style="text-align:right;"><?= $fmt_days($b['entitled']) ?></td>
+          <td class="mono" style="text-align:right;"><?= $fmt_days($b['approved']) ?></td>
+          <td class="mono" style="text-align:right;color:var(--amber);"><?= $fmt_days($b['pending']) ?></td>
+          <td class="mono" style="text-align:right;font-weight:600;color:<?= ($b['remaining'] !== null && $b['remaining'] < 0) ? 'var(--red)' : 'var(--green)' ?>;">
+            <?= $fmt_days($b['remaining']) ?>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+    <div style="font-size:10.5px;color:var(--t4);margin-top:8px;">
+      Requests are not blocked by the balance — a supervisor decides. The balance is a guide.
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
 <div style="max-width:520px;">
 <div class="card" style="padding:28px;">
   <?= form_open('team/leave_request') ?>
