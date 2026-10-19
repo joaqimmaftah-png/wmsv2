@@ -136,7 +136,7 @@ $bg    = $supplier->status==='Active' ? 'var(--green-d)' : ($supplier->status===
       <input type="text" name="part_number" class="form-control" placeholder="Part Number">
       <input type="number" step="0.01" name="unit_price" class="form-control" placeholder="Unit Price">
       <select name="currency" class="form-select">
-        <?php foreach (array('TZS','USD','CNY','UGX','CDF','KES') as $cu): ?><option value="<?= $cu ?>" <?= $cu===$supplier->currency?'selected':'' ?>><?= $cu ?></option><?php endforeach; ?>
+        <?php foreach (wms_currencies() as $cu): ?><option value="<?= $cu ?>" <?= $cu===$supplier->currency?'selected':'' ?>><?= $cu ?></option><?php endforeach; ?>
       </select>
       <input type="number" step="0.01" name="moq" class="form-control" placeholder="MOQ">
       <input type="number" name="lead_time_days" class="form-control" placeholder="Lead time (days)">

@@ -400,13 +400,21 @@ class Order_model extends CI_Model {
     }
 
     /* ── Analytics ──────────────────────────────────────── */
+    /**
+     * Spend per supplier, one row per currency (K-11).
+     *
+     * `total_cost` is recorded in the order's own currency, so summing it
+     * across orders in TZS, UGX and USD produced a number with no meaning.
+     * Grouping by currency lets the caller show a total per currency instead
+     * of inventing an exchange rate.
+     */
     public function get_spend_by_supplier($from = null, $to = null) {
-        $this->db->select('s.company_name, s.country, SUM(o.total_cost) as total_spend, COUNT(*) as order_count')
+        $this->db->select('s.company_name, s.country, o.currency, SUM(o.total_cost) as total_spend, COUNT(*) as order_count')
             ->from('spare_orders o')
             ->join('suppliers s', 's.id = o.supplier_id');
         if ($from) $this->db->where('o.order_date >=', $from);
         if ($to)   $this->db->where('o.order_date <=', $to);
-        $this->db->group_by('o.supplier_id')->order_by('total_spend', 'DESC');
+        $this->db->group_by('o.supplier_id, o.currency')->order_by('total_spend', 'DESC');
         return $this->db->get()->result();
     }
 

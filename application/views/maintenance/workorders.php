@@ -72,7 +72,15 @@
           <td><span class="badge b-primary" style="font-size:10px;"><?= htmlspecialchars($wo->type); ?></span></td>
           <td><span class="<?= $pc; ?>"><?= htmlspecialchars($wo->priority); ?></span></td>
           <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars($wo->title); ?></td>
-          <td><span class="<?= $sc; ?>"><?= htmlspecialchars($wo->status); ?></span></td>
+          <td>
+            <span class="<?= $sc; ?>"><?= htmlspecialchars($wo->status); ?></span>
+            <?php if (!empty($wo->hold_code)): ?>
+            <div style="font-size:10px;color:var(--amber);margin-top:3px;white-space:nowrap;"
+                 title="<?= htmlspecialchars((string)wo_hold_label($wo->hold_code)) ?>">
+              ⏸ <?= htmlspecialchars($wo->hold_code); ?>
+            </div>
+            <?php endif; ?>
+          </td>
           <td style="color:var(--t3);font-size:12px;"><?= htmlspecialchars(isset($wo->assigned_name) ? $wo->assigned_name : '—'); ?></td>
           <td class="mono" style="font-size:11px;color:var(--t3);"><?= $wo->created_at ? date('d M Y',strtotime($wo->created_at)) : '—'; ?></td>
           <td>

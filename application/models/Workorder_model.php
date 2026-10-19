@@ -111,12 +111,19 @@ class Workorder_model extends CI_Model {
     }
 
     public function get_recent($limit = 5) {
-        return $this->db
+        $rows = $this->db
             ->select('wo.*, e.registration_no')
             ->from('work_orders wo')
             ->join('equipment e','e.id = wo.equipment_id')
             ->order_by('wo.created_at','DESC')
             ->limit($limit)->get()->result();
+
+        // `assigned_to` is a CSV; resolve every technician through the same
+        // helper the list and detail screens use, never a JOIN on the column.
+        foreach ($rows as $wo) {
+            $wo->assigned_name = $this->_resolve_tech_names($wo->assigned_to);
+        }
+        return $rows;
     }
 
     /**
@@ -138,8 +145,18 @@ class Workorder_model extends CI_Model {
         return $this->db->insert_id();
     }
 
+    /**
+     * Apply a partial update and report whether it worked.
+     *
+     * This used to swallow the result, so a rejected UPDATE (an enum value the
+     * column does not accept, a value too long, a dead connection) still let the
+     * caller flash "Work Order updated." and redirect to a page showing the old
+     * values.
+     *
+     * @return bool TRUE on success, FALSE when the statement failed
+     */
     public function update($id, $data) {
-        $this->db->update('work_orders', $this->_with_breakdown_flag($data), array('id' => $id));
+        return $this->db->update('work_orders', $this->_with_breakdown_flag($data), array('id' => $id));
     }
 
     // ── Spare Parts ──────────────────────────────────────────
@@ -248,11 +265,278 @@ class Workorder_model extends CI_Model {
     }
 
     public function get_lube_consumption($wo_id) {
+        if (!$this->db->table_exists('lube_consumption')) return array();
         return $this->db
             ->select('lc.*, lt.name as lube_name, lt.unit')
             ->from('lube_consumption lc')
             ->join('lube_types lt','lt.id = lc.lube_type_id')
             ->where('lc.work_order_id', $wo_id)
+            ->get()->result();
+    }
+
+    /**
+     * Post the work order's oil / coolant lines to the lubricant-consumption
+     * ledger (`lube_consumption`), where the lubricant reports and compliance
+     * figures read them.
+     *
+     * The job card's oil lines were only ever written to `wo_oil_records`:
+     * `lube_consumption.work_order_id` was never populated, so oil topped up
+     * on a repair was invisible to Lubricants → consumption and to the
+     * PM-driven compliance report. This is idempotent: rows previously posted
+     * for this work order are replaced, never stacked.
+     *
+     * A line whose `oil_type` (auto-filled from the inventory item's
+     * description) does not resolve to a `lube_types` row is counted as
+     * unmatched and left out — the raw line still exists on the job card.
+     *
+     * @param  int      $wo_id
+     * @param  int|null $user_id recorded_by
+     * @return array{posted:int,unmatched:int,removed:int}
+     */
+    public function sync_lube_consumption($wo_id, $user_id = NULL) {
+        $out = array('posted' => 0, 'unmatched' => 0, 'removed' => 0);
+
+        if (!$this->db->table_exists('lube_consumption') || !$this->db->table_exists('lube_types')) {
+            return $out;
+        }
+
+        $wo = $this->db->select('id, wo_number, equipment_id, start_datetime, end_datetime, created_at')
+            ->where('id', (int)$wo_id)->get('work_orders')->row();
+        if (!$wo) return $out;
+
+        // Replace only what THIS model posted before. A consumption record
+        // entered by hand on the Lubricants screen and attached to this work
+        // order must survive an edit of the job card.
+        $auto_note = 'Auto: oil line on work order ' . $wo->wo_number;
+        $this->db->where('work_order_id', (int)$wo_id)
+            ->where('notes', $auto_note)
+            ->delete('lube_consumption');
+        $out['removed'] = (int)$this->db->affected_rows();
+
+        $oils = $this->get_oil_records($wo_id);
+        if (empty($oils)) return $out;
+
+        // `lube_consumption.equipment_id` is NOT NULL; an oil line without a
+        // machine cannot be posted (and cannot be reported either).
+        if (empty($wo->equipment_id)) {
+            $out['unmatched'] = count($oils);
+            return $out;
+        }
+
+        $equipment_type_id = NULL;
+        if (!empty($wo->equipment_id)) {
+            $eq = $this->db->select('id, equipment_type_id')
+                ->where('id', (int)$wo->equipment_id)->get('equipment')->row();
+            if ($eq) $equipment_type_id = $eq->equipment_type_id;
+        }
+
+        $types = $this->db->select('id, name, grade, unit')->get('lube_types')->result();
+
+        $when = $wo->end_datetime ?: ($wo->start_datetime ?: $wo->created_at);
+        $date = $when ? date('Y-m-d', strtotime($when)) : date('Y-m-d');
+
+        foreach ($oils as $oil) {
+            $qty = (float)$oil->quantity;
+            if ($qty <= 0) continue;
+
+            $type = $this->_resolve_lube_type($types, $oil->oil_type, $oil->grade);
+            if (!$type) {
+                $out['unmatched']++;
+                continue;
+            }
+
+            $recommended = NULL;
+            if ($equipment_type_id && $this->db->table_exists('lube_specifications')) {
+                $spec = $this->db->where('equipment_type_id', (int)$equipment_type_id)
+                    ->where('lube_type_id', (int)$type->id)
+                    ->get('lube_specifications')->row();
+                if ($spec) $recommended = (float)$spec->recommended_qty;
+            }
+
+            $this->db->insert('lube_consumption', array(
+                'work_order_id'    => (int)$wo_id,
+                'equipment_id'     => (int)$wo->equipment_id,
+                'lube_type_id'     => (int)$type->id,
+                'quantity_used'    => $qty,
+                'recommended_qty'  => $recommended,
+                'variance'         => $recommended === NULL ? NULL : round($qty - $recommended, 2),
+                'consumption_date' => $date,
+                'recorded_by'      => $user_id ? (int)$user_id : NULL,
+                'equipment_hours'  => NULL,
+                'notes'            => $auto_note,
+            ));
+            $out['posted']++;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Match a job-card oil line to a `lube_types` row.
+     *
+     * Exact name first (case-insensitive), then a conservative contains match
+     * because the job card's oil type is the inventory item's description
+     * ("Engine Oil 15W-40") while `lube_types.name` is the short name ("Engine
+     * Oil"). A grade match is used when the names do not overlap.
+     */
+    private function _resolve_lube_type($types, $oil_type, $grade) {
+        $name    = strtolower(trim((string)$oil_type));
+        $grade_v = strtolower(trim((string)$grade));
+        if ($name === '' && $grade_v === '') return NULL;
+
+        // 1. Exact name (case-insensitive) — the only unambiguous match.
+        foreach ($types as $t) {
+            if ($name !== '' && strtolower(trim($t->name)) === $name) return $t;
+        }
+
+        // 2. Whole-word containment, longest lube name first, so "Engine Oil"
+        //    matches "Engine Oil 15W-40" but a two-letter name can never match
+        //    half a word. Names shorter than four characters are skipped.
+        $best = NULL;
+        $best_len = 0;
+        foreach ($types as $t) {
+            $tn = strtolower(trim($t->name));
+            if ($tn === '' || strlen($tn) < 4 || $name === '') continue;
+            if (strlen($tn) <= $best_len) continue;
+            if (preg_match('/(^|[^a-z0-9])' . preg_quote($tn, '/') . '([^a-z0-9]|$)/', $name)) {
+                $best = $t;
+                $best_len = strlen($tn);
+            }
+        }
+        if ($best) return $best;
+
+        // 3. The grade as a tie-breaker ("15W-40"); same whole-token rule.
+        if ($grade_v !== '') {
+            foreach ($types as $t) {
+                $tg = strtolower(trim(isset($t->grade) ? $t->grade : ''));
+                if ($tg === '' || strlen($tg) < 2) continue;
+                if (preg_match('/(^|[^a-z0-9])' . preg_quote($tg, '/') . '([^a-z0-9]|$)/', $grade_v)) {
+                    return $t;
+                }
+            }
+        }
+        return NULL;
+    }
+
+    /* ── Breakdown events ─────────────────────────────────────────────
+       One failure can need several repair work orders. They are grouped by
+       `breakdown_event_id` (the id of the first work order; that first row
+       keeps NULL) and the KPI engine counts the group as ONE breakdown
+       (D1, kpi_helper.php::kpi_breakdown_events). Until now nothing in the UI
+       could write the column. */
+
+    /** The root work-order id of the event this WO belongs to (its own id when it is the root). */
+    public function get_breakdown_event_root($wo_id) {
+        $wo = $this->db->select('id, breakdown_event_id')->where('id', (int)$wo_id)->get('work_orders')->row();
+        if (!$wo) return NULL;
+        return $wo->breakdown_event_id ? (int)$wo->breakdown_event_id : (int)$wo->id;
+    }
+
+    /** Every work order in the same breakdown event, root first. */
+    public function get_breakdown_event_group($wo_id) {
+        if (!$this->db->field_exists('breakdown_event_id', 'work_orders')) return array();
+        $root = $this->get_breakdown_event_root($wo_id);
+        if (!$root) return array();
+
+        return $this->db
+            ->select('w.id, w.wo_number, w.title, w.status, w.type, w.start_datetime, w.end_datetime, w.is_breakdown, w.breakdown_event_id')
+            ->from('work_orders w')
+            ->where('(w.id = ' . (int)$root . ' OR w.breakdown_event_id = ' . (int)$root . ')', NULL, FALSE)
+            ->order_by('w.start_datetime', 'ASC')
+            ->get()->result();
+    }
+
+    /**
+     * Root work orders of OTHER breakdown events on the same machine that this
+     * work order could join.
+     */
+    public function get_breakdown_event_candidates($equipment_id, $exclude_id = NULL) {
+        if (!$this->db->field_exists('breakdown_event_id', 'work_orders')) return array();
+
+        $this->db->select('w.id, w.wo_number, w.title, w.status, w.start_datetime')
+            ->from('work_orders w')
+            ->where('w.equipment_id', (int)$equipment_id)
+            ->where('w.is_breakdown', 1)
+            ->where('w.breakdown_event_id IS NULL', NULL, FALSE);
+        if ($exclude_id) {
+            $this->db->where('w.id !=', (int)$exclude_id);
+        }
+        return $this->db->order_by('w.start_datetime', 'DESC')->limit(50)->get()->result();
+    }
+
+    /**
+     * Link this work order into another breakdown event, or detach it.
+     *
+     * Guards: both work orders must be breakdowns on the same machine, and an
+     * event can never point at itself or form a two-step cycle. When the
+     * linked row was itself the root of an event, its followers are moved to
+     * the new root so the group stays one event.
+     *
+     * @param  int $wo_id       work order being edited
+     * @param  int $event_wo_id root work order to join; 0/NULL/own id = detach
+     * @return array{ok:bool,message:string}
+     */
+    public function link_breakdown_event($wo_id, $event_wo_id) {
+        $wo = $this->get_by_id($wo_id);
+        if (!$wo) return array('ok' => FALSE, 'message' => 'Work order not found.');
+        if (function_exists('wo_is_breakdown') ? !wo_is_breakdown($wo) : !(int)$wo->is_breakdown) {
+            return array('ok' => FALSE, 'message' => 'Only a breakdown work order can be part of a breakdown event.');
+        }
+        if (!$this->db->field_exists('breakdown_event_id', 'work_orders')) {
+            return array('ok' => FALSE, 'message' => 'This database does not have the breakdown-event column.');
+        }
+
+        $event_wo_id = (int)$event_wo_id;
+
+        if ($event_wo_id <= 0 || $event_wo_id === (int)$wo->id) {
+            $this->db->where('id', (int)$wo->id)->update('work_orders', array('breakdown_event_id' => NULL));
+            return array('ok' => TRUE, 'message' => 'This work order now stands alone as its own breakdown event.');
+        }
+
+        $target = $this->get_by_id($event_wo_id);
+        if (!$target) return array('ok' => FALSE, 'message' => 'The selected work order does not exist.');
+        if (function_exists('wo_is_breakdown') ? !wo_is_breakdown($target) : !(int)$target->is_breakdown) {
+            return array('ok' => FALSE, 'message' => 'The selected work order is not a breakdown.');
+        }
+        if ((int)$target->equipment_id !== (int)$wo->equipment_id) {
+            return array('ok' => FALSE, 'message' => 'A breakdown event can only group work orders on the same machine.');
+        }
+
+        $root = $target->breakdown_event_id ? (int)$target->breakdown_event_id : (int)$target->id;
+        if ($root === (int)$wo->id) {
+            return array('ok' => FALSE, 'message' => 'A breakdown event cannot be linked to itself.');
+        }
+
+        $this->db->trans_begin();
+
+        // If this row was the root of its own group, its followers move with it.
+        if (empty($wo->breakdown_event_id)) {
+            $this->db->where('breakdown_event_id', (int)$wo->id)
+                ->update('work_orders', array('breakdown_event_id' => $root));
+        }
+
+        $this->db->where('id', (int)$wo->id)->update('work_orders', array('breakdown_event_id' => $root));
+
+        if ($this->db->trans_status() === FALSE) {
+            $this->db->trans_rollback();
+            return array('ok' => FALSE, 'message' => 'The link could not be saved.');
+        }
+        $this->db->trans_commit();
+
+        return array('ok' => TRUE, 'message' => 'Linked to breakdown event ' . $target->wo_number . '.');
+    }
+
+    /* ── PM completions recorded against this work order ─────────────── */
+
+    public function get_pm_completions($wo_id) {
+        if (!$this->db->table_exists('pm_completions')) return array();
+        return $this->db
+            ->select('pc.*, p.schedule_name, p.interval_type, p.interval_value, e.registration_no')
+            ->from('pm_completions pc')
+            ->join('pm_schedules p', 'p.id = pc.pm_schedule_id', 'left')
+            ->join('equipment e', 'e.id = p.equipment_id', 'left')
+            ->where('pc.work_order_id', (int)$wo_id)
+            ->order_by('pc.completed_date', 'DESC')
             ->get()->result();
     }
 

@@ -31,7 +31,7 @@
           <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars((string)$w->position, ENT_QUOTES, 'UTF-8') ?></td>
           <td>
             <select name="attendance[<?= $w->id ?>][status]" class="form-select" style="width:130px;">
-              <?php foreach (['Present','Absent','Leave','Rest'] as $s): ?>
+              <?php foreach (['Present','Absent','Leave','Rest','Holiday'] as $s): ?>
               <option value="<?= $s ?>" <?= ($att&&$att->status==$s)?'selected':($s==='Present'?'selected':'') ?>><?= $s ?></option>
               <?php endforeach; ?>
             </select>

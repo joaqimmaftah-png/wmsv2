@@ -19,12 +19,35 @@ class Dashboard_model extends CI_Model {
         return $ci->Kpi_engine_model;
     }
 
+    /**
+     * The 30-day fleet window, computed once per request.
+     *
+     * One dashboard load used availability + MTTR + MTBF, and each of those
+     * asked the engine for the same whole-fleet window — three full passes over
+     * every machine's work orders. It is also the number the failure and
+     * downtime cards must use, so caching it keeps the cards consistent as
+     * well as making the page cheaper.
+     */
+    private $_fleet_window_cache = null;
+
+    private function _fleet_window() {
+        if ($this->_fleet_window_cache === null) {
+            // Resolve the model first: the constant lives in its file, and the
+            // argument must not be evaluated before that file is loaded.
+            $engine = $this->_engine();
+            $this->_fleet_window_cache = $engine->fleet_window(Kpi_engine_model::DASHBOARD_WINDOW_DAYS);
+        }
+        return $this->_fleet_window_cache;
+    }
+
     public function count_open_wo() {
-        return $this->db->where_in('status', ['Open','In Progress','Waiting Parts'])->count_all_results('work_orders');
+        // Waiting Tools is a waiting state too; omitting it under-reported
+        // the open-work-order card next to a list that did show those jobs.
+        return $this->db->where_in('status', ['Open','In Progress','Waiting Parts','Waiting Tools'])->count_all_results('work_orders');
     }
 
     public function get_availability_pct() {
-        $data = $this->_engine()->fleet_window(Kpi_engine_model::DASHBOARD_WINDOW_DAYS);
+        $data = $this->_fleet_window();
         $pct  = $data['fleet']['availability_pct'];
         // null means the window had no required time at all (no machines, or
         // every hour accounted for by planned work) — the card shows 100.
@@ -54,13 +77,13 @@ class Dashboard_model extends CI_Model {
     }
 
     public function get_mttr_30d() {
-        $fleet = $this->_engine()->fleet_window(Kpi_engine_model::DASHBOARD_WINDOW_DAYS);
+        $fleet = $this->_fleet_window();
         $mttr  = $fleet['fleet']['mttr_hours'];
         return $mttr === null ? 0.0 : round($mttr, 2);
     }
 
     public function get_mtbf_30d() {
-        $fleet = $this->_engine()->fleet_window(Kpi_engine_model::DASHBOARD_WINDOW_DAYS);
+        $fleet = $this->_fleet_window();
         $mtbf  = $fleet['fleet']['mtbf_hours'];
         // No failure in the window: the business rule (settings.
         // mtbf_zero_failure_mode) decides — 'dash' shows nothing, and the card
@@ -82,17 +105,29 @@ class Dashboard_model extends CI_Model {
         return $this->get_lube_month_total();
     }
 
+    /**
+     * Failures in the same 30-day window the availability/MTTR/MTBF cards use.
+     *
+     * This used to be a raw COUNT of work orders, so a failure split over three
+     * repair jobs read as three breakdowns here while the W36 and the MTTR card
+     * counted it once (they group by `breakdown_event_id`). It now comes from
+     * the KPI engine, i.e. the number the weekly report publishes.
+     */
     public function count_breakdowns_30d() {
-        return $this->db->where('is_breakdown', 1)
-            ->where('start_datetime >=', date('Y-m-d', strtotime('-30 days')))
-            ->count_all_results('work_orders');
+        $fleet = $this->_fleet_window();
+        return isset($fleet['fleet']['breakdowns']) ? (int)$fleet['fleet']['breakdowns'] : 0;
     }
 
+    /**
+     * Downtime hours in the window — the union of breakdown intervals, clipped
+     * to the configured open hours, exactly as W36 reports it. The old sum of
+     * `work_orders.downtime_hours` was neither clipped nor non-overlapping, and
+     * was NULL for every still-open work order (so a machine down right now
+     * contributed nothing).
+     */
     public function get_total_downtime_30d() {
-        $r = $this->db->select_sum('downtime_hours', 'total')
-            ->where('start_datetime >=', date('Y-m-d', strtotime('-30 days')))
-            ->get('work_orders')->row();
-        return $r ? (float)($r->total ?: 0) : 0;
+        $fleet = $this->_fleet_window();
+        return isset($fleet['fleet']['downtime_hours']) ? round((float)$fleet['fleet']['downtime_hours'], 1) : 0.0;
     }
 
     // FIX: was using is_active=1, table uses status='Active'

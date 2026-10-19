@@ -297,7 +297,7 @@ if (isset($equipment)) {
         ['MTTR',$mttr,'hrs avg','var(--amber)',min(100,floatval($mttr)/20*100)],
         ['MTBF',$mtbf,'hrs avg','var(--green)',min(100,$mtbf/500*100)],
         ['Downtime',$total_downtime,'hrs total','var(--red)',min(100,$total_downtime/200*100)],
-        ['Failures',$breakdowns,'this month','var(--purple)',min(100,$breakdowns/20*100)],
+        ['Failures',$breakdowns,'breakdown events','var(--purple)',min(100,$breakdowns/20*100)],
       ];
       foreach ($gauges as $g):
       ?>

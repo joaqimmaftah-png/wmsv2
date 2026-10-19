@@ -38,16 +38,39 @@ class Lubricants extends MY_Controller {
         }
 
         if ($this->input->post()) {
-            $lube_type_id = $this->input->post('lube_type_id', TRUE);
-            $equipment_id = $this->input->post('equipment_id', TRUE);
+            $lube_type_id = (int)$this->input->post('lube_type_id', TRUE);
+            $equipment_id = (int)$this->input->post('equipment_id', TRUE);
             $qty_used     = (float)$this->input->post('quantity_used', TRUE);
+            $wo_id        = (int)$this->input->post('work_order_id', TRUE);
 
-            $eq = $this->Equipment_model->get_by_id($equipment_id);
+            // The equipment must exist before its type is read — a crafted
+            // equipment_id used to dereference null here (K-10).
+            $eq = $equipment_id ? $this->Equipment_model->get_by_id($equipment_id) : NULL;
+            if (!$eq) {
+                $this->session->set_flashdata('error', 'The selected equipment was not found.');
+                redirect('lubricants/record');
+                return;
+            }
+
+            // An optional work-order link: it must be a work order on the same
+            // machine, otherwise the consumption would be attributed to the
+            // wrong history.
+            if ($wo_id > 0) {
+                $wo = $this->db->select('id, equipment_id')->where('id', $wo_id)->get('work_orders')->row();
+                if (!$wo || (int)$wo->equipment_id !== $equipment_id) {
+                    $this->session->set_flashdata('error',
+                        'The selected work order does not belong to that machine.');
+                    redirect('lubricants/record');
+                    return;
+                }
+            }
+
             $spec = $this->Lubricant_model->get_spec($eq->equipment_type_id, $lube_type_id);
             $rec_qty  = $spec ? $spec->recommended_qty : NULL;
             $variance = $rec_qty ? round($qty_used - $rec_qty, 2) : NULL;
 
             $data = [
+                'work_order_id'   => $wo_id > 0 ? $wo_id : NULL,
                 'equipment_id'    => $equipment_id,
                 'lube_type_id'    => $lube_type_id,
                 'quantity_used'   => $qty_used,
@@ -66,6 +89,13 @@ class Lubricants extends MY_Controller {
 
         $data['lube_types']  = $this->Lubricant_model->get_all_types();
         $data['equipment']   = $this->Equipment_model->get_all_active();
+        // Open work orders, so a top-up can be attributed to the job it was
+        // done under (the WO form does this automatically for its oil lines).
+        $data['open_wos']    = $this->db->select('w.id, w.wo_number, w.title, w.equipment_id, e.registration_no')
+            ->from('work_orders w')
+            ->join('equipment e', 'e.id = w.equipment_id', 'left')
+            ->where_in('w.status', array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools'))
+            ->order_by('w.created_at', 'DESC')->limit(300)->get()->result();
         $data['page_title']  = 'Record Consumption';
         $this->render('lubricants/record', $data);
     }

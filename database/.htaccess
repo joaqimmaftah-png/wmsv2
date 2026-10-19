@@ -1,0 +1,29 @@
+# ---------------------------------------------------------------------------
+# database/ — no direct web access.
+#
+# This directory holds the shipped schema dump
+# (yzzme_43038742_aml.sql), which contains the staff table and the legacy
+# password hashes. Apache would happily serve a .sql file as a download:
+# the sibling application/ and system/ directories have the same guard.
+#
+# Wrapped per directive so a host without the module ignores the rule
+# instead of returning 500 for the whole directory.
+# ---------------------------------------------------------------------------
+<IfModule authz_core_module>
+    Require all denied
+</IfModule>
+<IfModule !authz_core_module>
+    Order deny,allow
+    Deny from all
+</IfModule>
+
+# Belt and braces for hosts that map .sql to a handler rather than a download.
+<FilesMatch "\.(?i:sql|gz|zip|dump|bak)$">
+    <IfModule authz_core_module>
+        Require all denied
+    </IfModule>
+    <IfModule !authz_core_module>
+        Order deny,allow
+        Deny from all
+    </IfModule>
+</FilesMatch>

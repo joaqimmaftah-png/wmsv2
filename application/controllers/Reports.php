@@ -52,8 +52,9 @@ class Reports extends MY_Controller {
     }
 
     public function monthly() {
-        $month = $this->input->get('month') ?: date('Y-m');
-        list($year, $mon) = explode('-', $month);
+        // Validate the month before it reaches strtotime(): a malformed value
+        // returned false there and silently produced a January-1970 report.
+        $month = $this->_valid_month($this->input->get('month'));
         $date_from = "{$month}-01";
         $date_to   = date('Y-m-t', strtotime($date_from));
         $data['month']        = $month;
@@ -128,8 +129,14 @@ class Reports extends MY_Controller {
         $to   = $year.'-12-31';
 
         $spend = $this->Order_model->get_spend_by_supplier($from, $to);
-        $total_spend = 0;
-        foreach ($spend as $s) $total_spend += $s->total_spend;
+        // K-11: one total per order currency — never a cross-currency sum.
+        $spend_by_currency = array();
+        foreach ($spend as $s) {
+            $cur = wms_currency_code($s->currency);
+            $spend_by_currency[$cur] = (isset($spend_by_currency[$cur]) ? $spend_by_currency[$cur] : 0)
+                + (float)$s->total_spend;
+        }
+        arsort($spend_by_currency);
 
         $order_kpi = $this->Order_model->get_kpi();
 
@@ -142,7 +149,7 @@ class Reports extends MY_Controller {
 
         $data['year']               = $year;
         $data['spend']              = $spend;
-        $data['total_spend']        = $total_spend;
+        $data['spend_by_currency']  = $spend_by_currency;
         $data['lead_times']         = $this->Order_model->get_lead_time_by_route();
         $data['order_kpi']          = $order_kpi;
         $data['orders_this_year']   = $orders_this_year;
@@ -179,7 +186,7 @@ class Reports extends MY_Controller {
         $user  = $this->user_data;
         $this->asset_excel->export_register($data, $tmp, array(
             'title'        => 'ASSET REGISTER',
-            'generated_by' => is_array($user) && isset($user['full_name']) ? $user['full_name'] : '',
+            'generated_by' => wms_user_full_name($user),
         ));
         $this->_send_file($tmp, $fname);
     }
@@ -477,7 +484,7 @@ class Reports extends MY_Controller {
         }
 
         $fname = 'Monthly_Plan_'.str_replace('-','_',$plan['month']).'.xlsx';
-        $tmp   = sys_get_temp_dir().'/'.$fname;
+        $tmp   = wms_temp_path($fname);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$fname.'"');
@@ -604,7 +611,7 @@ class Reports extends MY_Controller {
         }
 
         $fname='Annual_Report_'.$year.'.xlsx';
-        $tmp=sys_get_temp_dir().'/'.$fname;
+        $tmp=wms_temp_path($fname);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$fname.'"');
@@ -664,7 +671,7 @@ class Reports extends MY_Controller {
         }
 
         $fname='Annual_Maintenance_Plan_'.$year.'.xlsx';
-        $tmp=sys_get_temp_dir().'/'.$fname;
+        $tmp=wms_temp_path($fname);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$fname.'"');
@@ -752,7 +759,7 @@ class Reports extends MY_Controller {
         }
 
         $fname='Service_Kit_Recommendations_'.date('Ymd').'.xlsx';
-        $tmp=sys_get_temp_dir().'/'.$fname;
+        $tmp=wms_temp_path($fname);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$fname.'"');
@@ -897,7 +904,7 @@ class Reports extends MY_Controller {
         }
 
         $filename = 'Materials_Movement_'.date('Ymd').'.xlsx';
-        $tmp      = sys_get_temp_dir().'/'.$filename;
+        $tmp      = wms_temp_path($filename);
         $xlsx->save($tmp);
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -1455,7 +1462,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         $xlsx->mergeCells("A{$rowNum}", "P{$rowNum}");
 
         $filename = 'Workshop_Weekly_Report_'.date('Ymd',strtotime($week_start)).'_'.date('Ymd',strtotime($week_end)).'.xlsx';
-        $tmp      = sys_get_temp_dir().'/'.$filename;
+        $tmp      = wms_temp_path($filename);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$filename.'"');
@@ -1971,7 +1978,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         $xlsx->mergeCells("A{$rowNum}", "P{$rowNum}");
 
         $filename = 'Workshop_Daily_Report_'.date('Ymd', strtotime($date)).'.xlsx';
-        $tmp      = sys_get_temp_dir().'/'.$filename;
+        $tmp      = wms_temp_path($filename);
         $xlsx->save($tmp);
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -1986,8 +1993,16 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
        EXISTING CSV EXPORTS
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+    /** 'YYYY-MM' from a query string, or the current month when invalid. */
+    private function _valid_month($value) {
+        if (is_string($value) && preg_match('/^([0-9]{4})-(0[1-9]|1[0-2])$/D', $value)) {
+            return $value;
+        }
+        return date('Y-m');
+    }
+
     public function export_excel($type) {
-        $month = $this->input->get('month') ?: date('Y-m');
+        $month = $this->_valid_month($this->input->get('month'));
         switch ($type) {
             case 'workorders':
                 $rows = $this->Workorder_model->get_by_date_range($month.'-01', date('Y-m-t', strtotime($month.'-01')));
@@ -2005,8 +2020,8 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                 header('Content-Type: text/csv');
                 header("Content-Disposition: attachment; filename={$filename}");
                 $out = fopen('php://output', 'w');
-                fputcsv($out, ['Employee ID','Name','Position','Present','Absent','Leave','Rest','Total Days','Attendance %']);
-                foreach ($rows as $r) fputcsv($out, [$r->employee_id,$r->full_name,$r->position,$r->present,$r->absent,$r->leave,$r->rest,$r->total,$r->pct]);
+                fputcsv($out, ['Employee ID','Name','Position','Present','Absent','Leave','Rest','Holiday','Working Days','Attendance %']);
+                foreach ($rows as $r) fputcsv($out, [$r->employee_id,$r->full_name,$r->position,$r->present,$r->absent,$r->leave,$r->rest,$r->holiday,$r->total,$r->pct]);
                 fclose($out);
                 break;
             case 'lubricants':
@@ -2243,7 +2258,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         }
 
         $name = ($isIssue ? 'Issue_Register_' : 'Receipt_Register_').date('Ymd_His').'.xlsx';
-        $tmp  = sys_get_temp_dir().'/'.$name;
+        $tmp  = wms_temp_path($name);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$name.'"');
@@ -2345,7 +2360,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         }
 
         $name = 'Reorder_Report_'.date('Ymd_His').'.xlsx';
-        $tmp  = sys_get_temp_dir().'/'.$name;
+        $tmp  = wms_temp_path($name);
         $xlsx->save($tmp);
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'.$name.'"');

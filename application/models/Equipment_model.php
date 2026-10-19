@@ -202,8 +202,31 @@ class Equipment_model extends CI_Model {
         $this->db->update('equipment', $data, ['id' => $id]);
     }
 
+    /**
+     * Change a machine's status.
+     *
+     * Two guards the old one-liner did not have:
+     *  - the value must be one of the `equipment.status` enum values (a typo or
+     *    a crafted POST could otherwise be written and, under a non-strict
+     *    sql_mode, silently coerced);
+     *  - a Retired machine is never moved back into service automatically by
+     *    work-order activity — retiring is a deliberate act.
+     *
+     * @return bool whether a row was written
+     */
     public function update_status($id, $status) {
-        $this->db->update('equipment', ['status' => $status], ['id' => $id]);
+        $allowed = function_exists('equip_statuses')
+            ? equip_statuses()
+            : array('Available', 'In Maintenance', 'Breakdown', 'Standby', 'Retired');
+
+        if (!in_array($status, $allowed, TRUE)) return FALSE;
+
+        $eq = $this->db->select('id, status')->where('id', (int)$id)->get('equipment')->row();
+        if (!$eq) return FALSE;
+        if ($eq->status === 'Retired' && $status !== 'Retired') return FALSE;
+
+        $this->db->where('id', (int)$id)->update('equipment', array('status' => $status));
+        return $this->db->affected_rows() > 0;
     }
 
     public function get_pm_schedules($equipment_id) {

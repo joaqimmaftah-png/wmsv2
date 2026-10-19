@@ -1,7 +1,13 @@
 <?php
 $discrepancyPct = $orders_this_year > 0 ? round($discrepancy_count / $orders_this_year * 100, 1) : null;
-$maxSpend = 1;
-foreach ($spend as $s) $maxSpend = max($maxSpend, $s->total_spend);
+// Bars compare like with like: a supplier's UGX bar is scaled against the
+// largest UGX total, not against a USD one (K-11).
+$maxSpendByCurrency = array();
+foreach ($spend as $s) {
+    $cur = wms_currency_code($s->currency);
+    $maxSpendByCurrency[$cur] = max(isset($maxSpendByCurrency[$cur]) ? $maxSpendByCurrency[$cur] : 0, (float)$s->total_spend);
+}
+$spend_by_currency = isset($spend_by_currency) ? $spend_by_currency : array();
 ?>
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
@@ -22,8 +28,12 @@ foreach ($spend as $s) $maxSpend = max($maxSpend, $s->total_spend);
 <div class="grid g-4 mb-4">
   <div class="kpi"><div class="kpi-glow" style="background:var(--blue)"></div>
     <span class="kpi-tag">Total Spend (<?= $year ?>)</span>
-    <div class="kpi-num"><?= number_format($total_spend,0) ?></div>
-    <div class="cs" style="margin-top:4px;"><?= $orders_this_year ?> orders</div>
+    <?php if (empty($spend_by_currency)): ?>
+    <div class="kpi-num">0</div>
+    <?php else: $first_currency = true; foreach ($spend_by_currency as $cur => $amount): ?>
+    <div class="kpi-num" style="font-size:<?= $first_currency ? '' : '14px' ?>;<?= $first_currency ? '' : 'margin-top:2px;' ?>"><?= wms_money($amount, $cur, 0) ?></div>
+    <?php $first_currency = false; endforeach; endif; ?>
+    <div class="cs" style="margin-top:4px;"><?= $orders_this_year ?> orders<?= count($spend_by_currency) > 1 ? ' — per currency' : '' ?></div>
   </div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--cyan)"></div>
     <span class="kpi-tag">Open Orders (all time)</span>
@@ -49,11 +59,13 @@ foreach ($spend as $s) $maxSpend = max($maxSpend, $s->total_spend);
   <div style="padding:48px;text-align:center;color:var(--t3);">No orders recorded for <?= $year ?>.</div>
   <?php else: ?>
   <div style="padding:16px 18px 6px;">
-    <?php foreach ($spend as $s): $pct = $maxSpend > 0 ? round($s->total_spend / $maxSpend * 100, 1) : 0; ?>
+    <?php foreach ($spend as $s): $cur = wms_currency_code($s->currency);
+          $cur_max = isset($maxSpendByCurrency[$cur]) ? $maxSpendByCurrency[$cur] : 0;
+          $pct = $cur_max > 0 ? round($s->total_spend / $cur_max * 100, 1) : 0; ?>
     <div style="margin-bottom:12px;">
       <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px;">
         <span style="font-weight:600;color:var(--t1);"><?= htmlspecialchars($s->company_name) ?> <span style="color:var(--t3);font-weight:400;">(<?= htmlspecialchars($s->country) ?>)</span></span>
-        <span class="mono" style="color:var(--t3);"><?= number_format($s->total_spend,0) ?> &middot; <?= $s->order_count ?> orders</span>
+        <span class="mono" style="color:var(--t3);"><?= wms_money($s->total_spend, $cur, 0) ?> &middot; <?= $s->order_count ?> orders</span>
       </div>
       <div style="background:var(--g2);border-radius:5px;height:9px;overflow:hidden;">
         <div style="background:var(--blue);height:100%;width:<?= $pct ?>%;border-radius:5px;"></div>

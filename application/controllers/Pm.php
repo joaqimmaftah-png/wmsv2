@@ -20,6 +20,12 @@ class Pm extends MY_Controller {
         $data['filter']     = $filter;
         $data['due_today']  = $this->Pm_model->get_due_today();
         $data['overdue']    = $this->Pm_model->get_overdue();
+        // Open work orders, so a completion can name the job that did it.
+        $data['open_wos']   = $this->db->select('w.id, w.wo_number, w.title, w.equipment_id, e.registration_no')
+            ->from('work_orders w')
+            ->join('equipment e', 'e.id = w.equipment_id', 'left')
+            ->where_in('w.status', array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools'))
+            ->order_by('w.created_at', 'DESC')->limit(300)->get()->result();
         $data['page_title'] = 'PM Planner';
         $this->render('maintenance/pm_planner', $data);
     }
@@ -37,7 +43,9 @@ class Pm extends MY_Controller {
             $last_hours = $this->input->post('last_done_hours', TRUE) ?: NULL;
 
             $next_date  = $this->_calc_next_date($last_date, $interval_t, $interval_v);
-            $next_hours = $last_hours ? $last_hours + ($interval_t === 'Hours' ? $interval_v : 0) : NULL;
+            $next_hours = $last_hours
+                ? $last_hours + (in_array($interval_t, array('Hours', 'Km'), TRUE) ? $interval_v : 0)
+                : NULL;
 
             $data = [
                 'equipment_id'    => $this->input->post('equipment_id', TRUE),
@@ -137,7 +145,7 @@ class Pm extends MY_Controller {
             if ($interval_changed || $last_done_changed) {
                 $data['next_due_date']  = $this->_calc_next_date($last_date, $interval_t, $interval_v);
                 $data['next_due_hours'] = $last_hours
-                    ? $last_hours + ($interval_t === 'Hours' ? $interval_v : 0)
+                    ? $last_hours + (in_array($interval_t, array('Hours', 'Km'), TRUE) ? $interval_v : 0)
                     : NULL;
             }
 
@@ -189,19 +197,66 @@ class Pm extends MY_Controller {
                 redirect('pm');
             }
 
-            $completed_date  = $this->input->post('completed_date', TRUE) ?: date('Y-m-d');
-            $completed_hours = $this->input->post('completed_hours', TRUE) ?: NULL;
+            /*
+             * Field names: the planner's Mark Done modal posts
+             * `completion_date` / `current_hours`, while this handler read
+             * `completed_date` / `completed_hours` — so the modal's date was
+             * ignored (always "today") and its meter reading was always lost.
+             * Both spellings are accepted now; the view uses the canonical
+             * ones.
+             */
+            $completed_date  = $this->input->post('completed_date', TRUE)
+                ?: ($this->input->post('completion_date', TRUE) ?: date('Y-m-d'));
+            if (!preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/D', (string)$completed_date)
+                || !checkdate((int)substr($completed_date, 5, 2), (int)substr($completed_date, 8, 2), (int)substr($completed_date, 0, 4))) {
+                $completed_date = date('Y-m-d');
+            }
+            $completed_hours = $this->input->post('completed_hours', TRUE);
+            if ($completed_hours === NULL) {
+                $completed_hours = $this->input->post('current_hours', TRUE);
+            }
+            $completed_hours = ($completed_hours === NULL || $completed_hours === '') ? NULL : $completed_hours;
+
+            /*
+             * Optional link to the work order that did the service. Without it
+             * a PM completion and its work order are two unrelated facts, so
+             * the job card cannot show the services it covered and the PM
+             * history cannot show the job that performed it.
+             */
+            $work_order_id = (int)$this->input->post('work_order_id', TRUE);
+            if ($work_order_id > 0) {
+                $wo = $this->db->select('id, equipment_id')->where('id', $work_order_id)->get('work_orders')->row();
+                if (!$wo || (int)$wo->equipment_id !== (int)$pm->equipment_id) {
+                    $work_order_id = 0;
+                    $this->session->set_flashdata('error',
+                        'The PM was not completed: the selected work order belongs to a different machine.');
+                    redirect('pm');
+                    return;
+                }
+            }
 
             $next_date  = $this->_calc_next_date($completed_date, $pm->interval_type, $pm->interval_value);
-            $next_hours = $completed_hours ? $completed_hours + ($pm->interval_type === 'Hours' ? $pm->interval_value : 0) : NULL;
+            // Km schedules advance the odometer target the same way Hours does
+            // (the enum value is 'Km', not 'Kilometres' — see K-05).
+            $meter_interval = in_array($pm->interval_type, array('Hours', 'Km'), TRUE);
+            // NULL here means "the target is unchanged", not "no target": a
+            // date-based schedule must not lose the odometer target it had.
+            $next_hours = ($completed_hours !== NULL && $meter_interval)
+                ? (float)$completed_hours + (float)$pm->interval_value
+                : NULL;
 
-            $this->db->insert('pm_completions', [
+            $completion = [
                 'pm_schedule_id'  => $id,
                 'completed_date'  => $completed_date,
                 'completed_hours' => $completed_hours,
                 'completed_by'    => $this->user_id,
                 'notes'           => $this->input->post('notes', TRUE),
-            ]);
+            ];
+            // Older databases may predate the link column (§13 tolerance).
+            if ($this->db->field_exists('work_order_id', 'pm_completions')) {
+                $completion['work_order_id'] = $work_order_id > 0 ? $work_order_id : NULL;
+            }
+            $this->db->insert('pm_completions', $completion);
 
             /*
              * The hours typed at completion are a real meter reading — until
@@ -212,22 +267,32 @@ class Pm extends MY_Controller {
              * never blocks the completion: it is reported afterwards.
              */
             $meter_note = '';
-            if ($completed_hours !== NULL && in_array($pm->interval_type, ['Hours', 'Kilometres'], TRUE)) {
+            if ($completed_hours !== NULL && $meter_interval) {
+                // `record_meter_reading()` speaks "Hours"/"Kilometres"; the
+                // schedule enum says "Km".
+                $unit = ($pm->interval_type === 'Km') ? 'Kilometres' : $pm->interval_type;
                 $reading = $this->Equipment_model->record_meter_reading(
                     $pm->equipment_id, $completed_date, (float)$completed_hours,
-                    'WorkOrder', null, $this->user_id, ['unit' => $pm->interval_type]
+                    'WorkOrder', $work_order_id > 0 ? $work_order_id : null, $this->user_id, ['unit' => $unit]
                 );
                 if (empty($reading['ok'])) {
                     $meter_note = ' ⚠ The meter reading was not recorded: '.$reading['message'];
                 }
             }
 
-            $this->Pm_model->update($id, [
-                'last_done_date'  => $completed_date,
-                'last_done_hours' => $completed_hours,
-                'next_due_date'   => $next_date,
-                'next_due_hours'  => $next_hours,
-            ]);
+            $schedule_update = array(
+                'last_done_date' => $completed_date,
+                'next_due_date'  => $next_date,
+            );
+            // Only a reading that was actually entered moves the meter fields;
+            // a blank box on a date-based schedule must not erase them.
+            if ($completed_hours !== NULL) {
+                $schedule_update['last_done_hours'] = $completed_hours;
+            }
+            if ($next_hours !== NULL) {
+                $schedule_update['next_due_hours'] = $next_hours;
+            }
+            $this->Pm_model->update($id, $schedule_update);
 
             $this->session->set_flashdata('success', 'PM marked as completed.'.$meter_note);
         }

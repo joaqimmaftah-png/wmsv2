@@ -216,6 +216,27 @@ function _v($is_edit, $wo, $field, $default = '') {
           <?php endforeach; ?>
         </select>
       </div>
+      <div>
+        <label class="form-label">Hold Code <span style="font-weight:400;color:var(--t4);">(why work waits)</span></label>
+        <select name="hold_code" class="form-select">
+          <option value="">— none —</option>
+          <?php $curHold = $is_edit && isset($wo->hold_code) ? (string)$wo->hold_code : '';
+          foreach (wo_hold_codes() as $code => $label): ?>
+          <option value="<?= $code; ?>" <?= ($curHold === $code) ? 'selected' : ''; ?>>
+            <?= $code; ?> — <?= htmlspecialchars($label); ?>
+          </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <?php $is_sup_form = isset($role_id) && (int)$role_id === 1; ?>
+      <?php if ($is_edit && $is_sup_form): ?>
+      <div>
+        <label class="form-label">Verification Notes <span style="font-weight:400;color:var(--t4);">(recorded when closing)</span></label>
+        <input type="text" name="verification_notes" class="form-control"
+               value="<?= htmlspecialchars((string)_v($is_edit,$wo,'verification_notes')); ?>"
+               placeholder="What you checked on the machine" maxlength="300">
+      </div>
+      <?php endif; ?>
     </div>
 
     <!-- ══ INCIDENT DETAILS (shown only when WO Type = Incident) — mirrors HSE Near-Miss form ══ -->

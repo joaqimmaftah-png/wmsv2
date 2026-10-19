@@ -37,7 +37,8 @@
       <div>
         <label class="form-label">Currency</label>
         <select name="currency" id="currency" class="form-select">
-          <?php foreach (array('TZS','USD','CNY','UGX','CDF','KES') as $c): ?><option value="<?= $c ?>"><?= $c ?></option><?php endforeach; ?>
+          <?php $order_currency = isset($order->currency) && $order->currency !== '' ? strtoupper($order->currency) : wms_site_currency(); ?>
+          <?php foreach (wms_currencies() as $c): ?><option value="<?= $c ?>" <?= $order_currency === $c ? 'selected' : '' ?>><?= $c ?></option><?php endforeach; ?>
         </select>
       </div>
       <div>

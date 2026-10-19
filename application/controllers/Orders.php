@@ -35,7 +35,14 @@ class Orders extends MY_Controller {
     /* ── CREATE ─────────────────────────────────────────── */
     public function create() {
         if ($this->input->method() === 'post') {
-            $supplier = $this->Supplier_model->get_by_id($this->input->post('supplier_id', TRUE));
+            $supplier = $this->Supplier_model->get_by_id((int)$this->input->post('supplier_id', TRUE));
+            // A crafted/stale supplier_id used to dereference null two lines
+            // later — a 500 instead of a message (K-10).
+            if (!$supplier) {
+                $this->session->set_flashdata('error', 'The selected supplier was not found. The order was not created.');
+                redirect('orders/create');
+                return;
+            }
             $shipping_method = $this->input->post('shipping_method', TRUE);
             $order_date = $this->input->post('order_date', TRUE) ?: date('Y-m-d');
 
@@ -50,7 +57,10 @@ class Orders extends MY_Controller {
                 'order_date'              => $order_date,
                 'expected_delivery_date'  => $expected,
                 'status'                  => 'Pending Approval',
-                'currency'                => $this->input->post('currency', TRUE) ?: $supplier->currency,
+                'currency'                => wms_currency_code(
+                    $this->input->post('currency', TRUE),
+                    !empty($supplier->currency) ? $supplier->currency : wms_site_currency()
+                ),
                 'total_cost'              => $this->input->post('total_cost', TRUE) ?: 0,
                 'linked_wo_id'            => $this->input->post('linked_wo_id', TRUE) ?: NULL,
                 'requested_by'            => $this->user_id,
@@ -203,7 +213,7 @@ class Orders extends MY_Controller {
         if (!$this->Order_model->receipts_ready()) {
             $this->session->set_flashdata('error',
                 'The goods-receipt tables are not installed yet. Import the database dump '
-                .'shipped with this repository (database/yzzme_43038742_aml.sql), then receive the order again. Nothing was saved.');
+                .'shipped with this repository (database/schema.sql), then receive the order again. Nothing was saved.');
             redirect('orders/view/'.$id);
             return;
         }

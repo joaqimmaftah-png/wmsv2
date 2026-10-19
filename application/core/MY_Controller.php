@@ -98,7 +98,7 @@ class MY_Controller extends CI_Controller {
         echo htmlspecialchars("<?php\ndefined('BASEPATH') OR exit('No direct script access allowed');\n\n\$db['default']['hostname'] = 'localhost';\n\$db['default']['username'] = 'cpaneluser_dbuser';\n\$db['default']['password'] = 'your_password';\n\$db['default']['database'] = 'cpaneluser_dbname';\n");
         echo '</pre></li>';
         echo '<li>cPanel > MySQL Databases: Create DB + User + <strong>Add user to DB with ALL PRIVILEGES</strong></li>';
-        echo '<li>cPanel > phpMyAdmin: Import <code>database/yzzme_43038742_aml.sql</code></li>';
+        echo '<li>cPanel > phpMyAdmin: Import <code>database/schema.sql</code></li>';
         echo '</ol>';
         echo '<p><strong>cPanel credentials format:</strong><br>';
         echo 'Username: <code>cpaneluser_dbuser</code> (cPanel prefixes your username)<br>';
@@ -224,6 +224,20 @@ class MY_Controller extends CI_Controller {
         $this->user_id   = $this->session->userdata('user_id');
         $this->role_id   = $this->session->userdata('role_id');
         $this->user_data = $this->session->userdata('user_data');
+
+        /*
+         * Sessions written before K-18 carry the entire `users` row, password
+         * hash included, in `ci_sessions`. Rewrite one the first time it is
+         * seen so existing rows stop holding it; new sign-ins are trimmed at
+         * the source (Auth::login). The check is a property test, so it costs
+         * nothing once the payload has been rewritten.
+         */
+        $legacy = (is_object($this->user_data) && isset($this->user_data->password))
+               || (is_array($this->user_data)  && isset($this->user_data['password']));
+        if ($legacy) {
+            $this->user_data = wms_session_user($this->user_data);
+            $this->session->set_userdata('user_data', $this->user_data);
+        }
     }
 
     protected function _load_settings() {

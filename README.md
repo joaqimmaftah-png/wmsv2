@@ -20,22 +20,30 @@ Excel reader/writer and the PDF generator are hand-written in this repository.
 
 ## ⚠️ Read this first — repository contents
 
-This repository currently contains material that should not be in version control:
+This repository's **history** contains material that must not be there, and
+this repository is **public**:
 
-- `database/yzzme_43038742_aml.sql` is a **full production database dump**,
-  including real staff accounts (most password hashes are legacy **MD5**),
-  the equipment fleet, and ≈12,700 stock movements.
-- `application/config/database.local.php` and `application/config/config.local.php`
-  are **committed with live-looking credentials / encryption key**, even though
-  the code comments state they are git-ignored. There is **no `.gitignore`** in
-  the repository.
-- `application/logs/` contains committed runtime log files.
+- The production **database password** and the application **encryption key**
+  were committed in `application/config/database.local.php` and
+  `application/config/config.local.php` in the first commit. Both files are now
+  **removed from the tree and git-ignored** (the `.example` templates are the
+  only copies in git), but the values remain readable in history.
+  **Treat them as compromised and rotate them.**
+  Read [`SECURITY.md`](SECURITY.md) — it is a step-by-step runbook (rotate the
+  MySQL password, replace the key, purge the history, verify the old password
+  no longer works).
+- A **full production database dump** (`database/yzzme_43038742_aml.sql`,
+  66 staff accounts, most hashes legacy **MD5**, the fleet and the stock
+  ledger) was tracked until this revision. It is now untracked and ignored;
+  the repository ships `database/schema.sql`, which creates the same 59 tables
+  with reference data only. The old dump is still in public history — every
+  account that existed in it must be treated as password-compromised
+  (K-02; `SECURITY.md` §5).
+- `application/logs/` contained committed runtime log files; they are untracked
+  and ignored now (K-03).
 
-Treat every credential and hash in this history as exposed. See
-[`SYSTEM.md` §18 (issues K-01…K-03)](SYSTEM.md) for the remediation checklist
-(rotate the DB password and encryption key, add a `.gitignore`, untrack the
-files, force password resets). Do not import the dump into a public environment
-without resetting all passwords.
+Do not import the dump into a public environment without resetting all
+passwords. See [`SYSTEM.md` §18](SYSTEM.md) for the full register.
 
 ---
 
@@ -46,14 +54,14 @@ without resetting all passwords.
 | Dashboard | Operational KPI dashboard (30-day availability/MTTR/MTBF, open WOs, overdue PM, attendance, pending-spares board) and a separate read-only Executive Summary for the CEO role |
 | Work Orders | Corrective / Preventive / Incident work orders with printable job cards, multi-technician labour sessions, spare-part and oil lines, incident (HSE) details with photo/PDF evidence, drawn operator signature, two-stage close (Completed → supervisor-verified Closed) |
 | Equipment | Asset register with types, meter readings (hours/km) with validation and history, report grouping/site classification, manufacturer spec sheets, per-machine KPIs |
-| PM Planner | Preventive-maintenance schedules (Hours/Km/Days/Months intervals), completion recording, 12-month calendar forecast, per-service spare-part requirements |
-| Inspections | 14 seeded bilingual (EN/FR) checklist templates; signed inspection records; failed items automatically raise/annotate/close backlog defects; real PDF output |
+| PM Planner | Preventive-maintenance schedules (Hours/Km/Days/Months intervals), completion recording linked to the work order that did the service, 12-month calendar forecast, per-service spare-part requirements |
+| Inspections | 14 seeded bilingual (EN/FR) checklist templates plus a supervisor template editor (create/edit/delete, usage-guarded); signed inspection records; failed items automatically raise/annotate/close backlog defects; real PDF output |
 | Backlog | Defect register (P1–P3) with Excel export mirroring the legacy "Backlog on going / done" sheets; planning a defect pushes a job into the maintenance plan |
 | Inventory (Materials) | Stock items with a movement ledger (receive/issue), reorder data, Excel export/template/**import with dry-run validation and per-row error report** |
 | Pending Spare Parts | Matches parts requested on open work orders against stock; Allocate → Issue reservations; in-app availability alerts when stock arrives |
 | Suppliers & Orders | Supplier master with contacts and part catalogue; purchase-order pipeline with measured lead-time estimates; partial deliveries, GRN (goods receipt note) per delivery, order documents |
 | Lubricants | Lube types, per-equipment-type specifications, consumption recording with variance, monthly budget, PM-driven requirement vs actual compliance |
-| Team | Staff list on the same `users` table, daily attendance, leave requests/approval, certifications with expiry tracking, monthly attendance report, shift-roster display |
+| Team | Staff list on the same `users` table, daily attendance, leave requests/approval with automatic attendance days and per-type balances, certifications with expiry refresh and document upload, monthly attendance report, editable shift roster (shift types + weekly assignments) |
 | Users & Settings | Role-based user administration (Supervisor only); system settings; sign-in security screen (throttling policy + security events) |
 | Reports | Daily/weekly/monthly reports, MTTR/MTBF, lube compliance, store registers (issue/receipt/reorder), asset register (+ Excel import), annual report/plan, service-kit recommendations, workshop daily/weekly reports, and the W36 weekly fleet report (screen, Excel, print, publish/freeze) |
 | Forecast | Planned-availability week planner (PM placement, maintenance jobs, weekly inspection rounds, standing/unplanned allowances), publish/freeze with revisions, plan-vs-actual, rolling 3-week plan, PM spare-parts forecast |
@@ -99,7 +107,12 @@ required) for an on-screen environment check.
 │   ├── cache/                 must be writable
 │   └── logs/                  must be writable (CI logs + php_errors.log)
 ├── database/
-│   └── yzzme_43038742_aml.sql The ONLY schema/seed artifact — full production dump (59 tables)
+│   ├── schema.sql              Schema + reference data only (59 tables, no staff/fleet/stock)
+│   └── migrations/             Forward-only SQL for an existing database (K-16, K-20)
+├── tests/run.php               Dependency-free test runner (no Composer/PHPUnit/database)
+├── scripts/
+│   ├── migrate.sh              Applies pending database/migrations/*.sql, records them
+│   └── purge-secrets.sh        History rewrite helper (see SECURITY.md §6)
 └── uploads/                   User files (web-served, script execution blocked by .htaccess)
     ├── photos/                equipment & user photos
     ├── signatures/            drawn/uploaded signatures
@@ -110,10 +123,13 @@ required) for an on-screen environment check.
     └── logoam.png             company logo used by the W36 workbook/print view
 ```
 
-> There are **no** database migrations, seeders, CLI scripts, cron jobs, or
-> automated tests in this repository — the SQL dump contains the complete
-> schema. Decision/task IDs cited in code comments (D29, F-06, MP-3, …) are
-> labels from the development history; the rule each one produced is stated
+> There is no Composer install, no cron job and no background worker. The few
+> command-line tools are `tests/run.php` (unit tests), `scripts/migrate.sh`
+> (applies `database/migrations/`) and `scripts/purge-secrets.sh` (history
+> rewrite, `SECURITY.md` §6). `database/schema.sql` is the baseline for a new
+> installation; the migrations directory is only for bringing an **existing**
+> database forward. Decision/task IDs cited in code comments (D29, F-06, MP-3, …)
+> are labels from the development history; the rule each one produced is stated
 > in the comment itself and in `SYSTEM.md` (§17).
 
 ## Installation
@@ -134,27 +150,37 @@ cd wmsv2
 ```
 
 Point the web server document root at the repository root (where `index.php`
-is). `base_url` is auto-detected from the request host, so no URL edit is
-normally needed.
+is). `base_url` is detected from the request host for local use; in production
+pin it with `WMS_BASE_URL` or `$config['base_url']` in `config.local.php`.
+A Host header that is not a valid `host[:port]` is refused with HTTP 400.
 
-### 3. Create the database and import the dump
+### 3. Create the database and import the schema
 
 ```bash
 mysql -u <user> -p -e "CREATE DATABASE <dbname> CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -u <user> -p <dbname> < database/yzzme_43038742_aml.sql
+mysql -u <user> -p <dbname> < database/schema.sql
 ```
 
 Notes:
 
-- The dump contains **no** `CREATE DATABASE`, `USE`, or `DROP TABLE`
+- The file contains **no** `CREATE DATABASE`, `USE`, or `DROP TABLE`
   statements — import it into an empty database; importing twice will fail on
   existing tables.
 - It creates all 59 tables including `ci_sessions` (required before first
-  sign-in) and loads reference data (roles, settings, inspection templates,
-  report groups/sites, equipment types…) **plus production operational data**
-  (66 user accounts, 116 machines, ≈1,700 stock items, ≈12,700 movements).
+  sign-in) and loads the reference data the application needs: roles,
+  equipment types, lubricant types, report groups/sites, shift definitions and
+  settings. It contains **no staff accounts, no password hashes, no fleet, no
+  suppliers and no stock records** — those belong to a live installation and
+  are not distributed with the code.
+- The production dump that used to live in this repository is *not* part of a
+  fresh install. Create the first account in step 6, then add the fleet and
+  stock through the UI or the Excel importers.
 - On cPanel: create the database and user under *MySQL Databases*, grant the
   user **ALL PRIVILEGES** on it, then import the file with phpMyAdmin.
+- **Upgrading an existing installation** instead of importing into an empty
+  database? Do not re-import `schema.sql`. Run `scripts/migrate.sh` instead —
+  see *Upgrading an existing database* below.
+
 
 ### 4. Configure credentials (never commit these files)
 
@@ -176,9 +202,10 @@ Credentials can alternatively come from environment variables
 configured at all, the application intentionally shows a "Database Setup
 Required" page instead of connecting.
 
-> ⚠️ The copies of `database.local.php` / `config.local.php` currently in git
-> contain real values from the production host — **overwrite them locally and
-> do not commit them back** (see the warning at the top).
+> ⚠️ Both files are **git-ignored** (`.gitignore`) and the only copies in the
+> repository are the `.example` templates — `git status` must never list them.
+> If you cloned this repository before the fix, your local history still holds
+> the old production values; see [`SECURITY.md`](SECURITY.md).
 
 ### 5. Make runtime directories writable
 
@@ -188,18 +215,14 @@ The PHP process must be able to write to:
 application/logs/  application/cache/  uploads/ (and every subdirectory)
 ```
 
-Import/export workbooks are generated in `uploads/tmp/`; several Forecast and
-Backlog exports use the PHP system temp directory instead.
+Import/export workbooks are generated in `uploads/tmp/`; the Forecast, Backlog
+and Reports exports are written to the PHP system temp directory under a
+random, collision-free name (`wms_temp_path()`, `application/helpers/tmp_helper.php`).
 
 ### 6. First sign-in
 
-Open the site root — you are redirected to `/login`. After importing the
-production dump, the accounts are the production staff accounts (their
-passwords are not documented anywhere and most hashes are MD5 — the sign-in
-screen still accepts legacy MD5/SHA1 hashes and upgrades them to bcrypt on
-first successful sign-in; see `legacy_password_login` below).
-
-For a fresh/cleaned database, create a supervisor directly:
+Open the site root — you are redirected to `/login`. A fresh install from
+`database/schema.sql` has no accounts, so create a supervisor directly:
 
 ```bash
 php -r "echo password_hash('Pick-A-Strong-Password', PASSWORD_DEFAULT), PHP_EOL;"
@@ -211,15 +234,17 @@ VALUES (1, 'ADMIN001', 'System', 'Admin', 'admin@example.com', '<paste-bcrypt-ha
 ```
 
 Then manage all further accounts under **Users** in the UI (Supervisor only).
-To retire legacy hashes once everyone has a bcrypt hash, set
+The Users screen counts and marks any account still carrying a legacy MD5/SHA1
+hash; once that count is zero, retire legacy sign-in by setting
 `$config['legacy_password_login'] = FALSE;` in `config.local.php` (or the
-`WMS_LEGACY_PASSWORD_LOGIN=0` environment variable).
+`WMS_LEGACY_PASSWORD_LOGIN=0` environment variable). A hash copied out of a
+database dump stays usable until its password is reset — see `SECURITY.md` §5.
 
 ## Configuration reference
 
 | Where | What |
 |---|---|
-| `application/config/config.php` | Committed defaults: auto-detected `base_url`, DB-backed sessions (`wms_session`, 2 h), CSRF protection **on** (`csrf_token_wms`, regenerated per request), cookie `Secure` auto-enabled on HTTPS, `legacy_password_login` |
+| `application/config/config.php` | Committed defaults: `base_url` from `WMS_BASE_URL` or a validated Host header, DB-backed sessions (`wms_session`, 2 h), CSRF protection **on** (`csrf_token_wms`, regenerated per request), cookie `Secure` auto-enabled on HTTPS, `legacy_password_login` |
 | `application/config/config.local.php` | Host-local overrides (encryption key, `legacy_password_login`, `cookie_secure`) — **secret, do not commit** |
 | `application/config/database.php` | Reads credentials from `WMS_DB_*` env vars, then `database.local.php`; defines `WMS_DB_MISSING` when unconfigured |
 | `CI_ENV` server variable | `production` (default) / `development` / `testing` — set in `index.php`; development enables error display and `db_debug` |
@@ -275,18 +300,46 @@ recorded under **Settings → Sign-in Security**.
 
 ## Testing
 
-There is **no automated test suite in this repository** and no Composer /
-PHPUnit setup. Verify changes manually: sign in as each role, and for
-report/forecast changes compare the W36 screen, its Excel export and the
-dashboard cards — they intentionally share one KPI engine
+```bash
+php tests/run.php          # 54 checks, no dependencies, exits non-zero on failure
+```
+
+The suite covers the pure logic that has broken silently: the session payload
+(K-18), currency normalisation (K-11) and `base_url` / Host validation (K-17).
+`tests/README.md` lists the cases and the gaps (anything needing MySQL or a
+browser). CI runs it on every push and pull request
+(`.github/workflows/tests.yml`), together with `php -l` over every PHP file and
+`bash -n` over the scripts.
+
+Automated tests do not replace the manual walkthrough: sign in as each role,
+and for report/forecast changes compare the W36 screen, its Excel export and
+the dashboard cards — they intentionally share one KPI engine
 (`application/helpers/kpi_helper.php`) and must agree.
+
+## Upgrading an existing database
+
+`database/schema.sql` is for a new installation. An existing database (for
+example one restored from the production dump) is brought forward with the
+files in `database/migrations/`:
+
+```bash
+WMS_DB_HOST=localhost WMS_DB_USER=… WMS_DB_PASS=… WMS_DB_NAME=… \
+    scripts/migrate.sh --dry-run    # what is pending
+WMS_DB_HOST=localhost WMS_DB_USER=… WMS_DB_PASS=… WMS_DB_NAME=… \
+    scripts/migrate.sh              # apply
+```
+
+Each file is idempotent and recorded in `schema_migrations`, so re-running is
+safe. The two current files (K-16 severity column, K-20 duplicate index) are
+optional at runtime; see `database/migrations/README.md`.
 
 ## Deployment (cPanel production checklist)
 
 1. Upload the code (or `git pull`) into the site root.
 2. Create `database.local.php` / `config.local.php` on the server (step 4) —
    if you are changing the DB password, create them with the *current*
-   credentials first, verify the site works, then rotate.
+   credentials first, verify the site works, then rotate. Both files are
+   git-ignored; `git status` must stay clean after creating them.
 3. Import the SQL dump into an empty database (first install only).
 4. Set the PHP version (the app's setup page suggests 8.1/8.2) and enable the
    extensions listed above; set `date.timezone`.
@@ -301,7 +354,7 @@ dashboard cards — they intentionally share one KPI engine
 
 | Symptom | Likely cause / fix |
 |---|---|
-| "🗄️ Database Setup Required" page | `database.local.php` missing or host/user/database empty. Create it from the `.example` file, then import `database/yzzme_43038742_aml.sql` |
+| "🗄️ Database Setup Required" page | `database.local.php` missing or host/user/database empty. Create it from the `.example` file, then import `database/schema.sql` |
 | Sign-in page loads but every login says the database is not answering | DB reachable by config but schema not imported (or user lacks SELECT). Import the dump |
 | Blank/500 page right after sign-in | `ci_sessions` or `settings` table missing — re-import; check `application/logs/php_errors.log` and the dated CI log in the same folder |
 | "The action you have requested is not allowed" (403) on submit | CSRF token missing/expired — reload the form and resubmit; do not open the same form in two tabs for a long time (tokens regenerate) |
@@ -310,10 +363,13 @@ dashboard cards — they intentionally share one KPI engine
 | Photos/signatures return 403/404 on nginx | `.htaccess` is ignored on nginx — apply the uploads rules in the server block (see `uploads/.htaccess` footer) |
 | Availability figures look wrong after changing open hours | **Settings** values (`daily_open_hours`, `weekly_open_hours`, target, week start) drive every KPI screen; reports already *published* (forecast baselines, W36 snapshots) stay frozen by design |
 | Account "locked" after wrong passwords | Wait 15 minutes or sign in successfully from the account+IP pair; supervisors can review events under **Settings → Sign-in Security** |
-| Attachment / order-document **download** returns 500 | Known bug K-04 (`SYSTEM.md` §18): the `download` helper is never loaded. Files remain in `uploads/wo_attachments/` / `uploads/order_docs/` |
+| Attachment / order-document **download** returns 500 | The `download` helper is loaded in `autoload.php` now; if it still fails, check the file exists under `uploads/wo_attachments/` / `uploads/order_docs/` and that the path is readable |
 
 ## Documentation
 
+- [`SECURITY.md`](SECURITY.md) — credential-exposure runbook (K-01): what
+  leaked, how to rotate the database password and encryption key, how to purge
+  the values from git history, and how to stop it happening again.
 - [`SYSTEM.md`](SYSTEM.md) — complete technical & functional specification:
   architecture, all modules and their status, business rules and formulas,
   end-to-end workflows, the full 59-table schema with relationships, the

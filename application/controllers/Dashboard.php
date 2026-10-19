@@ -60,14 +60,12 @@ class Dashboard extends MY_Controller {
         $data['fleet_kpi_by_type'] = $this->Dashboard_model->get_fleet_kpi_by_type();
 
         // --- Recent WOs ---
-        $data['recent_wo'] = $this->db
-            ->select('w.*,e.registration_no,u.first_name AS assigned_name')
-            ->from('work_orders w')
-            ->join('equipment e','e.id=w.equipment_id','left')
-            ->join('users u','u.id=w.assigned_to','left')
-            ->order_by('w.created_at','DESC')
-            ->limit(5)
-            ->get()->result();
+        // `assigned_to` is a CSV of user IDs, so joining `users` on it only ever
+        // matched the first technician (MySQL coerces '3,5' to 3) and could
+        // print the wrong name. The model resolves the whole list after the
+        // query; the card itself shows machine + status, not the assignee.
+        $this->load->model('Workorder_model');
+        $data['recent_wo'] = $this->Workorder_model->get_recent(5);
 
         // --- Due PM ---
         $data['due_pm'] = $this->db
@@ -131,8 +129,15 @@ class Dashboard extends MY_Controller {
 
         // ── Spend & Orders ──
         $spend = $this->Order_model->get_spend_by_supplier($year.'-01-01', $year.'-12-31');
-        $total_spend = 0;
-        foreach ($spend as $s) $total_spend += $s->total_spend;
+        // K-11: orders carry their own currency, so a single grand total would
+        // add TZS, UGX and USD together. Keep one total per currency.
+        $spend_by_currency = array();
+        foreach ($spend as $s) {
+            $cur = wms_currency_code($s->currency);
+            $spend_by_currency[$cur] = (isset($spend_by_currency[$cur]) ? $spend_by_currency[$cur] : 0)
+                + (float)$s->total_spend;
+        }
+        arsort($spend_by_currency);
         $order_kpi = $this->Order_model->get_kpi();
 
         // ── Incidents ──
@@ -211,7 +216,7 @@ class Dashboard extends MY_Controller {
                 'mtbf'            => $this->Dashboard_model->get_mtbf_30d(),
                 'manpower'        => $manpower,
                 'breakdowns_30d'  => $this->Dashboard_model->count_breakdowns_30d(),
-                'spend_ytd'       => $total_spend,
+                'spend_ytd'       => $spend_by_currency,
                 'order_kpi'       => $order_kpi,
                 'incidents_month' => $incident_count,
                 'critical_incidents_month' => $critical_incidents,

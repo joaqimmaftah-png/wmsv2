@@ -55,7 +55,8 @@ $is_edit = !empty($s->id);
       <div>
         <label class="form-label">Default Currency</label>
         <select name="currency" class="form-select">
-          <?php $cur = $s->currency ?? 'TZS'; foreach (array('TZS','USD','CNY','UGX','CDF','KES','EUR') as $c): ?>
+          <?php $cur = isset($s->currency) && $s->currency !== '' ? strtoupper($s->currency) : wms_site_currency();
+              foreach (wms_currencies() as $c): ?>
           <option value="<?= $c ?>" <?= ($cur===$c)?'selected':'' ?>><?= $c ?></option>
           <?php endforeach; ?>
         </select>

@@ -102,8 +102,17 @@ $action_url = $issue_mode ? 'materials/issue/'.$item->id : 'materials/receive/'.
         <input type="number" name="qty_approved" class="form-control" min="0" step="1" placeholder="Ordered / approved qty">
       </div>
       <div>
-        <label class="form-label">Unit price (UGX)</label>
-        <input type="number" name="unit_price" class="form-control" min="0" step="0.01">
+        <label class="form-label">Unit price</label>
+        <div style="display:flex;gap:8px;">
+          <input type="number" name="unit_price" class="form-control" min="0" step="0.01">
+          <select name="currency" class="form-select" style="width:96px;" title="Currency of the unit price"
+                  aria-label="Currency of the unit price">
+            <?php foreach (wms_currencies() as $c): ?>
+            <option value="<?= $c ?>" <?= $c === wms_site_currency() ? 'selected' : '' ?>><?= $c ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="cs" style="margin-top:4px;">Recorded on the stock movement, so a receipt in another currency keeps its meaning.</div>
       </div>
       <?php endif; ?>
     </div>

@@ -1,0 +1,55 @@
+# ---------------------------------------------------------------------------
+# Workshop Management System — files that must never be committed
+# ---------------------------------------------------------------------------
+# Everything matched here is deployment state, a credential, or generated
+# output. The repository is PUBLIC, so a single `git add -f` publishes the
+# value to the internet and to every clone made from it.
+# ---------------------------------------------------------------------------
+
+# --- Local configuration (the only place a credential belongs) -------------
+# Copy the .example template on the server; never commit the real file.
+application/config/*.local.php
+!application/config/*.local.php.example
+
+# Environment files (alternative credential source, see database.php)
+.env
+.env.*
+!.env.example
+
+# --- Runtime output --------------------------------------------------------
+application/logs/*
+!application/logs/.gitkeep
+*.log
+
+# --- User-supplied files ----------------------------------------------------
+# Photos, signatures, incident evidence and delivery documents are personal
+# data and are written at runtime; only the directory markers belong in git.
+uploads/**
+!uploads/
+!uploads/**/
+!uploads/.htaccess
+!uploads/**/.gitkeep
+!uploads/logoam.png
+
+# --- Database exports ------------------------------------------------------
+# Only the schema + master-data file is source. A dump of a real database
+# contains staff, hashes, fleet and stock rows; it belongs in a backup, not in
+# a public repository (K-02).
+database/*.sql
+!database/schema.sql
+database/*.sql.gz
+database/*.sql.bak
+database/*.sql.gz
+database/*.sql.bak
+database/*.dump
+database/*.zip
+database/*.tar.gz
+
+# --- Editors / operating systems -------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/

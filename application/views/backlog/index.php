@@ -31,7 +31,7 @@ $qs = array_filter((array)$f, function ($v) { return $v !== null && $v !== ''; }
 <div class="card" style="padding:18px;border-left:3px solid var(--amber);">
   <strong>The backlog table is not installed yet.</strong><br>
   Import the database dump shipped with this repository
-  (<code>database/yzzme_43038742_aml.sql</code>) to enable this register.
+  (<code>database/schema.sql</code>) to enable this register.
 </div>
 <?php else: ?>
 

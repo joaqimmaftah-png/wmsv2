@@ -11,15 +11,15 @@ $route['logout'] = 'auth/logout';
 
 // Dashboard
 $route['dashboard'] = 'dashboard/index';
-$route['dashboard/kpi_data'] = 'dashboard/kpi_data';
 
 // Team Management
 $route['team'] = 'team/index';
 $route['team/(:any)'] = 'team/$1';
 
-// Maintenance
-$route['maintenance'] = 'maintenance/index';
-$route['maintenance/(:any)'] = 'maintenance/$1';
+// NOTE: there is no `Maintenance` controller — `views/maintenance/` is used by
+// workorders/equipment/pm. The old `maintenance/*` routes (and
+// `dashboard/kpi_data`, a method that does not exist) were dead: every request
+// to them was a 404 through a route that resolved to nothing (K-07).
 
 // Work Orders
 $route['workorders'] = 'workorders/index';

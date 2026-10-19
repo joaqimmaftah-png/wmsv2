@@ -32,6 +32,23 @@ $grad_colors  = array('#1a6fff,#0a50cc','#5e5ce6,#3634a3','var(--purple),#9b59b6
   </div>
 </div>
 
+<?php if (!empty($stats['legacy'])): ?>
+<!-- K-02: password hashes that a leaked dump would still crack -->
+<div class="card" style="padding:14px 18px;margin-bottom:20px;border-color:rgba(180,83,9,.28);background:var(--amber-fill);">
+  <div style="font-size:12.5px;color:var(--t2);line-height:1.6;">
+    <strong style="color:var(--amber);"><?= (int)$stats['legacy'] ?> account<?= (int)$stats['legacy'] === 1 ? '' : 's' ?> still use a legacy MD5/SHA1 password hash.</strong>
+    They are marked <span class="badge b-warning" style="font-size:9.5px;">legacy hash</span> below.
+    Reset each one with the key icon — a hash copied from a database dump stays usable until it is replaced.
+    <?php if ($this->config->item('legacy_password_login')): ?>
+    Legacy sign-in is currently <strong>enabled</strong>; when the count reaches zero set
+    <code>legacy_password_login = FALSE</code> in <code>config.local.php</code> to retire MD5/SHA1 for good.
+    <?php else: ?>
+    Legacy sign-in is <strong>disabled</strong>: these accounts cannot sign in until their password is reset.
+    <?php endif; ?>
+  </div>
+</div>
+<?php endif; ?>
+
 <!-- ── Role cards ── -->
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
 <?php
@@ -140,7 +157,12 @@ foreach ($role_info as $rname => $ri):
           </div>
           <div>
             <div style="font-size:13px;font-weight:600;color:var(--t1);"><?= htmlspecialchars($u->first_name.' '.$u->last_name) ?><?php if ($is_me): ?> <span style="font-size:9.5px;color:var(--blue);font-weight:700;"> YOU</span><?php endif; ?></div>
-            <div style="font-size:10.5px;color:var(--t3);"><?= htmlspecialchars($u->email) ?></div>
+            <div style="font-size:10.5px;color:var(--t3);">
+              <?= htmlspecialchars($u->email) ?>
+              <?php if (!empty($stats['legacy_ids'][$u->id])): ?>
+              <span class="badge b-warning" style="font-size:9px;margin-left:4px;" title="Sign-in still uses a legacy MD5/SHA1 hash — reset this password">legacy hash</span>
+              <?php endif; ?>
+            </div>
           </div>
         </div>
       </td>

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+#
+# pre-commit — refuse to stage deployment secrets.
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+#
+# This is a convenience guard, not a security boundary: `git commit --no-verify`
+# bypasses it. The real controls are .gitignore, review, and not putting a
+# credential in a tracked file in the first place (see SECURITY.md).
+set -u
+
+bad=0
+
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+
+    case "$f" in
+        *.example|*.example.php)
+            continue
+            ;;
+        application/config/*.local.php|.env|.env.*|*.env)
+            printf 'pre-commit: refusing to commit %s\n' "$f" >&2
+            printf '            deployment secrets belong in the server copy, not in git (SECURITY.md)\n' >&2
+            bad=1
+            ;;
+        database/*.sql.gz|database/*.sql.bak|database/*.dump|database/*.zip)
+            printf 'pre-commit: refusing to commit %s\n' "$f" >&2
+            printf '            database exports are not source; keep them outside the repository\n' >&2
+            bad=1
+            ;;
+    esac
+done < <(git diff --cached --name-only --diff-filter=ACMR)
+
+if [ "$bad" -ne 0 ]; then
+    printf 'pre-commit: unstage the file(s) above, or use --no-verify if you are certain.\n' >&2
+    exit 1
+fi
+
+exit 0

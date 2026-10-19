@@ -22,20 +22,22 @@
         <div class="form-grid cols-2">
           <div>
             <label class="form-label">Currency</label>
+            <?php $site_currency = isset($s['currency']) && $s['currency']->setting_value !== ''
+                    ? strtoupper($s['currency']->setting_value) : wms_site_currency(); ?>
             <select name="settings[currency]" class="form-select">
-              <?php foreach (['USD','EUR','GBP','AUD','ZAR','IDR','MYR','NGN','TZS'] as $c): ?>
-              <option value="<?= $c ?>" <?= (isset($s['currency']) ? $s['currency']->setting_value : '')==$c?'selected':'' ?>><?= $c ?></option>
+              <?php foreach (wms_currencies() as $c): ?>
+              <option value="<?= $c ?>" <?= $site_currency === $c ? 'selected' : '' ?>><?= $c ?></option>
               <?php endforeach; ?>
+              <?php if (!in_array($site_currency, wms_currencies(), true)): ?>
+              <option value="<?= htmlspecialchars($site_currency) ?>" selected><?= htmlspecialchars($site_currency) ?> (current)</option>
+              <?php endif; ?>
             </select>
+            <div class="cs" style="margin-top:4px;">Used for spend totals and as the default in every currency picker.</div>
           </div>
           <div>
             <label class="form-label">PM Alert (days before due)</label>
             <input type="number" name="settings[pm_alert_days]" class="form-control" value="<?= (isset($s['pm_alert_days']) ? $s['pm_alert_days']->setting_value : '7') ?>">
           </div>
-        </div>
-        <div>
-          <label class="form-label">Certification Expiry Alert (days)</label>
-          <input type="number" name="settings[cert_alert_days]" class="form-control" value="<?= (isset($s['cert_alert_days']) ? $s['cert_alert_days']->setting_value : '30') ?>">
         </div>
       </div>
 
@@ -189,6 +191,26 @@
         </div>
       </div>
       <?php endif; ?>
+
+      <?php /* ── Team / leave — the values the Team screens read ── */ ?>
+      <div class="ch" style="margin-top:26px;"><div><div class="ct">Team &amp; Leave</div>
+        <div class="cs">Certification alerting and the leave balances shown on the Team screens</div></div></div>
+      <div class="form-grid cols-1" style="gap:16px;margin-bottom:24px;">
+        <div class="form-grid cols-2">
+          <div>
+            <label class="form-label">Certification Expiry Alert (days)</label>
+            <input type="number" min="1" max="365" name="settings[cert_alert_days]" class="form-control"
+                   value="<?= htmlspecialchars($rval('cert_alert_days', $rdef['cert_alert_days'])) ?>">
+            <div class="cs" style="margin-top:4px;"><?= $rdesc['cert_alert_days'] ?></div>
+          </div>
+        </div>
+        <div>
+          <label class="form-label">Leave Entitlements (days per year, JSON)</label>
+          <textarea name="settings[leave_entitlements]" class="form-control" rows="3" spellcheck="false"
+                    style="font-family:ui-monospace,monospace;font-size:12px;"><?= htmlspecialchars($rval('leave_entitlements', $rdef['leave_entitlements'])) ?></textarea>
+          <div class="cs" style="margin-top:4px;"><?= $rdesc['leave_entitlements'] ?></div>
+        </div>
+      </div>
 
       <div class="flex ai-c gap-10" style="justify-content:flex-end;">
         <button type="submit" class="btn btn-primary">Save Settings</button>

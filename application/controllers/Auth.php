@@ -33,7 +33,7 @@ class Auth extends CI_Controller {
                 echo '<li>Copy <code>database.local.php.example</code> to <code>database.local.php</code></li>';
                 echo '<li>Edit with cPanel DB credentials (localhost, cpaneluser_dbuser, cpaneluser_dbname)</li>';
                 echo '<li>cPanel > MySQL Databases > Add user to DB with ALL PRIVILEGES</li>';
-                echo '<li>Import <code>database/yzzme_43038742_aml.sql</code> via phpMyAdmin</li>';
+                echo '<li>Import <code>database/schema.sql</code> via phpMyAdmin</li>';
                 echo '</ol>';
                 echo '</div></body></html>';
                 exit;
@@ -85,7 +85,7 @@ class Auth extends CI_Controller {
 
                         $data['error'] = 'The workshop database is not answering. '
                             .'If this installation was just set up, import the database dump shipped '
-                            .'with this repository (database/yzzme_43038742_aml.sql) and reload this page.';
+                            .'with this repository (database/schema.sql) and reload this page.';
                         $this->load->view('auth/login', $data);
                         return;
                     }
@@ -131,10 +131,16 @@ class Auth extends CI_Controller {
                             );
                             $user->last_login = date('Y-m-d H:i:s');
 
+                            /*
+                             * Only the whitelisted view fields go into the
+                             * session, not the whole row: `$user` carries the
+                             * password hash, and sessions are rows in
+                             * `ci_sessions` (K-18).
+                             */
                             $this->session->set_userdata([
                                 'user_id'   => $user->id,
                                 'role_id'   => $user->role_id,
-                                'user_data' => $user,
+                                'user_data' => wms_session_user($user),
                             ]);
 
                             // Session fixation: keep the session data, change the

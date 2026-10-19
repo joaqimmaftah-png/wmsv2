@@ -34,6 +34,10 @@ class Settings_model extends CI_Model {
 
     /** Defaults, mirrored from the seeded `settings` rows. Key => default. */
     const DEFAULTS = array(
+        // Site currency (K-11): the code every spend total and default picker
+        // uses. Mirrors the seeded row; the vocabulary lives in
+        // helpers/currency_helper.php so this is not a second list.
+        'currency'                    => 'USD',
         'weekly_open_hours'           => '168',
         'daily_open_hours'            => '24',
         'default_availability_target' => '0.88',
@@ -60,9 +64,19 @@ class Settings_model extends CI_Model {
         'unplanned_allowance_default_hours'=> '1',
         'unplanned_allowance_lookback_weeks' => '12',
         'forecast_show_excel_reference'    => '1',
+
+        /* ── team / leave (previously hard-coded or absent) ── */
+        // Seeded as 30 in the dump; kept here so a database created without
+        // that row still has the value the certification screens expect.
+        'cert_alert_days'                  => '30',
+        // Days per leave type per year. A type missing from the map is not
+        // tracked (shown as "—"), which is how Maternity/Paternity/Training
+        // behave until the business sets a figure.
+        'leave_entitlements'               => '{"Annual Leave":21,"Sick Leave":10,"Emergency":3}',
     );
 
     const DESCRIPTIONS = array(
+        'currency'                    => 'Site currency: code used for spend totals and as the default in currency pickers',
         'login_ip_cap_enabled'        => 'F-19: 1 = limit failed sign-ins from one source across many accounts (credential stuffing); 0 = off',
         'weekly_open_hours'           => 'Open hours in a 7-day reporting week',
         'daily_open_hours'            => 'Open hours per day',
@@ -82,6 +96,9 @@ class Settings_model extends CI_Model {
         'unplanned_allowance_default_hours' => 'flat mode: planned breakdown allowance per day (hours). The historical workbook typed 1 h/day on 85 of 103 machines',
         'unplanned_allowance_lookback_weeks'=> 'derived mode: how many weeks of history the per-machine allowance is computed from',
         'forecast_show_excel_reference'     => 'D29/D30: 1 = also show the historical Excel figures (24-hour calendar availability, unweighted group mean) as labelled reference columns; 0 = system figures only',
+
+        'cert_alert_days'                   => 'Days before a certification expiry at which it is flagged "Expiring Soon" (the tracker also lists already-expired certificates)',
+        'leave_entitlements'                => 'Leave days per type per year, as JSON keyed by the leave type, e.g. {"Annual Leave":21,"Sick Leave":10,"Emergency":3}. A type not listed is not tracked (shown as "—")',
     );
 
     const BREAKDOWN_COUNT_MODES = array('start_in_period', 'overlapping');
@@ -147,6 +164,16 @@ class Settings_model extends CI_Model {
 
     public function float_val($key, $default = null) {
         return (float)$this->get($key, $default);
+    }
+
+    /**
+     * The installation's currency code (K-11). Kept next to the other typed
+     * getters so callers do not reimplement the validation; the helper
+     * `wms_site_currency()` is the same value for views.
+     */
+    public function currency() {
+        $code = strtoupper(trim((string)$this->get('currency')));
+        return preg_match('/^[A-Z]{3}$/', $code) ? $code : 'USD';
     }
 
     /* ── the weekly-report values ────────────────────────────────────── */
@@ -304,6 +331,13 @@ class Settings_model extends CI_Model {
      */
     public function sanitize($key, $value) {
         switch ($key) {
+            case 'currency':
+                // Only a code from the shared vocabulary is written; an
+                // unsupported one keeps the stored value instead of replacing
+                // every total's currency with a typo.
+                $code = strtoupper(trim((string)$value));
+                return in_array($code, wms_currencies(), true) ? $code : $this->currency();
+
             case 'weekly_open_hours':
                 return (string)max(1, (int)$value);
 
@@ -400,14 +434,40 @@ class Settings_model extends CI_Model {
 
             case 'forecast_show_excel_reference':
                 return ((string)$value === '1' || $value === true || $value === 1) ? '1' : '0';
+
+            /* ── team / leave ─────────────────────────────────────────── */
+
+            case 'cert_alert_days':
+                $v = (int)$value;
+                return (string)(($v > 0 && $v <= 365) ? $v : 30);
+
+            case 'leave_entitlements':
+                // must stay a JSON object of type => whole/half days; a
+                // malformed value would silently zero every balance.
+                $j = json_decode((string)$value, true);
+                if (!is_array($j)) return '{}';
+                $clean = array();
+                foreach ($j as $type => $days) {
+                    if (!is_string($type) || trim($type) === '') continue;
+                    if (!is_numeric($days)) continue;
+                    $d = (float)$days;
+                    if ($d < 0)   $d = 0;
+                    if ($d > 365) $d = 365;
+                    $clean[trim($type)] = round($d, 1);
+                }
+                return $clean ? json_encode($clean) : '{}';
         }
         return $value;
     }
 
     /**
      * Upsert a batch of settings. Rows that do not exist yet are inserted with
-     * their documented description (the settings table has no unique index on
-     * `setting_key`, so existence is checked first).
+     * their documented description.
+     *
+     * The comment used to say the table had no unique index on `setting_key`;
+     * the schema does define one (K-14). The select-then-write is kept because
+     * it is correct with or without the constraint and it creates a missing row
+     * with its documented description — it never relied on the index.
      *
      * @param  array $values key => value (as posted)
      * @return int number of keys written

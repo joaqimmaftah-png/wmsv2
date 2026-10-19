@@ -356,7 +356,7 @@ class Materials extends MY_Controller {
 
         $this->inventory_excel->export_inventory($rows, $suppliers, $tmp, array(
             'title'        => 'INVENTORY STOCK LIST',
-            'generated_by' => is_array($user) && isset($user['full_name']) ? $user['full_name'] : '',
+            'generated_by' => wms_user_full_name($user),
             'filter_note'  => $this->_filter_note($filter),
         ));
         $this->_send_file($tmp, $fname);
@@ -593,7 +593,9 @@ class Materials extends MY_Controller {
             $price = $this->input->post('unit_price');
             if ($price !== null && $price !== '') {
                 $ctx['unit_price'] = (float)$price;
-                $ctx['currency']   = 'UGX';
+                // K-11: the receipt's currency is what the operator picked;
+                // it used to be the literal 'UGX' whatever the site used.
+                $ctx['currency'] = wms_currency_code($this->input->post('currency'), wms_site_currency());
             }
         }
         return $ctx;

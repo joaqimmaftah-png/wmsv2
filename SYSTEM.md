@@ -111,17 +111,17 @@ the noted gaps (§17 details).
 |---|---|---|---|---|
 | 1 | `Auth` | `Auth_throttle_model` | Sign-in/out, legacy-hash upgrade, throttling | Implemented |
 | 2 | `Dashboard` | `Dashboard_model`, `Spareparts_model` (+ order/lube/materials for CEO) | Operational dashboard; CEO Executive Summary variant | Implemented |
-| 3 | `Workorders` | `Workorder_model`, `Equipment_model`, `Team_model`, `Lubricant_model`, `Materials_model`, `Spareparts_model` | WO CRUD, status lifecycle, labour sessions, job cards, incidents & evidence, spare/oil lines | Implemented (attachment **download** broken — K-04) |
+| 3 | `Workorders` | `Workorder_model`, `Equipment_model`, `Team_model`, `Lubricant_model`, `Materials_model`, `Spareparts_model` | WO CRUD, status lifecycle, labour sessions, job cards, incidents & evidence, spare/oil lines | Implemented |
 | 4 | `Equipment` | `Equipment_model`, `Workorder_model` | Fleet register, machine detail + KPIs, meter updates | Implemented |
-| 5 | `Pm` | `Pm_model`, `Equipment_model` | PM schedules, completion, 12-month calendar | Implemented (Km-completion meter bug — K-05) |
+| 5 | `Pm` | `Pm_model`, `Equipment_model` | PM schedules, completion, 12-month calendar | Implemented |
 | 6 | `Inspections` | `Inspection_model`, `Equipment_model` | Template checklists EN/FR, signed records, PDF, defect automation | Implemented |
-| 7 | `Backlog` | `Backlog_model`, `Equipment_model`, `Maintenance_plan_model` | Defect register, planning push to maintenance plan, Excel export | Partial (list Close button hidden — K-06) |
+| 7 | `Backlog` | `Backlog_model`, `Equipment_model`, `Maintenance_plan_model` | Defect register, planning push to maintenance plan, Excel export | Implemented |
 | 8 | `Materials` | `Materials_model`, `Spareparts_model` | Inventory dashboard/list, receive/issue, Excel import/export/template | Implemented |
 | 9 | `Spareparts` | `Spareparts_model`, `Materials_model` | Pending-spares board, allocate/release/issue, availability alerts | Implemented |
 | 10 | `Suppliers` | `Supplier_model`, `Materials_model`, `Order_model` | Suppliers, contacts, part catalogue, "who supplies this part?" | Implemented |
-| 11 | `Orders` | `Order_model`, `Supplier_model`, `Materials_model`, `Spareparts_model` | Purchase orders, status pipeline, receiving + GRN, documents, lead-time estimate | Implemented (document **download** broken — K-04) |
+| 11 | `Orders` | `Order_model`, `Supplier_model`, `Materials_model`, `Spareparts_model` | Purchase orders, status pipeline, receiving + GRN, documents, lead-time estimate | Implemented |
 | 12 | `Lubricants` | `Lubricant_model`, `Equipment_model` | Lube types/specs, consumption + variance, budget, forecast & compliance widgets | Implemented |
-| 13 | `Team` | `Team_model` | Staff (= `users`) list/detail, attendance, leave, certifications, shift roster, monthly report | Partial (shift roster is display-only; cert status not refreshed) |
+| 13 | `Team` | `Team_model` | Staff (= `users`) list/detail, attendance, leave, certifications, shift roster, monthly report | Implemented |
 | 14 | `Users` | `Team_model` (loaded, most work via `$this->db`) | Account administration, own profile & password | Implemented |
 | 15 | `Settings` | `Settings_model`, `Auth_throttle_model` | Business settings; sign-in security console | Implemented |
 | 16 | `Reports` | 14 models (dashboard/WO/team/lube/equipment/order/supplier/asset/materials/store/settings/KPI target/KPI engine/W36) | 20+ reports and exports incl. W36 and the asset-register import | Implemented |
@@ -143,7 +143,10 @@ exists but is **not used** (`render()` loads `layouts/header.php`).
   immediately re-hashes to bcrypt. 63 of the 66 accounts in the shipped dump
   still hold MD5-format hashes, so the switch is currently load-bearing.
 - On success: throttle history cleared, `last_login` stamped, session vars
-  `user_id`, `role_id`, `user_data` (the full user row) set, session ID
+  `user_id`, `role_id` and `user_data` set — `user_data` is the whitelisted
+  view of the row (`wms_session_user()`: id, role, names, e-mail, position,
+  photo, signature, status, full name), **not** the row itself, so the
+  password hash never reaches `ci_sessions` (K-18). The session ID is
   regenerated with destroy. Logout is **POST-only** (405 otherwise) and
   destroys the session.
 - Failure messages never distinguish "locked" from "wrong password"; a failed
@@ -253,27 +256,44 @@ are assigned to (CSV match on `assigned_to`).
   (e.g. `.git`) are blocked except `.well-known`.
 - **Secrets handling by design**: DB credentials/encryption key are read from
   `*.local.php` files or `WMS_*` environment variables; if none exist the app
-  refuses to connect and shows a setup page. (The repository currently
-  violates its own rule — K-01/K-02.)
-- Note: the full user row, including the password hash, is stored in the
-  server-side session record (`user_data`).
+  refuses to connect and shows a setup page. The files are git-ignored and the
+  `.example` templates are the only copies in the repository; the pre-rotation
+  values are still in its public history and must be rotated (K-01,
+  `SECURITY.md`).
+- Sessions are DB-backed (`ci_sessions`). `user_data` holds only the fields a
+  view reads; the password hash is **not** stored (K-18). A session written by
+  an older build is rewritten on its next request by `MY_Controller::_check_auth()`,
+  which drops the extra columns.
+- `base_url` comes from `WMS_BASE_URL`, then `config.local.php`, then
+  auto-detection; detection accepts only a syntactically valid `host[:port]`
+  and answers 400 otherwise, so a crafted `Host` header cannot be reflected
+  into links (K-17).
 
 ## 5. Database
 
 ### 5.1 Overview
 
-One MySQL/MariaDB database, 59 tables, `utf8mb4`. The **only** schema artifact
-in the repo is `database/yzzme_43038742_aml.sql` — a phpMyAdmin dump
-(2026-10-19, MariaDB 11.4) containing the complete schema **and
-production data** (≈66 users, 116 equipment, 1,697 materials, 12,721 material
-transactions, 630 inspection items over 14 templates; 39 tables are empty in
-the dump, including `work_orders`, `pm_schedules` and `spare_orders`).
-There are no `CREATE DATABASE`/`USE`/`DROP TABLE` statements.
+One MySQL/MariaDB database, 59 tables, `utf8mb4`. The schema artifact in the
+repo is `database/schema.sql`: all 59 tables with their indexes and foreign
+keys, plus the master data the application needs to start (5 roles,
+21 equipment types, 7 lubricant types, 17 report groups, 35 report sites,
+19 settings rows, 3 shifts). It contains **no staff, fleet, supplier, stock,
+session or inspection records**.
 
-There are no migration files in this repository — the dump **is** the
-schema. Schema evolution is therefore unmanaged: any change must be applied
-manually and the dump re-exported (K-13). §13 lists the runtime schema
-probes that let screens degrade gracefully on an older database.
+The production dump it was derived from (`database/yzzme_43038742_aml.sql`,
+phpMyAdmin, MariaDB 11.4, 2026-10-19) held 66 users, 116 equipment,
+1,697 materials, 12,721 material transactions and 630 inspection items over
+14 templates; 39 tables were empty in it, including `work_orders`,
+`pm_schedules` and `spare_orders`. That file is no longer tracked (K-02) and
+must not be re-added — it is a data export, not source.
+
+There are no `CREATE DATABASE`/`USE`/`DROP TABLE` statements in either file.
+
+`database/schema.sql` **is** the baseline schema. Changes made after a database
+was created live in `database/migrations/` and are applied by
+`scripts/migrate.sh` (idempotent files, recorded in `schema_migrations`); a new
+installation imports only `schema.sql`. §13 lists the runtime schema probes that
+let screens degrade gracefully on a database where a migration has not run yet.
 
 Conventions: surrogate `INT` auto-increment PKs (except `ci_sessions`);
 statuses are MySQL `ENUM`s (the authoritative value lists are in §5.3);
@@ -440,9 +460,9 @@ generated as last number + 1), `equipment_id NN →equipment`,
 `type ENUM(Corrective Maintenance, Preventive Maintenance, Incident) NN`,
 `is_breakdown NN=0` (derived from type on every save — §7.1),
 `breakdown_event_id` (groups several WOs of one failure; read by the KPI
-engine, never written by the UI), `priority ENUM(Critical,High,Medium,Low)=Medium`,
+engine; the work-order detail page links/detaches it), `priority ENUM(Critical,High,Medium,Low)=Medium`,
 `status ENUM(Open,In Progress,Waiting Parts,Waiting Tools,Completed,Closed)=Open`,
-`hold_code ENUM(WSP,WQT,WCF,UD,UR)` (read by W36; no UI writes it),
+`hold_code ENUM(WSP,WQT,WCF,UD,UR)` (read by W36; written by the WO form and the quick status form),
 `machine_status VARCHAR=Operational` (free form: Operational/Breakdown…),
 `equipment_systems` (CSV), `title NN`, `description`, `symptoms`,
 `root_cause`, `pending_work`, `remarks`, `planner`, `purchase_order`,
@@ -480,8 +500,11 @@ No `material_id` column — linkage to inventory is resolved by matching
 
 **`wo_oil_records`** — free-text oil lines printed on the job card.
 `id AI`, `work_order_id NN →work_orders`, `system_location`, `oil_type`,
-`grade`, `quantity`. **Not** linked to `lube_types`/`materials` and never
-posted to `lube_consumption` (§17).
+`grade`, `quantity`. **Not** linked to `lube_types`/`materials` at entry; a
+copy is posted to `lube_consumption` (with `work_order_id`) whenever the work
+order is saved or edited, matching the oil type/grade to a `lube_types` row.
+A line that matches nothing stays on the job card and is reported in the
+flash message.
 
 **`wo_status_history`** — `id AI`, `work_order_id NN →work_orders`,
 `old_status`, `new_status`, `changed_by`, `notes`, `changed_at`. Written by
@@ -516,7 +539,8 @@ drives forecast placement; NULL = cannot be placed), `last_done_date`,
 `preferred_weekday` (1–7; set on "Weekly inspection" rounds).
 
 **`pm_completions`** — `id AI`, `pm_schedule_id NN →pm_schedules`,
-`work_order_id →work_orders` (never written by the current completion flow),
+`work_order_id →work_orders` (written when Mark Done names the job that did
+the service — §17),
 `completed_date NN`, `completed_hours`, `completed_by`, `notes`, `created_at`.
 
 **`pm_part_requirements`** — parts a service consumes. `id AI`,
@@ -695,8 +719,9 @@ inventory), row counters (`total_rows`, `inserted/imported`, `updated`,
 `service_interval_hours`, `notes`. (No unique key — duplicates possible;
 `Lubricant_model::get_spec()` effectively takes one row.)
 
-**`lube_consumption`** — `id AI`, `work_order_id →work_orders` (never written
-by the UI), `equipment_id NN →equipment`, `lube_type_id NN →lube_types`,
+**`lube_consumption`** — `id AI`, `work_order_id →work_orders` (written by
+the work-order oil-line sync as well as the Lubricants screen),
+`equipment_id NN →equipment`, `lube_type_id NN →lube_types`,
 `quantity_used NN`, `recommended_qty` (copied from spec at entry),
 `variance` (= used − recommended), `variance_reason`, `consumption_date NN`,
 `recorded_by →users`, `equipment_hours`, `notes`, `created_at`.
@@ -717,19 +742,23 @@ UQ (`user_id`,`date`) — saving a day uses `REPLACE` inside a transaction.
 `leave_type ENUM(Annual Leave,Sick Leave,Emergency,Unpaid,Maternity,Paternity,Training) NN`,
 `start_date NN`, `end_date NN`, `days_count` (inclusive calendar days),
 `reason`, `status ENUM(Pending,Approved,Rejected)=Pending`,
-`approved_by →users`, `approved_at`, `notes`, `created_at`. Approval does
-**not** create attendance rows.
+`approved_by →users`, `approved_at`, `notes`, `created_at`. Approval writes
+`attendance` rows (`status = Leave`, marker in `notes`) for every day of the
+request and removes exactly those rows when the decision is reversed.
 
 **`certifications`** (1 row) — `id AI`, `user_id NN →users`, `cert_name NN`,
 `cert_number`, `issued_date`, `expiry_date`, `issuing_body`, `document`
-(never written by the UI), `status ENUM(Valid,Expired,Expiring Soon)=Valid`
-(computed **once at insert**; listings compute expiry from the date instead),
-`created_at`.
+(PDF/JPG/PNG under `uploads/documents/`, written by the Team certification
+form), `status ENUM(Valid,Expired,Expiring Soon)=Valid` (recomputed from the
+expiry date by `Team_model::refresh_cert_status()`, so a stored status cannot
+outlive the certificate), `created_at`.
 
 **`shifts`** (3 rows) — `id AI`, `name NN`, `start_time NN`, `end_time NN`,
 `description`. **`shift_assignments`** — `id AI`, `user_id NN →users`,
-`shift_id NN →shifts`, `week_start NN`. The roster screen only displays
-assignments; there is no UI to create them.
+`shift_id NN →shifts`, `week_start NN` (ISO Monday). Both are edited from
+Team → Shift Roster: shift types by supervisors, and one assignment per
+worker per week (the table has no unique key, so the screen deletes the
+existing row before inserting).
 
 #### Migration/history artefacts
 
@@ -802,9 +831,11 @@ A machine whose meter basis for judging PM currency is stale is reported as
   start/end datetimes when both are present. A Corrective WO immediately sets
   its equipment's status to `Breakdown`. Spare-part lines, oil lines,
   incident details + evidence, and the operator's drawn signature (base64 PNG
-  → `uploads/signatures/`) are saved with the WO. There is **no form-validation
-  ruleset** on create/edit — posted values are trusted after CI's XSS filter
-  (K-09).
+  → `uploads/signatures/`) are saved with the WO. Create and edit validate
+  server-side before anything is written: machine + non-empty title + a valid
+  `type`/`status` on create, and title + `type`/`priority`/`status`/
+  `machine_status` on edit. A rejected insert/update aborts — no child rows are
+  written and the page does not claim success (K-09).
 - Spare-part lines are **upserted** (matched by item code, else part name) so
   row IDs — and therefore stock reservations/alerts referencing them — survive
   edits; lines removed from the form are deleted (their reservations become
@@ -837,7 +868,7 @@ A machine whose meter basis for judging PM currency is stale is reported as
   multi-file evidence (gif/jpg/jpeg/png/pdf/doc/docx ≤ 8 MB each, generated
   filenames) into `uploads/wo_attachments/`; a supervisor "review" stamps
   `review_status=Reviewed`. Evidence files whose DB row fails to save are
-  deleted from disk again. Attachment **download is broken** (K-04).
+  deleted from disk again. Attachment download is fixed (K-04).
 - AJAX helpers: `api_spare_lookup?code=` returns part name/number/unit and
   stock (= initial+received−sortie); `api_stock_check?code=&qty=` warns when
   qty > stock. Both degrade to `ok` when the item/table is absent.
@@ -855,10 +886,18 @@ A machine whose meter basis for judging PM currency is stale is reported as
   writer (§7.3). The detail page shows WO history (20), PM schedules, spec
   sheet, and 30-day KPIs from `Kpi_engine_model`
   (availability/MTTR/MTBF/downtime/breakdowns/target/variance).
-- Equipment `status` automation is partial: Corrective WO creation →
-  `Breakdown`; WO Completed/Closed via `update_status` → `Available`.
-  `In Maintenance` is never set automatically; other transitions are manual
-  via the equipment edit form.
+- Equipment `status` automation (§17): every work-order path that changes
+  status — create, edit and the quick status form — runs
+  `Workorders::_sync_equipment_status()`. A corrective WO puts the machine in
+  `Breakdown`; `In Progress` on a planned job puts it in `In Maintenance`; a
+  completed/closed job releases the machine to `Available`. The machine then
+  follows the strongest remaining claim from other open work orders on it (an
+  open breakdown keeps it `Breakdown`, an open planned job keeps it
+  `In Maintenance`), so closing one job cannot mark a machine available while
+  another is still down. Going *backwards* (e.g. `In Progress` → `Open`) is
+  still a manual correction on the equipment form, and a `Retired` machine is
+  never revived by work-order activity (`Equipment_model::update_status()`
+  validates the enum and guards retirement).
 
 ### 7.3 Meter readings — `Equipment_model::record_meter_reading()`
 
@@ -871,20 +910,24 @@ override); `equipment.current_*` follows the latest reading and only moves
 up — unless `override` ("This is a correction", equipment screen only) is
 given, in which case the recorder is stored on the row. A refusal never
 blocks the caller's main action (PM completion/inspection still save; the
-message is surfaced). **Bug:** PM completion only calls the writer for
-interval types `Hours`/`Kilometres`, but the enum value is `Km`, so
-Km-interval completions never record a reading (K-05).
+message is surfaced). PM completion calls the writer for `Hours` and `Km`
+schedules — translating `Km` to `Kilometres` only at the writer — so both
+intervals record a reading (K-05 resolved).
 
 ### 7.4 PM schedules, inspections, backlog
 
 **PM** (`Pm` controller): create/edit Supervisor-only. Next due date:
 `Days` → +interval days; `Months` → +interval months; `Hours`/`Km` → an
 **estimate of +30 days** from last-done (and `next_due_hours` = last + interval
-for Hours only). Edit recomputes next-due fields only when interval or
+for Hours and Km). Edit recomputes next-due fields only when interval or
 last-done changed (protects forecast placement). `standard_hours` is clamped
 0–999.99, blank → NULL. Completion (planner modal posts `pm_id` in the body;
-URI form also accepted) inserts a `pm_completions` row, advances
-last/next fields, and records the completion meter reading (§7.3).
+URI form also accepted) inserts a `pm_completions` row — naming the optional
+same-machine work order in `work_order_id` — advances last/next fields, and
+records the completion meter reading (§7.3). A blank meter box leaves the
+previous `last_done_hours`/`next_due_hours` untouched rather than NULLing
+them; a work order from another machine aborts the whole completion with a
+message.
 `Pm_model::get_12month_forecast()` feeds the calendar view.
 
 **Inspections**: templates are data (`inspection_templates`+`inspection_items`,
@@ -894,7 +937,12 @@ bilingual EN/FR; the UI language is kept in the session). Two layouts:
 JSON, keeps existing signatures when a signatory doesn't re-sign, attributes
 new records to the signed-in inspector (edits preserve the original), records
 the SMR as a meter reading when equipment is linked, and then runs the defect
-engine. There is no UI to manage templates — they are seed/dump data.
+engine. Templates are seed/dump data *and* editable from Inspections →
+Manage Templates (supervisors): the editor creates/edits/deletes a template
+and its bilingual rows, refuses invalid codes/layouts, keeps rows that a
+submitted record references, and only deletes a template with zero records.
+Rows already used by a record keep their `item_id`, so historical inspections
+stay readable.
 
 Defect engine (`Inspection_model::process_backlog_findings()`), run on every
 save (idempotent via `backlogs.source_ref = insp_<record>_item_<item>`, UQ):
@@ -953,7 +1001,8 @@ legacy sheets ("Backlog on going" / "Backlog done").
   can be charged to an equipment (allocation label becomes its registration
   number), a department label, or Other, with a collecting person; receipts
   capture supplier (matched to `suppliers` by exact company name), approved
-  qty and unit price, with currency hard-coded `UGX` on this path (K-11).
+  qty, unit price and a currency the operator picks (default: the site
+  currency from `settings.currency`, K-11).
 - Item edit may change the three stock columns directly (Supervisor/Store/
   Technician with write access); every change is logged as an adjusting
   movement ("…adjusted via item edit") and a negative result is warned about,
@@ -1038,7 +1087,7 @@ Answers "which pending jobs can proceed now that parts arrived?".
   prints the latest or a specific GRN (receipt must belong to the order);
   orders received before GRN rows existed fall back to an order-level print.
 - Documents: upload (gif/jpg/jpeg/png/pdf/doc/docx ≤ 8 MB) to
-  `uploads/order_docs/`; download currently **broken** (K-04).
+  `uploads/order_docs/`; download fixed in this revision (K-04).
 - Supplier deletion is a hard delete with no reference checks (§5.2).
 
 ### 7.8 Lubricants
@@ -1073,7 +1122,7 @@ HTML, Forecast's plan-vs-actual actuals):
   PM-service KPI (schedules due/done with the stale-meter "not judged" rule);
   inspection register for the week; a **Synthèse** (summary) with an action
   plan built from open WOs/backlogs (`pending_work`/`action_taken` text and
-  the WO `hold_code` — currently always empty, §17) and KPI synthesis; plus a
+  the WO `hold_code`, written by the work-order screens) and KPI synthesis; plus a
   data-quality list explaining anomalies (missing targets provenance etc.).
 - Week resolution honours `report_week_start_day`; URL input accepts ISO
   labels (`2026-W36`) validated against real ISO weeks, or a date.
@@ -1088,27 +1137,51 @@ HTML, Forecast's plan-vs-actual actuals):
 
 ### 7.10 Team, users, settings
 
-- Team screens operate on the same `users` rows. Attendance save replaces the
-  whole day atomically: statuses limited to Present/Absent/Leave/Rest, times
-  validated `HH:MM`, unknown user IDs or any invalid row roll the whole day
-  back. Monthly report counts present/absent/leave/rest per worker and an
-  attendance %. `hours_worked` is stored but never computed by the UI.
-- Leave: days = inclusive calendar days (min 1); approval sets status +
-  approver; no attendance backfill, no balance/entitlement logic.
-- Certifications: status derived at insert (Expired / Expiring Soon within
-  30 days / Valid); the tracker lists certs expiring within 60 days computed
-  from `expiry_date`. The stored status is never refreshed.
+- Team screens operate on the same `users` rows. Attendance save writes the
+  whole day atomically: statuses limited to Present/Absent/Leave/Rest/Holiday,
+  times validated `HH:MM`, unknown user IDs or any invalid row roll the whole
+  day back. An existing day for the same `(user_id, date)` is updated in place
+  (never REPLACE), so its `hours_worked` and notes survive. Monthly report
+  counts present/absent/leave/rest/holiday per worker; the attendance
+  percentage divides by the days actually judged (present + absent + leave),
+  so weekends and public holidays no longer cap it below 100%. `hours_worked`
+  is stored but never computed by the UI.
+- Leave: days = inclusive calendar days (min 1); submitting a request that
+  overlaps a pending/approved one is refused. Approval runs one transaction:
+  the request row plus an `attendance` row (`status = Leave`, notes
+  `Auto: approved leave request #<id>`) for every day, skipping a day the
+  person actually worked. Rejecting/reverting removes exactly the rows it
+  wrote. Balances per type come from the `leave_entitlements` setting
+  (Annual 21 / Sick 10 / Emergency 3 by default); an untracked type shows
+  "—". A request is never blocked by the balance — the requester is warned
+  and the supervisor decides.
+- Certifications: adding and deleting a certificate is supervisor-only (the
+  worker page's Add dialog is hidden from other roles and the endpoint refuses
+  them); a certificate's document is deleted only after the row delete
+  succeeds. `Team_model::refresh_cert_status()` recomputes the stored status
+  from `expiry_date` (Expired / Expiring Soon within `cert_alert_days` = 30 by
+  default / Valid) — on the profile and on the tracker, so "Valid" can never
+  outlive the certificate. Documents (pdf/jpg/png ≤ 8 MB) are stored under
+  `uploads/documents/` and linked from both screens; deleting a certificate
+  removes its file.
+- Shift roster: week keyed by its ISO Monday; shift types are `HH:MM`, start
+  ≠ end; deleting a shift still assigned to anyone is refused; assignments
+  are one row per worker per week (delete-then-insert, the table has no
+  unique key).
 - Signature upload (Team create/edit) converts the image to a transparent PNG
-  by removing dark backgrounds pixel-by-pixel (GD, unguarded — K-15).
+  by removing dark backgrounds pixel-by-pixel; when GD is unavailable the
+  upload is stored unchanged instead of fatal-erroring (K-15).
   Profile signatures are drawn on a canvas and saved as `sig_user_<id>.png`.
 - Users administration validates unique e-mail/employee ID and password ≥ 8 on
   create; role changes accept IDs 1–5; self-deactivation/self-role-change/
   self-delete are refused; delete = set `Inactive` (sign-in then refuses the
   account). Own password change requires the current password (bcrypt verify
   only — a legacy-hash account must sign in once, which upgrades it, before
-  it can change its password here). `Team::create/edit` is a second,
-  less-validated path onto the same table (no uniqueness/length validation —
-  K-09).
+  it can change its password here). `Team::create/edit` is a second path onto
+  the same table and now applies the same checks (required names, valid and
+  unique e-mail, unique employee ID on create, password ≥ 8, a real role); both
+  actions are supervisor-only and a failed write keeps the form and its values
+  on screen (K-09).
 - Settings screen writes through `Settings_model::save_many()`, which only
   accepts keys in `Settings_model::DEFAULTS` or already present in the table,
   and coerces each known key to its documented range (§12).
@@ -1263,32 +1336,35 @@ POST (many also render a form on GET); POST-only endpoints return 405 on GET.
 |---|---|
 | auth | `login` (GET form/POST), `logout` (POST-only) |
 | dashboard | `index` — also `/` and `/dashboard` |
-| workorders | `index`, `create` (POST saves), `view(id)`, `edit(id)`, `update_status(id)` POST, `jobcard(id)` (print; `?autoprint=1`), `api_spare_lookup` JSON GET, `api_stock_check` JSON GET, `start_session(id)` POST, `close_session(session_id, wo_id)` POST, `session_jobcard(session_id)`, `review_incident(id)` POST, `upload_evidence(id)` POST, `download_attachment(id)` *(broken K-04)*, `delete_attachment(att_id, wo_id)` POST |
+| workorders | `index`, `create` (POST saves), `view(id)`, `edit(id)`, `update_status(id)` POST, `jobcard(id)` (print; `?autoprint=1`), `api_spare_lookup` JSON GET, `api_stock_check` JSON GET, `start_session(id)` POST, `close_session(session_id, wo_id)` POST, `session_jobcard(session_id)`, `review_incident(id)` POST, `upload_evidence(id)` POST, `download_attachment(id)`, `delete_attachment(att_id, wo_id)` POST, `link_breakdown_event(id)` POST |
 | equipment | `index`, `create`, `view(id)`, `edit(id)`, `update_hours(id)` POST |
 | pm | `index`, `create`, `edit(id)`, `complete([id])` POST (id in URI or `pm_id` field), `calendar` |
-| inspections | `index`, `fill(code, [en\|fr])`, `edit(id)`, `save` POST, `records(code)`, `view(id)`, `pdf(id)`, `pdf_diagnostics` |
+| inspections | `index`, `fill(code, [en\|fr])`, `edit(id)`, `save` POST, `records(code)`, `view(id)`, `pdf(id)`, `pdf_diagnostics`, `templates`, `template_edit([id])` (GET form/POST save), `template_delete(id)` POST |
 | backlog | `index`, `create`, `edit(id)`, `close(id)` POST, `delete(id)` POST, `export_xlsx` |
 | materials | `index` (dashboard), `inventory`, `create`, `edit(id)`, `receive(id)`, `issue(id)`, `transactions`, `report` (= export), `export_xlsx`, `template_xlsx`, `import_excel` POST, `import_report(token)`, `delete(id)` POST, `api_lookup` JSON GET, `ping` (diagnostic) |
 | spareparts | `index`, `alerts`, `mark_read(id)` POST, `mark_all_read` POST, `allocate(line_id)` POST, `release(allocation_id)` POST, `issue(allocation_id)` POST |
 | suppliers | `index`, `create`, `edit(id)`, `view(id)`, `add_contact(supplier_id)` POST, `delete_contact(id, supplier_id)` POST, `add_catalog_item(supplier_id)` POST, `delete_catalog_item(id, supplier_id)` POST, `find_part`, `delete(id)` POST |
-| orders | `index`, `create`, `view(id)`, `update_status(id)` POST, `receive(id)` (GET form/POST), `grn(id, [receipt_id])` print, `upload_document(id)` POST, `download_document(doc_id)` *(broken K-04)*, `api_lead_time_estimate` JSON GET |
+| orders | `index`, `create`, `view(id)`, `update_status(id)` POST, `receive(id)` (GET form/POST), `grn(id, [receipt_id])` print, `upload_document(id)` POST, `download_document(doc_id)`, `api_lead_time_estimate` JSON GET |
 | lubricants | `index`, `record`, `types`, `specifications`, `budget`, `forecast` |
-| team | `index`, `create`, `view(id)`, `attendance` (GET/POST), `leave_request`, `edit(id)`, `approve_leave(id)` POST, `certifications([user_id])`, `shift_roster`, `report` |
+| team | `index`, `create`, `view(id)`, `attendance` (GET/POST), `leave_request`, `edit(id)`, `approve_leave(id)` POST, `certifications([user_id])`, `delete_certification(id)` POST, `shift_roster` (`?week=YYYY-Www` or date), `shift_save` POST, `shift_delete(id)` POST, `assign_shift` POST, `report` |
 | users | `index`, `create`, `edit(id)`, `toggle_status(id)` POST, `change_role(id)` (reads POST), `reset_password(id)`, `profile`, `change_password`, `delete(id)` POST |
 | settings | `index`, `security` (POST actions: acknowledge, policy) |
 | forecast | `index` (`?week=`), `generate` POST, `create_inspection_rounds` POST, `save_cell` POST, `publish` POST, `jobs`, `save_job` POST, `delete_job` POST, `plan_vs_actual`, `rolling`, `parts(id)`, `save_part` POST, `delete_part` POST, `export([planned\|rolling])`, `spares`, `allowances` |
 | reports | `index`, `daily`, `weekly`, `monthly`, `mttr_mtbf`, `availability_forecast`, `monthly_plan`, `export_monthly_plan_xlsx`, `lube_compliance`, `lube_compliance_yearly`, `store_analytics`, `asset_register`, `export_asset_register_xlsx`, `asset_template_xlsx`, `import_asset_register` POST, `asset_import_report(token)`, `annual_report`, `export_annual_report_xlsx`, `annual_plan`, `export_annual_plan_xlsx`, `service_kits`, `export_service_kits_xlsx`, `equipment_history(id)`, `materials_movement`, `export_materials_xlsx`, `workshop_weekly`, `export_workshop_weekly_xlsx`, `export_workshop_weekly_pdf` (print HTML), `workshop_daily`, `export_workshop_daily_xlsx`, `export_workshop_daily_pdf` (print HTML), `export_excel(workorders\|attendance\|lubricants)` **CSV** despite the name, `pdf_daily` (print HTML), `issue_register`, `export_issue_register_xlsx`, `receipt_register`, `export_receipt_register_xlsx`, `reorder`, `export_reorder_xlsx`, `weekly_targets`, `weekly_targets_save/bulk/copy/delete` POST, `weekly_w36`, `weekly_report_name` POST, `export_weekly_w36_xlsx`, `export_weekly_w36_pdf` (print HTML, `?live=1`, `?noauto=1`), `publish_weekly_w36` POST |
 
-**Dead routes** (defined, target missing → 404): `maintenance/*` (no
-`Maintenance` controller; the *views* folder `views/maintenance/` is used by
-workorders/equipment/pm), `dashboard/kpi_data` (no such method).
+**Dead routes removed** (K-07): `maintenance/*` (there is no `Maintenance`
+controller; the *views* folder `views/maintenance/` is used by
+workorders/equipment/pm) and `dashboard/kpi_data` (no such method). Nothing
+linked to either; both only ever produced a 404 through a route that resolved
+to nothing.
 
 Report inventory (all under `reports`, roles Supervisor + Manager):
 daily / weekly / monthly operational reports; MTTR-MTBF (3–24 months);
 availability forecast and monthly maintenance plan (from `Dashboard_model`);
 workshop daily & weekly (fleet-by-type readiness + KPI-engine availability,
 screen/XLSX/print); lube compliance (period + yearly); store analytics
-(orders spend/lead times); issue & receipt registers and reorder list
+(orders spend, one total per currency, and lead times); issue & receipt
+registers and reorder list
 (`Store_model` over the movement ledger; they self-disable with a notice if
 the register columns are absent); materials movement; asset register;
 annual report & annual plan (PM schedule projections); service-kit
@@ -1331,6 +1407,7 @@ equipment history (WOs + KPIs + lube); W36 weekly (§7.9) + weekly targets.
 | `helpers/wo_helper.php` | Breakdown classification (`wo_is_breakdown`, `wo_bucket(s)`) and the five hold codes with labels |
 | `helpers/equip_helper.php` | Equipment-status predicates/colours — the single interpretation of `equipment.status` values (the enum's `In Maintenance`, not `Maintenance`) |
 | `helpers/csrf_helper.php` | `csrf_field()` for hand-written forms (token name from the Security class) |
+| `helpers/tmp_helper.php` | `wms_temp_path()` — private temp path for a generated download (random token + the offered filename), so concurrent exports cannot overwrite each other (K-19) |
 
 Models not yet mentioned: `Store_model` (issue/receipt registers, register
 totals, allocation consumption, monthly movement; feature-detects the movement
@@ -1346,13 +1423,14 @@ forecast used by Reports).
 
 | Item | Location / name | Notes |
 |---|---|---|
-| App config | `application/config/config.php` | `base_url` auto-detected from `HTTP_HOST`+script path (falls back to a hard-coded production URL on CLI); sessions/CSRF per §4.4; log threshold 1 (errors) to `application/logs/`; `index_page=''` (requires rewrite) |
+| App config | `application/config/config.php` | `base_url` from `WMS_BASE_URL`, else auto-detected from a validated `HTTP_HOST` + script path (CLI: `http://localhost/`); a malformed Host is refused with 400 (K-17). Sessions/CSRF per §4.4; log threshold 1 (errors) to `application/logs/`; `index_page=''` (requires rewrite) |
 | Local overrides | `application/config/config.local.php` | Loaded last by `config.php`; template: `config.local.php.example`. Typical keys: `encryption_key`, `legacy_password_login`, `cookie_secure` |
 | DB config | `application/config/database.php` | `mysqli`, `utf8mb4_unicode_ci`, `db_debug` only in development; credentials from env then local file; defines `WMS_DB_MISSING` when host/user/database empty → setup page in `MY_Controller`/`Auth` |
 | DB credentials | `application/config/database.local.php` or env `WMS_DB_HOST` (host[:port]), `WMS_DB_USER`, `WMS_DB_PASS`, `WMS_DB_NAME` | Local file wins over env |
 | Environment | server var `CI_ENV` | `production` (default: errors logged to `application/logs/php_errors.log`, deprecations suppressed), `development` (display errors, `db_debug`), `testing` |
 | `WMS_ENCRYPTION_KEY` | env | If unset **and** no local override, `config.php` derives a predictable fallback from a static salt + host (the Encryption library is not currently loaded anywhere, but do not rely on the fallback) |
 | `WMS_LEGACY_PASSWORD_LOGIN=0` | env | Disables MD5/SHA1 sign-in acceptance |
+| `WMS_BASE_URL` | env | Pins `base_url` (e.g. `https://wms.example.com`); takes precedence over detection. Can also be set as `$config['base_url']` in `config.local.php` |
 | `WMS_COOKIE_SECURE=0` | env | Forces non-secure cookies (local HTTP dev) |
 | Timezone | PHP `date.timezone` | Never set by the app; the dump's `SET time_zone='+00:00'` applies to the import session only |
 
@@ -1365,6 +1443,7 @@ missing/invalid; the Settings screen edits the report + forecast groups;
 | Key | Default | Meaning |
 |---|---|---|
 | `company_name` | *(seeded `A&ML`; fallback "Workshop WMS" in views)* | Display name in titles/reports |
+| `currency` | `USD` | Site currency (3-letter code). Drives the spend totals (which are kept **per currency**, never summed across one) and the default in the supplier, order, catalog and stock-receipt pickers (K-11). The vocabulary lives in `helpers/currency_helper.php` |
 | `weekly_open_hours` | `168` | Open hours in a 7-day week (≤0 → 7 × daily) |
 | `daily_open_hours` | `24` | Open hours/day (clamped 1–24) |
 | `default_availability_target` | `0.88` | Final fallback target (fraction; "88" accepted) |
@@ -1384,15 +1463,17 @@ missing/invalid; the Settings screen edits the report + forecast groups;
 | `unplanned_allowance_lookback_weeks` | `12` | Derived-mode history window (1–104) |
 | `forecast_show_excel_reference` | `1` | Show historical-Excel reference figures in forecast |
 
-Seeded legacy keys `working_hours_per_day`, `work_days_per_month`,
-`pm_alert_days`, `cert_alert_days`, `currency` exist in the dump but **no code
-reads them** (verified by search); alert windows in code are hard-coded
-(dashboard PM +14 days, certifications 60 days, etc.).
+Seeded legacy keys `working_hours_per_day`, `work_days_per_month` and
+`pm_alert_days` exist in the dump but **no code reads them** (verified by
+search); alert windows in code are hard-coded (dashboard PM +14 days, etc.).
+`cert_alert_days` is read by the certification screens and `currency` by
+`wms_site_currency()` (K-11), so those two are live settings now.
 
 ## 13. Schema-version tolerance
 
-The dump contains the complete schema; there are no migration files. Many
-screens nevertheless tolerate an older database. Runtime probes
+`database/schema.sql` is the baseline; `database/migrations/` brings an
+existing database forward (`scripts/migrate.sh`). Until an optional migration
+has run, screens tolerate the older shape. Runtime probes
 (`table_exists` on ~30 tables; `field_exists` on backlog verification
 columns, `equipment.{report_group,report_sort,include_in_weekly_report}`,
 `materials.min_stock`, `pm_schedules.{standard_hours,preferred_weekday}`,
@@ -1414,12 +1495,12 @@ backlog closure/inspection-link columns, and `security_events`.
 |---|---|---|---|
 | `uploads/photos/` | equipment photos (`eq_<ts>`), user photos (`user_<id>_<ts>`), gif/jpg/png ≤ 5 MB / 2 MB | Equipment, Team, Users | Direct (script-blocked) |
 | `uploads/signatures/` | drawn PNGs (`opsig_…`, `insp_…`, `sig_user_<id>.png`) + converted uploads (`sig_…`) | Workorders, Inspections, Users, Team | Direct (script-blocked) |
-| `uploads/wo_attachments/` | incident evidence (`evd_<wo>_<ts>_<n>`), ≤ 8 MB/file | Workorders | Direct (script-blocked); intended download endpoint broken (K-04) |
-| `uploads/order_docs/` | order documents (`ord_<id>_<ts>`), ≤ 8 MB | Orders | Direct (script-blocked); endpoint broken (K-04) |
+| `uploads/wo_attachments/` | incident evidence (`evd_<wo>_<ts>_<n>`), ≤ 8 MB/file | Workorders | Direct (script-blocked); download endpoint works (K-04 fix) |
+| `uploads/order_docs/` | order documents (`ord_<id>_<ts>`), ≤ 8 MB | Orders | Direct (script-blocked); endpoint works (K-04 fix) |
 | `uploads/tmp/` | generated workbooks (deleted after send), uploaded import files (deleted after processing), parked import-report JSON (24 h) | Materials, Reports | **Denied** (`uploads/tmp/.htaccess`) |
-| `uploads/documents/` | — | nothing | unused |
+| `uploads/documents/` | certification documents (`cert_<user_id>_<ts>`), pdf/jpg/png ≤ 8 MB | Team | Direct (script-blocked); deleting the certificate removes its file |
 | `uploads/logoam.png` | company logo embedded in W36 outputs | manual | Direct |
-| PHP temp dir | forecast + backlog workbooks (deleted after send) | Forecast, Backlog | n/a |
+| PHP temp dir | generated workbooks (`wms_<random>_<name>`, deleted after send) | Forecast, Backlog, Reports | n/a |
 
 Deleting DB rows does not delete files (except attachment delete, which
 removes the file first — see `Workorder_model::delete_attachment`), and
@@ -1451,12 +1532,20 @@ editing signatures/photos orphans the previous file.
 
 - Target: Apache (cPanel) with the shipped `.htaccess` (rewrite to
   `index.php`, hidden-file block, uploads PHP block, security headers when
-  available). `.htaccess.cpanel-alternative` is the FastCGI fallback.
+  available). `application/`, `system/` and `database/` each carry a
+  deny-all `.htaccess`, so the code and the SQL dump are not served even if
+  PHP handling is misconfigured. `.htaccess.cpanel-alternative` is the FastCGI
+  fallback.
   `FallbackResource` covers missing `mod_rewrite`. Nginx/IIS need equivalent
   hand-written rules (notes inside `uploads/.htaccess`).
 - Install/upgrade order for credential changes (documented in
   `database.php`): create local config with current credentials → deploy →
   verify → rotate password → verify old password fails.
+- Credentials live **only** in `application/config/*.local.php` (or the
+  `WMS_*` environment variables); both files are git-ignored and the
+  `.example` templates are the only copies in the repository. The history of
+  this repository still contains the pre-rotation values — see
+  `SECURITY.md` (K-01).
 - Writable: `application/logs`, `application/cache`, `uploads/**`. PHP needs
   `mysqli, mbstring, iconv, zip, xml`; `gd` for Team signature processing
   (optional elsewhere); `zlib` optional. Upload limits: app allows ≤ 8 MB
@@ -1485,28 +1574,48 @@ user admin; settings + security console; the W36 build/publish/export chain;
 forecast generate/publish/plan-vs-actual/rolling/spares; both Excel imports
 with dry-run and error reports.
 
-**Partially implemented:**
+**Implemented in this revision:** the nine gaps below now have code paths.
+The file column names the controller/model/view that carries the change;
+the rules each one follows are stated in §7 and in the code comments.
 
-| Area | What works | What's missing |
+| Area | What now works | Files |
 |---|---|---|
-| Shift roster | Week view of `shift_assignments` | No UI to create/edit assignments or shifts (DB-only) |
-| WO `hold_code` | Column, labels, W36 action-plan display | No UI writes `work_orders.hold_code` (plan jobs have their own) |
-| Breakdown events | KPI engine groups WOs by `breakdown_event_id` | No UI links WOs into one event; column only settable in DB |
-| WO oil lines vs lubricants | Oil lines print on job cards | Never posted to `lube_consumption`; `lube_consumption.work_order_id` never written; `Workorder_model::get_lube_consumption()` has no callers |
-| Equipment status automation | Breakdown on corrective WO create; Available on WO completion (status endpoint) | `In Maintenance` never auto-set; WO edit-form status changes don't sync equipment or verification (§7.1) |
-| Certifications | Add + expiring list (date-computed) | Stored `status` never refreshed; `document` upload not implemented |
-| Leave | Request/approve recorded | No attendance integration or balances |
-| Templates (inspections) | 14 seeded bilingual templates fully usable | No template-management UI (DB-only) |
-| PM completions | Logged with schedule advance | `pm_completions.work_order_id` never set (PM isn't linked to the WO that did the work) |
+| Shift roster | Supervisor screen creates/edits shifts and assigns people per week; assignment counts per shift; a shift in use cannot be deleted | `Team::shift_roster/shift_save/shift_delete/assign_shift`, `views/team/shift_roster.php` |
+| WO `hold_code` | Set on the WO form and on the quick status form; shown as a badge on the list and detail; cleared when the job is Completed/Closed | `Workorders::create/edit/update_status`, `views/maintenance/{wo_form,wo_view,workorders}.php` |
+| Breakdown events | Detail page links a breakdown WO to another event on the same machine (or detaches it); cycles and cross-machine links refused | `Workorder_model::link_breakdown_event`, `Workorders::link_breakdown_event` |
+| WO oil lines vs lubricants | Oil lines are posted to `lube_consumption` with `work_order_id` (idempotent); the detail page shows the ledger; unmatched lines are reported | `Workorder_model::sync_lube_consumption`, `get_lube_consumption`, `workorders/view` |
+| Equipment status automation | Create/edit/quick-status all keep `equipment.status` in step; planned work sets `In Maintenance`; the machine follows the strongest open claim and is only Available when nothing is open | `Workorders::_sync_equipment_status` |
+| Certifications | Stored status refreshed from the expiry date; document upload (pdf/jpg/png ≤8 MB) with a detail-page link | `Team_model::refresh_cert_status`, `Team::_save_cert_document` |
+| Leave | Approval writes attendance rows (and reverting removes only those); balances per type shown on the request and profile pages; overlap refused | `Team_model::apply_leave_to_attendance/revert_leave_attendance/get_leave_balance` |
+| Templates (inspections) | Supervisor template editor: create/edit/delete, EN/FR names, compliance or matrix layout, item rows, usage counts; delete only at zero records | `Inspections::templates/template_edit/template_delete`, `Inspection_model::save_template/delete_template` |
+| PM completions | Mark Done records the meter reading and the optional same-machine work order in `pm_completions.work_order_id` | `Pm::complete`, `views/maintenance/pm_planner.php` |
+
+Two previously-unused paths are live now: `uploads/documents/` stores
+certification documents, and `Workorder_model::get_lube_consumption()` is
+called by the work-order detail page.
+
+**Also fixed in this revision (register §18):** the backlog
+supervisor close button that never rendered (K-06); three dead routes
+(K-07); the write paths that flashed success over a rejected INSERT/UPDATE
+(K-09, now resolved: WO create + edit, team create/edit — whose form was
+create-only, so "editing" a worker created a duplicate account — plus
+certifications and shift types); the last null-dereference write paths (K-10);
+the worker profile page's dead "Add Certification" modal and hidden edit
+controls (K-22); the dashboard's CSV assignee join (K-12); and colliding
+temp-file names in
+all eleven workbook exports (K-19). The dashboard's **Failures** and
+**Downtime** cards now come from the KPI engine — the same 30-day window,
+the same breakdown-event grouping and the same open-hour clipping as W36 —
+instead of a raw count/sum of `work_orders`; the fleet window is computed
+once per request instead of three times.
 
 **Present but dead/unused:** `kpi_log` and `excel_migration_log` tables (no
-code references); `views/layouts/header-apple.php`; `uploads/documents/`;
-routes `maintenance/*`, `dashboard/kpi_data`; model methods with no callers
-in controllers/views (e.g. `Workorder_model::get_lube_consumption`,
-`Dashboard_model::count_overdue_pm_count`, `Dashboard_model::get_wo_ratio`,
-`Workorder_model::get_recent`); inspection `status='draft'` (schema allows,
-UI always submits); CodeIgniter's Encryption library (configured key, never
-loaded).
+code references); `views/layouts/header-apple.php`; model methods with no
+callers in controllers/views
+(e.g. `Dashboard_model::count_overdue_pm_count`,
+`Dashboard_model::get_wo_ratio`); inspection
+`status='draft'` (schema allows, UI always submits); CodeIgniter's Encryption
+library (configured key, never loaded).
 
 **Repository self-containedness:** an earlier version of the codebase
 pointed (in setup pages, flash messages and comments) at migration files,
@@ -1527,27 +1636,28 @@ are to the reviewed commit.
 
 | ID | Sev | Issue | Evidence / notes |
 |---|---|---|---|
-| K-01 | **Critical** | Live database credentials and the encryption key are committed to git. Comments claim the files are git-ignored, but there is no `.gitignore` and both `application/config/database.local.php` and `config.local.php` are tracked with non-placeholder values. | `git ls-files` lists both files. **Remediation:** rotate DB password + encryption key, add `.gitignore` (`*.local.php`, logs, dumps), `git rm --cached` the files, scrub history if the repo was ever shared. |
-| K-02 | **Critical** | The committed dump `database/yzzme_43038742_aml.sql` exposes 66 staff accounts — 63 with unsalted **MD5** hashes (fast to crack) — plus names/e-mails/phones, and the committed local config keeps `legacy_password_login = TRUE`, so those hashes remain directly usable knowledge for credential attacks. | Dump analysis (hash formats counted, values not reproduced here). **Remediation:** treat all passwords as compromised — force resets (there is no bulk-reset script in the repo; use Users → Reset Password per account or a one-off SQL), then set `legacy_password_login = FALSE`; move the dump out of git. |
-| K-03 | Medium | Runtime logs committed (`application/logs/log-2026-10-19.php`, `php_errors.log`) — reveal absolute server paths and operational details. | Untrack and ignore `application/logs/*` (keep `.gitkeep`). |
-| K-04 | **High** | Attachment/document **downloads fatal-error**: `force_download()` is called in `Workorders::download_attachment()` and `Orders::download_document()` but CodeIgniter's `download` helper is never loaded (not in `autoload.php`, no `load->helper('download')` anywhere). Uploads work; downloads return 500. Files remain reachable by direct URL under `uploads/…` (names are timestamp-based, i.e. guessable — a confidentiality consideration for incident evidence). | One-line fix (load the helper) — not applied here because this task is documentation-only. |
-| K-05 | Medium | PM completion never records the meter reading for `Km`-interval schedules: `Pm::complete()` checks `in_array($pm->interval_type, ['Hours','Kilometres'])` but the enum value is `Km`. Hours schedules work. | `application/controllers/Pm.php` vs `pm_schedules.interval_type` enum. |
-| K-06 | Medium | The backlog list's supervisor **"Close (verify)" button never renders**: `Backlog::index()` sets `$data['is_supervisor']` **after** `$this->render(...)`. The endpoint itself works; supervisors must close via the work order (or POST directly). | `application/controllers/Backlog.php::index()`, `views/backlog/index.php` (`$is_supervisor`). |
-| K-07 | Low | Dead routes: `maintenance/*` (no controller) and `dashboard/kpi_data` (no method) → 404. | `application/config/routes.php`. |
+| K-01 | **Critical — rotation outstanding** | The live MySQL password and the application `encryption_key` were committed in `application/config/database.local.php` and `config.local.php` in the first commit. The repository is **public**, so both values must be treated as compromised regardless of what happens next. | **Fixed in the tree:** both files removed from the index (still on disk for the running install), `.gitignore` now excludes `*.local.php`/`.env*`/logs/uploads, `.githooks/pre-commit` refuses them, and `database/.htaccess` closes direct HTTP access to the dump. `scripts/purge-secrets.sh` performs and verifies the history rewrite without pushing. **Operator action still required:** rotate the DB password and the key on the host and force-push the rewritten history — [`SECURITY.md`](SECURITY.md) is the step-by-step runbook. Nothing is encrypted with the old key (the Encryption library is never loaded), so its rotation needs no re-encryption. |
+| K-02 | **Critical — resets outstanding** | The production dump (`database/yzzme_43038742_aml.sql`) was tracked in a **public** repository. It exposed 66 staff accounts — 63 with unsalted **MD5** hashes — plus names, e-mails and phones, and the committed local config kept `legacy_password_login = TRUE`, so a cracked hash was directly usable. | **Fixed in the tree:** the dump is untracked and ignored; `database/schema.sql` (59 tables + master data, no people/fleet/stock) is the install artifact, and every "import the dump" message now names it. The Users screen counts and marks accounts still on a legacy hash so the reset campaign is measurable. **Operator action:** treat every account in that dump as compromised — reset each password (Users → Reset Password), then set `legacy_password_login = FALSE` in `config.local.php`; see `SECURITY.md` §5. The hashes are still in public history until the K-01 purge is run. |
+| K-03 | **Resolved** | Runtime logs were committed (`application/logs/log-2026-10-19.php`, `php_errors.log`), revealing absolute server paths and operational details. | Fixed in this revision: both files removed from the tree, `application/logs/*` ignored (`.gitkeep` kept), and `.gitignore` covers `*.log`. They remain in history — the K-01 purge covers that. |
+| K-04 | **Resolved** | Attachment/document **downloads fatal-errored**: `force_download()` is called in `Workorders::download_attachment()` and `Orders::download_document()` but CodeIgniter's `download` helper was never loaded. Uploads work; downloads returned 500. Files remain reachable by direct URL under `uploads/…` (names are timestamp-based, i.e. guessable — a confidentiality consideration for incident evidence). | Fixed in this revision: `download` added to `$autoload['helper']`. |
+| K-05 | **Resolved** | PM completion never recorded the meter reading for `Km`-interval schedules: `Pm::complete()` checked `['Hours','Kilometres']` but the enum value is `Km`. Hours schedules worked. | Fixed in this revision: the handler compares `Hours`/`Km` and translates to `Kilometres` only for the meter writer (`Pm.php`). |
+| K-06 | **Resolved** | The backlog list's supervisor **"Close (verify)" button never rendered**: `Backlog::index()` set `$data['is_supervisor']` **after** `$this->render(...)`. | Fixed in this revision: the flag is part of the render data. A sweep of every controller found no other `render()`-before-data site. |
+| K-07 | **Resolved** | Dead routes: `maintenance/*` (no controller) and `dashboard/kpi_data` (no method) → 404. | Fixed in this revision: both removed from `routes.php`; no view or controller linked to them. |
 | K-08 | **Resolved** | Onboarding references were broken: the built-in setup pages and code comments pointed to at least a dozen files that didn't exist in the repo, including the import file named in the "Database Setup Required" page. All such references have been rewritten (§17) — messages now name the shipped dump and comments describe the probed table/column, so a fresh clone can be installed by following the in-app text and `README.md`. | `MY_Controller::_show_db_config_error()`, `Auth::__construct()`, various comments. |
-| K-09 | Medium | Weak server-side validation on several write paths. WO create/edit have no form-validation rules and `create()` doesn't check the insert result before flashing success and saving child rows; `Team::create/edit` skip the uniqueness/min-length checks that `Users` enforces and flash success unconditionally. With non-strict SQL modes, invalid enum values can be silently coerced — *to verify at runtime* against the production `sql_mode` (connection sets `stricton = FALSE`). | `Workorders::create/edit`, `Team::create/edit`, `application/config/database.php`. |
-| K-10 | Low | Null dereferences on crafted input: `Lubricants::record()` uses `$eq->equipment_type_id` without checking the equipment exists; `Orders::create()` does the same with the supplier. Normal UI flow always sends valid IDs. | `Lubricants.php`, `Orders.php`. |
-| K-11 | Low | Currency handling is inconsistent: seeded `settings.currency='USD'` is never read; suppliers/orders default to `TZS`; material prices are `unit_price_ugx`/`unit_price_usd`; manual goods receipts hard-code `UGX`. Order spend totals (CEO dashboard, store analytics) sum `total_cost` as recorded per order with no currency conversion — meaningful only if all orders share a currency. | §7.5, §7.7. |
-| K-12 | Low | Dashboard "recent work orders" resolves the assignee by joining `users.id = work_orders.assigned_to`, but `assigned_to` is a CSV — at best the first technician matches (MySQL coercion); multi-technician names can be blank/wrong there. List/detail pages resolve via `Workorder_model` correctly. Display-only. | `Dashboard::index()`. |
-| K-13 | Medium | No migrations, seeders, or tests in the repository — the dump is the only schema artifact. The defensive table/field probes (§13) mask schema drift instead of failing loudly, so a partially-updated database can silently lose features (e.g. register fields, closure evidence). | Whole repo. |
-| K-14 | Low | `Settings_model::save_many()`'s comment says `settings` has no unique index on `setting_key`; the dump defines one (`UNIQUE KEY setting_key`). Behaviour (select-then-upsert) is correct either way — comment only. | `Settings_model.php` vs dump. |
-| K-15 | Low | `Team::_make_transparent()` calls GD functions without an availability guard → fatal error on hosts without `gd` when a signature image is uploaded via Team create/edit. The per-pixel loop is also slow for multi-megapixel images. | `Team.php` (contrast `Inspection_pdf`, which guards). |
-| K-16 | Low | Inspection defect priority depends on substring matching of free-text item categories (`no-go`, `go & fix`, FR variants). Renaming a template category in the DB silently changes P1/P2 behaviour. | `Inspection_model::_inspection_item_verdict()`. |
-| K-17 | Info | `base_url` is derived from the request `Host` header; behind a proxy or with host-header manipulation, generated URLs follow the supplied host. Pin `base_url` in `config.local.php` for production hardening. | `config.php`. |
-| K-18 | Low | The whole user row (including password hash) is stored in the DB-backed session (`user_data`) — hashes at rest in `ci_sessions` for every signed-in user. | `Auth::login()`. |
-| K-19 | Low | Forecast/backlog workbook exports write to `sys_get_temp_dir()` under deterministic (label/timestamp) names — simultaneous exports of the same week can collide. Other exports use `uploads/tmp/` with per-second names. | `Forecast::export()`, `Backlog::export_xlsx()`. |
-| K-20 | Info | Duplicate unique indexes on `material_transactions.import_key` (`uq_mt_import_key`, `uq_txn_import_key`) — harmless, double write cost on that column. | Dump. |
+| K-09 | **Resolved** | Weak server-side validation on several write paths. `Team::create/edit` skipped the uniqueness/min-length checks that `Users` enforces, and the team form was create-only — "editing" a worker inserted a duplicate account. With non-strict SQL modes, invalid enum values can be silently coerced (connection sets `stricton = FALSE`). | Fixed in this revision: WO create validates machine/type/status/title and aborts a failed insert before any child row is written; WO edit validates title/type/priority/status/machine status and aborts on a failed UPDATE; `Team::create/edit` now validate required names, `valid_email`, unique `email`/`employee_id`, an 8-character password and a real role, and guard the insert/update result. `views/team/form.php` is a single create/edit form that posts each field back on a validation error. |
+| K-10 | **Resolved** | Null dereferences on crafted input: `Lubricants::record()` used `$eq->equipment_type_id` without checking the equipment exists; `Orders::create()` did the same with the supplier. | Fixed in this revision: both guard the lookup and flash a message; the optional lubricant work-order link is also validated against the machine. |
+| K-11 | **Resolved** | Currency handling was inconsistent: seeded `settings.currency='USD'` was never read; suppliers/orders defaulted to `TZS`; material prices are `unit_price_ugx`/`unit_price_usd`; manual goods receipts hard-coded `UGX`; and the CEO dashboard and store analytics added `total_cost` from TZS, UGX and USD orders into one meaningless total. | Fixed in this revision: `helpers/currency_helper.php` is the one vocabulary, `settings.currency` is the one default (editable on the Settings screen, which previously did not offer UGX at all), and every currency picker draws from it. A stock receipt records the currency the operator selected. Spend is grouped by `o.currency` in `Order_model::get_spend_by_supplier()` and shown as one total per currency; supplier bars are scaled within their own currency. No exchange-rate conversion is invented. |
+| K-12 | **Resolved** | Dashboard "recent work orders" resolved the assignee by joining `users.id = work_orders.assigned_to`, but `assigned_to` is a CSV — at best the first technician matched (MySQL coercion). | Fixed in this revision: the card reads `Workorder_model::get_recent()`, which resolves every technician through the CSV parser; the CSV column is never joined again. |
+| K-13 | **Resolved** | No migrations, seeders or tests: `database/schema.sql` was the only schema artifact, and the defensive table/field probes (§13) could mask schema drift instead of failing loudly. | Fixed in this revision: `database/migrations/` + `scripts/migrate.sh` apply forward-only, idempotent SQL and record it in `schema_migrations` (`--dry-run` lists pending files); a fresh install still imports only `schema.sql`. `tests/run.php` is a dependency-free suite (K-11/K-17/K-18 logic, 54 checks) and `.github/workflows/tests.yml` runs it plus `php -l` and `bash -n` on every push/PR. The runtime probes remain for databases where a migration has not been applied; the register entry stays closed because drift can now be detected and applied rather than hand-edited. |
+| K-14 | **Resolved** | `Settings_model::save_many()`'s comment said `settings` had no unique index on `setting_key`; the schema defines one (`UNIQUE KEY setting_key`). | Comment corrected in this revision. The select-then-upsert is deliberately unchanged — it is correct with or without the constraint and creates a missing row with its documented description. |
+| K-15 | **Resolved** | `Team::_make_transparent()` called GD functions without an availability guard → fatal error on hosts without `gd` when a signature image is uploaded. | Fixed in this revision: the function copies the upload unchanged when `gd` is absent. The per-pixel loop is still slow for very large images. |
+| K-16 | **Resolved** | Inspection defect priority depended on substring matching of free-text item categories (`no-go`, `go & fix`, FR variants). Renaming a template category silently changed P1/P2 behaviour. | Fixed in this revision: `inspection_items.priority` (`P1`/`P2`/`P3`, NULL = derive) is set from a **Severity** select in the template editor and read by `_inspection_item_verdict()`; the category wording remains only the fallback for rows saved before the column existed. Fresh installs get the column from `database/schema.sql`; an existing database keeps working and can be upgraded with<br>`ALTER TABLE inspection_items ADD COLUMN priority ENUM('P1','P2','P3') NULL DEFAULT NULL AFTER na_columns;` |
+| K-17 | **Resolved** | `base_url` was assembled from the raw request `Host` header: a crafted value was reflected into every generated link (attribute injection), and a proxy that rewrote Host changed every URL. | Fixed in this revision: `WMS_BASE_URL` → `config.local.php` → validated auto-detection, in that order. Detection accepts only `hostname[:port]`, IPv4 or `[IPv6][:port]`; anything else gets HTTP 400 and a log line. `SCRIPT_NAME` is validated too. Pin the value in production. |
+| K-18 | **Resolved** | The whole user row — including the password hash — was stored in the DB-backed session (`user_data`), so every signed-in user had a hash at rest in `ci_sessions`, rewritten on each session regeneration. | Fixed in this revision: `wms_session_user()` (`helpers/user_helper.php`) projects the row onto the fields a view actually reads; `Auth::login()` and the profile save use it, and `MY_Controller::_check_auth()` rewrites any pre-existing session payload that still carries `password`. Export headers now resolve `generated_by` through `wms_user_full_name()`. |
+| K-19 | **Resolved** | Workbook exports wrote to `sys_get_temp_dir()` under deterministic (label/timestamp) names — simultaneous exports of the same week shared one path, so a download could be truncated or contain another user's file. | Fixed in this revision: all 11 export sites use `wms_temp_path()` (`helpers/tmp_helper.php`), which prefixes a random token while keeping the offered filename. `uploads/tmp/` exports still use per-second names. |
+| K-20 | **Resolved** | Duplicate unique indexes on `material_transactions.import_key` (`uq_mt_import_key`, `uq_txn_import_key`) — harmless, but every insert maintained the same index twice. | Removed `uq_txn_import_key` from `database/schema.sql`. An existing database keeps both unless the operator runs `ALTER TABLE material_transactions DROP INDEX uq_txn_import_key;` (optional; the remaining index enforces the same uniqueness). |
 | K-21 | Info | `README.md` in the original upload was a 20-byte UTF-16 placeholder ("# wmsv2"); replaced by the current `README.md`. | Git history. |
+| K-22 | **Resolved** | The worker profile page rendered a **Bootstrap modal** for adding certifications, but the layout loads no Bootstrap CSS or JS (only Chart.js): `data-bs-toggle` did nothing and the "modal" body was laid out inline at the bottom of the page, so the "Add" button never opened anything. The page also had no link to the (new) edit form. | Fixed in this revision: a native `<dialog>` (no framework), a supervisor-only **Edit Profile** button, and `$data['is_supervisor']` from the controller; the role badge uses the theme's `b-secondary` instead of the unstyled `.bg-light .text-dark`; the attendance strip and legend know the `Holiday` status. |
 
 Not investigated to a verdict (needs a running instance): actual rendered
 output of every view (possible undefined-variable notices masked in
