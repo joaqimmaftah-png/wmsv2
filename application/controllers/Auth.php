@@ -33,9 +33,8 @@ class Auth extends CI_Controller {
                 echo '<li>Copy <code>database.local.php.example</code> to <code>database.local.php</code></li>';
                 echo '<li>Edit with cPanel DB credentials (localhost, cpaneluser_dbuser, cpaneluser_dbname)</li>';
                 echo '<li>cPanel > MySQL Databases > Add user to DB with ALL PRIVILEGES</li>';
-                echo '<li>Import <code>database/workshop_full_import.sql</code> via phpMyAdmin</li>';
+                echo '<li>Import <code>database/yzzme_43038742_aml.sql</code> via phpMyAdmin</li>';
                 echo '</ol>';
-                echo '<p><a href="cpanel_check.php" style="display:inline-block;background:#007aff;color:#fff;padding:10px 20px;border-radius:20px;text-decoration:none">Run Diagnostic</a></p>';
                 echo '</div></body></html>';
                 exit;
             } else {
@@ -82,12 +81,11 @@ class Auth extends CI_Controller {
 
                     if ($query === FALSE) {
                         log_message('error', 'WMS: the sign-in lookup on `users` failed — the database is '
-                            .'unreachable, or the schema has not been imported into it. See '
-                            .'deployment/CPANEL_500_TROUBLESHOOTING.md.');
+                            .'unreachable, or the schema has not been imported into it.');
 
                         $data['error'] = 'The workshop database is not answering. '
-                            .'If this installation was just set up, import the schema (and the '
-                            .'migrations it still needs) and reload this page.';
+                            .'If this installation was just set up, import the database dump shipped '
+                            .'with this repository (database/yzzme_43038742_aml.sql) and reload this page.';
                         $this->load->view('auth/login', $data);
                         return;
                     }
@@ -104,8 +102,8 @@ class Auth extends CI_Controller {
                         }
                         // 2. Legacy MD5, accepted only while legacy_password_login
                         //    is TRUE; the hash is upgraded on this successful sign-in.
-                        //    Set that switch to FALSE once
-                        //    scripts/reset_legacy_passwords.php has been applied.
+                        //    Set that switch to FALSE once every legacy hash has
+                        //    been upgraded.
                         elseif ($this->config->item('legacy_password_login')
                                 && md5($password) === $user->password) {
                             $valid = TRUE;

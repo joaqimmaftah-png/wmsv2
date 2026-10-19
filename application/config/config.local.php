@@ -17,7 +17,6 @@ $config['encryption_key'] = 'a21ed87f4abf521de31a179ea2e648d747406fe7f2de045c496
 // Keep existing logins working. 15+ accounts still store MD5 hashes
 // (e.g. every *@aml.cd seeded user); with FALSE those users cannot sign in.
 // Each legacy hash is upgraded to bcrypt automatically on that user's next
-// successful sign-in. Set to FALSE only after
-// `php scripts/reset_legacy_passwords.php` has been applied / VERIFY_IMPORT.sql
-// shows zero "legacy MD5" rows.
+// successful sign-in. Set to FALSE only once no "legacy MD5" hashes remain
+// in the users table.
 $config['legacy_password_login'] = TRUE;

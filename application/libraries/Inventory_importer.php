@@ -47,7 +47,7 @@ class Inventory_importer {
     );
 
     /**
-     * Re-order / pricing columns (migration 007).  They mirror the Min stock,
+     * Re-order / pricing columns.  They mirror the Min stock,
      * Max stock, Price UGX and Vendor columns of the manual Stock List and are
      * only written when the database really has them.
      */
@@ -92,7 +92,7 @@ class Inventory_importer {
         'location' => 'location', 'store' => 'location', 'storage' => 'location',
         'storage location' => 'location', 'bin' => 'location', 'bin location' => 'location',
         'shelf' => 'location', 'store location' => 'location', 'rack' => 'location',
-        // re-order levels, price and preferred supplier (migration 007)
+        // re-order levels, price and preferred supplier
         'min stock' => 'min_stock', 'minimum stock' => 'min_stock', 'min' => 'min_stock',
         'reorder level' => 'min_stock', 're order level' => 'min_stock', 'min level' => 'min_stock',
         'max stock' => 'max_stock', 'maximum stock' => 'max_stock', 'max' => 'max_stock',

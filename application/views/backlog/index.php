@@ -30,9 +30,8 @@ $qs = array_filter((array)$f, function ($v) { return $v !== null && $v !== ''; }
 <?php if (empty($available)): ?>
 <div class="card" style="padding:18px;border-left:3px solid var(--amber);">
   <strong>The backlog table is not installed yet.</strong><br>
-  Run <code>migrations/007_excel_alignment.sql</code> (and
-  <code>migrations/008_excel_data_import.sql</code> to load the existing Excel
-  backlog) to enable this register.
+  Import the database dump shipped with this repository
+  (<code>database/yzzme_43038742_aml.sql</code>) to enable this register.
 </div>
 <?php else: ?>
 

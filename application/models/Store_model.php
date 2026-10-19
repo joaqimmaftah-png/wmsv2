@@ -3,17 +3,17 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 /**
  * Store_model — the queries behind the store registers that used to be kept
- * by hand in `myexcellreport/Inventory.xlsx`.
+ * by hand in the old `Inventory.xlsx` workbook.
  *
  *   Excel sheet "Sortie"    →  issue_register()    (ISSUE movements)
  *   Excel sheet "Receipts"  →  receipt_register()  (RECEIVE movements)
  *   Excel columns Alerte /
  *   Variance / Qty to order →  Materials_model::get_reorder_items()
  *
- * Everything reads `material_transactions` as extended by
- * migrations/007_excel_alignment.sql.  When that migration has not been
- * applied the model reports "not available" instead of failing, so the rest
- * of the application is unaffected.
+ * Everything reads the extended register columns of
+ * `material_transactions`.  When those columns are missing the model reports
+ * "not available" instead of failing, so the rest of the application is
+ * unaffected.
  */
 class Store_model extends CI_Model {
 

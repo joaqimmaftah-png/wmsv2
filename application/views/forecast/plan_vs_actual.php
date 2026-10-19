@@ -1,13 +1,14 @@
 <?php
 /**
- * PLAN vs ACTUAL — FORECAST_REVIEW.md task F6.
+ * PLAN vs ACTUAL — task F6.
  *
  * The learning loop: Plan → Execute → Measure → Explain variance → Improve.
  *
  * The plan side is the FROZEN baseline (D33), never the current draft, so a
  * variance cannot be argued away by editing the plan after the week.  Both
  * sides are `kpi_availability()` on required time (D29), so the variance is a
- * real difference and not a formula artefact — the defect §7.1 documents.
+ * real difference and not a formula artefact like the workbook's typed
+ * constant.
  *
  * The variance is also split into its causes, which is the part the Excel
  * workbook could never do: it had no history to compare against.

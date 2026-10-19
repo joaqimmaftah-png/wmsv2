@@ -7,10 +7,10 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *
  * Pure functions: no database, no settings model, no formatting. Everything the
  * weekly report computes is derived here from plain event intervals, so the
- * preview, the Excel writer and the tests all run the same arithmetic and the
+ * preview and the Excel writer all run the same arithmetic and the
  * rules live in exactly one file.
  *
- * The rules (DECISIONS.md):
+ * The rules:
  *   · downtime            measure of the UNION of a machine's breakdown
  *                         intervals ∩ the reporting period — overlapping or
  *                         touching work orders of one failure never double
@@ -29,8 +29,8 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *                         with the documented no-failure handling (D3/OPEN-3)
  *   · availability         (required − downtime) ÷ required, clamped to 0…1
  *
- * Timestamps are unix seconds; hours are floats. Comparisons in the tests use
- * the same 0.005 h tolerance the pilot oracle uses.
+ * Timestamps are unix seconds; hours are floats. Numeric comparisons use a
+ * 0.005 h tolerance.
  */
 
 if (!function_exists('kpi_ts')) {

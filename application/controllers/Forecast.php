@@ -4,7 +4,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 /**
  * PLANNED AVAILABILITY FORECAST
  *
- * `FORECAST_REVIEW.md` tasks F5–F7, F10, F11 on decisions D29…D33.
+ * Tasks F5–F7, F10, F11 on decisions D29…D33.
  *
  * The business flow this controller walks, in the order the workshop asked for:
  *
@@ -42,7 +42,7 @@ class Forecast extends MY_Controller {
         $plan = $this->Forecast_model->planned_availability($week_start);
 
         $data = $plan;
-        $data['migration_ready'] = $this->Forecast_model->tables_ready();
+        $data['tables_ready']    = $this->Forecast_model->tables_ready();
         $data['snapshot']        = $this->Forecast_model->baseline_snapshot($week_start);
         $data['history']         = $this->Forecast_model->snapshot_history($week_start);
         $data['standing']        = $this->Forecast_model->standing_allowances();
@@ -100,7 +100,7 @@ class Forecast extends MY_Controller {
 
         if (!$this->Forecast_model->tables_ready()) {
             $this->session->set_flashdata('error',
-                'Migration 008 has not been applied yet — the planned-downtime tables do not exist.');
+                'The planned-downtime tables do not exist on this database yet — import the database dump shipped with this repository.');
             redirect('forecast?week=' . $label);
         }
 
@@ -391,7 +391,7 @@ class Forecast extends MY_Controller {
      * The actual side of the comparison, by group, from the same KPI engine the
      * weekly report uses — so both halves of the variance are one metric.
      *
-     * Returns null when the weekly report cannot be built (migration missing,
+     * Returns null when the weekly report cannot be built (tables missing,
      * no data), and the screen says so rather than showing zeros.
      *
      * @return array|null group code => kpi_rollup() output, plus '__fleet__'
@@ -422,8 +422,7 @@ class Forecast extends MY_Controller {
 
     /**
      * Weeks +1, +2, +3 in one grid — the database-driven replacement for the
-     * `WEEK 40 SCHEDULE` sheet, whose week-41 and week-42 blocks are `#REF!`
-     * (§7.7 of the review).
+     * `WEEK 40 SCHEDULE` sheet, whose week-41 and week-42 blocks are `#REF!`.
      */
     public function rolling() {
         $base = $this->_resolve_week();
@@ -525,7 +524,7 @@ class Forecast extends MY_Controller {
 
         if (!$this->Forecast_model->tables_ready()) {
             $this->session->set_flashdata('error',
-                'Migration 008 has not been applied — there is nowhere to store this yet.');
+                'The forecast tables are not set up on this database yet — there is nowhere to store this.');
             redirect('forecast/parts/' . $id);
         }
 
@@ -582,7 +581,7 @@ class Forecast extends MY_Controller {
 
         if (!$this->Forecast_model->tables_ready()) {
             $this->session->set_flashdata('error',
-                'Migration 008 has not been applied yet — there is no plan to export.');
+                'The forecast tables are not set up on this database yet — there is no plan to export.');
             redirect('forecast?week=' . $label);
         }
 
@@ -657,7 +656,7 @@ class Forecast extends MY_Controller {
     /**
      * What the reliability-based unplanned allowance would be, per machine —
      * shown before it is written, so the planner can see the derivation
-     * instead of trusting a number that appeared (§8 R4).
+     * instead of trusting a number that appeared (rule R4).
      */
     public function allowances() {
         $week_start = $this->_resolve_week();

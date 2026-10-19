@@ -310,15 +310,15 @@ class Workorder_model extends CI_Model {
     /**
      * Is the attachment table actually present?
      *
-     * It is created by migration 001, which every installation is supposed to
-     * have — but this one does not: the production log shows
+     * Every installation is supposed to have it — but one did not: its
+     * production log shows
      *   Query error: Table 'your_database.wo_attachments' doesn't exist
      * and the work-order page returned a 500 because of it (audit finding F-07).
      * The table may be missing; the PAGE may not be.
      *
      * Every method below therefore degrades instead of erroring: reads return
-     * nothing, writes report failure. Apply `database/migrations/001_create_wo_attachments.sql`
-     * to make the feature real.
+     * nothing, writes report failure. Restoring the table (it is in the shipped
+     * database dump) makes the feature real.
      */
     public function attachments_ready() {
         return $this->db->table_exists('wo_attachments');

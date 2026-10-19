@@ -47,7 +47,7 @@ class Kpi_target_model extends CI_Model {
      |  basics
      * ──────────────────────────────────────────────────────────────────── */
 
-    /** The table only exists once the W36 migration has been applied. */
+    /** Whether the `equipment_kpi_targets` table exists. */
     public function table_ready() {
         return (bool)$this->db->table_exists(self::TABLE);
     }
@@ -73,7 +73,7 @@ class Kpi_target_model extends CI_Model {
      *
      * Deliberately the same rule as Settings_model::sanitize() for
      * 'default_availability_target' so the two entry points can never drift
-     * apart; tests/unit/58 asserts that both agree.
+     * apart.
      *
      * @return float|null null when the input is not a usable percentage
      */
@@ -171,7 +171,7 @@ class Kpi_target_model extends CI_Model {
      * ──────────────────────────────────────────────────────────────────── */
 
     /**
-     * Insert or update one target. The pilot table has no unique index (and a
+     * Insert or update one target. The table has no unique index (and a
      * NULL date cannot be unique in MySQL anyway), so existence is checked
      * first — the same approach Settings_model::save_many() uses.
      *

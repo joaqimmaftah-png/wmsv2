@@ -4,7 +4,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 /**
  * Backlog_model — the defect / backlog register.
  *
- * Replaces the two manual sheets in `myexcellreport/asset list.xlsx`:
+ * Replaces the two manual backlog sheets of the old asset-list workbook:
  *
  *   "Backlog on going"  → open items   (status Open / In Progress)
  *   "Backlog done"      → closed items (status Closed)
@@ -32,7 +32,7 @@ class Backlog_model extends CI_Model {
         'priority', 'deadline', 'observation', 'machine_status', 'status',
         'end_odometer', 'end_date', 'closing_remarks', 'mechanic', 'supervisor',
         'work_order_id', 'planned_date', 'estimated_duration', 'source_ref',
-        // Wave 3 / migration 014 — closure evidence and inspection links.
+        // Closure-evidence and inspection-link columns.
         // Listed here because _filter() drops anything not in this list, and
         // silently losing the verifier on a closure would be worse than a
         // failed write. Callers only set them when the columns exist.
@@ -151,7 +151,7 @@ class Backlog_model extends CI_Model {
     // ── WRITE ───────────────────────────────────────────────
     public function insert($data) {
         $this->_last_error = null;
-        if (!$this->available()) { $this->_last_error = 'The backlog table is missing — run migration 007.'; return false; }
+        if (!$this->available()) { $this->_last_error = 'The backlog table is missing — import the database dump shipped with this repository.'; return false; }
         $row = $this->_filter($data);
         $row['created_at'] = date('Y-m-d H:i:s');
         $row['updated_at'] = date('Y-m-d H:i:s');

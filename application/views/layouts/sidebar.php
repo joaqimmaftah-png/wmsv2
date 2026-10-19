@@ -156,9 +156,9 @@ $is_ceo        = ($role_id == 5);
     <?php endif; ?>
 
     <!-- ── 3b. PLANNING — Supervisor, Manager ─────────────────────────
-         The planned-availability forecast (FORECAST_REVIEW.md F5-F7, F10, F11).
+         The planned-availability forecast (tasks F5-F7, F10, F11).
          Kept in its own section because it is a *forward-looking plan*, not a
-         report about the past — the distinction the review is built on. -->
+         report about the past. -->
     <?php if ($is_supervisor || $is_manager): ?>
     <div class="nav-sep"></div>
     <div class="nav-section-label">Planning</div>

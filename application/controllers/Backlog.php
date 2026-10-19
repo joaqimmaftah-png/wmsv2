@@ -96,7 +96,7 @@ class Backlog extends MY_Controller {
             'supervisor'      => $this->input->post('supervisor') ?: $item->supervisor,
         );
 
-        // The Wave 3 evidence columns arrive with migration 014.
+        // Closure-evidence columns — written only on databases that have them.
         if ($this->db->field_exists('verified_by', 'backlogs')) {
             $data['verified_by']         = $this->user_id;
             $data['verified_at']         = date('Y-m-d H:i:s');

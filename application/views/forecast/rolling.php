@@ -1,10 +1,10 @@
 <?php
 /**
- * ROLLING THREE-WEEK MAINTENANCE PLAN — FORECAST_REVIEW.md task F11.
+ * ROLLING THREE-WEEK MAINTENANCE PLAN — task F11.
  *
  * The database-driven replacement for the `WEEK 40 SCHEDULE` sheet, whose
  * week-41 and week-42 blocks are `#REF!` and whose block headers disagree with
- * their own week numbers (§7.7).  Here every cell is read from
+ * their own week numbers.  Here every cell is read from
  * `equipment_planned_downtime`, so a stale formula reference cannot exist.
  */
 $pct = function ($v, $d = 1) { return $v === null ? '—' : number_format($v * 100, $d) . '%'; };

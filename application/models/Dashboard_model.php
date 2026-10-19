@@ -361,7 +361,7 @@ class Dashboard_model extends CI_Model {
        inside a horizon, and how urgent each one is.  It does NOT project an
        availability percentage — that is `Forecast_model` (D29).  The screen
        used to be titled "Availability Forecast" and promised an "availability
-       prediction" it never made; see FORECAST_REVIEW.md §5.1, task F1.
+       prediction" it never made (task F1).
     ──────────────────────────────────────────────────────── */
 
     public function get_availability_forecast($horizon_days = 90) {

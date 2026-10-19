@@ -94,7 +94,7 @@ $src_short = array(
       <?php if (!$has_table): ?>
       <div class="tgt-warn">
         The targets table (<code>equipment_kpi_targets</code>) is not installed on this database, so nothing can be
-        shown or edited yet. Apply the weekly-report schema migration before using this screen.
+        shown or edited yet. Import the database dump shipped with this repository before using this screen.
       </div>
       <?php endif; ?>
 

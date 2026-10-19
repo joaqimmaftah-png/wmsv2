@@ -98,15 +98,13 @@ class MY_Controller extends CI_Controller {
         echo htmlspecialchars("<?php\ndefined('BASEPATH') OR exit('No direct script access allowed');\n\n\$db['default']['hostname'] = 'localhost';\n\$db['default']['username'] = 'cpaneluser_dbuser';\n\$db['default']['password'] = 'your_password';\n\$db['default']['database'] = 'cpaneluser_dbname';\n");
         echo '</pre></li>';
         echo '<li>cPanel > MySQL Databases: Create DB + User + <strong>Add user to DB with ALL PRIVILEGES</strong></li>';
-        echo '<li>cPanel > phpMyAdmin: Import <code>database/workshop_full_import.sql</code></li>';
-        echo '<li>Upload <code>cpanel_check.php</code> and visit it for full diagnosis</li>';
+        echo '<li>cPanel > phpMyAdmin: Import <code>database/yzzme_43038742_aml.sql</code></li>';
         echo '</ol>';
         echo '<p><strong>cPanel credentials format:</strong><br>';
         echo 'Username: <code>cpaneluser_dbuser</code> (cPanel prefixes your username)<br>';
         echo 'Database: <code>cpaneluser_dbname</code><br>';
         echo 'Host: <code>localhost</code> (not 127.0.0.1 on most shared hosts)</p>';
-        echo '<p><a href="cpanel_check.php" style="display:inline-block;background:#007aff;color:#fff;padding:10px 20px;border-radius:20px;text-decoration:none">Run cpanel_check.php Diagnostic</a></p>';
-        echo '<p style="font-size:12px;color:#86868b">See CPANEL_FIX.md for detailed guide. Delete cpanel_check.php after fixing.</p>';
+        echo '<p style="font-size:12px;color:#86868b">See README.md (Installation / Troubleshooting) for the detailed guide.</p>';
         echo '</div></body></html>';
         exit;
     }
@@ -169,8 +167,8 @@ class MY_Controller extends CI_Controller {
         'spareparts/mark_read',
         'spareparts/mark_all_read',
         // Publishing (freezing) a weekly report is the sign-off on a week's
-        // figures, which the review gives Manager as well as Supervisor
-        // (`WEEKLY_REPORT_REVIEW.md` §7.4) — so this POST is allowed through.
+        // figures, which Manager may perform as well as Supervisor — so
+        // this POST is allowed through.
         'reports/publish_weekly_w36',
         'reports/weekly_report_name',
     );
@@ -238,7 +236,7 @@ class MY_Controller extends CI_Controller {
         // blank HTTP 500 on every page, which is the hardest failure there is
         // to diagnose from a browser: no message, no page, nothing to search.
         // Now it is checked, logged, and the page renders with the documented
-        // defaults instead. See deployment/CPANEL_500_TROUBLESHOOTING.md.
+        // defaults instead.
         if ($this->db) {
             try {
                 $query = $this->db->get('settings');
@@ -250,7 +248,7 @@ class MY_Controller extends CI_Controller {
                 } else {
                     log_message('error', 'WMS: the `settings` table could not be read — the database is '
                         .'unreachable, or the schema has not been imported into it. Pages will render '
-                        .'with the documented default settings. See deployment/CPANEL_500_TROUBLESHOOTING.md.');
+                        .'with the documented default settings.');
                 }
             } catch (Throwable $e) {   // Exception and Error alike (PHP 7+)
                 log_message('error', 'WMS: settings could not be loaded — '.$e->getMessage());
@@ -264,12 +262,12 @@ class MY_Controller extends CI_Controller {
         $data['current_user'] = $this->user_data;
         $data['role_id']      = $this->role_id;
         // Pending-spares availability alerts (bell in the top bar).  The query
-        // is skipped entirely when migration 006 has not been applied yet.
+        // is skipped entirely when the spare-parts tracking tables are missing.
         if (!isset($data['new_spares_alerts'])) {
             $data['new_spares_alerts'] = $this->_new_spares_alert_count();
         }
         // Sign-in security events waiting to be looked at (F-19). Supervisors
-        // only, and silent when migration 015 has not been applied.
+        // only, and silent when the security-events table is missing.
         if (!isset($data['security_events_open'])) {
             $data['security_events_open'] = $this->is_supervisor() ? $this->_open_security_event_count() : 0;
         }

@@ -1,6 +1,6 @@
 <?php
 /**
- * PLANNED ALLOWANCES — FORECAST_REVIEW.md task F9, decision D31.
+ * PLANNED ALLOWANCES — task F9, decision D31.
  *
  * The two allowances that drive most of any planned week, shown per machine
  * with their provenance, *before* they are written to the plan:
@@ -10,7 +10,7 @@
  *                 alike. 51.0 % of the historical planned downtime was this.
  *   · Unplanned — breakdown allowance. Flat 1 h/day in the workbook on 85 of
  *                 103 machines; in `derived` mode it is each machine's own
- *                 measured loss rate from its corrective history (§8 R4).
+ *                 measured loss rate from its corrective history (rule R4).
  */
 $num = function ($v) { return rtrim(rtrim(number_format((float)$v, 2, '.', ''), '0'), '.'); };
 $derived_n = 0;
@@ -119,7 +119,7 @@ foreach ($rows as $r) if ($r['source'] === 'derived') $derived_n++;
   planned downtime hours (51.0 %) were the standing allowance and 253 (13.4 %) the unplanned one —
   together nearly two thirds of the plan, both typed as a single figure for every machine. Making
   the standing allowance per type (D31) and the unplanned allowance per machine's own measured loss
-  rate (§8 R4) is what turns the largest part of the forecast from an assumption into a measurement.
+  rate (rule R4) is what turns the largest part of the forecast from an assumption into a measurement.
   <br>
   A derived rate is <strong>floored at 0.5 h/day</strong>: a machine that happened not to break in
   the lookback window is not forecast as incapable of breaking.

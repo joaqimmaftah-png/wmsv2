@@ -1,6 +1,6 @@
 <?php
 /**
- * PM SPARE-PARTS FORECAST — FORECAST_REVIEW.md task F10.
+ * PM SPARE-PARTS FORECAST — task F10.
  *
  * The half of the workbook's forecast it never had: the plan's PM hours turned
  * into a parts bill, compared with the store and with what is already ordered.
@@ -35,7 +35,7 @@ $num = function ($v) { return rtrim(rtrim(number_format((float)$v, 3, '.', ''), 
   <div style="font-weight:700;margin-bottom:6px;">No parts requirements on file</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.7;">
     <?php if (empty($table_ready)): ?>
-      Migration 008 has not been applied — the <code>pm_part_requirements</code> table does not exist.
+      The <code>pm_part_requirements</code> table does not exist on this database yet.
     <?php else: ?>
       Nothing links a PM schedule to the parts it consumes yet. Add rows to
       <code>pm_part_requirements</code> (<code>pm_schedule_id</code>, <code>material_id</code>,

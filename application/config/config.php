@@ -124,9 +124,9 @@ $config['proxy_ips'] = '';
 | TRUE  : the sign-in screen still accepts MD5 and SHA1 hashes, upgrading them
 |         to bcrypt on the next successful sign-in. Required only while
 |         accounts with legacy hashes exist.
-| FALSE : only bcrypt hashes are accepted. Set this once
-|         scripts/reset_legacy_passwords.php --apply has been run and everybody
-|         has signed in at least once — it is the switch that finally retires
+| FALSE : only bcrypt hashes are accepted. Set this once every legacy
+|         hash has been upgraded to bcrypt (each is upgraded on its owner's
+|         next successful sign-in) — it is the switch that finally retires
 |         MD5/SHA1. Overridable per installation through the
 |         WMS_LEGACY_PASSWORD_LOGIN=0 environment variable or config.local.php.
 */

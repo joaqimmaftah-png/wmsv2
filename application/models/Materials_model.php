@@ -43,10 +43,9 @@ class Materials_model extends CI_Model {
     );
 
     /**
-     * Re-order control and valuation columns added by
-     * migrations/007_excel_alignment.sql to match the manual "Stock List"
+     * Re-order control and valuation columns matching the manual "Stock List"
      * sheet.  They are only written when the column really exists, so the
-     * module keeps working on a database where 007 has not been applied yet.
+     * module keeps working on a database that does not have them yet.
      */
     const EXTENDED_FIELDS = array(
         'min_stock', 'max_stock', 'unit_price_ugx', 'unit_price_usd',
@@ -516,7 +515,7 @@ class Materials_model extends CI_Model {
          * movement cannot be represented: silently rounding 2.5 to 3 would put
          * a wrong number in both the balance and the movement log, so it is
          * refused instead. (The historical Excel rows do contain fractional
-         * quantities — they are migrated history and are flagged
+         * quantities — they are imported history and are flagged
          * affects_balance = 0; see the stock reconciliation.)
          */
         if ($id <= 0 || $amount <= 0 || abs($amount - $qty) > 0.0001) {
@@ -531,13 +530,13 @@ class Materials_model extends CI_Model {
          * movement is this document line". If that key is already in the
          * ledger, the movement was posted before (a double-clicked GRN, a
          * re-run import) and is reported as skipped instead of posted again.
-         * Migration 013 adds the unique index that enforces this at the
-         * database level as well.
+         * The unique index on `import_key` enforces this at the database
+         * level as well.
          */
         $import_key = isset($context['import_key']) ? trim((string)$context['import_key']) : '';
         // has_movement_fields() is the same probe that gates the context
-        // columns below: it is false on a database where migration 007 has not
-        // run, so there is no import_key column to look in either.
+        // columns below: it is false on a database without the register
+        // columns, so there is no import_key column to look in either.
         if ($import_key !== '' && $this->has_movement_fields()) {
             $existing = $this->db->select('id, stock_before, stock_after')
                 ->where('import_key', $import_key)->limit(1)
@@ -685,7 +684,7 @@ class Materials_model extends CI_Model {
      * the old table could not hold — the business date, the requisition /
      * MRN number, what the issue was charged to (a machine or a department),
      * who collected it and, for a receipt, the supplier and price.  They are
-     * written only when migration 007 has added the columns.
+     * written only when the register columns exist.
      */
     public function log_transaction($material_id, $type, $qty, $stock_before, $notes, $user_id, $context = array()) {
         if (!$this->db->table_exists('material_transactions')) return 0;
@@ -708,7 +707,7 @@ class Materials_model extends CI_Model {
             if (empty($row['txn_date'])) $row['txn_date'] = date('Y-m-d');
             if (empty($row['source']))   $row['source']   = 'Manual';
             // A movement entered in the system always moves the balance;
-            // only the migrated Excel history is flagged 0.
+            // only the imported Excel history is flagged 0.
             $row['affects_balance'] = 1;
         }
         $this->db->insert('material_transactions', $row);
@@ -815,7 +814,7 @@ class Materials_model extends CI_Model {
 
     /**
      * Does the catalogue carry the re-order / pricing columns?
-     * (migrations/007_excel_alignment.sql).  Probed once per request.
+     * Probed once per request.
      */
     public function has_extended_fields() {
         if ($this->_has_extended === null) {
@@ -905,8 +904,8 @@ class Materials_model extends CI_Model {
     /** Forget the previous error before a new write attempt. */
     private function _reset_error() { $this->_last_error = null; }
 
-    // ── Import audit trail (optional — skipped when migration 005 has not
-    //    been applied; the code detects the table) ──────────────────────────
+    // ── Import audit trail (optional — skipped while the log table is missing;
+    //    the code detects the table) ──────────────────────────
 
     public function has_import_log() {
         return $this->db->table_exists('inventory_import_logs');

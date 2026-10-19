@@ -12,8 +12,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *     'target'    => 0.90,             // ditto, twice
  *     strtotime('monday this week')    // week start, in four entry points
  *
- * Those values now live in `settings` (seeded by
- * `migrations/sample_data/w36_pilot_000_schema.sql` §7):
+ * Those values now live in `settings` (seeded in the database dump):
  *
  *     weekly_open_hours           168     open hours in a 7-day report week (W36!B2)
  *     daily_open_hours             24     open hours per day          (W36!C2)
@@ -26,14 +25,14 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *                                         (0 = the check is off)             (D21)
  *
  * Every getter falls back to the documented default when the row is missing or
- * holds an invalid value, so an installation that has not applied the
- * migration still behaves exactly as before — and nothing in the generator
+ * holds an invalid value, so an installation without those settings rows
+ * still behaves exactly as before — and nothing in the generator
  * needs to hard-code 168, 24 or 0.90 again.
  */
 
 class Settings_model extends CI_Model {
 
-    /** Defaults, mirrored from the migration. Key => default (stored as string). */
+    /** Defaults, mirrored from the seeded `settings` rows. Key => default. */
     const DEFAULTS = array(
         'weekly_open_hours'           => '168',
         'daily_open_hours'            => '24',
@@ -43,14 +42,14 @@ class Settings_model extends CI_Model {
         'mtbf_zero_failure_mode'      => 'dash',
         'pm_meter_stale_days'         => '30',
 
-        /* ── sign-in security (migration 015, finding F-19) ───────────── */
+        /* ── sign-in security (finding F-19) ───────────── */
         // 1 = limit failures from one source across many accounts (credential
         // stuffing). Turn it off when every visitor appears to come from one
         // address (a proxy/CDN without `proxy_ips` configured), where the rule
         // would lock out the whole site instead of stopping an attacker.
         'login_ip_cap_enabled'        => '1',
 
-        /* ── forecast planning (migration 008, decisions D29–D31) ─────── */
+        /* ── forecast planning (decisions D29–D31) ─────── */
         'standing_allowance_hours'         => '{}',
         'standing_allowance_default_hours' => '2',
         'inspection_default_hours'         => '1',
@@ -99,8 +98,8 @@ class Settings_model extends CI_Model {
     /* ── reading ─────────────────────────────────────────────────────── */
 
     /**
-     * Every settings row as key => value. Missing table (migration not applied
-     * yet) yields an empty array, never an exception.
+     * Every settings row as key => value. A missing table yields an empty
+     * array, never an exception.
      *
      * @param  bool $refresh bypass the per-request cache
      * @return array
@@ -176,7 +175,7 @@ class Settings_model extends CI_Model {
         return ($v >= 1 && $v <= 7) ? $v : 1;
     }
 
-    /** How a breakdown is counted in a period (D1 / DECISIONS.md OPEN-2). */
+    /** How a breakdown is counted in a period (D1 / OPEN-2). */
     public function breakdown_count_mode() {
         $v = (string)$this->get('breakdown_count_mode');
         return in_array($v, self::BREAKDOWN_COUNT_MODES, true) ? $v : 'start_in_period';
@@ -190,7 +189,7 @@ class Settings_model extends CI_Model {
 
     /**
      * How old the reading behind a meter-only PM judgement may be, in days
-     * (G4-stale, DECISIONS.md D21).  A schedule whose due date is empty is
+     * (G4-stale, D21).  A schedule whose due date is empty is
      * judged by its meter alone, so the judgement is only as good as the
      * reading behind it: when the newest reading is older than this many days
      * before the reported week — or there is none on file — the schedule is
@@ -458,7 +457,7 @@ class Settings_model extends CI_Model {
 
     /**
      * The forecast-planning settings, grouped for the settings screen
-     * (FORECAST_REVIEW.md D29–D31, migration 008).
+     * (D29–D31).
      *
      * These are a planner's decision, not a developer's constant: the standing
      * allowance alone drove 966 of the historical 1 894 planned downtime hours.

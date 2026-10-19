@@ -68,7 +68,7 @@
           <?php elseif ($sites): ?>
           <div class="cs" style="margin-top:4px;"><?= count($sites) ?> approved sites — start typing to pick one.</div>
           <?php else: ?>
-          <div class="cs" style="margin-top:4px;">The site list is not installed yet (see the W36 master-data migration).</div>
+          <div class="cs" style="margin-top:4px;">The site list is not installed on this database yet.</div>
           <?php endif; ?>
         </div>
         <div>
@@ -91,8 +91,8 @@
 
       <?php
       // ── W0.3   weekly-report classification ───────────────────────────
-      // The codes/labels/order come from `report_groups` (seeded by the
-      // weekly-report master-data migration); the sheet order is the one the business approved.
+      // The codes/labels/order come from `report_groups` (seeded master
+      // data); the sheet order is the one the business approved.
       $groups  = isset($report_groups) ? $report_groups : array();
       $cur_grp = isset($equipment->report_group) ? $equipment->report_group : '';
       $cur_srt = isset($equipment->report_sort)  ? (int)$equipment->report_sort : 0;
@@ -115,7 +115,7 @@
           </select>
           <?php else: ?>
           <input type="text" class="form-control" value="" disabled placeholder="report_groups not installed">
-          <div class="cs" style="margin-top:4px;">Apply the weekly-report master-data migration to enable this list.</div>
+          <div class="cs" style="margin-top:4px;">This list needs the seeded report_groups data from the shipped database dump.</div>
           <?php endif; ?>
         </div>
         <div>

@@ -207,8 +207,9 @@ class Inspection_model extends CI_Model {
         $record = $this->get_record($record_id);
         if (!$record) return $stats;
 
-        // The Wave 3 columns arrive with migration 014; on an un-migrated
-        // database the method still works, it just cannot link or verify.
+        // The closure-evidence/link columns are probed with field_exists(); on
+        // a database without them the method still works, it just cannot link
+        // or verify.
         $has_item_link  = $this->db->field_exists('inspection_item_id', 'backlogs');
         $has_recurrence = $this->db->field_exists('recurrence_of', 'backlogs');
         $has_verified   = $this->db->field_exists('verified_by', 'backlogs');

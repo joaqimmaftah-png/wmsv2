@@ -10,12 +10,12 @@
  *
  * The token name comes from the security class, never from a literal, and the
  * helper answers with an empty string when there is no application at hand (a
- * bare view render in the tests) rather than sending a broken value.
+ * bare view render outside the framework) rather than sending a broken value.
  */
 
 if (!function_exists('csrf_field')) {
     /**
-     * @param  string|null $token a token the caller already resolved (tests, CLI, cached pages)
+     * @param  string|null $token a token the caller already resolved (CLI, cached pages)
      * @param  string|null $name  its field name — defaults to the configured one
      * @return string             the hidden input, or '' when there is nothing to send
      */

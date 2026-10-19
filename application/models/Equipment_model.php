@@ -37,8 +37,8 @@ class Equipment_model extends CI_Model {
     /* ── W0.5  site vocabulary ─────────────────────────────────────────── */
 
     /**
-     * The approved sites (`report_sites`, seeded by the W0.6 master-data
-     * migration), in printing order: label => code.
+     * The approved sites (`report_sites`, seeded master data, task W0.6),
+     * in printing order: label => code.
      *
      * Empty array on a database where the table does not exist yet, so every
      * screen degrades to plain text instead of breaking.
@@ -123,8 +123,8 @@ class Equipment_model extends CI_Model {
     /* ── W0.3  weekly-report grouping ─────────────────────────────────── */
 
     /**
-     * The 17 report groups in sheet order (`report_groups`, seeded by the W36
-     * pilot migration).  Returns an empty array on a database where the table
+     * The 17 report groups in sheet order (`report_groups`, seeded master
+     * data).  Returns an empty array on a database where the table
      * has not been created yet, so the screens never crash.
      *
      * @return array code => label
@@ -240,7 +240,7 @@ class Equipment_model extends CI_Model {
             'mtbf'          => $k['mtbf_hours'] === null ? 0 : round($k['mtbf_hours'], 1),
             'total_down'    => round((float)$k['downtime_hours'], 2),
             'breakdowns'    => (int)$k['breakdowns'],
-            // extra context for the page and the runbook's acceptance checks
+            // extra context for the page
             'required_hours'=> round((float)$k['required_time_hours'], 2),
             'open_hours'    => $ci->Kpi_engine_model->open_hours_between($from, $to),
             'period'        => ['from' => $from, 'to' => $to, 'days' => $days],
@@ -297,7 +297,7 @@ class Equipment_model extends CI_Model {
         $current_field = ($unit === 'Kilometres') ? 'current_km' : 'current_hours';
 
         if (!$this->db->table_exists('equipment_meter_readings')) {
-            return array('ok' => false, 'message' => 'The meter-reading history table is not installed yet — run the migrations before recording readings.', 'unit' => $unit, 'value' => $value, 'previous' => null);
+            return array('ok' => false, 'message' => 'The meter-reading history table is not installed yet — import the database dump shipped with this repository before recording readings.', 'unit' => $unit, 'value' => $value, 'previous' => null);
         }
         if ($value <= 0) {
             return array('ok' => false, 'message' => 'A meter reading must be greater than zero.', 'unit' => $unit, 'value' => $value, 'previous' => null);

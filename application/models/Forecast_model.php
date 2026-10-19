@@ -4,7 +4,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 /**
  * PLANNED AVAILABILITY FORECAST — the calculation engine.
  *
- * `FORECAST_REVIEW.md` task F3, on the business decisions D29…D33.
+ * Task F3, on the business decisions D29…D33.
  *
  * ── The one rule that governs this whole file ────────────────────────────
  *
@@ -17,7 +17,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *
  * The historical workbook divided by the 24-hour calendar day with a typed
  * constant of 0.04166 and averaged machine percentages unweighted. Neither is
- * reproduced (§7.1–§7.3 of the review); both are offered as *labelled
+ * reproduced (defects 1–4 listed in `Forecast_excel`); both are offered as *labelled
  * reference* figures when `forecast_show_excel_reference` is on.
  *
  * ── How planned categories map onto the actual's formula ─────────────────
@@ -53,11 +53,11 @@ class Forecast_model extends CI_Model {
     const CAT_UNPLANNED   = 'Unplanned';
     const CAT_OUT         = 'OutOfService';
     /**
-     * MP-1 (migration 009) — a known, dated repair.  Same availability effect
+     * MP-1 — a known, dated repair.  Same availability effect
      * as `Unplanned` (it is downtime), reported on its own line so the
      * breakdown *allowance* and the *known* repair are never one number
-     * (MAINTENANCE_PLAN_REVIEW.md R-MP5, OPEN-MP1).  Only accepted once
-     * migration 009 has extended the ENUM — see `corrective_ready()`.
+     * (R-MP5, OPEN-MP1).  Only accepted when the ENUM carries the value —
+     * see `corrective_ready()`.
      */
     const CAT_CORRECTIVE  = 'Corrective';
 
@@ -66,7 +66,7 @@ class Forecast_model extends CI_Model {
     const SRC_MANUAL  = 'Manual';
     const SRC_FROM_PM = 'FromPM';
     const SRC_DERIVED = 'Derived';
-    /** MP-2 — hours synchronised from `maintenance_plan_jobs` (migration 009). */
+    /** MP-2 — hours synchronised from `maintenance_plan_jobs`. */
     const SRC_FROM_PLAN = 'FromPlan';
 
     /**
@@ -92,8 +92,8 @@ class Forecast_model extends CI_Model {
     /**
      * `kpi_helper` is autoloaded (`application/config/autoload.php`), so this
      * model must not load it itself — the other models don't, and doing so
-     * makes the model unconstructable outside the framework, which is exactly
-     * how `tests/unit/71_forecast_model.php` exercises it.
+     * makes the model unconstructable outside the framework; the model must
+     * stay constructable without booting the framework.
      */
     public function __construct() {
         parent::__construct();
@@ -103,15 +103,16 @@ class Forecast_model extends CI_Model {
         }
     }
 
-    /** False until migration 008 has been applied — callers must degrade, not crash. */
+    /** False while the planned-downtime table is missing — callers degrade, not crash. */
     public function tables_ready() {
         return $this->db && $this->db->table_exists(self::TABLE);
     }
 
     /**
-     * Migration 009 has run: the job table exists, and with it the ENUM values
-     * `Corrective` / `FromPlan` (the same file adds both, so one probe answers
-     * both questions without reading INFORMATION_SCHEMA).
+     * Whether maintenance-plan jobs are available: the job table must exist,
+     * and with it the ENUM values `Corrective` / `FromPlan` (both arrive
+     * together, so one probe answers both questions without reading
+     * INFORMATION_SCHEMA).
      */
     public function jobs_ready() {
         return $this->db && $this->db->table_exists(self::JOBS);
@@ -345,7 +346,7 @@ class Forecast_model extends CI_Model {
 
     /**
      * Place every PM due inside the week on its due date, using
-     * `pm_schedules.standard_hours` (added by migration 008) as the duration.
+     * `pm_schedules.standard_hours` as the duration.
      *
      * Idempotent: re-running updates the same rows rather than duplicating
      * them.  Rows a planner has since edited by hand — or that the planner's
@@ -368,7 +369,7 @@ class Forecast_model extends CI_Model {
         if (!$this->tables_ready()) {
             return array('placed' => 0, 'skipped' => 0, 'missing_hours' => 0,
                          'not_placed' => array(), 'estimated' => array(), 'missing' => array(),
-                         'error'  => 'migration 008 has not been applied');
+                         'error'  => 'the forecast tables are not set up on this database');
         }
 
         // MP-4 — one plan, read here and shown by pm_schedule_issues(), so the
@@ -801,8 +802,8 @@ class Forecast_model extends CI_Model {
              * The historical workbook's own type label is 'DOZERS ' with a
              * trailing space, so the same fleet can be filed under both
              * 'DOZERS' and 'DOZERS '.  Un-trimmed, those become two groups with
-             * two roll-ups — the same class of split as §7.3, where a machine
-             * fell out of its own group, and neither half would be the truth.
+             * two roll-ups — the same class of split that once made a machine
+             * fall out of its own group, and neither half would be the truth.
              */
             $type  = trim((string)$m->equip_type);
             if ($type === '') $type = 'OTHER';
@@ -914,7 +915,8 @@ class Forecast_model extends CI_Model {
              * `kpi_availability()` is undefined (null) on a zero base.  Folding
              * it into the OutOfService population keeps D32's rule honest and
              * stops a data-entry choice from printing "—" in the fleet figure.
-             * This is also §7.4: the workbook printed 0.02 % for CR 001 because
+             * This is also the workbook's out-of-service defect: it printed
+             * 0.02 % for CR 001 because
              * it had no way to say "not in service at all".
              *
              * Two ways to get there, and both have to count.  `$required <= 0`
@@ -972,7 +974,8 @@ class Forecast_model extends CI_Model {
              * *all* planned out of service — a crane fleet with its one crane
              * down for the week simply vanished from the group list, and with it
              * the machine, since both the screen and the export walk `$groups`.
-             * That is §7.3 (EX 006 missing from its own roll-up) arriving by a
+             * That is the dropped-machine defect (EX 006 missing from its own
+             * roll-up) arriving by a
              * different route, and D32 asks for the opposite: out of service is
              * excluded from the *availability population*, never from the view.
              *
@@ -1290,7 +1293,7 @@ class Forecast_model extends CI_Model {
      * @return array|false  the stored row, or false with 'error'
      */
     public function publish($week_start, $user_id = null, $note = null) {
-        if (!$this->snapshots_ready()) return array('error' => 'migration 008 has not been applied');
+        if (!$this->snapshots_ready()) return array('error' => 'the forecast tables are not set up on this database');
 
         $plan     = $this->planned_availability($week_start);
         $existing = $this->snapshot_history($week_start);
@@ -1436,7 +1439,7 @@ class Forecast_model extends CI_Model {
         $qty            = (float)str_replace(',', '.', (string)$qty);
 
         if (!$this->db->table_exists(self::PARTS)) {
-            return array('ok' => false, 'error' => 'Migration 008 has not been applied.');
+            return array('ok' => false, 'error' => 'The forecast tables are not set up on this database.');
         }
         if (!$pm_schedule_id || !$material_id) {
             return array('ok' => false, 'error' => 'A schedule and a part are both required.');
@@ -1529,7 +1532,7 @@ class Forecast_model extends CI_Model {
      *
      * This is the half of the workbook's forecast it never had: 675 hours of
      * planned PM across 44 machines is a parts requirement nobody had written
-     * down (§4.3).  It generalises the pattern `Lubricant_model` already proves
+     * down.  It generalises the pattern `Lubricant_model` already proves
      * for lubricants.
      *
      * @param  string $week_start Monday of the first week
@@ -1698,7 +1701,7 @@ class Forecast_model extends CI_Model {
 
     /**
      * Replace the workbook's flat 1 h/day on every machine with a per-machine
-     * figure derived from its own failure history (§8 R4).
+     * figure derived from its own failure history (rule R4).
      *
      *     allowance/day = (downtime over the lookback) / (days in the lookback)
      *
@@ -1861,7 +1864,8 @@ class Forecast_model extends CI_Model {
      * engine computes for the same week.
      *
      * Both sides are `kpi_availability()` on required time, so the variance is
-     * a real difference and not a formula artefact (§7.1).
+     * a real difference and not a formula artefact like the workbook's
+     * typed constant.
      *
      * @param  array $actual_by_group group code => kpi_rollup() output
      * @return array

@@ -5,10 +5,9 @@ require_once dirname(__FILE__) . '/Pdf_writer.php';
 
 /**
  * Inspection_pdf — builds the print-ready inspection PDF entirely in PHP
- * (no exec(), no python3/reportlab dependency). Mirrors the layout of
- * scripts/generate_inspection_pdf.py so the two stay visually consistent;
- * this is the one actually used by Inspections::pdf() now, since many
- * hosts disable exec() for shared-hosting security.
+ * (no exec(), no python3/reportlab dependency), since many hosts disable
+ * exec() for shared-hosting security. This is the generator actually used
+ * by Inspections::pdf().
  *
  * Usage:
  *   $builder = new Inspection_pdf($payload); // same $payload shape the
@@ -28,7 +27,7 @@ class Inspection_pdf {
     private $content_w;
     private $y;
 
-    // palette (kept in sync with generate_inspection_pdf.py)
+    // palette
     const CLR_GREEN_HEADER = array(0.722, 0.831, 0.659);
     const CLR_GREEN_BAND   = array(0.831, 0.890, 0.800);
     const CLR_GREY_HDR     = array(0.922, 0.922, 0.922);

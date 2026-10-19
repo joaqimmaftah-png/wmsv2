@@ -100,7 +100,7 @@ class Dashboard extends MY_Controller {
 
         // --- Pending Spare Parts Tracking & Availability Alerts ---
         // Answers: "which pending jobs can now proceed because their parts arrived?"
-        // (no-op until migration 006 has been applied)
+        // (no-op until the spare-parts tracking tables exist)
         $this->load->model('Spareparts_model');
         $spare_lines = $this->Spareparts_model->get_pending_lines();
         $spare_rank  = array('Pending' => 0, 'Unlinked' => 1, 'Partial' => 2, 'Available' => 3, 'Allocated' => 4);

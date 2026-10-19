@@ -69,8 +69,7 @@ $db['default'] = array(
 /*
 | Host-local override. Never committed; it may set or replace any key of
 | $db['default'] (and $active_group if needed) and wins over the
-| environment variables above. It is also read by the CLI scripts in
-| scripts/ (they bootstrap this file directly).
+| environment variables above.
 */
 $local_config = __DIR__ . '/database.local.php';
 if (is_file($local_config)) {

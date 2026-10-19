@@ -45,7 +45,7 @@ $route['lubricants/(:any)'] = 'lubricants/$1';
 $route['backlog'] = 'backlog/index';
 $route['backlog/(:any)'] = 'backlog/$1';
 
-// Planned availability forecast (FORECAST_REVIEW.md F5-F7, F10, F11)
+// Planned availability forecast (tasks F5-F7, F10, F11)
 $route['forecast']              = 'forecast/index';
 $route['forecast/(:any)']       = 'forecast/$1';
 // (:any) is [^/]+ (system/core/Router.php), so it cannot carry the export's

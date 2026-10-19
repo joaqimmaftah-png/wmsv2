@@ -50,7 +50,7 @@
       <div class="card-body">
         <table style="width:100%;font-size:13px;">
           <?php
-          // W0.3 — weekly-report position (columns may be absent on an unmigrated DB)
+          // W0.3 — weekly-report position (columns may be absent on older databases)
           $w36_group = isset($equipment->report_group) ? $equipment->report_group : '';
           $w36_sort  = isset($equipment->report_sort)  ? (int)$equipment->report_sort  : 0;
           $w36_in    = equip_is_reportable($equipment);

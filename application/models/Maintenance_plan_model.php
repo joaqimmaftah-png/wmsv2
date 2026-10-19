@@ -2,7 +2,7 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 /**
- * MAINTENANCE PLAN JOBS — MAINTENANCE_PLAN_REVIEW.md MP-2 (R-MP1), migration 009.
+ * MAINTENANCE PLAN JOBS — MP-2 (R-MP1).
  *
  * The Excel maintenance plan holds JOBS — "Inspection 2 h", "Service 500 Hrs
  * 3 h", "Waiting for parts 24 h" — and several of them on one machine on one
@@ -14,7 +14,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *
  *     ledger hours (machine, day, category) = Σ jobs.hours_per_day,  source = FromPlan
  *
- * Rules, each with a test in `tests/unit/77_maintenance_plan_jobs.php`:
+ * Rules:
  *
  *   • a Manual ledger row always wins (D31) — the sync leaves it alone and
  *     reports it;
@@ -217,7 +217,7 @@ class Maintenance_plan_model extends CI_Model {
      * @return array{id?:int,errors?:string[],synced?:array}
      */
     public function save_job(array $in, $user_id = null, $id = null) {
-        if (!$this->tables_ready()) return array('errors' => array('Migration 009 has not been applied yet.'));
+        if (!$this->tables_ready()) return array('errors' => array('The maintenance-plan tables are not set up on this database yet.'));
 
         list($row, $errors) = $this->validate($in);
         if ($errors) return array('errors' => $errors);
@@ -265,7 +265,7 @@ class Maintenance_plan_model extends CI_Model {
 
     /** Remove a job and take its hours out of the ledger. */
     public function delete_job($id, $user_id = null) {
-        if (!$this->tables_ready()) return array('errors' => array('Migration 009 has not been applied yet.'));
+        if (!$this->tables_ready()) return array('errors' => array('The maintenance-plan tables are not set up on this database yet.'));
         $old = $this->get($id);
         if (!$old) return array('errors' => array('That job no longer exists.'));
         $frozen = $this->frozen_weeks($old->start_date, $old->end_date);
@@ -381,7 +381,7 @@ class Maintenance_plan_model extends CI_Model {
     const SCHEDULE_NAME     = 'Weekly inspection';
     const SOURCE_INSPECTION = 'FromInspection';
 
-    /** Whether the weekday column exists — migration 009 has been applied. */
+    /** Whether the plan tables and the weekday column all exist. */
     protected function rounds_ready() {
         return $this->tables_ready() && $this->db->table_exists('pm_schedules')
             && $this->db->field_exists('preferred_weekday', 'pm_schedules');
@@ -426,7 +426,7 @@ class Maintenance_plan_model extends CI_Model {
     public function create_inspection_rounds($user_id = null) {
         $out = array('created' => 0, 'existing' => 0, 'by_day' => array_fill(1, 7, 0));
         if (!$this->rounds_ready()) {
-            $out['error'] = 'Migration 009 has not been applied yet.';
+            $out['error'] = 'The maintenance-plan tables are not set up on this database yet.';
             return $out;
         }
         $fc = $this->fc();
@@ -483,7 +483,7 @@ class Maintenance_plan_model extends CI_Model {
         $out = array('placed' => 0, 'already' => 0, 'standby' => array(), 'out_week' => array(),
                      'out_days' => array(), 'orphans' => array(), 'frozen' => false);
         if (!$this->rounds_ready() || !$fc->tables_ready()) {
-            $out['error'] = 'Migration 009 has not been applied yet.';
+            $out['error'] = 'The maintenance-plan tables are not set up on this database yet.';
             return $out;
         }
         if ($fc->baseline_snapshot($ws)) { $out['frozen'] = true; return $out; }
