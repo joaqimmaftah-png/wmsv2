@@ -111,17 +111,17 @@ the noted gaps (§17 details).
 |---|---|---|---|---|
 | 1 | `Auth` | `Auth_throttle_model` | Sign-in/out, legacy-hash upgrade, throttling | Implemented |
 | 2 | `Dashboard` | `Dashboard_model`, `Spareparts_model` (+ order/lube/materials for CEO) | Operational dashboard; CEO Executive Summary variant | Implemented |
-| 3 | `Workorders` | `Workorder_model`, `Equipment_model`, `Team_model`, `Lubricant_model`, `Materials_model`, `Spareparts_model` | WO CRUD, status lifecycle, labour sessions, job cards, incidents & evidence, spare/oil lines | Implemented (attachment download fixed — K-04) |
+| 3 | `Workorders` | `Workorder_model`, `Equipment_model`, `Team_model`, `Lubricant_model`, `Materials_model`, `Spareparts_model` | WO CRUD, status lifecycle, labour sessions, job cards, incidents & evidence, spare/oil lines | Implemented |
 | 4 | `Equipment` | `Equipment_model`, `Workorder_model` | Fleet register, machine detail + KPIs, meter updates | Implemented |
-| 5 | `Pm` | `Pm_model`, `Equipment_model` | PM schedules, completion, 12-month calendar | Implemented (Km-completion meter bug — K-05) |
+| 5 | `Pm` | `Pm_model`, `Equipment_model` | PM schedules, completion, 12-month calendar | Implemented |
 | 6 | `Inspections` | `Inspection_model`, `Equipment_model` | Template checklists EN/FR, signed records, PDF, defect automation | Implemented |
-| 7 | `Backlog` | `Backlog_model`, `Equipment_model`, `Maintenance_plan_model` | Defect register, planning push to maintenance plan, Excel export | Partial (list Close button hidden — K-06) |
+| 7 | `Backlog` | `Backlog_model`, `Equipment_model`, `Maintenance_plan_model` | Defect register, planning push to maintenance plan, Excel export | Implemented |
 | 8 | `Materials` | `Materials_model`, `Spareparts_model` | Inventory dashboard/list, receive/issue, Excel import/export/template | Implemented |
 | 9 | `Spareparts` | `Spareparts_model`, `Materials_model` | Pending-spares board, allocate/release/issue, availability alerts | Implemented |
 | 10 | `Suppliers` | `Supplier_model`, `Materials_model`, `Order_model` | Suppliers, contacts, part catalogue, "who supplies this part?" | Implemented |
-| 11 | `Orders` | `Order_model`, `Supplier_model`, `Materials_model`, `Spareparts_model` | Purchase orders, status pipeline, receiving + GRN, documents, lead-time estimate | Implemented (document download fixed — K-04) |
+| 11 | `Orders` | `Order_model`, `Supplier_model`, `Materials_model`, `Spareparts_model` | Purchase orders, status pipeline, receiving + GRN, documents, lead-time estimate | Implemented |
 | 12 | `Lubricants` | `Lubricant_model`, `Equipment_model` | Lube types/specs, consumption + variance, budget, forecast & compliance widgets | Implemented |
-| 13 | `Team` | `Team_model` | Staff (= `users`) list/detail, attendance, leave, certifications, shift roster, monthly report | Partial (shift roster is display-only; cert status not refreshed) |
+| 13 | `Team` | `Team_model` | Staff (= `users`) list/detail, attendance, leave, certifications, shift roster, monthly report | Implemented |
 | 14 | `Users` | `Team_model` (loaded, most work via `$this->db`) | Account administration, own profile & password | Implemented |
 | 15 | `Settings` | `Settings_model`, `Auth_throttle_model` | Business settings; sign-in security console | Implemented |
 | 16 | `Reports` | 14 models (dashboard/WO/team/lube/equipment/order/supplier/asset/materials/store/settings/KPI target/KPI engine/W36) | 20+ reports and exports incl. W36 and the asset-register import | Implemented |
@@ -811,9 +811,11 @@ A machine whose meter basis for judging PM currency is stale is reported as
   start/end datetimes when both are present. A Corrective WO immediately sets
   its equipment's status to `Breakdown`. Spare-part lines, oil lines,
   incident details + evidence, and the operator's drawn signature (base64 PNG
-  → `uploads/signatures/`) are saved with the WO. There is **no form-validation
-  ruleset** on create/edit — posted values are trusted after CI's XSS filter
-  (K-09).
+  → `uploads/signatures/`) are saved with the WO. Create and edit validate
+  server-side before anything is written: machine + non-empty title + a valid
+  `type`/`status` on create, and title + `type`/`priority`/`status`/
+  `machine_status` on edit. A rejected insert/update aborts — no child rows are
+  written and the page does not claim success (K-09).
 - Spare-part lines are **upserted** (matched by item code, else part name) so
   row IDs — and therefore stock reservations/alerts referencing them — survive
   edits; lines removed from the form are deleted (their reservations become
@@ -1114,11 +1116,15 @@ HTML, Forecast's plan-vs-actual actuals):
 
 ### 7.10 Team, users, settings
 
-- Team screens operate on the same `users` rows. Attendance save replaces the
-  whole day atomically: statuses limited to Present/Absent/Leave/Rest, times
-  validated `HH:MM`, unknown user IDs or any invalid row roll the whole day
-  back. Monthly report counts present/absent/leave/rest per worker and an
-  attendance %. `hours_worked` is stored but never computed by the UI.
+- Team screens operate on the same `users` rows. Attendance save writes the
+  whole day atomically: statuses limited to Present/Absent/Leave/Rest/Holiday,
+  times validated `HH:MM`, unknown user IDs or any invalid row roll the whole
+  day back. An existing day for the same `(user_id, date)` is updated in place
+  (never REPLACE), so its `hours_worked` and notes survive. Monthly report
+  counts present/absent/leave/rest/holiday per worker; the attendance
+  percentage divides by the days actually judged (present + absent + leave),
+  so weekends and public holidays no longer cap it below 100%. `hours_worked`
+  is stored but never computed by the UI.
 - Leave: days = inclusive calendar days (min 1); submitting a request that
   overlaps a pending/approved one is refused. Approval runs one transaction:
   the request row plus an `attendance` row (`status = Leave`, notes
@@ -1128,12 +1134,15 @@ HTML, Forecast's plan-vs-actual actuals):
   (Annual 21 / Sick 10 / Emergency 3 by default); an untracked type shows
   "—". A request is never blocked by the balance — the requester is warned
   and the supervisor decides.
-- Certifications: `Team_model::refresh_cert_status()` recomputes the stored
-  status from `expiry_date` (Expired / Expiring Soon within
-  `cert_alert_days` = 30 by default / Valid) — on the profile and on the
-  tracker, so "Valid" can never outlive the certificate. Documents
-  (pdf/jpg/png ≤ 8 MB) are stored under `uploads/documents/` and linked from
-  both screens; deleting a certificate removes its file.
+- Certifications: adding and deleting a certificate is supervisor-only (the
+  worker page's Add dialog is hidden from other roles and the endpoint refuses
+  them); a certificate's document is deleted only after the row delete
+  succeeds. `Team_model::refresh_cert_status()` recomputes the stored status
+  from `expiry_date` (Expired / Expiring Soon within `cert_alert_days` = 30 by
+  default / Valid) — on the profile and on the tracker, so "Valid" can never
+  outlive the certificate. Documents (pdf/jpg/png ≤ 8 MB) are stored under
+  `uploads/documents/` and linked from both screens; deleting a certificate
+  removes its file.
 - Shift roster: week keyed by its ISO Monday; shift types are `HH:MM`, start
   ≠ end; deleting a shift still assigned to anyone is refused; assignments
   are one row per worker per week (delete-then-insert, the table has no
@@ -1147,9 +1156,11 @@ HTML, Forecast's plan-vs-actual actuals):
   self-delete are refused; delete = set `Inactive` (sign-in then refuses the
   account). Own password change requires the current password (bcrypt verify
   only — a legacy-hash account must sign in once, which upgrades it, before
-  it can change its password here). `Team::create/edit` is a second,
-  less-validated path onto the same table (no uniqueness/length validation —
-  K-09).
+  it can change its password here). `Team::create/edit` is a second path onto
+  the same table and now applies the same checks (required names, valid and
+  unique e-mail, unique employee ID on create, password ≥ 8, a real role); both
+  actions are supervisor-only and a failed write keeps the form and its values
+  on screen (K-09).
 - Settings screen writes through `Settings_model::save_many()`, which only
   accepts keys in `Settings_model::DEFAULTS` or already present in the table,
   and coerces each known key to its documented range (§12).
@@ -1551,9 +1562,13 @@ called by the work-order detail page.
 
 **Also fixed in this revision (register §18):** the backlog
 supervisor close button that never rendered (K-06); three dead routes
-(K-07); the WO-create path that flashed success over a failed insert (the WO
-half of K-09); the last null-dereference write paths (K-10, now resolved);
-the dashboard's CSV assignee join (K-12); and colliding temp-file names in
+(K-07); the write paths that flashed success over a rejected INSERT/UPDATE
+(K-09, now resolved: WO create + edit, team create/edit — whose form was
+create-only, so "editing" a worker created a duplicate account — plus
+certifications and shift types); the last null-dereference write paths (K-10);
+the worker profile page's dead "Add Certification" modal and hidden edit
+controls (K-22); the dashboard's CSV assignee join (K-12); and colliding
+temp-file names in
 all eleven workbook exports (K-19). The dashboard's **Failures** and
 **Downtime** cards now come from the KPI engine — the same 30-day window,
 the same breakdown-event grouping and the same open-hour clipping as W36 —
@@ -1595,7 +1610,7 @@ are to the reviewed commit.
 | K-06 | **Resolved** | The backlog list's supervisor **"Close (verify)" button never rendered**: `Backlog::index()` set `$data['is_supervisor']` **after** `$this->render(...)`. | Fixed in this revision: the flag is part of the render data. A sweep of every controller found no other `render()`-before-data site. |
 | K-07 | **Resolved** | Dead routes: `maintenance/*` (no controller) and `dashboard/kpi_data` (no method) → 404. | Fixed in this revision: both removed from `routes.php`; no view or controller linked to them. |
 | K-08 | **Resolved** | Onboarding references were broken: the built-in setup pages and code comments pointed to at least a dozen files that didn't exist in the repo, including the import file named in the "Database Setup Required" page. All such references have been rewritten (§17) — messages now name the shipped dump and comments describe the probed table/column, so a fresh clone can be installed by following the in-app text and `README.md`. | `MY_Controller::_show_db_config_error()`, `Auth::__construct()`, various comments. |
-| K-09 | Medium | Weak server-side validation on several write paths. `Team::create/edit` skip the uniqueness/min-length checks that `Users` enforces and flash success unconditionally. With non-strict SQL modes, invalid enum values can be silently coerced — *to verify at runtime* against the production `sql_mode` (connection sets `stricton = FALSE`). | **WO create fixed** in this revision: machine, type, status and title are validated and a failed insert aborts before any child row is written. `Team::create/edit` and WO edit still open. |
+| K-09 | **Resolved** | Weak server-side validation on several write paths. `Team::create/edit` skipped the uniqueness/min-length checks that `Users` enforces, and the team form was create-only — "editing" a worker inserted a duplicate account. With non-strict SQL modes, invalid enum values can be silently coerced (connection sets `stricton = FALSE`). | Fixed in this revision: WO create validates machine/type/status/title and aborts a failed insert before any child row is written; WO edit validates title/type/priority/status/machine status and aborts on a failed UPDATE; `Team::create/edit` now validate required names, `valid_email`, unique `email`/`employee_id`, an 8-character password and a real role, and guard the insert/update result. `views/team/form.php` is a single create/edit form that posts each field back on a validation error. |
 | K-10 | **Resolved** | Null dereferences on crafted input: `Lubricants::record()` used `$eq->equipment_type_id` without checking the equipment exists; `Orders::create()` did the same with the supplier. | Fixed in this revision: both guard the lookup and flash a message; the optional lubricant work-order link is also validated against the machine. |
 | K-11 | Low | Currency handling is inconsistent: seeded `settings.currency='USD'` is never read; suppliers/orders default to `TZS`; material prices are `unit_price_ugx`/`unit_price_usd`; manual goods receipts hard-code `UGX`. Order spend totals (CEO dashboard, store analytics) sum `total_cost` as recorded per order with no currency conversion — meaningful only if all orders share a currency. | §7.5, §7.7. |
 | K-12 | **Resolved** | Dashboard "recent work orders" resolved the assignee by joining `users.id = work_orders.assigned_to`, but `assigned_to` is a CSV — at best the first technician matched (MySQL coercion). | Fixed in this revision: the card reads `Workorder_model::get_recent()`, which resolves every technician through the CSV parser; the CSV column is never joined again. |
@@ -1608,6 +1623,7 @@ are to the reviewed commit.
 | K-19 | **Resolved** | Workbook exports wrote to `sys_get_temp_dir()` under deterministic (label/timestamp) names — simultaneous exports of the same week shared one path, so a download could be truncated or contain another user's file. | Fixed in this revision: all 11 export sites use `wms_temp_path()` (`helpers/tmp_helper.php`), which prefixes a random token while keeping the offered filename. `uploads/tmp/` exports still use per-second names. |
 | K-20 | Info | Duplicate unique indexes on `material_transactions.import_key` (`uq_mt_import_key`, `uq_txn_import_key`) — harmless, double write cost on that column. | Dump. |
 | K-21 | Info | `README.md` in the original upload was a 20-byte UTF-16 placeholder ("# wmsv2"); replaced by the current `README.md`. | Git history. |
+| K-22 | **Resolved** | The worker profile page rendered a **Bootstrap modal** for adding certifications, but the layout loads no Bootstrap CSS or JS (only Chart.js): `data-bs-toggle` did nothing and the "modal" body was laid out inline at the bottom of the page, so the "Add" button never opened anything. The page also had no link to the (new) edit form. | Fixed in this revision: a native `<dialog>` (no framework), a supervisor-only **Edit Profile** button, and `$data['is_supervisor']` from the controller; the role badge uses the theme's `b-secondary` instead of the unstyled `.bg-light .text-dark`; the attendance strip and legend know the `Holiday` status. |
 
 Not investigated to a verdict (needs a running instance): actual rendered
 output of every view (possible undefined-variable notices masked in

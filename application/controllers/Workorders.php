@@ -73,10 +73,10 @@ class Workorders extends MY_Controller {
                 'created_by'          => $this->user_id,
             );
 
-            if ($insert['start_datetime'] && $insert['end_datetime']) {
-                $insert['downtime_hours'] = round(
-                    (strtotime($insert['end_datetime']) - strtotime($insert['start_datetime'])) / 3600, 2
-                );
+            $start_ts = $insert['start_datetime'] ? strtotime($insert['start_datetime']) : FALSE;
+            $end_ts   = $insert['end_datetime']   ? strtotime($insert['end_datetime'])   : FALSE;
+            if ($start_ts !== FALSE && $end_ts !== FALSE && $end_ts >= $start_ts) {
+                $insert['downtime_hours'] = round(($end_ts - $start_ts) / 3600, 2);
             }
 
             /*
@@ -237,10 +237,24 @@ class Workorders extends MY_Controller {
                 $update['verification_notes'] = $this->input->post('verification_notes', TRUE) ?: NULL;
             }
 
-            if ($update['start_datetime'] && $update['end_datetime']) {
-                $update['downtime_hours'] = round(
-                    (strtotime($update['end_datetime']) - strtotime($update['start_datetime'])) / 3600, 2
-                );
+            /*
+             * Same gap as create(): the edit form posted straight into the
+             * UPDATE. A blank title, or an enum value the column does not
+             * accept (type/priority/status/machine_status), made MySQL reject
+             * the row — nothing was saved, yet the page said "Work Order
+             * updated." and the child rows below were still rewritten (K-09,
+             * edit half). Validate first, then write.
+             */
+            $core_ok = trim((string)$update['title']) !== ''
+                && in_array($update['type'], array('Corrective Maintenance', 'Preventive Maintenance', 'Incident'), TRUE)
+                && in_array($update['priority'], array('Critical', 'High', 'Medium', 'Low'), TRUE)
+                && in_array($update['status'], array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools', 'Completed', 'Closed'), TRUE)
+                && ($update['machine_status'] === NULL || in_array($update['machine_status'], array('Operational', 'Breakdown'), TRUE));
+            if (!$core_ok) {
+                $this->session->set_flashdata('error',
+                    'A work order needs a title, a valid type, priority and status. Nothing was saved.');
+                redirect("workorders/edit/{$id}");
+                return;
             }
 
             if (in_array($update['status'], array('Completed','Closed'))) {
@@ -254,7 +268,26 @@ class Workorders extends MY_Controller {
                 }
             }
 
-            $this->Workorder_model->update($id, $update);
+            /*
+             * Downtime is derived, so recompute it last — after the Completed
+             * stamp above may have filled end_datetime. strtotime() returns
+             * FALSE for a malformed timestamp, which used to be arithmetic'd
+             * into a large negative figure; with no usable pair the value is
+             * cleared instead of keeping a stale duration.
+             */
+            $update['downtime_hours'] = NULL;
+            $start_ts = $update['start_datetime'] ? strtotime($update['start_datetime']) : FALSE;
+            $end_ts   = $update['end_datetime']   ? strtotime($update['end_datetime'])   : FALSE;
+            if ($start_ts !== FALSE && $end_ts !== FALSE && $end_ts >= $start_ts) {
+                $update['downtime_hours'] = round(($end_ts - $start_ts) / 3600, 2);
+            }
+
+            if ($this->Workorder_model->update($id, $update) === FALSE) {
+                $this->session->set_flashdata('error',
+                    'The work order could not be saved. Nothing was written — check the values and try again.');
+                redirect("workorders/edit/{$id}");
+                return;
+            }
             $this->Workorder_model->save_spare_parts($id, $this->input->post('spares'));
             $this->Workorder_model->save_oil_records($id,  $this->input->post('lubes'));
             $lube = $this->Workorder_model->sync_lube_consumption($id, $this->user_id);

@@ -30,6 +30,7 @@
             <th class="text-danger">Absent</th>
             <th class="text-warning">Leave</th>
             <th>Rest</th>
+            <th>Holiday</th>
             <th>Working Days</th>
             <th>Attendance %</th>
           </tr>
@@ -44,6 +45,7 @@
             <td class="text-danger fw-700 text-center"><?= $r->absent ?></td>
             <td class="text-warning fw-700 text-center"><?= $r->leave ?></td>
             <td class="text-center"><?= $r->rest ?></td>
+            <td class="text-center"><?= $r->holiday ?></td>
             <td class="text-center"><?= $r->total ?></td>
             <td>
               <div class="d-flex align-items-center gap-2">

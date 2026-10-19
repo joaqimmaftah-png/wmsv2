@@ -61,11 +61,18 @@ class Team_model extends CI_Model {
             ->order_by('a.date', 'ASC')->get()->result();
     }
 
+    /**
+     * Attendance counts per worker for one calendar month.
+     *
+     * `Working Days` / the percentage used to divide by the number of days in
+     * the month, so a month with weekends and public holidays could never reach
+     * 100% and the figure disagreed with its own label. The denominator is now
+     * the days actually judged — present + absent + leave — while rest days and
+     * holidays are reported separately and excluded.
+     */
     public function get_monthly_report($month) {
-        list($year, $mon) = explode('-', $month);
         $from = "{$month}-01";
         $to   = date('Y-m-t', strtotime($from));
-        $days = date('t', strtotime($from));
 
         $workers = $this->get_all_active();
         $result  = [];
@@ -76,9 +83,11 @@ class Team_model extends CI_Model {
                 ->group_by('status')->get('attendance')->result_array();
 
             $stats = ['Present' => 0, 'Absent' => 0, 'Leave' => 0, 'Rest' => 0, 'Holiday' => 0];
-            foreach ($counts as $c) { $stats[$c['status']] = $c['cnt']; }
+            foreach ($counts as $c) {
+                if (isset($stats[$c['status']])) $stats[$c['status']] = (int)$c['cnt'];
+            }
 
-            $total = $days;
+            $total = $stats['Present'] + $stats['Absent'] + $stats['Leave'];
             $pct   = $total > 0 ? round($stats['Present'] / $total * 100, 0) : 0;
             $result[] = (object)[
                 'employee_id' => $w->employee_id,
@@ -88,6 +97,7 @@ class Team_model extends CI_Model {
                 'absent'      => $stats['Absent'],
                 'leave'       => $stats['Leave'],
                 'rest'        => $stats['Rest'],
+                'holiday'     => $stats['Holiday'],
                 'total'       => $total,
                 'pct'         => $pct,
             ];
@@ -370,10 +380,10 @@ class Team_model extends CI_Model {
         return $this->db->where('id', (int)$id)->get('shifts')->row();
     }
 
+    /** Create or update a shift type; the new/updated id on success, 0 on failure. */
     public function save_shift($data, $id = NULL) {
         if ($id) {
-            $this->db->where('id', (int)$id)->update('shifts', $data);
-            return (int)$id;
+            return $this->db->where('id', (int)$id)->update('shifts', $data) ? (int)$id : 0;
         }
         $this->db->insert('shifts', $data);
         return (int)$this->db->insert_id();
@@ -385,7 +395,9 @@ class Team_model extends CI_Model {
             return FALSE;
         }
         $this->db->where('id', (int)$id)->delete('shifts');
-        return TRUE;
+        // A failed DELETE used to return TRUE as long as nobody was assigned,
+        // so the screen said "Shift deleted." for a row that still existed.
+        return $this->db->affected_rows() > 0;
     }
 
     public function count_shift_assignments($shift_id) {

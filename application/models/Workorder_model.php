@@ -145,8 +145,18 @@ class Workorder_model extends CI_Model {
         return $this->db->insert_id();
     }
 
+    /**
+     * Apply a partial update and report whether it worked.
+     *
+     * This used to swallow the result, so a rejected UPDATE (an enum value the
+     * column does not accept, a value too long, a dead connection) still let the
+     * caller flash "Work Order updated." and redirect to a page showing the old
+     * values.
+     *
+     * @return bool TRUE on success, FALSE when the statement failed
+     */
     public function update($id, $data) {
-        $this->db->update('work_orders', $this->_with_breakdown_flag($data), array('id' => $id));
+        return $this->db->update('work_orders', $this->_with_breakdown_flag($data), array('id' => $id));
     }
 
     // ── Spare Parts ──────────────────────────────────────────

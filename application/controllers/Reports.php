@@ -52,8 +52,9 @@ class Reports extends MY_Controller {
     }
 
     public function monthly() {
-        $month = $this->input->get('month') ?: date('Y-m');
-        list($year, $mon) = explode('-', $month);
+        // Validate the month before it reaches strtotime(): a malformed value
+        // returned false there and silently produced a January-1970 report.
+        $month = $this->_valid_month($this->input->get('month'));
         $date_from = "{$month}-01";
         $date_to   = date('Y-m-t', strtotime($date_from));
         $data['month']        = $month;
@@ -1986,8 +1987,16 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
        EXISTING CSV EXPORTS
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+    /** 'YYYY-MM' from a query string, or the current month when invalid. */
+    private function _valid_month($value) {
+        if (is_string($value) && preg_match('/^([0-9]{4})-(0[1-9]|1[0-2])$/D', $value)) {
+            return $value;
+        }
+        return date('Y-m');
+    }
+
     public function export_excel($type) {
-        $month = $this->input->get('month') ?: date('Y-m');
+        $month = $this->_valid_month($this->input->get('month'));
         switch ($type) {
             case 'workorders':
                 $rows = $this->Workorder_model->get_by_date_range($month.'-01', date('Y-m-t', strtotime($month.'-01')));
@@ -2005,8 +2014,8 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                 header('Content-Type: text/csv');
                 header("Content-Disposition: attachment; filename={$filename}");
                 $out = fopen('php://output', 'w');
-                fputcsv($out, ['Employee ID','Name','Position','Present','Absent','Leave','Rest','Total Days','Attendance %']);
-                foreach ($rows as $r) fputcsv($out, [$r->employee_id,$r->full_name,$r->position,$r->present,$r->absent,$r->leave,$r->rest,$r->total,$r->pct]);
+                fputcsv($out, ['Employee ID','Name','Position','Present','Absent','Leave','Rest','Holiday','Working Days','Attendance %']);
+                foreach ($rows as $r) fputcsv($out, [$r->employee_id,$r->full_name,$r->position,$r->present,$r->absent,$r->leave,$r->rest,$r->holiday,$r->total,$r->pct]);
                 fclose($out);
                 break;
             case 'lubricants':

@@ -176,7 +176,7 @@ foreach ($work_orders as $wo_item) {
   <div style="overflow-x:auto;">
     <table class="tbl" style="margin-top:0;">
       <thead>
-        <tr><th>Employee</th><th>Position</th><th>Present</th><th>Absent</th><th>Leave</th><th>Rest</th><th>Working Days</th><th>Rate</th></tr>
+        <tr><th>Employee</th><th>Position</th><th>Present</th><th>Absent</th><th>Leave</th><th>Rest</th><th>Holiday</th><th>Working Days</th><th>Rate</th></tr>
       </thead>
       <tbody>
         <?php foreach ($attendance as $a):
@@ -190,6 +190,7 @@ foreach ($work_orders as $wo_item) {
           <td style="font-family:inherit;font-size:12px;color:var(--red);font-weight:500;"><?= $a->absent; ?></td>
           <td style="font-family:inherit;font-size:12px;color:var(--amber);font-weight:500;"><?= $a->leave; ?></td>
           <td style="font-family:inherit;font-size:12px;color:var(--t3);"><?= $a->rest; ?></td>
+          <td style="font-family:inherit;font-size:12px;color:var(--t3);"><?= isset($a->holiday) ? $a->holiday : 0; ?></td>
           <td style="font-family:inherit;font-size:12px;"><?= $a->total; ?></td>
           <td>
             <div style="display:flex;align-items:center;gap:8px;">
@@ -202,7 +203,7 @@ foreach ($work_orders as $wo_item) {
         </tr>
         <?php endforeach; ?>
         <?php if (empty($attendance)): ?>
-        <tr><td colspan="8" style="text-align:center;padding:48px;color:var(--t3);">No attendance records</td></tr>
+        <tr><td colspan="9" style="text-align:center;padding:48px;color:var(--t3);">No attendance records</td></tr>
         <?php endif; ?>
       </tbody>
     </table>

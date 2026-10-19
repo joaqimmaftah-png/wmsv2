@@ -19,10 +19,12 @@
       <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       Leave Request
     </a>
+    <?php if (!empty($is_supervisor)): ?>
     <a href="<?= base_url('team/create') ?>" class="btn btn-primary btn-sm btn-icon">
       <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
       Add Worker
     </a>
+    <?php endif; ?>
   </div>
 </div>
 
@@ -106,6 +108,6 @@
   </div>
   </a>
   <?php endforeach; else: ?>
-  <div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--t3);">No workers found. <a href="<?= base_url('team/create') ?>" style="color:var(--blue);">Add one →</a></div>
+  <div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--t3);">No workers found.<?php if (!empty($is_supervisor)): ?> <a href="<?= base_url('team/create') ?>" style="color:var(--blue);">Add one →</a><?php endif; ?></div>
   <?php endif; ?>
 </div>
