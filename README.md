@@ -169,6 +169,18 @@ Notes:
   stock through the UI or the Excel importers.
 - On cPanel: create the database and user under *MySQL Databases*, grant the
   user **ALL PRIVILEGES** on it, then import the file with phpMyAdmin.
+- **Upgrading an existing installation** instead of importing into an empty
+  database? Two DDL changes since this revision are optional — the code falls
+  back gracefully without them:
+
+  ```sql
+  ALTER TABLE inspection_items
+    ADD COLUMN priority ENUM('P1','P2','P3') NULL DEFAULT NULL
+    COMMENT 'Explicit defect severity; NULL = derive from the category'
+    AFTER na_columns;
+  ALTER TABLE material_transactions DROP INDEX uq_txn_import_key;  -- duplicate of uq_mt_import_key
+  ```
+
 
 ### 4. Configure credentials (never commit these files)
 

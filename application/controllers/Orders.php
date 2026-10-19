@@ -57,7 +57,10 @@ class Orders extends MY_Controller {
                 'order_date'              => $order_date,
                 'expected_delivery_date'  => $expected,
                 'status'                  => 'Pending Approval',
-                'currency'                => $this->input->post('currency', TRUE) ?: $supplier->currency,
+                'currency'                => wms_currency_code(
+                    $this->input->post('currency', TRUE),
+                    !empty($supplier->currency) ? $supplier->currency : wms_site_currency()
+                ),
                 'total_cost'              => $this->input->post('total_cost', TRUE) ?: 0,
                 'linked_wo_id'            => $this->input->post('linked_wo_id', TRUE) ?: NULL,
                 'requested_by'            => $this->user_id,

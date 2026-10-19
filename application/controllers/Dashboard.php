@@ -129,8 +129,15 @@ class Dashboard extends MY_Controller {
 
         // ── Spend & Orders ──
         $spend = $this->Order_model->get_spend_by_supplier($year.'-01-01', $year.'-12-31');
-        $total_spend = 0;
-        foreach ($spend as $s) $total_spend += $s->total_spend;
+        // K-11: orders carry their own currency, so a single grand total would
+        // add TZS, UGX and USD together. Keep one total per currency.
+        $spend_by_currency = array();
+        foreach ($spend as $s) {
+            $cur = wms_currency_code($s->currency);
+            $spend_by_currency[$cur] = (isset($spend_by_currency[$cur]) ? $spend_by_currency[$cur] : 0)
+                + (float)$s->total_spend;
+        }
+        arsort($spend_by_currency);
         $order_kpi = $this->Order_model->get_kpi();
 
         // ── Incidents ──
@@ -209,7 +216,7 @@ class Dashboard extends MY_Controller {
                 'mtbf'            => $this->Dashboard_model->get_mtbf_30d(),
                 'manpower'        => $manpower,
                 'breakdowns_30d'  => $this->Dashboard_model->count_breakdowns_30d(),
-                'spend_ytd'       => $total_spend,
+                'spend_ytd'       => $spend_by_currency,
                 'order_kpi'       => $order_kpi,
                 'incidents_month' => $incident_count,
                 'critical_incidents_month' => $critical_incidents,

@@ -74,8 +74,15 @@ $order_kpi = $k['order_kpi'];
   <div class="kpi">
     <div class="kpi-glow" style="background:var(--green);"></div>
     <span class="kpi-tag">Spend YTD</span>
-    <div class="kpi-num" style="font-size:18px;"><?= number_format($k['spend_ytd'],0) ?></div>
-    <div class="cs" style="margin-top:4px;">Spare parts &amp; materials, <?= date('Y') ?></div>
+    <?php $spend_by_currency = is_array($k['spend_ytd']) ? $k['spend_ytd'] : array(); ?>
+    <?php if (empty($spend_by_currency)): ?>
+    <div class="kpi-num" style="font-size:18px;">0</div>
+    <?php else: $first_currency = true; foreach ($spend_by_currency as $cur => $amount): ?>
+    <div class="kpi-num" style="font-size:<?= $first_currency ? '18px' : '13px' ?>;<?= $first_currency ? '' : 'margin-top:2px;' ?>">
+      <?= wms_money($amount, $cur, 0) ?>
+    </div>
+    <?php $first_currency = false; endforeach; endif; ?>
+    <div class="cs" style="margin-top:4px;">Spare parts &amp; materials, <?= date('Y') ?><?= count($spend_by_currency) > 1 ? ' — per currency' : '' ?></div>
   </div>
 
 </div>

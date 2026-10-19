@@ -129,8 +129,14 @@ class Reports extends MY_Controller {
         $to   = $year.'-12-31';
 
         $spend = $this->Order_model->get_spend_by_supplier($from, $to);
-        $total_spend = 0;
-        foreach ($spend as $s) $total_spend += $s->total_spend;
+        // K-11: one total per order currency — never a cross-currency sum.
+        $spend_by_currency = array();
+        foreach ($spend as $s) {
+            $cur = wms_currency_code($s->currency);
+            $spend_by_currency[$cur] = (isset($spend_by_currency[$cur]) ? $spend_by_currency[$cur] : 0)
+                + (float)$s->total_spend;
+        }
+        arsort($spend_by_currency);
 
         $order_kpi = $this->Order_model->get_kpi();
 
@@ -143,7 +149,7 @@ class Reports extends MY_Controller {
 
         $data['year']               = $year;
         $data['spend']              = $spend;
-        $data['total_spend']        = $total_spend;
+        $data['spend_by_currency']  = $spend_by_currency;
         $data['lead_times']         = $this->Order_model->get_lead_time_by_route();
         $data['order_kpi']          = $order_kpi;
         $data['orders_this_year']   = $orders_this_year;

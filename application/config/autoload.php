@@ -7,7 +7,7 @@ $autoload['drivers'] = array();
 // `download` is loaded here because Workorders::download_attachment() and
 // Orders::download_document() call force_download() without loading it —
 // every attachment/document download used to be a 500 (K-04).
-$autoload['helper'] = array('url', 'form', 'date', 'file', 'string', 'download', 'wo', 'equip', 'kpi', 'csrf', 'tmp', 'user');
+$autoload['helper'] = array('url', 'form', 'date', 'file', 'string', 'download', 'wo', 'equip', 'kpi', 'csrf', 'tmp', 'user', 'currency');
 $autoload['config'] = array();
 $autoload['language'] = array();
 $autoload['model'] = array();

@@ -34,6 +34,10 @@ class Settings_model extends CI_Model {
 
     /** Defaults, mirrored from the seeded `settings` rows. Key => default. */
     const DEFAULTS = array(
+        // Site currency (K-11): the code every spend total and default picker
+        // uses. Mirrors the seeded row; the vocabulary lives in
+        // helpers/currency_helper.php so this is not a second list.
+        'currency'                    => 'USD',
         'weekly_open_hours'           => '168',
         'daily_open_hours'            => '24',
         'default_availability_target' => '0.88',
@@ -72,6 +76,7 @@ class Settings_model extends CI_Model {
     );
 
     const DESCRIPTIONS = array(
+        'currency'                    => 'Site currency: code used for spend totals and as the default in currency pickers',
         'login_ip_cap_enabled'        => 'F-19: 1 = limit failed sign-ins from one source across many accounts (credential stuffing); 0 = off',
         'weekly_open_hours'           => 'Open hours in a 7-day reporting week',
         'daily_open_hours'            => 'Open hours per day',
@@ -159,6 +164,16 @@ class Settings_model extends CI_Model {
 
     public function float_val($key, $default = null) {
         return (float)$this->get($key, $default);
+    }
+
+    /**
+     * The installation's currency code (K-11). Kept next to the other typed
+     * getters so callers do not reimplement the validation; the helper
+     * `wms_site_currency()` is the same value for views.
+     */
+    public function currency() {
+        $code = strtoupper(trim((string)$this->get('currency')));
+        return preg_match('/^[A-Z]{3}$/', $code) ? $code : 'USD';
     }
 
     /* ── the weekly-report values ────────────────────────────────────── */
@@ -316,6 +331,13 @@ class Settings_model extends CI_Model {
      */
     public function sanitize($key, $value) {
         switch ($key) {
+            case 'currency':
+                // Only a code from the shared vocabulary is written; an
+                // unsupported one keeps the stored value instead of replacing
+                // every total's currency with a typo.
+                $code = strtoupper(trim((string)$value));
+                return in_array($code, wms_currencies(), true) ? $code : $this->currency();
+
             case 'weekly_open_hours':
                 return (string)max(1, (int)$value);
 
@@ -440,8 +462,12 @@ class Settings_model extends CI_Model {
 
     /**
      * Upsert a batch of settings. Rows that do not exist yet are inserted with
-     * their documented description (the settings table has no unique index on
-     * `setting_key`, so existence is checked first).
+     * their documented description.
+     *
+     * The comment used to say the table had no unique index on `setting_key`;
+     * the schema does define one (K-14). The select-then-write is kept because
+     * it is correct with or without the constraint and it creates a missing row
+     * with its documented description — it never relied on the index.
      *
      * @param  array $values key => value (as posted)
      * @return int number of keys written

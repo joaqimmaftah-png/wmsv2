@@ -22,11 +22,17 @@
         <div class="form-grid cols-2">
           <div>
             <label class="form-label">Currency</label>
+            <?php $site_currency = isset($s['currency']) && $s['currency']->setting_value !== ''
+                    ? strtoupper($s['currency']->setting_value) : wms_site_currency(); ?>
             <select name="settings[currency]" class="form-select">
-              <?php foreach (['USD','EUR','GBP','AUD','ZAR','IDR','MYR','NGN','TZS'] as $c): ?>
-              <option value="<?= $c ?>" <?= (isset($s['currency']) ? $s['currency']->setting_value : '')==$c?'selected':'' ?>><?= $c ?></option>
+              <?php foreach (wms_currencies() as $c): ?>
+              <option value="<?= $c ?>" <?= $site_currency === $c ? 'selected' : '' ?>><?= $c ?></option>
               <?php endforeach; ?>
+              <?php if (!in_array($site_currency, wms_currencies(), true)): ?>
+              <option value="<?= htmlspecialchars($site_currency) ?>" selected><?= htmlspecialchars($site_currency) ?> (current)</option>
+              <?php endif; ?>
             </select>
+            <div class="cs" style="margin-top:4px;">Used for spend totals and as the default in every currency picker.</div>
           </div>
           <div>
             <label class="form-label">PM Alert (days before due)</label>

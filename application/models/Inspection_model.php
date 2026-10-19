@@ -110,6 +110,26 @@ class Inspection_model extends CI_Model {
         return $counts;
     }
 
+    /** @var bool|null cached field_exists() probe for K-16's priority column */
+    protected $_has_item_priority = null;
+
+    /**
+     * Is `inspection_items.priority` present? Fresh installs get it from
+     * database/schema.sql; a database created before K-16 does not, and the
+     * severity then falls back to the category text exactly as before.
+     */
+    protected function _items_have_priority() {
+        if ($this->_has_item_priority === null) {
+            $this->_has_item_priority = (bool)$this->db->field_exists('priority', 'inspection_items');
+        }
+        return $this->_has_item_priority;
+    }
+
+    /** Public form of the probe: lets the template editor warn that the column is missing. */
+    public function supports_item_priority() {
+        return $this->_items_have_priority();
+    }
+
     public function get_items($template_id) {
         return $this->db->where('template_id', $template_id)
                          ->order_by('sort_order', 'ASC')
@@ -223,6 +243,15 @@ class Inspection_model extends CI_Model {
                 'na_columns'    => $na !== '' ? $na : NULL,
             );
 
+            // K-16: the editor now posts an explicit severity. Only a known
+            // code is stored; an empty value means "derive it from the
+            // category", which is how every row behaved before the column.
+            if ($this->_items_have_priority()) {
+                $priority = isset($row['priority']) ? strtoupper(trim((string)$row['priority'])) : '';
+                $data['priority'] = in_array($priority, array('P1', 'P2', 'P3'), true) ? $priority : NULL;
+                if ($row_type === 'section') $data['priority'] = NULL;
+            }
+
             if ($id > 0 && isset($existing[$id])) {
                 $this->db->where('id', $id)->update('inspection_items', $data);
                 $seen[$id] = TRUE;
@@ -307,7 +336,9 @@ class Inspection_model extends CI_Model {
     }
 
     public function get_record_items($record_id) {
-        $this->db->select('inspection_record_items.*, inspection_items.item_no, inspection_items.row_type, inspection_items.category_en, inspection_items.category_fr, inspection_items.text_en, inspection_items.text_fr, inspection_items.na_columns, inspection_items.sort_order')
+        $columns = 'inspection_record_items.*, inspection_items.item_no, inspection_items.row_type, inspection_items.category_en, inspection_items.category_fr, inspection_items.text_en, inspection_items.text_fr, inspection_items.na_columns';
+        if ($this->_items_have_priority()) $columns .= ', inspection_items.priority';
+        $this->db->select($columns . ', inspection_items.sort_order')
                   ->join('inspection_items', 'inspection_items.id = inspection_record_items.item_id')
                   ->where('inspection_record_items.record_id', $record_id)
                   ->order_by('inspection_items.sort_order', 'ASC');
@@ -323,9 +354,11 @@ class Inspection_model extends CI_Model {
      * defect arrived as P3 regardless of what the checklist said. The rules
      * now:
      *
-     *   • severity follows the checklist category: No-Go → P1, Go & Fix → P2,
-     *     anything else → P3. A No-Go item stops the machine, so it can never
-     *     sit at the bottom of the list behind a routine P3.
+     *   • severity is the item's explicit priority (No-Go → P1, Go & Fix →
+     *     P2, Defect → P3), set in the template editor; a row saved before
+     *     that setting existed still derives it from its category wording.
+     *     A No-Go item stops the machine, so it can never sit at the bottom
+     *     of the list behind a routine P3.
      *   • an item that now conforms closes the defect it opened — the closure
      *     records the inspection that cleared it (verified_by / verified_at),
      *     so "who said this is fixed, and on what evidence" has an answer.
@@ -486,6 +519,25 @@ class Inspection_model extends CI_Model {
             }
         }
 
+        // K-16: an explicit severity set on the checklist row wins. It is a
+        // fixed code picked in the template editor, so renaming the category
+        // (or writing it in another language) no longer changes what a
+        // failure is escalated to.
+        $explicit = isset($item->priority) ? strtoupper(trim((string)$item->priority)) : '';
+        if ($explicit === 'P1') {
+            return array('failed' => $failed, 'priority' => 'P1', 'label' => 'No-Go', 'machine_status' => 'BREAKDOWN');
+        }
+        if ($explicit === 'P2') {
+            return array('failed' => $failed, 'priority' => 'P2', 'label' => 'Go & Fix', 'machine_status' => 'OPERATIONAL');
+        }
+        if ($explicit === 'P3') {
+            return array('failed' => $failed, 'priority' => 'P3', 'label' => 'Defect', 'machine_status' => NULL);
+        }
+
+        // No explicit severity (a template saved before K-16, or "Auto"):
+        // fall back to the category wording, exactly as before. The substring
+        // aliases below are what the seeded checklists use ("No-Go",
+        // "Go & Fix", "Arrêt", "Non conforme"…).
         $category = strtolower(trim((string)(isset($item->category_en) ? $item->category_en : $item->category_fr)));
         $no_go    = (strpos($category, 'no-go') !== false || strpos($category, 'arrêt') !== false
                      || strpos($category, 'interdit') !== false || strpos($category, 'non conforme') !== false);

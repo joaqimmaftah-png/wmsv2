@@ -112,6 +112,14 @@ $val = function ($key, $default = '') use ($t) {
         </div>
       </div>
 
+      <?php if (isset($this->Inspection_model) && !$this->Inspection_model->supports_item_priority()): ?>
+      <div style="background:var(--amber-fill,#fff6e5);border:1px solid var(--amber,#e0a800);border-radius:var(--r2);padding:10px 12px;margin-bottom:12px;font-size:11.5px;color:var(--t2);">
+        <strong>Severity is not stored yet.</strong> This database predates the <code>inspection_items.priority</code>
+        column, so the dropdown below falls back to the category rule. Run the <code>ALTER TABLE</code> in
+        <code>README.md</code> §3 to enable it.
+      </div>
+      <?php endif; ?>
+
       <div style="overflow-x:auto;">
         <table class="tbl" id="items-table">
           <thead>
@@ -120,6 +128,7 @@ $val = function ($key, $default = '') use ($t) {
               <th style="width:60px;">No.</th>
               <th style="width:110px;">Category EN</th>
               <th style="width:110px;">Category FR</th>
+              <th style="width:104px;">Severity</th>
               <th>Text — English</th>
               <th>Text — French</th>
               <th style="width:90px;">N/A cols</th>
@@ -150,6 +159,15 @@ $val = function ($key, $default = '') use ($t) {
               <td><input type="number" name="items[<?= $idx ?>][item_no]" class="form-control" style="font-size:11.5px;padding:4px 6px;" value="<?= $is_section ? '' : htmlspecialchars((string)(isset($it->item_no) ? $it->item_no : '')) ?>" <?= $is_section ? 'disabled' : '' ?>></td>
               <td><input type="text" name="items[<?= $idx ?>][category_en]" class="form-control" style="font-size:11.5px;padding:4px 6px;" value="<?= $is_section ? '' : htmlspecialchars((string)(isset($it->category_en) ? $it->category_en : '')) ?>" placeholder="No-Go" <?= $is_section ? 'disabled' : '' ?>></td>
               <td><input type="text" name="items[<?= $idx ?>][category_fr]" class="form-control" style="font-size:11.5px;padding:4px 6px;" value="<?= $is_section ? '' : htmlspecialchars((string)(isset($it->category_fr) ? $it->category_fr : '')) ?>" placeholder="Arrêt" <?= $is_section ? 'disabled' : '' ?>></td>
+              <td>
+                <?php $prio = (!$is_section && isset($it->priority)) ? strtoupper((string)$it->priority) : ''; ?>
+                <select name="items[<?= $idx ?>][priority]" class="form-select" style="font-size:11.5px;padding:4px 6px;" title="Severity a failed item is escalated to" <?= $is_section ? 'disabled' : '' ?>>
+                  <option value="" <?= $prio === '' ? 'selected' : '' ?>>Auto</option>
+                  <option value="P1" <?= $prio === 'P1' ? 'selected' : '' ?>>P1 · No-Go</option>
+                  <option value="P2" <?= $prio === 'P2' ? 'selected' : '' ?>>P2 · Go &amp; Fix</option>
+                  <option value="P3" <?= $prio === 'P3' ? 'selected' : '' ?>>P3 · Defect</option>
+                </select>
+              </td>
               <td><input type="text" name="items[<?= $idx ?>][text_en]" class="form-control" style="font-size:11.5px;padding:4px 6px;" value="<?= htmlspecialchars((string)(isset($it->text_en) ? $it->text_en : '')) ?>" <?= $is_section ? 'placeholder="Section heading (English)"' : 'placeholder="Checklist item (English)"' ?>></td>
               <td><input type="text" name="items[<?= $idx ?>][text_fr]" class="form-control" style="font-size:11.5px;padding:4px 6px;" value="<?= htmlspecialchars((string)(isset($it->text_fr) ? $it->text_fr : '')) ?>" <?= $is_section ? 'placeholder="Titre de section (français)"' : 'placeholder="Point de contrôle (français)"' ?>></td>
               <td><input type="text" name="items[<?= $idx ?>][na_columns]" class="form-control" style="font-size:11.5px;padding:4px 6px;" value="<?= $is_section ? '' : htmlspecialchars((string)(isset($it->na_columns) ? $it->na_columns : '')) ?>" placeholder="H,J" <?= $is_section ? 'disabled' : '' ?>></td>
@@ -164,7 +182,10 @@ $val = function ($key, $default = '') use ($t) {
       </div>
       <div style="font-size:10.5px;color:var(--t3);margin-top:8px;">
         Rows are saved in the order shown. A row used by an already-submitted inspection cannot be
-        removed — the save keeps it and tells you so.
+        removed — the save keeps it and tells you so.<br>
+        <strong>Severity</strong>: a failed item opens a defect at this priority. <em>Auto</em> keeps the
+        old rule (P1 when the category says No-Go, P2 for Go &amp; Fix, P3 otherwise); pick a code to make
+        the escalation explicit and independent of the category wording.
       </div>
     </div>
 
@@ -201,6 +222,12 @@ function rowHtml(type, index) {
     '<td><input type="number" name="items[' + index + '][item_no]" class="form-control" style="font-size:11.5px;padding:4px 6px;" value=""' + dis + '></td>' +
     '<td><input type="text" name="items[' + index + '][category_en]" class="form-control" style="font-size:11.5px;padding:4px 6px;" value="" placeholder="No-Go"' + dis + '></td>' +
     '<td><input type="text" name="items[' + index + '][category_fr]" class="form-control" style="font-size:11.5px;padding:4px 6px;" value="" placeholder="Arrêt"' + dis + '></td>' +
+    '<td><select name="items[' + index + '][priority]" class="form-select" style="font-size:11.5px;padding:4px 6px;"' + dis + '>' +
+      '<option value="">Auto</option>' +
+      '<option value="P1">P1 &middot; No-Go</option>' +
+      '<option value="P2">P2 &middot; Go &amp; Fix</option>' +
+      '<option value="P3">P3 &middot; Defect</option>' +
+    '</select></td>' +
     '<td><input type="text" name="items[' + index + '][text_en]" class="form-control" style="font-size:11.5px;padding:4px 6px;" value="" placeholder="' + (isSection ? 'Section heading (English)' : 'Checklist item (English)') + '"></td>' +
     '<td><input type="text" name="items[' + index + '][text_fr]" class="form-control" style="font-size:11.5px;padding:4px 6px;" value="" placeholder="' + (isSection ? 'Titre de section (français)' : 'Point de contrôle (français)') + '"></td>' +
     '<td><input type="text" name="items[' + index + '][na_columns]" class="form-control" style="font-size:11.5px;padding:4px 6px;" value="" placeholder="H,J"' + dis + '></td>' +

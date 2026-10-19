@@ -428,7 +428,8 @@ CREATE TABLE `inspection_items` (
   `category_fr` varchar(100) DEFAULT NULL,
   `text_en` text DEFAULT NULL,
   `text_fr` text DEFAULT NULL,
-  `na_columns` varchar(255) DEFAULT NULL
+  `na_columns` varchar(255) DEFAULT NULL,
+  `priority` enum('P1','P2','P3') DEFAULT NULL COMMENT 'Explicit defect severity; NULL = derive from the category'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -1656,7 +1657,6 @@ ALTER TABLE `materials`
 ALTER TABLE `material_transactions`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uq_mt_import_key` (`import_key`),
-  ADD UNIQUE KEY `uq_txn_import_key` (`import_key`),
   ADD KEY `material_id` (`material_id`),
   ADD KEY `created_by` (`created_by`),
   ADD KEY `idx_mt_date` (`txn_date`),

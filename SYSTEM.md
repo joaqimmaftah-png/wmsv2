@@ -1000,7 +1000,8 @@ legacy sheets ("Backlog on going" / "Backlog done").
   can be charged to an equipment (allocation label becomes its registration
   number), a department label, or Other, with a collecting person; receipts
   capture supplier (matched to `suppliers` by exact company name), approved
-  qty and unit price, with currency hard-coded `UGX` on this path (K-11).
+  qty, unit price and a currency the operator picks (default: the site
+  currency from `settings.currency`, K-11).
 - Item edit may change the three stock columns directly (Supervisor/Store/
   Technician with write access); every change is logged as an adjusting
   movement ("…adjusted via item edit") and a negative result is warned about,
@@ -1361,7 +1362,8 @@ daily / weekly / monthly operational reports; MTTR-MTBF (3–24 months);
 availability forecast and monthly maintenance plan (from `Dashboard_model`);
 workshop daily & weekly (fleet-by-type readiness + KPI-engine availability,
 screen/XLSX/print); lube compliance (period + yearly); store analytics
-(orders spend/lead times); issue & receipt registers and reorder list
+(orders spend, one total per currency, and lead times); issue & receipt
+registers and reorder list
 (`Store_model` over the movement ledger; they self-disable with a notice if
 the register columns are absent); materials movement; asset register;
 annual report & annual plan (PM schedule projections); service-kit
@@ -1440,6 +1442,7 @@ missing/invalid; the Settings screen edits the report + forecast groups;
 | Key | Default | Meaning |
 |---|---|---|
 | `company_name` | *(seeded `A&ML`; fallback "Workshop WMS" in views)* | Display name in titles/reports |
+| `currency` | `USD` | Site currency (3-letter code). Drives the spend totals (which are kept **per currency**, never summed across one) and the default in the supplier, order, catalog and stock-receipt pickers (K-11). The vocabulary lives in `helpers/currency_helper.php` |
 | `weekly_open_hours` | `168` | Open hours in a 7-day week (≤0 → 7 × daily) |
 | `daily_open_hours` | `24` | Open hours/day (clamped 1–24) |
 | `default_availability_target` | `0.88` | Final fallback target (fraction; "88" accepted) |
@@ -1459,10 +1462,11 @@ missing/invalid; the Settings screen edits the report + forecast groups;
 | `unplanned_allowance_lookback_weeks` | `12` | Derived-mode history window (1–104) |
 | `forecast_show_excel_reference` | `1` | Show historical-Excel reference figures in forecast |
 
-Seeded legacy keys `working_hours_per_day`, `work_days_per_month`,
-`pm_alert_days`, `cert_alert_days`, `currency` exist in the dump but **no code
-reads them** (verified by search); alert windows in code are hard-coded
-(dashboard PM +14 days, certifications 60 days, etc.).
+Seeded legacy keys `working_hours_per_day`, `work_days_per_month` and
+`pm_alert_days` exist in the dump but **no code reads them** (verified by
+search); alert windows in code are hard-coded (dashboard PM +14 days, etc.).
+`cert_alert_days` is read by the certification screens and `currency` by
+`wms_site_currency()` (K-11), so those two are live settings now.
 
 ## 13. Schema-version tolerance
 
@@ -1640,16 +1644,16 @@ are to the reviewed commit.
 | K-08 | **Resolved** | Onboarding references were broken: the built-in setup pages and code comments pointed to at least a dozen files that didn't exist in the repo, including the import file named in the "Database Setup Required" page. All such references have been rewritten (§17) — messages now name the shipped dump and comments describe the probed table/column, so a fresh clone can be installed by following the in-app text and `README.md`. | `MY_Controller::_show_db_config_error()`, `Auth::__construct()`, various comments. |
 | K-09 | **Resolved** | Weak server-side validation on several write paths. `Team::create/edit` skipped the uniqueness/min-length checks that `Users` enforces, and the team form was create-only — "editing" a worker inserted a duplicate account. With non-strict SQL modes, invalid enum values can be silently coerced (connection sets `stricton = FALSE`). | Fixed in this revision: WO create validates machine/type/status/title and aborts a failed insert before any child row is written; WO edit validates title/type/priority/status/machine status and aborts on a failed UPDATE; `Team::create/edit` now validate required names, `valid_email`, unique `email`/`employee_id`, an 8-character password and a real role, and guard the insert/update result. `views/team/form.php` is a single create/edit form that posts each field back on a validation error. |
 | K-10 | **Resolved** | Null dereferences on crafted input: `Lubricants::record()` used `$eq->equipment_type_id` without checking the equipment exists; `Orders::create()` did the same with the supplier. | Fixed in this revision: both guard the lookup and flash a message; the optional lubricant work-order link is also validated against the machine. |
-| K-11 | Low | Currency handling is inconsistent: seeded `settings.currency='USD'` is never read; suppliers/orders default to `TZS`; material prices are `unit_price_ugx`/`unit_price_usd`; manual goods receipts hard-code `UGX`. Order spend totals (CEO dashboard, store analytics) sum `total_cost` as recorded per order with no currency conversion — meaningful only if all orders share a currency. | §7.5, §7.7. |
+| K-11 | **Resolved** | Currency handling was inconsistent: seeded `settings.currency='USD'` was never read; suppliers/orders defaulted to `TZS`; material prices are `unit_price_ugx`/`unit_price_usd`; manual goods receipts hard-coded `UGX`; and the CEO dashboard and store analytics added `total_cost` from TZS, UGX and USD orders into one meaningless total. | Fixed in this revision: `helpers/currency_helper.php` is the one vocabulary, `settings.currency` is the one default (editable on the Settings screen, which previously did not offer UGX at all), and every currency picker draws from it. A stock receipt records the currency the operator selected. Spend is grouped by `o.currency` in `Order_model::get_spend_by_supplier()` and shown as one total per currency; supplier bars are scaled within their own currency. No exchange-rate conversion is invented. |
 | K-12 | **Resolved** | Dashboard "recent work orders" resolved the assignee by joining `users.id = work_orders.assigned_to`, but `assigned_to` is a CSV — at best the first technician matched (MySQL coercion). | Fixed in this revision: the card reads `Workorder_model::get_recent()`, which resolves every technician through the CSV parser; the CSV column is never joined again. |
 | K-13 | Medium | No migrations, seeders, or tests in the repository — `database/schema.sql` is the only schema artifact. The defensive table/field probes (§13) mask schema drift instead of failing loudly, so a partially-updated database can silently lose features (e.g. register fields, closure evidence). | Whole repo. |
-| K-14 | Low | `Settings_model::save_many()`'s comment says `settings` has no unique index on `setting_key`; the dump defines one (`UNIQUE KEY setting_key`). Behaviour (select-then-upsert) is correct either way — comment only. | `Settings_model.php` vs dump. |
+| K-14 | **Resolved** | `Settings_model::save_many()`'s comment said `settings` had no unique index on `setting_key`; the schema defines one (`UNIQUE KEY setting_key`). | Comment corrected in this revision. The select-then-upsert is deliberately unchanged — it is correct with or without the constraint and creates a missing row with its documented description. |
 | K-15 | **Resolved** | `Team::_make_transparent()` called GD functions without an availability guard → fatal error on hosts without `gd` when a signature image is uploaded. | Fixed in this revision: the function copies the upload unchanged when `gd` is absent. The per-pixel loop is still slow for very large images. |
-| K-16 | Low | Inspection defect priority depends on substring matching of free-text item categories (`no-go`, `go & fix`, FR variants). Renaming a template category in the DB silently changes P1/P2 behaviour. | `Inspection_model::_inspection_item_verdict()`. |
+| K-16 | **Resolved** | Inspection defect priority depended on substring matching of free-text item categories (`no-go`, `go & fix`, FR variants). Renaming a template category silently changed P1/P2 behaviour. | Fixed in this revision: `inspection_items.priority` (`P1`/`P2`/`P3`, NULL = derive) is set from a **Severity** select in the template editor and read by `_inspection_item_verdict()`; the category wording remains only the fallback for rows saved before the column existed. Fresh installs get the column from `database/schema.sql`; an existing database keeps working and can be upgraded with<br>`ALTER TABLE inspection_items ADD COLUMN priority ENUM('P1','P2','P3') NULL DEFAULT NULL AFTER na_columns;` |
 | K-17 | **Resolved** | `base_url` was assembled from the raw request `Host` header: a crafted value was reflected into every generated link (attribute injection), and a proxy that rewrote Host changed every URL. | Fixed in this revision: `WMS_BASE_URL` → `config.local.php` → validated auto-detection, in that order. Detection accepts only `hostname[:port]`, IPv4 or `[IPv6][:port]`; anything else gets HTTP 400 and a log line. `SCRIPT_NAME` is validated too. Pin the value in production. |
 | K-18 | **Resolved** | The whole user row — including the password hash — was stored in the DB-backed session (`user_data`), so every signed-in user had a hash at rest in `ci_sessions`, rewritten on each session regeneration. | Fixed in this revision: `wms_session_user()` (`helpers/user_helper.php`) projects the row onto the fields a view actually reads; `Auth::login()` and the profile save use it, and `MY_Controller::_check_auth()` rewrites any pre-existing session payload that still carries `password`. Export headers now resolve `generated_by` through `wms_user_full_name()`. |
 | K-19 | **Resolved** | Workbook exports wrote to `sys_get_temp_dir()` under deterministic (label/timestamp) names — simultaneous exports of the same week shared one path, so a download could be truncated or contain another user's file. | Fixed in this revision: all 11 export sites use `wms_temp_path()` (`helpers/tmp_helper.php`), which prefixes a random token while keeping the offered filename. `uploads/tmp/` exports still use per-second names. |
-| K-20 | Info | Duplicate unique indexes on `material_transactions.import_key` (`uq_mt_import_key`, `uq_txn_import_key`) — harmless, double write cost on that column. | Dump. |
+| K-20 | **Resolved** | Duplicate unique indexes on `material_transactions.import_key` (`uq_mt_import_key`, `uq_txn_import_key`) — harmless, but every insert maintained the same index twice. | Removed `uq_txn_import_key` from `database/schema.sql`. An existing database keeps both unless the operator runs `ALTER TABLE material_transactions DROP INDEX uq_txn_import_key;` (optional; the remaining index enforces the same uniqueness). |
 | K-21 | Info | `README.md` in the original upload was a 20-byte UTF-16 placeholder ("# wmsv2"); replaced by the current `README.md`. | Git history. |
 | K-22 | **Resolved** | The worker profile page rendered a **Bootstrap modal** for adding certifications, but the layout loads no Bootstrap CSS or JS (only Chart.js): `data-bs-toggle` did nothing and the "modal" body was laid out inline at the bottom of the page, so the "Add" button never opened anything. The page also had no link to the (new) edit form. | Fixed in this revision: a native `<dialog>` (no framework), a supervisor-only **Edit Profile** button, and `$data['is_supervisor']` from the controller; the role badge uses the theme's `b-secondary` instead of the unstyled `.bg-light .text-dark`; the attendance strip and legend know the `Holiday` status. |
 
