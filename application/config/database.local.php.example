@@ -1,0 +1,22 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+/*
+| -------------------------------------------------------------------
+| LOCAL DATABASE CREDENTIALS — TEMPLATE
+| -------------------------------------------------------------------
+| Copy this file to  application/config/database.local.php  ON THE SERVER
+| and fill in the real values. That file is ignored by Git, so it is the
+| one place a production credential belongs.
+|
+| Do not commit database.local.php, do not paste its contents into chat,
+| e-mail or documentation, and rotate the password immediately if it is
+| ever exposed.
+|
+| Only set the keys you need: values assigned here replace the environment
+| variable values for the same key.
+*/
+$db['default']['hostname'] = 'localhost';            // or host:port
+$db['default']['username'] = 'cpaneluser_dbuser';
+$db['default']['password'] = 'CHANGE_ME';
+$db['default']['database'] = 'cpaneluser_dbname';

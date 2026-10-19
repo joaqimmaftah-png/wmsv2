@@ -1,0 +1,34 @@
+# Alternative .htaccess for stubborn cPanel hosts that use FastCGI
+# If main .htaccess gives 404 on all pages except homepage, use this one
+# Rename this file to .htaccess (backup old one first)
+
+<IfModule mod_autoindex.c>
+    Options -Indexes
+</IfModule>
+
+<Files .htaccess>
+    Order Allow,Deny
+    Deny from all
+</Files>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Block hidden files
+    RewriteCond %{REQUEST_URI} !^/\.well-known/
+    RewriteRule ^(.*/)?\.(.+)$ - [F,L]
+
+    # Some cPanel FastCGI setups need ?/$1 format
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ index.php?/$1 [L,QSA]
+</IfModule>
+
+<IfModule !mod_rewrite.c>
+    ErrorDocument 404 /index.php
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+</IfModule>

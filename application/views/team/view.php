@@ -1,0 +1,189 @@
+<?php
+$skill_colors = ['Junior'=>'secondary','Senior'=>'primary','Expert'=>'success','Specialist'=>'warning'];
+$status_colors = ['Active'=>'success','Inactive'=>'danger','On Leave'=>'warning'];
+$present_count = 0; $absent_count = 0;
+foreach ($attendance as $a) {
+    if ($a->status == 'Present') $present_count++;
+    elseif ($a->status == 'Absent') $absent_count++;
+}
+?>
+<div class="row mb-3">
+  <div class="col-auto">
+    <a href="<?= base_url('team') ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-4">
+    <!-- Profile Card -->
+    <div class="wms-card mb-3">
+      <div class="card-body text-center py-4">
+        <div style="width:80px;height:80px;border-radius:50%;background:#1a3c5e;color:#fff;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;margin:0 auto 16px;">
+          <?php if ($worker->photo): ?>
+            <img src="<?= base_url('uploads/photos/' . $worker->photo) ?>" style="width:80px;height:80px;border-radius:50%;object-fit:cover;">
+          <?php else: ?>
+            <?= strtoupper(substr($worker->first_name,0,1) . substr($worker->last_name,0,1)) ?>
+          <?php endif; ?>
+        </div>
+        <h5 class="fw-700 mb-1"><?= $worker->first_name . ' ' . $worker->last_name ?></h5>
+        <div class="text-muted mb-2" style="font-size:13px;"><?= htmlspecialchars((string)$worker->position, ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="d-flex justify-content-center gap-2 mb-3">
+          <span class="badge bg-<?= (isset($status_colors[$worker->status]) ? $status_colors[$worker->status] : 'secondary') ?>"><?= $worker->status ?></span>
+          <span class="badge bg-<?= (isset($skill_colors[$worker->skill_level]) ? $skill_colors[$worker->skill_level] : 'secondary') ?>"><?= $worker->skill_level ?></span>
+          <span class="badge bg-light text-dark" style="border:1px solid #e2e8f0;"><?= $worker->role_name ?></span>
+        </div>
+        <div style="font-size:12px;color:#64748b;text-align:left;">
+          <div class="mb-1"><i class="bi bi-person-badge me-2"></i><?= $worker->employee_id ?></div>
+          <div class="mb-1"><i class="bi bi-envelope me-2"></i><?= htmlspecialchars((string)$worker->email, ENT_QUOTES, 'UTF-8') ?></div>
+          <?php if ($worker->phone): ?><div class="mb-1"><i class="bi bi-phone me-2"></i><?= htmlspecialchars((string)$worker->phone, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
+          <?php if ($worker->join_date): ?><div class="mb-1"><i class="bi bi-calendar me-2"></i>Joined <?= date('d M Y', strtotime($worker->join_date)) ?></div><?php endif; ?>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="wms-card mb-3">
+      <div class="card-head"><i class="bi bi-bar-chart text-primary me-1"></i>Last 30 Days</div>
+      <div class="card-body">
+        <div class="row g-2 text-center">
+          <div class="col-6">
+            <div style="font-size:24px;font-weight:700;color:#16a34a;"><?= $present_count ?></div>
+            <div style="font-size:12px;color:#64748b;">Days Present</div>
+          </div>
+          <div class="col-6">
+            <div style="font-size:24px;font-weight:700;color:#dc2626;"><?= $absent_count ?></div>
+            <div style="font-size:12px;color:#64748b;">Days Absent</div>
+          </div>
+        </div>
+        <?php $total_days = count($attendance); $att_pct = $total_days > 0 ? round($present_count / $total_days * 100) : 0; ?>
+        <div class="mt-3">
+          <div class="d-flex justify-content-between mb-1" style="font-size:12px;"><span>Attendance Rate</span><span class="fw-600"><?= $att_pct ?>%</span></div>
+          <div class="progress" style="height:8px;">
+            <div class="progress-bar bg-<?= $att_pct >= 90 ? 'success' : ($att_pct >= 75 ? 'warning' : 'danger') ?>" style="width:<?= $att_pct ?>%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leave History -->
+    <div class="wms-card">
+      <div class="card-head"><i class="bi bi-calendar-x text-primary me-1"></i>Leave History</div>
+      <div class="card-body p-0">
+        <?php if (empty($leave_history)): ?>
+          <div class="text-center py-3 text-muted" style="font-size:13px;">No leave records</div>
+        <?php else: ?>
+          <?php foreach ($leave_history as $lr): ?>
+          <div class="px-3 py-2 border-bottom">
+            <div class="d-flex justify-content-between">
+              <span class="badge bg-primary bg-opacity-15 text-primary"><?= $lr->leave_type ?></span>
+              <span class="badge <?= $lr->status=='Approved'?'bg-success':($lr->status=='Rejected'?'bg-danger':'bg-warning text-dark') ?>"><?= $lr->status ?></span>
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-top:3px;">
+              <?= date('d M Y', strtotime($lr->start_date)) ?> — <?= date('d M Y', strtotime($lr->end_date)) ?>
+              (<?= $lr->days_count ?> days)
+            </div>
+          </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <!-- Certifications -->
+    <div class="wms-card mb-3">
+      <div class="card-head">
+        <i class="bi bi-patch-check text-primary me-1"></i>Certifications
+        <button class="btn btn-sm btn-outline-primary ms-auto" data-bs-toggle="modal" data-bs-target="#addCertModal">
+          <i class="bi bi-plus"></i> Add
+        </button>
+      </div>
+      <div class="card-body p-0">
+        <?php if (empty($certifications)): ?>
+          <div class="text-center py-3 text-muted" style="font-size:13px;">No certifications recorded</div>
+        <?php else: ?>
+        <table class="table wms-table mb-0">
+          <thead><tr><th>Certificate</th><th>Number</th><th>Issued By</th><th>Expiry</th><th>Status</th></tr></thead>
+          <tbody>
+            <?php foreach ($certifications as $c): ?>
+            <?php
+            $days_left = $c->expiry_date ? round((strtotime($c->expiry_date) - time()) / 86400) : null;
+            $cert_status_badge = $c->status == 'Valid' ? 'bg-success' : ($c->status == 'Expiring Soon' ? 'bg-warning text-dark' : 'bg-danger');
+            ?>
+            <tr>
+              <td class="fw-500"><?= $c->cert_name ?></td>
+              <td style="font-size:12px;"><?= $c->cert_number ?: '—' ?></td>
+              <td style="font-size:12px;color:#64748b;"><?= $c->issuing_body ?: '—' ?></td>
+              <td style="font-size:12px;">
+                <?= $c->expiry_date ? date('d M Y', strtotime($c->expiry_date)) : '—' ?>
+                <?php if ($days_left !== null && $days_left >= 0 && $days_left <= 60): ?>
+                  <div style="font-size:10px;color:#f59e0b;"><?= $days_left ?> days left</div>
+                <?php elseif ($days_left !== null && $days_left < 0): ?>
+                  <div style="font-size:10px;color:#dc2626;"><?= abs($days_left) ?> days expired</div>
+                <?php endif; ?>
+              </td>
+              <td><span class="badge <?= $cert_status_badge ?>"><?= $c->status ?></span></td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <!-- Attendance History -->
+    <div class="wms-card">
+      <div class="card-head"><i class="bi bi-calendar-check text-primary me-1"></i>Attendance (Last 30 Days)</div>
+      <div class="card-body">
+        <div class="d-flex flex-wrap gap-1">
+          <?php
+          $att_by_date = [];
+          foreach ($attendance as $a) $att_by_date[$a->date] = $a->status;
+          for ($i = 29; $i >= 0; $i--):
+            $date = date('Y-m-d', strtotime("-{$i} days"));
+            $status = (isset($att_by_date[$date]) ? $att_by_date[$date] : null);
+            $color = '#e2e8f0';
+            $title = $date . ': Not recorded';
+            if ($status == 'Present') { $color = '#16a34a'; $title = $date . ': Present'; }
+            elseif ($status == 'Absent') { $color = '#dc2626'; $title = $date . ': Absent'; }
+            elseif ($status == 'Leave') { $color = '#f59e0b'; $title = $date . ': On Leave'; }
+            elseif ($status == 'Rest') { $color = '#64748b'; $title = $date . ': Rest Day'; }
+          ?>
+          <div title="<?= $title ?>" style="width:20px;height:20px;border-radius:4px;background:<?= $color ?>;cursor:default;"></div>
+          <?php endfor; ?>
+        </div>
+        <div class="d-flex gap-3 mt-2" style="font-size:11px;color:#64748b;">
+          <span><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#16a34a;margin-right:4px;"></span>Present</span>
+          <span><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#dc2626;margin-right:4px;"></span>Absent</span>
+          <span><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#f59e0b;margin-right:4px;"></span>Leave</span>
+          <span><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#64748b;margin-right:4px;"></span>Rest</span>
+          <span><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#e2e8f0;margin-right:4px;"></span>Not Recorded</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Certification Modal -->
+<div class="modal fade" id="addCertModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Add Certification</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <?= form_open('team/certifications/' . $worker->id) ?>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-12"><label class="form-label">Certificate Name *</label><input type="text" name="cert_name" class="form-control" required placeholder="e.g. Forklift Operator License"></div>
+          <div class="col-6"><label class="form-label">Certificate Number</label><input type="text" name="cert_number" class="form-control"></div>
+          <div class="col-6"><label class="form-label">Issuing Body</label><input type="text" name="issuing_body" class="form-control"></div>
+          <div class="col-6"><label class="form-label">Issued Date</label><input type="date" name="issued_date" class="form-control"></div>
+          <div class="col-6"><label class="form-label">Expiry Date</label><input type="date" name="expiry_date" class="form-control"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Add Certification</button>
+      </div>
+      <?= form_close() ?>
+    </div>
+  </div>
+</div>

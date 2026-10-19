@@ -1,0 +1,25 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+/*
+| -------------------------------------------------------------------
+| LOCAL APPLICATION CONFIG OVERRIDES — TEMPLATE
+| -------------------------------------------------------------------
+| Copy this file to  application/config/config.local.php  ON THE SERVER.
+| It is ignored by Git and is loaded at the end of application/config/config.php,
+| so anything set here wins over the committed defaults.
+|
+| Use it for secrets and per-installation values, for example:
+|
+|$config['encryption_key'] = 'PUT-A-LONG-RANDOM-STRING-HERE';
+|$config['cookie_secure']       = TRUE;   // once the site is HTTPS
+|$config['legacy_password_login'] = FALSE; // after the bcrypt migration
+|
+| Generate a key with, for example:
+|   php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
+| or any password generator of at least 32 random characters.
+|
+| The environment variable equivalents (WMS_ENCRYPTION_KEY,
+| WMS_LEGACY_PASSWORD_LOGIN) are read by config.php as well and work when
+| the host supports setting them.
+*/

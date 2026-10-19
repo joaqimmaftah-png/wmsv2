@@ -1,0 +1,44 @@
+# --------------------------------------------------------------------------
+# uploads/ — browsable content, NEVER executable (audit finding F-25).
+#
+# Files in this tree are user-supplied (photos, signatures, evidence,
+# delivery documents). Even though the application whitelists MIME types and
+# generates the file names, a web server that executes PHP found here would
+# turn any upload slip into remote code execution.
+#
+# Every directive is wrapped so that a server which does not support it simply
+# ignores the rest of the file instead of returning "500 Internal Server
+# Error" for the whole directory.
+# --------------------------------------------------------------------------
+
+# 1. Turn off the PHP engine when PHP runs as an Apache module.
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php8.c>
+    php_flag engine off
+</IfModule>
+
+# 2. Refuse to serve anything that could be interpreted as a script.
+<FilesMatch "\.(?i:php|php[0-9]|phtml|phps|phar|shtml|cgi|pl|py|rb|sh|bash|asp|aspx|jsp)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# 3. Serve uploads as plain data: no content sniffing, no inline script
+#    rendering. Images keep working.
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+</IfModule>
+
+# NOTE for nginx / IIS hosts: .htaccess files are ignored. Apply the
+# equivalent rule in the server configuration:
+#     location ~* ^/uploads/.*\.(php|phtml|phar)$ { deny all; }

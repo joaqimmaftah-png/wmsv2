@@ -1,0 +1,374 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+class Inspection_model extends CI_Model {
+
+    const CATEGORY_MAP = array(
+        'excavator'        => array('Heavy Equipment', 'Engins lourds'),
+        'adt'              => array('Heavy Equipment', 'Engins lourds'),
+        'grader'           => array('Heavy Equipment', 'Engins lourds'),
+        'dozer'            => array('Heavy Equipment', 'Engins lourds'),
+        'drill_rigg'       => array('Heavy Equipment', 'Engins lourds'),
+        'bus'              => array('Transport & Light Vehicles', 'Transport & Véhicules légers'),
+        'light_vehicle'    => array('Transport & Light Vehicles', 'Transport & Véhicules légers'),
+        'lv'               => array('Transport & Light Vehicles', 'Transport & Véhicules légers'),
+        'hiab'             => array('Service & Utility Trucks', 'Camions de service & utilitaires'),
+        'bowser'           => array('Service & Utility Trucks', 'Camions de service & utilitaires'),
+        'service_van'      => array('Service & Utility Trucks', 'Camions de service & utilitaires'),
+        'forklift'         => array('Heavy Equipment', 'Engins lourds'),
+        'heavy_equipment'  => array('General Checklists', 'Listes de contrôle générales'),
+        'lv_bus'           => array('General Checklists', 'Listes de contrôle générales'),
+        'heavy_vehicle'    => array('General Checklists', 'Listes de contrôle générales'),
+    );
+
+    const CODE_ALIASES = array(
+        'lv'                => 'light_vehicle',
+        'fuel_water_bowser' => 'bowser',
+        'bulldozer'         => 'dozer',
+        'drill_rig'         => 'drill_rigg',
+        'fork_lift'         => 'forklift',
+        'servicevan'        => 'service_van',
+    );
+
+    public function __construct() {
+        parent::__construct();
+    }
+
+    /* ---------- Templates ---------- */
+
+    public function get_templates($active_only = TRUE) {
+        $this->db->order_by('id', 'ASC');
+        if ($active_only) $this->db->where('active', 1);
+        $templates = $this->db->get('inspection_templates')->result();
+        foreach ($templates as $t) {
+            $this->_enrich_template($t);
+        }
+        return $templates;
+    }
+
+    public function get_template($id_or_code) {
+        if (is_string($id_or_code)) {
+            $normalized = strtolower(trim($id_or_code));
+            if (isset(self::CODE_ALIASES[$normalized])) {
+                $id_or_code = self::CODE_ALIASES[$normalized];
+            }
+        }
+
+        if (is_numeric($id_or_code)) {
+            $this->db->where('id', (int)$id_or_code);
+        } else {
+            $this->db->where('code', $id_or_code);
+        }
+        $t = $this->db->get('inspection_templates')->row();
+        if ($t) {
+            $this->_enrich_template($t);
+        }
+        return $t;
+    }
+
+    private function _enrich_template($t) {
+        if (!$t) return;
+        if (!empty($t->columns_json)) {
+            $t->columns = json_decode($t->columns_json, TRUE);
+        } else {
+            $t->columns = array();
+        }
+
+        if (empty($t->category_en)) {
+            $code = strtolower($t->code);
+            if (isset(self::CATEGORY_MAP[$code])) {
+                $t->category_en = self::CATEGORY_MAP[$code][0];
+                $t->category_fr = self::CATEGORY_MAP[$code][1];
+            } else {
+                $t->category_en = 'General';
+                $t->category_fr = 'Général';
+            }
+        }
+    }
+
+    public function get_templates_grouped($active_only = TRUE, $lang = 'en') {
+        $templates = $this->get_templates($active_only);
+        $groups = array();
+        foreach ($templates as $t) {
+            $cat = ($lang === 'fr') ? $t->category_fr : $t->category_en;
+            if (!isset($groups[$cat])) {
+                $groups[$cat] = array();
+            }
+            $groups[$cat][] = $t;
+        }
+        return $groups;
+    }
+
+    public function get_record_counts() {
+        $rows = $this->db->select('template_id, COUNT(*) as cnt')
+                         ->group_by('template_id')
+                         ->get('inspection_records')->result();
+        $counts = array();
+        foreach ($rows as $r) {
+            $counts[$r->template_id] = (int) $r->cnt;
+        }
+        return $counts;
+    }
+
+    public function get_items($template_id) {
+        return $this->db->where('template_id', $template_id)
+                         ->order_by('sort_order', 'ASC')
+                         ->get('inspection_items')->result();
+    }
+
+    /* ---------- Records ---------- */
+
+    public function create_record($record, $items) {
+        $this->db->trans_start();
+        $this->db->insert('inspection_records', $record);
+        $record_id = $this->db->insert_id();
+
+        foreach ($items as $item_id => $row) {
+            $this->db->insert('inspection_record_items', array(
+                'record_id'  => $record_id,
+                'item_id'    => $item_id,
+                'value_json' => isset($row['value_json']) ? $row['value_json'] : null,
+                'comment'    => isset($row['comment']) ? $row['comment'] : null,
+            ));
+        }
+
+        $this->db->trans_complete();
+        return $this->db->trans_status() ? $record_id : FALSE;
+    }
+
+    public function update_record($record_id, $record, $items) {
+        $this->db->trans_start();
+
+        $this->db->where('id', $record_id)->update('inspection_records', $record);
+
+        // Simplest correct approach: replace all item rows for this record
+        $this->db->where('record_id', $record_id)->delete('inspection_record_items');
+        foreach ($items as $item_id => $row) {
+            $this->db->insert('inspection_record_items', array(
+                'record_id'  => $record_id,
+                'item_id'    => $item_id,
+                'value_json' => isset($row['value_json']) ? $row['value_json'] : null,
+                'comment'    => isset($row['comment']) ? $row['comment'] : null,
+            ));
+        }
+
+        $this->db->trans_complete();
+        return $this->db->trans_status();
+    }
+
+    public function get_records($template_id = NULL, $limit = 200) {
+        $this->db->select('inspection_records.*, inspection_templates.name_en AS template_name_en, inspection_templates.name_fr AS template_name_fr, inspection_templates.layout_type')
+                  ->join('inspection_templates', 'inspection_templates.id = inspection_records.template_id')
+                  ->order_by('inspection_records.id', 'DESC')
+                  ->limit($limit);
+        if ($template_id) $this->db->where('inspection_records.template_id', $template_id);
+        return $this->db->get('inspection_records')->result();
+    }
+
+    public function get_record($id) {
+        return $this->db->where('id', $id)->get('inspection_records')->row();
+    }
+
+    public function get_record_items($record_id) {
+        $this->db->select('inspection_record_items.*, inspection_items.item_no, inspection_items.row_type, inspection_items.category_en, inspection_items.category_fr, inspection_items.text_en, inspection_items.text_fr, inspection_items.na_columns, inspection_items.sort_order')
+                  ->join('inspection_items', 'inspection_items.id = inspection_record_items.item_id')
+                  ->where('inspection_record_items.record_id', $record_id)
+                  ->order_by('inspection_items.sort_order', 'ASC');
+        return $this->db->get('inspection_record_items')->result();
+    }
+
+    /**
+     * Turn a submitted inspection into defects — and, just as important, close
+     * the ones the inspection has just cleared (Wave 3, Q2).
+     *
+     * Until now this method only ever created rows: a repeat failure added a
+     * second row beside the first, a later pass closed nothing, and every
+     * defect arrived as P3 regardless of what the checklist said. The rules
+     * now:
+     *
+     *   • severity follows the checklist category: No-Go → P1, Go & Fix → P2,
+     *     anything else → P3. A No-Go item stops the machine, so it can never
+     *     sit at the bottom of the list behind a routine P3.
+     *   • an item that now conforms closes the defect it opened — the closure
+     *     records the inspection that cleared it (verified_by / verified_at),
+     *     so "who said this is fixed, and on what evidence" has an answer.
+     *   • a repeat failure does NOT add a row beside an open one: the existing
+     *     defect is annotated with the new sighting and escalated if the new
+     *     verdict is more severe. When the earlier defect was already closed,
+     *     the new row records `recurrence_of` — a repeat is visible as a
+     *     repeat, not as a brand-new problem.
+     *
+     * @return array ['created'=>int,'annotated'=>int,'closed'=>int]
+     */
+    public function process_backlog_findings($record_id) {
+        $stats = array('created' => 0, 'annotated' => 0, 'closed' => 0);
+        if (!$this->db->table_exists('backlogs')) return $stats;
+
+        $record = $this->get_record($record_id);
+        if (!$record) return $stats;
+
+        // The Wave 3 columns arrive with migration 014; on an un-migrated
+        // database the method still works, it just cannot link or verify.
+        $has_item_link  = $this->db->field_exists('inspection_item_id', 'backlogs');
+        $has_recurrence = $this->db->field_exists('recurrence_of', 'backlogs');
+        $has_verified   = $this->db->field_exists('verified_by', 'backlogs');
+
+        $items = $this->get_record_items($record_id);
+        $who   = (int)$record->created_by;   // the person who signed the inspection
+
+        foreach ($items as $item) {
+            if (isset($item->row_type) && $item->row_type === 'section') continue;
+
+            $verdict = $this->_inspection_item_verdict($item);
+            $source_ref = 'insp_'.$record_id.'_item_'.$item->item_id;
+
+            // ── the item conforms now: close the defect it opened ─────────
+            if (!$verdict['failed']) {
+                if ($has_item_link && $record->equipment_id) {
+                    $this->db->where('equipment_id', (int)$record->equipment_id)
+                        ->where('inspection_item_id', (int)$item->item_id)
+                        ->where_in('status', array('Open', 'In Progress'));
+                    $open = $this->db->get('backlogs')->result();
+
+                    foreach ($open as $row) {
+                        $close = array(
+                            'status'          => 'Closed',
+                            'end_date'        => $record->inspection_date ?: date('Y-m-d'),
+                            'closing_remarks' => 'Closed by inspection '.($record->inspection_date ?: date('Y-m-d'))
+                                .' (record #'.$record_id.'): the item conforms. '
+                                .'Previously: '.mb_substr((string)$row->description, 0, 120),
+                        );
+                        if ($has_verified) {
+                            $close['verified_by']         = $who ?: null;
+                            $close['verified_at']         = date('Y-m-d H:i:s');
+                            $close['verification_notes'] = 'Cleared on inspection record #'.$record_id
+                                .' ('.($item->item_no !== null ? 'item '.$item->item_no : 'checklist item').').';
+                        }
+                        $this->db->where('id', (int)$row->id)->update('backlogs', $close);
+                        $stats['closed']++;
+                    }
+                }
+                continue;
+            }
+
+            // ── the item failed ──────────────────────────────────────────
+            $priority = $verdict['priority'];
+
+            // Re-processing the same record must not duplicate its own defects.
+            $same = $this->db->where('source_ref', $source_ref)->get('backlogs')->row();
+            if ($same) continue;
+
+            $desc = ($record->language === 'fr' && !empty($item->text_fr)) ? $item->text_fr : $item->text_en;
+            if (!empty($item->comment)) {
+                $desc .= ' - '.$item->comment;
+            }
+
+            // An identical defect from an earlier inspection that is still open:
+            // annotate it rather than stacking a second row on the same fault.
+            $open_same = null;
+            if ($has_item_link && $record->equipment_id) {
+                $open_same = $this->db->where('equipment_id', (int)$record->equipment_id)
+                    ->where('inspection_item_id', (int)$item->item_id)
+                    ->where_in('status', array('Open', 'In Progress'))
+                    ->order_by('id', 'ASC')->limit(1)
+                    ->get('backlogs')->row();
+            }
+
+            if ($open_same) {
+                $observation = trim((string)$open_same->observation);
+                $note = 'Re-seen on inspection '.($record->inspection_date ?: date('Y-m-d'))
+                    .' (record #'.$record_id.'): '.$verdict['label'].'.';
+                $update = array(
+                    'observation' => $observation === '' ? $note : $observation."\n".$note,
+                    'updated_at'  => date('Y-m-d H:i:s'),
+                );
+                if ($has_item_link) $update['priority'] = $this->_escalate($open_same->priority, $priority);
+                $this->db->where('id', (int)$open_same->id)->update('backlogs', $update);
+                $stats['annotated']++;
+                continue;
+            }
+
+            // A repeat of a defect that was closed before: link it back.
+            $previous = null;
+            if ($has_item_link && $record->equipment_id) {
+                $previous = $this->db->where('equipment_id', (int)$record->equipment_id)
+                    ->where('inspection_item_id', (int)$item->item_id)
+                    ->where('status', 'Closed')
+                    ->order_by('id', 'DESC')->limit(1)
+                    ->get('backlogs')->row();
+            }
+
+            $backlog_data = array(
+                'equipment_id'   => $record->equipment_id,
+                'asset_label'    => $record->fleet_number,
+                'model'          => $record->model,
+                'serial_no'      => $record->serial_number,
+                'start_odometer' => $record->smr,
+                'start_date'     => $record->inspection_date,
+                'description'    => $desc,
+                'source'         => 'Inspection',
+                'reported_by'    => $record->mechanic_name ?: $record->operator_name,
+                'priority'       => $priority,
+                'status'         => 'Open',
+                'machine_status' => $verdict['machine_status'],
+                'source_ref'     => $source_ref,
+                'created_at'     => date('Y-m-d H:i:s'),
+            );
+            if ($has_item_link)  $backlog_data['inspection_item_id'] = (int)$item->item_id;
+            if ($has_recurrence && $previous) {
+                $backlog_data['recurrence_of'] = (int)$previous->id;
+                $backlog_data['observation'] = 'Recurrence of backlog #'.$previous->id
+                    .' (first reported '.($previous->start_date ?: 'unknown').', closed '.($previous->end_date ?: 'unknown').').';
+            }
+
+            $this->db->insert('backlogs', $backlog_data);
+            $stats['created']++;
+        }
+
+        return $stats;
+    }
+
+    /**
+     * What a checklist item says. `No-Go` stops the machine; `Go & Fix` allows
+     * operation but needs the repair — so the first is P1 and the second P2,
+     * whatever the free-text comment says.
+     */
+    private function _inspection_item_verdict($item) {
+        $failed = false;
+        $values = array();
+
+        if (!empty($item->value_json)) {
+            $val = json_decode($item->value_json, true);
+            if (is_array($val)) {
+                foreach ($val as $k => $v) {
+                    if (is_string($v)) $values[] = $v;
+                }
+                if (isset($val['result']) && $val['result'] === 'No') $failed = true;
+                if (in_array('fail', $values, true)) $failed = true;
+            }
+        }
+
+        $category = strtolower(trim((string)(isset($item->category_en) ? $item->category_en : $item->category_fr)));
+        $no_go    = (strpos($category, 'no-go') !== false || strpos($category, 'arrêt') !== false
+                     || strpos($category, 'interdit') !== false || strpos($category, 'non conforme') !== false);
+        $go_fix   = (strpos($category, 'go & fix') !== false || strpos($category, 'corriger') !== false
+                     || strpos($category, 'conforme') !== false);
+
+        if ($no_go) {
+            return array('failed' => $failed, 'priority' => 'P1', 'label' => 'No-Go', 'machine_status' => 'BREAKDOWN');
+        }
+        if ($go_fix) {
+            return array('failed' => $failed, 'priority' => 'P2', 'label' => 'Go & Fix', 'machine_status' => 'OPERATIONAL');
+        }
+        return array('failed' => $failed, 'priority' => 'P3', 'label' => 'Defect', 'machine_status' => NULL);
+    }
+
+    /** P1 is the most severe: an escalation moves up, never down. */
+    private function _escalate($current, $candidate) {
+        $rank = array('P1' => 1, 'P2' => 2, 'P3' => 3);
+        $a = isset($rank[$current])   ? $rank[$current]   : 4;
+        $b = isset($rank[$candidate]) ? $rank[$candidate] : 4;
+        if ($b < $a) return $candidate;
+        return $current;   // untouched when the current priority is still the worse one
+    }
+}
