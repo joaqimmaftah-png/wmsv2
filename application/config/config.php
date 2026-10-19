@@ -30,6 +30,35 @@ $wms_is_https = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTP
     || (isset($_SERVER['HTTP_X_FORWARDED_PROTO'])
         && strtolower((string) $_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https');
 
+/*
+| Build the URL from a request, or return NULL when the Host header is not a
+| hostname / IPv4 / [IPv6] with an optional port. Kept as a function so
+| tests/run.php exercises this exact code instead of a copy of the regex.
+*/
+if (!function_exists('wms_base_url_from_host')) {
+    function wms_base_url_from_host($host, $script_name, $is_https)
+    {
+        $host = strtolower(trim((string) $host));
+
+        // No quotes, spaces, slashes, backslashes, CR/LF or userinfo can pass.
+        if (!preg_match('/^(?:\[[0-9a-f:.]+\]|[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)(?::[0-9]{1,5})?$/D', $host)
+            || strpos($host, '..') !== false) {
+            return NULL;
+        }
+
+        $script = (string) $script_name;
+        if (!preg_match('#^/[a-zA-Z0-9._/-]*$#D', $script)) {
+            $script = '/index.php';
+        }
+        $dir = strstr($script, 'index.php', true);
+        if ($dir === false || $dir === '') {
+            $dir = '/';
+        }
+
+        return ($is_https ? 'https' : 'http') . '://' . $host . $dir;
+    }
+}
+
 $wms_base_env = (string) getenv('WMS_BASE_URL');
 if ($wms_base_env !== '' && preg_match('#^https?://[A-Za-z0-9._~:/\[\]-]+$#D', $wms_base_env)) {
     $config['base_url'] = rtrim($wms_base_env, '/') . '/';
@@ -38,41 +67,30 @@ if ($wms_base_env !== '' && preg_match('#^https?://[A-Za-z0-9._~:/\[\]-]+$#D', $
     error_log('WMS: ignoring WMS_BASE_URL (expected an http(s) URL, e.g. https://wms.example.com)');
 }
 
-if ($config['base_url'] === '' && isset($_SERVER['HTTP_HOST'])) {
-    $wms_host = strtolower(trim((string) $_SERVER['HTTP_HOST']));
+if ($config['base_url'] === '') {
+    if (isset($_SERVER['HTTP_HOST'])) {
+        $wms_detected = wms_base_url_from_host(
+            $_SERVER['HTTP_HOST'],
+            isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '/index.php',
+            $wms_is_https
+        );
 
-    // hostname / IPv4 / [IPv6] with an optional port — no quotes, spaces,
-    // slashes, backslashes or CR/LF can pass this.
-    $wms_host_ok = (bool) preg_match(
-            '/^(?:\[[0-9a-f:.]+\]|[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)(?::[0-9]{1,5})?$/D',
-            $wms_host
-        )
-        && strpos($wms_host, '..') === false;
+        if ($wms_detected === NULL) {
+            // Refuse instead of echoing the value into links. A browser does
+            // not send a Host header that fails this test.
+            error_log('WMS: rejected a malformed Host header while building base_url');
+            http_response_code(400);
+            exit('Bad Request');
+        }
 
-    if (!$wms_host_ok) {
-        // Refuse instead of echoing the value into links. A browser does not
-        // send a Host header that fails this test.
-        error_log('WMS: rejected a malformed Host header while building base_url');
-        http_response_code(400);
-        exit('Bad Request');
+        $config['base_url'] = $wms_detected;
+    } else {
+        // CLI invocation: no request, no links to build.
+        $config['base_url'] = 'http://localhost/';
     }
-
-    $wms_script = isset($_SERVER['SCRIPT_NAME']) ? (string) $_SERVER['SCRIPT_NAME'] : '/index.php';
-    if (!preg_match('#^/[a-zA-Z0-9._/-]*$#D', $wms_script)) {
-        $wms_script = '/index.php';
-    }
-    $wms_dir = strstr($wms_script, 'index.php', true);
-    if ($wms_dir === false || $wms_dir === '') {
-        $wms_dir = '/';
-    }
-
-    $config['base_url'] = ($wms_is_https ? 'https' : 'http') . '://' . $wms_host . $wms_dir;
-} else {
-    // CLI invocation: no request, no links to build.
-    $config['base_url'] = 'http://localhost/';
 }
 
-unset($wms_base_env, $wms_host, $wms_host_ok, $wms_script, $wms_dir);
+unset($wms_base_env, $wms_detected);
 $config['index_page'] = '';
 $config['uri_protocol'] = 'AUTO';
 $config['url_suffix'] = '';

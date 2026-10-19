@@ -35,13 +35,15 @@ function wms_currencies() {
  * table is missing, so a half-installed database still renders.
  *
  * The model is loaded on first use, so a view can call this without the
- * controller having loaded Settings_model.
+ * controller having loaded Settings_model. `$refresh` bypasses the per-request
+ * cache (used by tests, and by a caller that has just saved the setting).
  *
+ * @param  bool $refresh
  * @return string 3-letter ISO code
  */
-function wms_site_currency() {
+function wms_site_currency($refresh = false) {
     static $code = null;
-    if ($code !== null) return $code;
+    if (!$refresh && $code !== null) return $code;
 
     $ci = function_exists('get_instance') ? get_instance() : null;
     if (!$ci) return $code = 'USD';

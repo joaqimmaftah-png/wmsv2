@@ -107,7 +107,12 @@ required) for an on-screen environment check.
 │   ├── cache/                 must be writable
 │   └── logs/                  must be writable (CI logs + php_errors.log)
 ├── database/
-│   └── schema.sql              Schema + reference data only (59 tables, no staff/fleet/stock)
+│   ├── schema.sql              Schema + reference data only (59 tables, no staff/fleet/stock)
+│   └── migrations/             Forward-only SQL for an existing database (K-16, K-20)
+├── tests/run.php               Dependency-free test runner (no Composer/PHPUnit/database)
+├── scripts/
+│   ├── migrate.sh              Applies pending database/migrations/*.sql, records them
+│   └── purge-secrets.sh        History rewrite helper (see SECURITY.md §6)
 └── uploads/                   User files (web-served, script execution blocked by .htaccess)
     ├── photos/                equipment & user photos
     ├── signatures/            drawn/uploaded signatures
@@ -118,10 +123,13 @@ required) for an on-screen environment check.
     └── logoam.png             company logo used by the W36 workbook/print view
 ```
 
-> There are **no** database migrations, seeders, CLI scripts, cron jobs, or
-> automated tests in this repository — the SQL dump contains the complete
-> schema. Decision/task IDs cited in code comments (D29, F-06, MP-3, …) are
-> labels from the development history; the rule each one produced is stated
+> There is no Composer install, no cron job and no background worker. The few
+> command-line tools are `tests/run.php` (unit tests), `scripts/migrate.sh`
+> (applies `database/migrations/`) and `scripts/purge-secrets.sh` (history
+> rewrite, `SECURITY.md` §6). `database/schema.sql` is the baseline for a new
+> installation; the migrations directory is only for bringing an **existing**
+> database forward. Decision/task IDs cited in code comments (D29, F-06, MP-3, …)
+> are labels from the development history; the rule each one produced is stated
 > in the comment itself and in `SYSTEM.md` (§17).
 
 ## Installation
@@ -170,16 +178,8 @@ Notes:
 - On cPanel: create the database and user under *MySQL Databases*, grant the
   user **ALL PRIVILEGES** on it, then import the file with phpMyAdmin.
 - **Upgrading an existing installation** instead of importing into an empty
-  database? Two DDL changes since this revision are optional — the code falls
-  back gracefully without them:
-
-  ```sql
-  ALTER TABLE inspection_items
-    ADD COLUMN priority ENUM('P1','P2','P3') NULL DEFAULT NULL
-    COMMENT 'Explicit defect severity; NULL = derive from the category'
-    AFTER na_columns;
-  ALTER TABLE material_transactions DROP INDEX uq_txn_import_key;  -- duplicate of uq_mt_import_key
-  ```
+  database? Do not re-import `schema.sql`. Run `scripts/migrate.sh` instead —
+  see *Upgrading an existing database* below.
 
 
 ### 4. Configure credentials (never commit these files)
@@ -300,11 +300,38 @@ recorded under **Settings → Sign-in Security**.
 
 ## Testing
 
-There is **no automated test suite in this repository** and no Composer /
-PHPUnit setup. Verify changes manually: sign in as each role, and for
-report/forecast changes compare the W36 screen, its Excel export and the
-dashboard cards — they intentionally share one KPI engine
+```bash
+php tests/run.php          # 54 checks, no dependencies, exits non-zero on failure
+```
+
+The suite covers the pure logic that has broken silently: the session payload
+(K-18), currency normalisation (K-11) and `base_url` / Host validation (K-17).
+`tests/README.md` lists the cases and the gaps (anything needing MySQL or a
+browser). CI runs it on every push and pull request
+(`.github/workflows/tests.yml`), together with `php -l` over every PHP file and
+`bash -n` over the scripts.
+
+Automated tests do not replace the manual walkthrough: sign in as each role,
+and for report/forecast changes compare the W36 screen, its Excel export and
+the dashboard cards — they intentionally share one KPI engine
 (`application/helpers/kpi_helper.php`) and must agree.
+
+## Upgrading an existing database
+
+`database/schema.sql` is for a new installation. An existing database (for
+example one restored from the production dump) is brought forward with the
+files in `database/migrations/`:
+
+```bash
+WMS_DB_HOST=localhost WMS_DB_USER=… WMS_DB_PASS=… WMS_DB_NAME=… \
+    scripts/migrate.sh --dry-run    # what is pending
+WMS_DB_HOST=localhost WMS_DB_USER=… WMS_DB_PASS=… WMS_DB_NAME=… \
+    scripts/migrate.sh              # apply
+```
+
+Each file is idempotent and recorded in `schema_migrations`, so re-running is
+safe. The two current files (K-16 severity column, K-20 duplicate index) are
+optional at runtime; see `database/migrations/README.md`.
 
 ## Deployment (cPanel production checklist)
 

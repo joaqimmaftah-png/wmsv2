@@ -289,10 +289,11 @@ must not be re-added — it is a data export, not source.
 
 There are no `CREATE DATABASE`/`USE`/`DROP TABLE` statements in either file.
 
-There are no migration files in this repository — `database/schema.sql` **is**
-the schema. Schema evolution is therefore unmanaged: any change must be applied
-manually and the file re-exported (K-13). §13 lists the runtime schema probes
-that let screens degrade gracefully on an older database.
+`database/schema.sql` **is** the baseline schema. Changes made after a database
+was created live in `database/migrations/` and are applied by
+`scripts/migrate.sh` (idempotent files, recorded in `schema_migrations`); a new
+installation imports only `schema.sql`. §13 lists the runtime schema probes that
+let screens degrade gracefully on a database where a migration has not run yet.
 
 Conventions: surrogate `INT` auto-increment PKs (except `ci_sessions`);
 statuses are MySQL `ENUM`s (the authoritative value lists are in §5.3);
@@ -1470,8 +1471,9 @@ search); alert windows in code are hard-coded (dashboard PM +14 days, etc.).
 
 ## 13. Schema-version tolerance
 
-The dump contains the complete schema; there are no migration files. Many
-screens nevertheless tolerate an older database. Runtime probes
+`database/schema.sql` is the baseline; `database/migrations/` brings an
+existing database forward (`scripts/migrate.sh`). Until an optional migration
+has run, screens tolerate the older shape. Runtime probes
 (`table_exists` on ~30 tables; `field_exists` on backlog verification
 columns, `equipment.{report_group,report_sort,include_in_weekly_report}`,
 `materials.min_stock`, `pm_schedules.{standard_hours,preferred_weekday}`,
@@ -1646,7 +1648,7 @@ are to the reviewed commit.
 | K-10 | **Resolved** | Null dereferences on crafted input: `Lubricants::record()` used `$eq->equipment_type_id` without checking the equipment exists; `Orders::create()` did the same with the supplier. | Fixed in this revision: both guard the lookup and flash a message; the optional lubricant work-order link is also validated against the machine. |
 | K-11 | **Resolved** | Currency handling was inconsistent: seeded `settings.currency='USD'` was never read; suppliers/orders defaulted to `TZS`; material prices are `unit_price_ugx`/`unit_price_usd`; manual goods receipts hard-coded `UGX`; and the CEO dashboard and store analytics added `total_cost` from TZS, UGX and USD orders into one meaningless total. | Fixed in this revision: `helpers/currency_helper.php` is the one vocabulary, `settings.currency` is the one default (editable on the Settings screen, which previously did not offer UGX at all), and every currency picker draws from it. A stock receipt records the currency the operator selected. Spend is grouped by `o.currency` in `Order_model::get_spend_by_supplier()` and shown as one total per currency; supplier bars are scaled within their own currency. No exchange-rate conversion is invented. |
 | K-12 | **Resolved** | Dashboard "recent work orders" resolved the assignee by joining `users.id = work_orders.assigned_to`, but `assigned_to` is a CSV — at best the first technician matched (MySQL coercion). | Fixed in this revision: the card reads `Workorder_model::get_recent()`, which resolves every technician through the CSV parser; the CSV column is never joined again. |
-| K-13 | Medium | No migrations, seeders, or tests in the repository — `database/schema.sql` is the only schema artifact. The defensive table/field probes (§13) mask schema drift instead of failing loudly, so a partially-updated database can silently lose features (e.g. register fields, closure evidence). | Whole repo. |
+| K-13 | **Resolved** | No migrations, seeders or tests: `database/schema.sql` was the only schema artifact, and the defensive table/field probes (§13) could mask schema drift instead of failing loudly. | Fixed in this revision: `database/migrations/` + `scripts/migrate.sh` apply forward-only, idempotent SQL and record it in `schema_migrations` (`--dry-run` lists pending files); a fresh install still imports only `schema.sql`. `tests/run.php` is a dependency-free suite (K-11/K-17/K-18 logic, 54 checks) and `.github/workflows/tests.yml` runs it plus `php -l` and `bash -n` on every push/PR. The runtime probes remain for databases where a migration has not been applied; the register entry stays closed because drift can now be detected and applied rather than hand-edited. |
 | K-14 | **Resolved** | `Settings_model::save_many()`'s comment said `settings` had no unique index on `setting_key`; the schema defines one (`UNIQUE KEY setting_key`). | Comment corrected in this revision. The select-then-upsert is deliberately unchanged — it is correct with or without the constraint and creates a missing row with its documented description. |
 | K-15 | **Resolved** | `Team::_make_transparent()` called GD functions without an availability guard → fatal error on hosts without `gd` when a signature image is uploaded. | Fixed in this revision: the function copies the upload unchanged when `gd` is absent. The per-pixel loop is still slow for very large images. |
 | K-16 | **Resolved** | Inspection defect priority depended on substring matching of free-text item categories (`no-go`, `go & fix`, FR variants). Renaming a template category silently changed P1/P2 behaviour. | Fixed in this revision: `inspection_items.priority` (`P1`/`P2`/`P3`, NULL = derive) is set from a **Severity** select in the template editor and read by `_inspection_item_verdict()`; the category wording remains only the fallback for rows saved before the column existed. Fresh installs get the column from `database/schema.sql`; an existing database keeps working and can be upgraded with<br>`ALTER TABLE inspection_items ADD COLUMN priority ENUM('P1','P2','P3') NULL DEFAULT NULL AFTER na_columns;` |
