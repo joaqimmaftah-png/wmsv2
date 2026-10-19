@@ -124,7 +124,7 @@
       <?php endif; ?>
 
       <?php
-      /* ── Forecast planning — FORECAST_REVIEW.md D31 ─────────────────
+      /* ── Forecast planning — D31 ─────────────────
        * The planned standing and unplanned allowances drive most of any
        * planned week, so they belong to an authorised planner rather than to a
        * constant in the model. */

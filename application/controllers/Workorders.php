@@ -728,7 +728,7 @@ class Workorders extends MY_Controller {
         } else {
             $this->session->set_flashdata('error',
                 'Evidence was not saved: the attachment table is missing on this installation. '
-                .'Apply database/migrations/001_create_wo_attachments.sql and try again.');
+                .'Import the database dump shipped with this repository and try again.');
         }
         redirect('workorders/view/'.$id);
     }

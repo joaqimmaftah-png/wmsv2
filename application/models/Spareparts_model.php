@@ -37,7 +37,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *      physical issue movement; completing a work order auto-issues whatever
  *      was still reserved for it.
  *
- * The model degrades gracefully: when migration 006 has not been applied,
+ * The model degrades gracefully: while the tracking tables are missing,
  * tables_ready() returns FALSE and every method returns an empty/no-op result
  * instead of failing.
  */
@@ -64,7 +64,7 @@ class Spareparts_model extends CI_Model {
 
     /* ── Infrastructure ─────────────────────────────────── */
 
-    /** TRUE once migration 006 has been applied. */
+    /** TRUE once the spare-parts tracking tables all exist. */
     public function tables_ready() {
         return $this->db->table_exists('wo_spare_allocations')
             && $this->db->table_exists('spare_part_alerts')
@@ -552,7 +552,7 @@ class Spareparts_model extends CI_Model {
      * @return array ['ok' => bool, 'error' => string|null, 'allocation_id' => int|null]
      */
     public function allocate($line_id, $qty, $user_id = null) {
-        if (!$this->tables_ready()) return array('ok' => false, 'error' => 'Spare parts tracking tables are not set up yet (run migration 006).');
+        if (!$this->tables_ready()) return array('ok' => false, 'error' => 'Spare parts tracking tables are not set up on this database yet.');
 
         $qty = (float)$qty;
         if ($qty <= 0) return array('ok' => false, 'error' => 'Quantity must be greater than zero.');
@@ -690,7 +690,7 @@ class Spareparts_model extends CI_Model {
      * @return array ['ok' => bool, 'error' => string|null]
      */
     public function issue_allocation($allocation_id, $user_id = null) {
-        if (!$this->tables_ready()) return array('ok' => false, 'error' => 'Spare parts tracking tables are not set up yet (run migration 006).');
+        if (!$this->tables_ready()) return array('ok' => false, 'error' => 'Spare parts tracking tables are not set up on this database yet.');
         $initial = $this->get_allocation($allocation_id);
         if (!$initial) return array('ok' => false, 'error' => 'Allocation not found.');
         if ($initial->status === 'Issued') return array('ok' => false, 'error' => 'This allocation was already issued.');

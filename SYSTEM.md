@@ -93,10 +93,10 @@ Key architectural facts:
   owns locking, idempotency and the movement ledger (§7.5).
 - **One meter writer**: `Equipment_model::record_meter_reading()` owns every
   hours/km change (§7.3).
-- **Defensive schema probes**: because the original migrations are not in this
-  repo, many code paths check `table_exists()`/`field_exists()` and degrade
-  (hide fields, skip features) instead of erroring (§13). With the shipped
-  dump all probed tables/columns exist.
+- **Defensive schema probes**: the schema ships as a single dump, and many
+  code paths check `table_exists()`/`field_exists()` and degrade (hide
+  fields, skip features) instead of erroring when an older database lacks a
+  table/column (§13). With the shipped dump all probed tables/columns exist.
 - **External runtime dependencies in the browser only**: Chart.js 4.4.1
   (jsDelivr) and the Inter font (Google Fonts) via CDN.
 
@@ -264,17 +264,16 @@ are assigned to (CSV match on `assigned_to`).
 
 One MySQL/MariaDB database, 59 tables, `utf8mb4`. The **only** schema artifact
 in the repo is `database/yzzme_43038742_aml.sql` — a phpMyAdmin dump
-(2026-10-19, MariaDB 11.4) containing the final post-migration schema **and
+(2026-10-19, MariaDB 11.4) containing the complete schema **and
 production data** (≈66 users, 116 equipment, 1,697 materials, 12,721 material
 transactions, 630 inspection items over 14 templates; 39 tables are empty in
 the dump, including `work_orders`, `pm_schedules` and `spare_orders`).
 There are no `CREATE DATABASE`/`USE`/`DROP TABLE` statements.
 
-The original migration files (referenced in code as migrations 001, 004–009,
-012–015 and a `w36_pilot_000_schema.sql`) are **not in this repository**;
-§13 lists what each number provided, as inferred from code comments and the
-resulting schema. Schema evolution today is therefore unmanaged — any change
-must be applied manually and the dump re-exported (K-13).
+There are no migration files in this repository — the dump **is** the
+schema. Schema evolution is therefore unmanaged: any change must be applied
+manually and the dump re-exported (K-13). §13 lists the runtime schema
+probes that let screens degrade gracefully on an older database.
 
 Conventions: surrogate `INT` auto-increment PKs (except `ci_sessions`);
 statuses are MySQL `ENUM`s (the authoritative value lists are in §5.3);
@@ -1325,7 +1324,7 @@ equipment history (WOs + KPIs + lube); W36 weekly (§7.9) + weekly targets.
 | `libraries/Inventory_excel.php` / `Asset_excel.php` | Workbook builders: export, import template (with dropdowns/instructions), import report |
 | `libraries/Inventory_importer.php` / `Asset_importer.php` | Validation + import engines; also the manual-entry validators (`validate_manual()`) — the single definition of field rules for their domains |
 | `libraries/Forecast_excel.php` | Planned-availability, plan-vs-actual and rolling-plan sheets from `Forecast_model` output |
-| `libraries/W36_excel.php` | The approved W36 workbook geometry from `W36_report_model::build()` output (references `docs/W36_Sheet_Structure.json`, not in repo) |
+| `libraries/W36_excel.php` | The approved W36 workbook geometry from `W36_report_model::build()` output (labels/geometry are the static contract fixed in the class) |
 | `libraries/Pdf_writer.php` | Dependency-free PDF 1.4 writer (text, rects, lines, GD image embedding, WinAnsi) |
 | `libraries/Inspection_pdf.php` | Lays out inspection records (matrix + compliance) on `Pdf_writer` |
 | `helpers/kpi_helper.php` | Pure KPI functions: interval merge/union, per-day splitting, breakdown events, days/hours down, availability, MTTR/MTBF, roll-ups (§6) — no DB access |
@@ -1390,26 +1389,24 @@ Seeded legacy keys `working_hours_per_day`, `work_days_per_month`,
 reads them** (verified by search); alert windows in code are hard-coded
 (dashboard PM +14 days, certifications 60 days, etc.).
 
-## 13. Schema-version tolerance ("migrations")
+## 13. Schema-version tolerance
 
-The dump already contains the final schema; numerically referenced migrations
-(inferred from comments) provided: 001 `wo_attachments`; 004/005 unspecified
-report groundwork; 006 pending-spares tables (`wo_spare_allocations`,
-`spare_part_alerts`); 007 store-register/material/inventory extension columns
-+ `equipment_specs`; 008 forecast (`equipment_planned_downtime`,
-`forecast_snapshots`, `pm_part_requirements`, PM `standard_hours`, forecast
-settings); 009 maintenance-plan jobs + `Corrective` category +
-`preferred_weekday`; 012 `login_attempts`; 013 goods receipts + movement
-`import_key` uniqueness; 014 backlog closure/inspection-link columns;
-015 `security_events` + `login_ip_cap_enabled`; plus the W36 pilot schema
-(targets, report groups/sites, WO `is_breakdown`/`breakdown_event_id`,
-`settings` report keys). Runtime probes
+The dump contains the complete schema; there are no migration files. Many
+screens nevertheless tolerate an older database. Runtime probes
 (`table_exists` on ~30 tables; `field_exists` on backlog verification
 columns, `equipment.{report_group,report_sort,include_in_weekly_report}`,
 `materials.min_stock`, `pm_schedules.{standard_hours,preferred_weekday}`,
-`material_transactions.txn_date`) let most screens run on a partially
-migrated database with reduced features. **To verify at runtime** for any
-database other than the shipped dump.
+`material_transactions.txn_date`) let screens run with reduced features
+when a table or column is missing, usually with an explanatory notice
+pointing at the shipped dump. The probed feature areas: WO evidence
+attachments (`wo_attachments`), pending-spares tracking
+(`wo_spare_allocations`, `spare_part_alerts`), store-register/material
+extension columns + `equipment_specs`, forecast tables
+(`equipment_planned_downtime`, `forecast_snapshots`, `pm_part_requirements`,
+PM `standard_hours`), maintenance-plan jobs + `preferred_weekday`,
+`login_attempts`, goods receipts + movement `import_key` uniqueness,
+backlog closure/inspection-link columns, and `security_events`.
+**To verify at runtime** for any database other than the shipped dump.
 
 ## 14. File storage
 
@@ -1435,9 +1432,8 @@ editing signatures/photos orphans the previous file.
   writes dated files in the same directory. Custom error views in
   `views/errors/html/`.
 - Missing DB configuration renders a dedicated setup page (HTTP 500) from
-  `MY_Controller`/`Auth`. Its text references helper files that don't exist
-  in this repo (K-08) — the actionable part (create `database.local.php`,
-  import the dump) is correct.
+  `MY_Controller`/`Auth`, walking through creating `database.local.php` and
+  importing the shipped dump.
 - Models and engines degrade on missing tables/columns (logged via
   `log_message('error', …)` where it matters, e.g. settings load, sign-in
   lookup, inventory export sanity check).
@@ -1512,19 +1508,17 @@ in controllers/views (e.g. `Workorder_model::get_lube_consumption`,
 UI always submits); CodeIgniter's Encryption library (configured key, never
 loaded).
 
-**Referenced in comments/messages but absent from this repository:**
-`database/migrations/*.sql` (001, 012, 013, 015 named; 004–009, 014 by
-number), `database/workshop_full_import.sql`, `migrations/sample_data/w36_pilot_000_schema.sql`,
-`scripts/reset_legacy_passwords.php`, `scripts/generate_inspection_pdf.py`,
-`cpanel_check.php`, `CPANEL_FIX.md`, `deployment/CPANEL_500_TROUBLESHOOTING.md`,
-`DECISIONS.md`, `FORECAST_REVIEW.md`, `WEEKLY_REPORT_REVIEW.md`,
-`W36_SHEET_REVIEW.md`, `W36_OPEN_ITEMS_AUDIT.md`, `MAINTENANCE_PLAN_REVIEW.md`,
-`docs/W36_Sheet_Structure.json`, `docs/W36_OPEN5_SIGNOFF.md`, the `tests/`
-suite (unit tests numbered into the 70s are cited), and the source workbooks
-under `myexcellreport/`. The decision IDs (D1–D37…), audit findings (F-02…)
-and task IDs (W36 W0.x–W3.x, Forecast F3–F11, MP-0…MP-4, AC-01…) cited in
-comments refer to those absent documents; the comments themselves usually
-state the resulting rule, and this document records the rules as implemented.
+**Repository self-containedness:** an earlier version of the codebase
+pointed (in setup pages, flash messages and comments) at migration files,
+review documents, diagnostic scripts and workbooks that were never
+committed. Those references have been removed: runtime messages now point
+at the shipped dump, and comments describe the probed table/column instead
+of a migration number. The decision/task/finding IDs still cited in
+comments (D1–D37, Forecast F3–F11, MP-0…MP-4, audit findings F-02…,
+BR-Wxx, OPEN-x…) are retained as labels — the rule each produced is stated
+in the comment itself and recorded in this document. The only non-text
+change in that cleanup was renaming the forecast view flag
+`$migration_ready` to `$tables_ready`.
 
 ## 18. Known issues register
 
@@ -1540,12 +1534,12 @@ are to the reviewed commit.
 | K-05 | Medium | PM completion never records the meter reading for `Km`-interval schedules: `Pm::complete()` checks `in_array($pm->interval_type, ['Hours','Kilometres'])` but the enum value is `Km`. Hours schedules work. | `application/controllers/Pm.php` vs `pm_schedules.interval_type` enum. |
 | K-06 | Medium | The backlog list's supervisor **"Close (verify)" button never renders**: `Backlog::index()` sets `$data['is_supervisor']` **after** `$this->render(...)`. The endpoint itself works; supervisors must close via the work order (or POST directly). | `application/controllers/Backlog.php::index()`, `views/backlog/index.php` (`$is_supervisor`). |
 | K-07 | Low | Dead routes: `maintenance/*` (no controller) and `dashboard/kpi_data` (no method) → 404. | `application/config/routes.php`. |
-| K-08 | Medium | Onboarding references are broken: the built-in setup pages and code comments point to at least a dozen files that don't exist in the repo (§17), including the import file named in the "Database Setup Required" page. A fresh clone cannot be installed by following the in-app text alone (use `README.md`). | `MY_Controller::_show_db_config_error()`, `Auth::__construct()`, various comments. |
+| K-08 | **Resolved** | Onboarding references were broken: the built-in setup pages and code comments pointed to at least a dozen files that didn't exist in the repo, including the import file named in the "Database Setup Required" page. All such references have been rewritten (§17) — messages now name the shipped dump and comments describe the probed table/column, so a fresh clone can be installed by following the in-app text and `README.md`. | `MY_Controller::_show_db_config_error()`, `Auth::__construct()`, various comments. |
 | K-09 | Medium | Weak server-side validation on several write paths. WO create/edit have no form-validation rules and `create()` doesn't check the insert result before flashing success and saving child rows; `Team::create/edit` skip the uniqueness/min-length checks that `Users` enforces and flash success unconditionally. With non-strict SQL modes, invalid enum values can be silently coerced — *to verify at runtime* against the production `sql_mode` (connection sets `stricton = FALSE`). | `Workorders::create/edit`, `Team::create/edit`, `application/config/database.php`. |
 | K-10 | Low | Null dereferences on crafted input: `Lubricants::record()` uses `$eq->equipment_type_id` without checking the equipment exists; `Orders::create()` does the same with the supplier. Normal UI flow always sends valid IDs. | `Lubricants.php`, `Orders.php`. |
 | K-11 | Low | Currency handling is inconsistent: seeded `settings.currency='USD'` is never read; suppliers/orders default to `TZS`; material prices are `unit_price_ugx`/`unit_price_usd`; manual goods receipts hard-code `UGX`. Order spend totals (CEO dashboard, store analytics) sum `total_cost` as recorded per order with no currency conversion — meaningful only if all orders share a currency. | §7.5, §7.7. |
 | K-12 | Low | Dashboard "recent work orders" resolves the assignee by joining `users.id = work_orders.assigned_to`, but `assigned_to` is a CSV — at best the first technician matches (MySQL coercion); multi-technician names can be blank/wrong there. List/detail pages resolve via `Workorder_model` correctly. Display-only. | `Dashboard::index()`. |
-| K-13 | Medium | No migrations, seeders, or tests in the repository (K-08's root cause for schema work). The defensive table/field probes (§13) mask schema drift instead of failing loudly, so a partially-updated database can silently lose features (e.g. register fields, closure evidence). | Whole repo. |
+| K-13 | Medium | No migrations, seeders, or tests in the repository — the dump is the only schema artifact. The defensive table/field probes (§13) mask schema drift instead of failing loudly, so a partially-updated database can silently lose features (e.g. register fields, closure evidence). | Whole repo. |
 | K-14 | Low | `Settings_model::save_many()`'s comment says `settings` has no unique index on `setting_key`; the dump defines one (`UNIQUE KEY setting_key`). Behaviour (select-then-upsert) is correct either way — comment only. | `Settings_model.php` vs dump. |
 | K-15 | Low | `Team::_make_transparent()` calls GD functions without an availability guard → fatal error on hosts without `gd` when a signature image is uploaded via Team create/edit. The per-pixel loop is also slow for multi-megapixel images. | `Team.php` (contrast `Inspection_pdf`, which guards). |
 | K-16 | Low | Inspection defect priority depends on substring matching of free-text item categories (`no-go`, `go & fix`, FR variants). Renaming a template category in the DB silently changes P1/P2 behaviour. | `Inspection_model::_inspection_item_verdict()`. |
@@ -1558,7 +1552,7 @@ are to the reviewed commit.
 Not investigated to a verdict (needs a running instance): actual rendered
 output of every view (possible undefined-variable notices masked in
 production mode), Excel geometry fidelity vs the legacy workbooks, W36
-figures vs the workshop's approved pilot numbers, and behaviour under the
+figures vs the workshop's approved reference numbers, and behaviour under the
 production PHP/MySQL versions and `sql_mode`.
 
 ## 19. Verification method
@@ -1578,17 +1572,17 @@ re-check it:
    code vs tables in the dump (only `kpi_log`, `excel_migration_log` unreferenced);
    helper availability for `force_download` (K-04); enum values vs the
    strings compared in code (K-05); referenced file paths vs the repo tree
-   (§17/K-08); committed-file inventory vs `.gitignore` claims (K-01…K-03).
-4. No code was executed and no application file was modified; the only files
-   written are `README.md` and `SYSTEM.md`.
+   (found the dangling references later removed — §17, K-08);
+   committed-file inventory vs `.gitignore` claims (K-01…K-03).
+4. No code was executed. The documentation review itself modified no
+   application file; a follow-up cleanup in the same pull request rewrote
+   the messages/comments that referenced files absent from this repository
+   (§17) — text-only edits plus the one view-variable rename noted there,
+   verified by residual searches and a full diff review.
 
 **Outstanding / unverifiable in this review:** runtime behaviour (no PHP or
 MySQL in the review environment) — in particular whether the app boots
 cleanly on the production PHP version with the dump imported; the items
 marked *to verify at runtime*; and the business correctness of KPI outputs
-against the workshop's approved figures (the pilot workbooks and decision
-documents that define them are not in the repository).
-
-against the workshop's approved figures (the pilot workbooks and decision
-documents that define them are not in the repository).
- that define them are not in the repository).
+against the workshop's approved reference figures (the legacy workbooks
+that define them are not in the repository).

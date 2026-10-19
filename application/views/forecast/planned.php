@@ -1,7 +1,7 @@
 <?php
 /**
  * PLANNED AVAILABILITY — one week, machine → group → fleet.
- * FORECAST_REVIEW.md task F5, with the unit view of F7 and the freeze of D33.
+ * Task F5, with the unit view of F7 and the freeze of D33.
  *
  * Nothing here is computed: every figure arrives from Forecast_model, which
  * calls kpi_availability() and kpi_rollup() (D29/D30).  A view that recomputes
@@ -64,14 +64,12 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
   </div>
 </div>
 
-<?php if (!$migration_ready): ?>
+<?php if (!$tables_ready): ?>
 <div class="card" style="padding:34px;border-left:3px solid var(--amber);">
-  <div style="font-weight:700;margin-bottom:6px;">Migration 008 has not been applied</div>
+  <div style="font-weight:700;margin-bottom:6px;">The forecast tables are not set up yet</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.7;">
     The planned-downtime tables do not exist yet, so there is nowhere to store a plan.
-    Run <code>migrations/008_create_forecast_tables.sql</code>, then reload this page.<br>
-    <code>python3 migrations/sample_data/check_forecast_migration.py</code> proves the file
-    against the live schema before it is run.
+    Import the database dump shipped with this repository, then reload this page.
   </div>
 </div>
 <?php else: ?>

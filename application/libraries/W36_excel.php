@@ -9,13 +9,13 @@
  * per-type block (BQ:CB, unchanged).
  *
  * Rule zero of this project: the workbook is a *reader of the database*. No
- * value here is typed, copied from `myexcellreport/weekly report W36.xlsx` or
+ * value here is typed, copied from the legacy `weekly report W36.xlsx` workbook or
  * defaulted — every cell comes from the report array (decisions D8/D-W2, BR-W1).
- * The labels and the geometry below are the static part of the contract and
- * mirror `docs/W36_Sheet_Structure.json`, which `tests/unit/63_w36_excel.php`
- * compares this class against, so the two can never drift apart.
+ * The labels and the geometry below are the static part of the contract:
+ * they fix the approved sheet structure in one place so the writer and the
+ * report can never drift apart.
  *
- * Deliberate differences from the sample (all documented in the review):
+ * Deliberate differences from the sample workbook:
  *   D-W3    the fleet row covers every reportable machine — the sample's formulas
  *           stopped at row 100 while its data ran to 108
  *   D-W4/11 the roll-ups are capacity-weighted, never an average of percentages
@@ -620,7 +620,7 @@ class W36_excel {
             $xlsx->mergeCells($parts[0], $parts[1]);
         }
 
-        // the site dropdown on every machine row (§2.5) — the sample applied it
+        // the site dropdown on every machine row — the sample applied it
         // to 30 rows out of 104; every machine row gets it here
         if (!empty($sheet['validation']['list'])) {
             $xlsx->addDataValidation($sheet['validation']['sqref'], array(
@@ -999,7 +999,7 @@ class W36_excel {
             $put('I', $row, $target, 'syn_num');
             $put('L', $row, isset($entry['comment']) ? $entry['comment'] : null, 'syn_text');
             $put('M', $row, isset($entry['action_plan']) ? $entry['action_plan'] : null, 'syn_text');
-            // the sample leaves the cell empty when the machine is not down (§2.2)
+            // the sample leaves the cell empty when the machine is not down
             $days = isset($entry['days_down']) ? (int)$entry['days_down'] : 0;
             $put('N', $row, $days > 0 ? $days : null, $days > 0 ? 'syn_days' : 'syn_num');
             $put('O', $row, isset($entry['hold_code']) ? $entry['hold_code'] : null,

@@ -411,7 +411,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
           <?php if (!isset($attachments_ready) || !$attachments_ready): ?>
           <div style="color:#b45309;font-size:12px;margin-top:6px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;">
             Evidence attachments are not available yet on this installation: the uploads table has not been created.
-            Apply <code>database/migrations/001_create_wo_attachments.sql</code> to enable this panel.
+            Import the database dump shipped with this repository to enable this panel.
           </div>
           <?php elseif (empty($attachments)): ?>
           <div style="color:var(--t3);font-size:12px;margin-top:6px;">No photos or documents uploaded yet.</div>

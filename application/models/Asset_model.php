@@ -259,8 +259,8 @@ class Asset_model extends CI_Model {
     }
 
     /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-       Import audit trail (optional — skipped when the table
-       has not been created by migration 004 yet)
+       Import audit trail (optional — skipped while the log table
+       does not exist)
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
     public function has_import_log() {

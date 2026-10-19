@@ -41,10 +41,11 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * Every lockout and spray detection is written to `security_events` and
  * surfaced at Settings → Sign-in security for the supervisor — with the count
  * on the sidebar — because a throttling rule that fires silently is a rule
- * nobody acts on. Recording degrades to nothing if 015 is not applied.
+ * nobody acts on. Recording degrades to nothing while the security-events
+ * table is missing.
  *
- * The tables are created by database/migrations/012_create_login_attempts.sql
- * and 015_login_security_events.sql. Until those are applied the model reports
+ * Both tables (`login_attempts`, `security_events`) are part of the shipped
+ * database schema. While they are missing the model reports
  * "not locked" and records no events, instead of raising an error page, so
  * deploying this file first cannot take the sign-in screen down.
  *
@@ -89,7 +90,7 @@ class Auth_throttle_model extends CI_Model {
         return $this->table_ready;
     }
 
-    /** Is the visibility table (migration 015) present? */
+    /** Is the `security_events` visibility table present? */
     private function events_table_ready() {
         if ($this->events_ready === NULL) {
             $this->events_ready = $this->table_exists('security_events');
@@ -114,8 +115,7 @@ class Auth_throttle_model extends CI_Model {
             return (bool) $this->db->table_exists($table);
         } catch (Throwable $e) {
             log_message('error', 'WMS: could not check for the `'.$table.'` table — the database is '
-                .'not answering. Sign-in throttling is disabled for this request. See '
-                .'deployment/CPANEL_500_TROUBLESHOOTING.md.');
+                .'not answering. Sign-in throttling is disabled for this request.');
             return FALSE;
         }
     }

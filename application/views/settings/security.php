@@ -31,8 +31,8 @@ $badge = array(
   <div style="padding:16px 18px;font-size:12.5px;color:var(--t2);line-height:1.6;">
     <strong style="color:var(--t1);">Event history is not available yet.</strong><br>
     Throttling itself is <?= empty($attempts_ready) ? '<strong>also off</strong> — the counters table is missing too' : 'running' ?>.
-    Apply <code>database/migrations/015_login_security_events.sql</code> to record what fires, and
-    <code>012_create_login_attempts.sql</code> if that one is missing as well.
+    Both tables are part of the database dump shipped with this repository —
+    restore the missing one to record what fires.
   </div>
 </div>
 <?php endif; ?>
@@ -94,7 +94,7 @@ $badge = array(
     <div style="padding:6px 18px 16px;">
       <?php if ($recent === NULL): ?>
       <div style="color:var(--t3);font-size:12px;padding:8px 0;">
-        Failed-attempt counters are not being kept: <code>login_attempts</code> is missing (migration 012).
+        Failed-attempt counters are not being kept: <code>login_attempts</code> is missing.
       </div>
       <?php else: ?>
       <div class="grid g-4" style="gap:10px;margin:8px 0 14px;">

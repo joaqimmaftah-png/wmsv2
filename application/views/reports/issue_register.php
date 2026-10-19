@@ -25,8 +25,8 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
 <?php if (empty($available)): ?>
 <div class="card" style="padding:18px;border-left:3px solid var(--amber);">
   <strong>The issue register is not installed yet.</strong><br>
-  Run <code>migrations/007_excel_alignment.sql</code> to add the register columns, then
-  <code>migrations/008_excel_data_import.sql</code> to load the Excel history.
+  The database is missing the register columns on <code>material_transactions</code>.
+  Import the database dump shipped with this repository.
 </div>
 <?php else: ?>
 

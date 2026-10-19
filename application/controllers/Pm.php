@@ -60,8 +60,8 @@ class Pm extends MY_Controller {
              * scheduled but never forecast, so the form asks for it whenever
              * the column exists.
              *
-             * Guarded by field_exists because the column arrives with migration
-             * 008 — on an un-migrated database the value is simply not written
+             * Guarded by field_exists because older databases may not have the
+             * column — where it is missing the value is simply not written
              * rather than failing on an unknown column.
              */
             if ($this->db->field_exists('standard_hours', 'pm_schedules')) {
@@ -77,7 +77,7 @@ class Pm extends MY_Controller {
         }
 
         $data['equipment']  = $this->Equipment_model->get_all_active();
-        // the field is only offered once migration 008 has added the column
+        // the field is only offered when the standard_hours column exists
         $data['has_standard_hours'] = $this->db->field_exists('standard_hours', 'pm_schedules');
         $data['page_title'] = 'Create PM Schedule';
         $this->render('maintenance/pm_form', $data);

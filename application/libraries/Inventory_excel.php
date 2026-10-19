@@ -627,7 +627,7 @@ class Inventory_excel {
             case 'opening':     return array('v' => (int)$get('initial_stock'), 's' => $s['cellInt']);
             case 'application': return array('v' => $get('application'), 's' => $s['cell']);
             case 'location':    return array('v' => $get('location'), 's' => $s['cell']);
-            // Re-order / pricing columns (migration 007). A database without
+            // Re-order / pricing columns. A database without
             // them simply exports an empty cell.
             case 'min_stock':
                 $n = $get('min_stock');

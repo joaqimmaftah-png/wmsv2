@@ -551,7 +551,7 @@ class Materials extends MY_Controller {
      * These are the columns the manual Sortie / Receipts sheets carried:
      * the business date, the requisition / MRN number, what an issue is
      * charged to, who collected it, and the supplier / price of a receipt.
-     * They are silently ignored when migration 007 has not been applied.
+     * They are silently ignored when the register columns are missing.
      */
     private function _movement_context($isIssue) {
         if (!$this->Materials_model->has_movement_fields()) return array();
@@ -643,7 +643,7 @@ class Materials extends MY_Controller {
      *
      * They come straight from Inventory_importer::validate_manual(), so the
      * form and the Excel import apply exactly the same rules, and they are
-     * only written when migration 007 has added the columns.
+     * only written when the extended columns exist.
      */
     private function _extended_values($v) {
         if (!$this->Materials_model->has_extended_fields()) return array();

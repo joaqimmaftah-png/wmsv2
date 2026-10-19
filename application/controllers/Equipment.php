@@ -91,8 +91,8 @@ class Equipment extends MY_Controller {
         $data['wo_history']  = $this->Workorder_model->get_by_equipment($id, 20);
         $data['pm_list']     = $this->Equipment_model->get_pm_schedules($id);
         $data['kpi']         = $this->Equipment_model->get_equipment_kpi($id);
-        // Manufacturer specification sheet imported from the asset list
-        // (migration 007). Absent on a database that has not been migrated.
+        // Manufacturer specification sheet imported from the asset list.
+        // Absent on a database without the `equipment_specs` table.
         $data['specs']       = $this->_equipment_specs($id);
         $data['report_sites'] = $this->Equipment_model->report_sites();       // W0.5
         $data['page_title']  = 'Equipment: ' . $data['equipment']->registration_no;
@@ -101,7 +101,7 @@ class Equipment extends MY_Controller {
 
     /**
      * Specification sheet rows for one machine, in the Excel column order.
-     * Returns an empty array when migration 007 has not been applied.
+     * Returns an empty array when the `equipment_specs` table is missing.
      */
     private function _equipment_specs($id) {
         if (!$this->db->table_exists('equipment_specs')) return array();

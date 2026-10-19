@@ -200,7 +200,7 @@ class Order_model extends CI_Model {
        values consistent (and refuses to post the same GRN line twice).
     */
 
-    /** Are the goods-receipt tables in place (migration 013)? */
+    /** Are the goods-receipt tables in place? */
     public function receipts_ready() {
         return $this->db->table_exists('goods_receipts')
             && $this->db->table_exists('goods_receipt_lines');
@@ -217,7 +217,7 @@ class Order_model extends CI_Model {
      * How much of each line has already been delivered.
      *
      * This is `spare_order_items.qty_received` — the running total. It has to
-     * be: it already includes the deliveries booked before migration 013 (when
+     * be: it already includes the deliveries booked before receipt rows existed (when
      * there were no receipt rows at all), and record_receipt() adds to it for
      * every delivery from now on. The goods_receipt_lines rows are the
      * documents and the per-delivery audit trail; if the two ever disagree,

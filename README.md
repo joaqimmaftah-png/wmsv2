@@ -111,11 +111,10 @@ required) for an on-screen environment check.
 ```
 
 > There are **no** database migrations, seeders, CLI scripts, cron jobs, or
-> automated tests in this repository. Code comments reference migration files
-> (`database/migrations/00x_*.sql`), review documents (`DECISIONS.md`,
-> `FORECAST_REVIEW.md`, …) and a `tests/` suite that were part of the original
-> development workspace but are **not included here**. The SQL dump already
-> contains the post-migration schema. See `SYSTEM.md` §17.
+> automated tests in this repository — the SQL dump contains the complete
+> schema. Decision/task IDs cited in code comments (D29, F-06, MP-3, …) are
+> labels from the development history; the rule each one produced is stated
+> in the comment itself and in `SYSTEM.md` (§17).
 
 ## Installation
 
@@ -276,8 +275,7 @@ recorded under **Settings → Sign-in Security**.
 
 ## Testing
 
-There is **no automated test suite in this repository** (the `tests/` folder
-referenced throughout the code comments is not included) and no Composer /
+There is **no automated test suite in this repository** and no Composer /
 PHPUnit setup. Verify changes manually: sign in as each role, and for
 report/forecast changes compare the W36 screen, its Excel export and the
 dashboard cards — they intentionally share one KPI engine
@@ -303,7 +301,7 @@ dashboard cards — they intentionally share one KPI engine
 
 | Symptom | Likely cause / fix |
 |---|---|
-| "🗄️ Database Setup Required" page | `database.local.php` missing or host/user/database empty. Create it from the `.example` file. Note: the page text references `database/workshop_full_import.sql` and `cpanel_check.php`, which do not exist in this repository — import `database/yzzme_43038742_aml.sql` instead |
+| "🗄️ Database Setup Required" page | `database.local.php` missing or host/user/database empty. Create it from the `.example` file, then import `database/yzzme_43038742_aml.sql` |
 | Sign-in page loads but every login says the database is not answering | DB reachable by config but schema not imported (or user lacks SELECT). Import the dump |
 | Blank/500 page right after sign-in | `ci_sessions` or `settings` table missing — re-import; check `application/logs/php_errors.log` and the dated CI log in the same folder |
 | "The action you have requested is not allowed" (403) on submit | CSRF token missing/expired — reload the form and resubmit; do not open the same form in two tabs for a long time (tokens regenerate) |

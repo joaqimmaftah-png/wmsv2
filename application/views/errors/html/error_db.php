@@ -39,16 +39,14 @@ body{background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
         <br><code>password = your password</code>
       </li>
       <li>In cPanel > MySQL Databases, ensure you <strong>added user to database</strong> with ALL PRIVILEGES</li>
-      <li>Import <code>database/workshop_full_import.sql</code> via phpMyAdmin if tables missing</li>
-      <li>Upload <code>cpanel_check.php</code> and visit it for full diagnosis</li>
+      <li>Import <code>database/yzzme_43038742_aml.sql</code> via phpMyAdmin if tables missing</li>
     </ol>
   </div>
 
   <div class="err-actions">
     <a href="javascript:history.back()" class="err-back">← Go Back</a>
-    <a href="<?= htmlspecialchars(base_url('cpanel_check.php'), ENT_QUOTES, 'UTF-8'); ?>" class="err-back" style="background:#34c759">Run Diagnostic</a>
   </div>
-  <p style="font-size:11px;color:#86868b;margin-top:16px;text-align:center">Check cPanel > Errors for full log. Delete cpanel_check.php after use.</p>
+  <p style="font-size:11px;color:#86868b;margin-top:16px;text-align:center">Check cPanel > Errors for the full log.</p>
 </div>
 </body>
 </html>

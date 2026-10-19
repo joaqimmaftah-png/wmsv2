@@ -947,7 +947,7 @@ class Reports extends MY_Controller {
 
     private function _build_workshop_weekly($week_start, $week_end) {
         // W0.7: the open hours, the week start and the fallback target are settings,
-        // never constants (settings seeded by the weekly-report migration).
+        // never constants (seeded in the `settings` table).
         $week_hours = $this->Settings_model->period_open_hours(7);
         $default_target = $this->Settings_model->default_availability_target();
 
@@ -2593,7 +2593,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
             $this->session->set_flashdata('success', 'Weekly report name saved for this week.');
         } else {
             $this->session->set_flashdata('error',
-                'The weekly report name could not be saved. Enter a valid name and make sure the report-name migration is installed.');
+                'The weekly report name could not be saved. Enter a valid name and make sure the weekly_report_names table is installed.');
         }
 
         $label = $this->Settings_model->iso_week_label($week_start);

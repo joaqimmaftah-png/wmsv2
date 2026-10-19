@@ -6,9 +6,9 @@
  * automatically in the other.  $pm is null when creating and the schedule row
  * when editing.
  *
- * $has_standard_hours is supplied by the controller from field_exists(), because
- * the standard_hours column arrives with migration 008.  On an un-migrated
- * database the field is not offered at all rather than posting into a column
+ * $has_standard_hours is supplied by the controller from field_exists(): on a
+ * database without the standard_hours column the field is not offered at all
+ * rather than posting into a column
  * that does not exist.
  */
 $editing = !empty($pm);

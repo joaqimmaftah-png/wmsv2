@@ -25,8 +25,8 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *   Down        : Breakdown, In Maintenance
  *   Retired     : Retired  (excluded from weekly reporting)
  *
- * Rules: BR-W18 / BR-W20 in `W36_SHEET_REVIEW.md`; decision OPEN-7 in
- * `DECISIONS.md` (period figures come from work orders, current status from
+ * Rules BR-W18 / BR-W20; decision OPEN-7 (period figures come from work
+ * orders, current status from
  * `equipment.status`, disagreements are surfaced in the data-quality panel).
  */
 

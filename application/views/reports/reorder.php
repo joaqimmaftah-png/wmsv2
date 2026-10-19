@@ -27,8 +27,8 @@ foreach ($rows as $m) { if ((int)$m->final_qty <= 0) $out++; $toOrder += (int)$m
 <?php if (empty($extended)): ?>
 <div class="card mb-4" style="padding:14px;border-left:3px solid var(--amber);font-size:13px;">
   Minimum / maximum stock levels are not installed yet — the report falls back to the
-  generic low-stock threshold. Run <code>migrations/007_excel_alignment.sql</code> and
-  <code>migrations/008_excel_data_import.sql</code> to use the levels already set in the Stock List.
+  generic low-stock threshold. The level columns are part of the database dump shipped
+  with this repository; the levels set in the Stock List come in with the inventory Excel import.
 </div>
 <?php endif; ?>
 

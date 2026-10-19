@@ -10,7 +10,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * in sheet order with their seven day blocks, the per-machine weekly roll-up, the
  * group blocks, the per-type block and the fleet row, plus a data-quality list —
  * and nothing else in the application is allowed to compute a W36 number:
- * the preview screen, the Excel writer and the tests all read this array.
+ * the preview screen and the Excel writer both read this array.
  *
  * Every rule lives in the pure helpers:
  *   kpi_helper.php     intervals, downtime, days down, availability, MTTR/MTBF,
@@ -344,7 +344,7 @@ class W36_report_model extends CI_Model {
 
         $select = 'e.id, e.registration_no, e.machine_type, e.brand, e.model, e.status, e.location,
                    e.current_hours, e.current_km, e.equipment_type_id';
-        // the reportability columns only exist once the W36 migration has run
+        // the reportability columns are probed: older databases may not have them
         foreach (array('legacy_code', 'report_group', 'report_sort', 'include_in_weekly_report') as $col) {
             if ($this->column_exists('equipment', $col)) $select .= ', e.' . $col;
         }
@@ -631,7 +631,7 @@ class W36_report_model extends CI_Model {
         // (settings, default 30) is the age limit: when the newest reading is older
         // than that many days before the reported week — or there is none on file —
         // the schedule is NOT JUDGED, never guessed.  0 switches the check off
-        // (DECISIONS.md D21; the policy was the business's to set, the default is
+        // (D21; the policy was the business's to set, the default is
         // the recommended one).
         $stale_days   = $this->settings ? (int)$this->settings->pm_meter_stale_days() : 30;
         $stale_before = $stale_days > 0
@@ -661,7 +661,7 @@ class W36_report_model extends CI_Model {
             // `interval_type` decides which meter judges a schedule: Hours →
             // equipment.current_hours, Km → current_km (G4).  A kilometre
             // schedule keeps its threshold in `next_due_hours` — the column the
-            // ENUM extension was made for (see W36_OPEN_ITEMS_AUDIT.md §4).
+            // ENUM extension was made for.
             ->from('pm_schedules s')
             ->where('s.status', 'Active')
             ->get()->result();
@@ -1264,8 +1264,8 @@ class W36_report_model extends CI_Model {
     /**
      * OPEN-5 — the `NUMBER OF DAYS DOWN` column, as signed off and implemented.
      *
-     * The workshop approved the three recommendations of
-     * `docs/W36_OPEN5_SIGNOFF.md` (D28): the D4 rule unchanged, the column as the
+     * The workshop approved three recommendations (D28): the D4 rule
+     * unchanged, the column as the
      * **first column of the weekly block on sheet `W36`** (`BG`; the rest of the
      * block shifts to `BH:BP`, the per-type block `BQ:CB` unchanged), and the
      * group/fleet rows carrying **Σ days down beside machines with downtime**,

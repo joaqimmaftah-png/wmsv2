@@ -16,14 +16,12 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * breakdown counts, MTTR, MTBF, the equipment reliability KPIs and the
  * dashboard donut silently reported zero.
  *
- * The explicit flag `work_orders.is_breakdown` (added by
- * `migrations/sample_data/w36_pilot_000_schema.sql`, which also links the
- * several repair work orders of one failure through `breakdown_event_id`) is
- * now the source of truth. Rows created before the flag existed fall back to
+ * The explicit flag `work_orders.is_breakdown` is now the source of truth
+ * (the several repair work orders of one failure are linked through
+ * `breakdown_event_id`). Rows created before the flag existed fall back to
  * the corrective type, so the helpers below are safe on legacy data too.
  *
- * Rules: BR-W7 / BR-W7b / BR-W7c in `W36_SHEET_REVIEW.md`, decisions D1 and D5
- * in `DECISIONS.md`.
+ * Rules BR-W7 / BR-W7b / BR-W7c; decisions D1 and D5.
  */
 
 if (!function_exists('wo_breakdown_sql')) {

@@ -1,32 +1,32 @@
 <?php
 /**
- * Forecast Excel writer — FORECAST_REVIEW.md task F8.
+ * Forecast Excel writer — task F8.
  *
  * The workbook the workshop is used to, generated from the database.
  *
- * Deliberate departures from `myexcellreport/WEEK 40 FORECAST 2026.xlsx`, each
- * one a defect found in the file itself and recorded in §7 of the review:
+ * Deliberate departures from the legacy `WEEK 40 FORECAST 2026.xlsx`
+ * workbook, each one a defect found in that workbook itself:
  *
- *   §7.1  a day's availability was typed `0.04166` rather than computed, so a
+ *   1.    a day's availability was typed `0.04166` rather than computed, so a
  *         machine planned out 24 h/day printed 0.02 % instead of 0 %.  Every
  *         figure here comes from `kpi_availability()` — nothing is typed.
- *   §7.2  the daily divisor was 30 in 309 cells and 24 in one, under a header
+ *   2.    the daily divisor was 30 in 309 cells and 24 in one, under a header
  *         that said 24 HRS.  One divisor, from `settings`, is used throughout.
- *   §7.3  `EX 006` was missing from its own group roll-up.  Rows are emitted
+ *   3.    `EX 006` was missing from its own group roll-up.  Rows are emitted
  *         from the model's own list, so a machine cannot be dropped.
- *   §7.3  group figures were an unweighted mean of percentages.  Subtotals are
+ *   4.    group figures were an unweighted mean of percentages.  Subtotals are
  *         capacity-weighted (D30); the unweighted mean appears only in the
  *         labelled reference column, and only when the setting allows it.
- *   §7.4  a machine out of service all week was scored as if it could be
+ *   5.    a machine out of service all week was scored as if it could be
  *         available.  It leaves the availability population and is reported in
  *         the unit view instead (D32).
- *   §7.7  the rolling schedule sheet carried `#REF!` in two of its three week
+ *   6.    the rolling schedule sheet carried `#REF!` in two of its three week
  *         blocks.  Every cell here is a value read from the database, so a
  *         stale reference cannot exist.
  *
  * The shape is split the way `W36_excel` splits it: `build_*()` returns a plain
- * cell map with no writer in sight, so `tests/unit/73_forecast_excel.php` can
- * assert on the exact figures, and `paint()` is the only thing that touches
+ * cell map with no writer in sight, so the exact figures can be asserted
+ * without a workbook, and `paint()` is the only thing that touches
  * XlsxWriter.
  */
 defined('BASEPATH') OR exit('No direct script access allowed');
@@ -186,7 +186,7 @@ class Forecast_excel {
                 $put(self::col_letter($c_down),  $row, $r['downtime_hours'],   self::S_HRS);
 
                 if ($r['out_of_service']) {
-                    // §7.4 / D32 — not scored, and said so
+                    // defect 5 above / D32 — not scored, and said so
                     $put(self::col_letter($c_avail), $row, 'OUT OF SERVICE', self::S_OUT);
                     if ($show_ref) $put(self::col_letter($c_ref), $row, '', self::S_PCT_REF);
                     $put(self::col_letter($c_stat), $row, 'OUT OF SERVICE', self::S_OUT);

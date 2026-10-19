@@ -13,7 +13,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 |
 |$config['encryption_key'] = 'PUT-A-LONG-RANDOM-STRING-HERE';
 |$config['cookie_secure']       = TRUE;   // once the site is HTTPS
-|$config['legacy_password_login'] = FALSE; // after the bcrypt migration
+|$config['legacy_password_login'] = FALSE; // once every password hash is bcrypt
 |
 | Generate a key with, for example:
 |   php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"

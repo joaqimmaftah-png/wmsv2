@@ -202,8 +202,8 @@ class Orders extends MY_Controller {
 
         if (!$this->Order_model->receipts_ready()) {
             $this->session->set_flashdata('error',
-                'The goods-receipt tables are not installed yet. Run '
-                .'database/migrations/013_goods_receipts.sql, then receive the order again. Nothing was saved.');
+                'The goods-receipt tables are not installed yet. Import the database dump '
+                .'shipped with this repository (database/yzzme_43038742_aml.sql), then receive the order again. Nothing was saved.');
             redirect('orders/view/'.$id);
             return;
         }
@@ -449,7 +449,7 @@ class Orders extends MY_Controller {
     /* ── GRN — printable, system-generated (not uploaded) ──
        `orders/grn/{order}` prints the latest delivery of that order,
        `orders/grn/{order}/{receipt}` prints one specific delivery. Orders
-       received before migration 013 have no receipt rows, so the original
+       received before receipt rows existed have no receipt rows, so the original
        order-level document is still produced for them.
     */
     public function grn($id, $receipt_id = null) {

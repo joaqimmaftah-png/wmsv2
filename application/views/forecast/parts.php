@@ -1,6 +1,6 @@
 <?php
 /**
- * PARTS A PM SERVICE CONSUMES — FORECAST_REVIEW.md task F10.
+ * PARTS A PM SERVICE CONSUMES — task F10.
  *
  * The entry path for `pm_part_requirements`. The spares forecast reads these
  * rows; without a way to write them the forecast can only ever report that
@@ -29,10 +29,10 @@ $is_supervisor = $role_id === 1;
 
 <?php if (!$table_ready): ?>
 <div class="card" style="padding:34px;border-left:3px solid var(--amber);">
-  <div style="font-weight:700;margin-bottom:6px;">Migration 008 has not been applied</div>
+  <div style="font-weight:700;margin-bottom:6px;">The forecast tables are not set up yet</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.7;">
     The <code>pm_part_requirements</code> table does not exist yet, so there is nowhere to store
-    this. Run <code>migrations/008_create_forecast_tables.sql</code> first.
+    this. Import the database dump shipped with this repository first.
   </div>
 </div>
 <?php else: ?>

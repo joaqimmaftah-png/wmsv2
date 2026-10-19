@@ -5,7 +5,7 @@ $bg  = $order->status==='Verified & Closed' ? 'var(--green-d)' : ($order->status
 $pipeline = array('Pending Approval','Sent to Supplier','Confirmed','In Transit','Customs Clearance','Received at Store','Verified & Closed');
 $curIdx = array_search($order->status, $pipeline);
 // Anything still outstanding on an open order can be booked in, whatever
-// stage the order has reached (orders received before migration 013 carry an
+// stage the order has reached (orders received before receipt documents existed carry an
 // outstanding balance on their item rows and have no receipt documents).
 $outstanding_total = 0;
 foreach ($items as $it) { $outstanding_total += (float)$it->qty_outstanding; }

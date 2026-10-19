@@ -1,6 +1,6 @@
 <?php
 /**
- * MAINTENANCE PLAN JOBS — one machine, one day (MAINTENANCE_PLAN_REVIEW.md MP-2).
+ * MAINTENANCE PLAN JOBS — one machine, one day (MP-2).
  *
  * Every job is its own row: an inspection and a service on the same day are
  * both listed and both counted (probe P4).  The hours shown per category are
@@ -44,8 +44,8 @@ $back = base_url('forecast?week=' . urlencode($iso_label));
 
 <?php if (!$jobs_ready): ?>
 <div class="card" style="padding:24px;border-left:3px solid var(--amber);">
-  <div style="font-weight:700;margin-bottom:6px;">Migration 009 has not been applied</div>
-  <div class="cs" style="font-size:12px;">Run <code>migrations/009_create_maintenance_plan_jobs.sql</code> to plan individual jobs.</div>
+  <div style="font-weight:700;margin-bottom:6px;">The maintenance-plan tables are not set up yet</div>
+  <div class="cs" style="font-size:12px;">Import the database dump shipped with this repository to plan individual jobs.</div>
 </div>
 <?php else: ?>
 
