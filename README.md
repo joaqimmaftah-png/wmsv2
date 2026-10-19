@@ -20,22 +20,25 @@ Excel reader/writer and the PDF generator are hand-written in this repository.
 
 ## ⚠️ Read this first — repository contents
 
-This repository currently contains material that should not be in version control:
+This repository's **history** contains material that must not be there, and
+this repository is **public**:
 
+- The production **database password** and the application **encryption key**
+  were committed in `application/config/database.local.php` and
+  `application/config/config.local.php` in the first commit. Both files are now
+  **removed from the tree and git-ignored** (the `.example` templates are the
+  only copies in git), but the values remain readable in history.
+  **Treat them as compromised and rotate them.**
+  Read [`SECURITY.md`](SECURITY.md) — it is a step-by-step runbook (rotate the
+  MySQL password, replace the key, purge the history, verify the old password
+  no longer works).
 - `database/yzzme_43038742_aml.sql` is a **full production database dump**,
   including real staff accounts (most password hashes are legacy **MD5**),
-  the equipment fleet, and ≈12,700 stock movements.
-- `application/config/database.local.php` and `application/config/config.local.php`
-  are **committed with live-looking credentials / encryption key**, even though
-  the code comments state they are git-ignored. There is **no `.gitignore`** in
-  the repository.
-- `application/logs/` contains committed runtime log files.
+  the equipment fleet, and ≈12,700 stock movements (K-02, still open).
+- `application/logs/` contains committed runtime log files (K-03, still open).
 
-Treat every credential and hash in this history as exposed. See
-[`SYSTEM.md` §18 (issues K-01…K-03)](SYSTEM.md) for the remediation checklist
-(rotate the DB password and encryption key, add a `.gitignore`, untrack the
-files, force password resets). Do not import the dump into a public environment
-without resetting all passwords.
+Do not import the dump into a public environment without resetting all
+passwords. See [`SYSTEM.md` §18](SYSTEM.md) for the full register.
 
 ---
 
@@ -176,9 +179,10 @@ Credentials can alternatively come from environment variables
 configured at all, the application intentionally shows a "Database Setup
 Required" page instead of connecting.
 
-> ⚠️ The copies of `database.local.php` / `config.local.php` currently in git
-> contain real values from the production host — **overwrite them locally and
-> do not commit them back** (see the warning at the top).
+> ⚠️ Both files are **git-ignored** (`.gitignore`) and the only copies in the
+> repository are the `.example` templates — `git status` must never list them.
+> If you cloned this repository before the fix, your local history still holds
+> the old production values; see [`SECURITY.md`](SECURITY.md).
 
 ### 5. Make runtime directories writable
 
@@ -286,7 +290,8 @@ dashboard cards — they intentionally share one KPI engine
 1. Upload the code (or `git pull`) into the site root.
 2. Create `database.local.php` / `config.local.php` on the server (step 4) —
    if you are changing the DB password, create them with the *current*
-   credentials first, verify the site works, then rotate.
+   credentials first, verify the site works, then rotate. Both files are
+   git-ignored; `git status` must stay clean after creating them.
 3. Import the SQL dump into an empty database (first install only).
 4. Set the PHP version (the app's setup page suggests 8.1/8.2) and enable the
    extensions listed above; set `date.timezone`.
@@ -314,6 +319,9 @@ dashboard cards — they intentionally share one KPI engine
 
 ## Documentation
 
+- [`SECURITY.md`](SECURITY.md) — credential-exposure runbook (K-01): what
+  leaked, how to rotate the database password and encryption key, how to purge
+  the values from git history, and how to stop it happening again.
 - [`SYSTEM.md`](SYSTEM.md) — complete technical & functional specification:
   architecture, all modules and their status, business rules and formulas,
   end-to-end workflows, the full 59-table schema with relationships, the

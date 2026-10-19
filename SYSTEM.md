@@ -253,8 +253,10 @@ are assigned to (CSV match on `assigned_to`).
   (e.g. `.git`) are blocked except `.well-known`.
 - **Secrets handling by design**: DB credentials/encryption key are read from
   `*.local.php` files or `WMS_*` environment variables; if none exist the app
-  refuses to connect and shows a setup page. (The repository currently
-  violates its own rule — K-01/K-02.)
+  refuses to connect and shows a setup page. The files are git-ignored and the
+  `.example` templates are the only copies in the repository; the pre-rotation
+  values are still in its public history and must be rotated (K-01,
+  `SECURITY.md`).
 - Note: the full user row, including the password hash, is stored in the
   server-side session record (`user_data`).
 
@@ -1506,12 +1508,20 @@ editing signatures/photos orphans the previous file.
 
 - Target: Apache (cPanel) with the shipped `.htaccess` (rewrite to
   `index.php`, hidden-file block, uploads PHP block, security headers when
-  available). `.htaccess.cpanel-alternative` is the FastCGI fallback.
+  available). `application/`, `system/` and `database/` each carry a
+  deny-all `.htaccess`, so the code and the SQL dump are not served even if
+  PHP handling is misconfigured. `.htaccess.cpanel-alternative` is the FastCGI
+  fallback.
   `FallbackResource` covers missing `mod_rewrite`. Nginx/IIS need equivalent
   hand-written rules (notes inside `uploads/.htaccess`).
 - Install/upgrade order for credential changes (documented in
   `database.php`): create local config with current credentials → deploy →
   verify → rotate password → verify old password fails.
+- Credentials live **only** in `application/config/*.local.php` (or the
+  `WMS_*` environment variables); both files are git-ignored and the
+  `.example` templates are the only copies in the repository. The history of
+  this repository still contains the pre-rotation values — see
+  `SECURITY.md` (K-01).
 - Writable: `application/logs`, `application/cache`, `uploads/**`. PHP needs
   `mysqli, mbstring, iconv, zip, xml`; `gd` for Team signature processing
   (optional elsewhere); `zlib` optional. Upload limits: app allows ≤ 8 MB
@@ -1602,7 +1612,7 @@ are to the reviewed commit.
 
 | ID | Sev | Issue | Evidence / notes |
 |---|---|---|---|
-| K-01 | **Critical** | Live database credentials and the encryption key are committed to git. Comments claim the files are git-ignored, but there is no `.gitignore` and both `application/config/database.local.php` and `config.local.php` are tracked with non-placeholder values. | `git ls-files` lists both files. **Remediation:** rotate DB password + encryption key, add `.gitignore` (`*.local.php`, logs, dumps), `git rm --cached` the files, scrub history if the repo was ever shared. |
+| K-01 | **Critical — rotation outstanding** | The live MySQL password and the application `encryption_key` were committed in `application/config/database.local.php` and `config.local.php` in the first commit. The repository is **public**, so both values must be treated as compromised regardless of what happens next. | **Fixed in the tree:** both files removed from the index (still on disk for the running install), `.gitignore` now excludes `*.local.php`/`.env*`/logs/uploads, `.githooks/pre-commit` refuses them, and `database/.htaccess` closes direct HTTP access to the dump. `scripts/purge-secrets.sh` performs and verifies the history rewrite without pushing. **Operator action still required:** rotate the DB password and the key on the host and force-push the rewritten history — [`SECURITY.md`](SECURITY.md) is the step-by-step runbook. Nothing is encrypted with the old key (the Encryption library is never loaded), so its rotation needs no re-encryption. |
 | K-02 | **Critical** | The committed dump `database/yzzme_43038742_aml.sql` exposes 66 staff accounts — 63 with unsalted **MD5** hashes (fast to crack) — plus names/e-mails/phones, and the committed local config keeps `legacy_password_login = TRUE`, so those hashes remain directly usable knowledge for credential attacks. | Dump analysis (hash formats counted, values not reproduced here). **Remediation:** treat all passwords as compromised — force resets (there is no bulk-reset script in the repo; use Users → Reset Password per account or a one-off SQL), then set `legacy_password_login = FALSE`; move the dump out of git. |
 | K-03 | Medium | Runtime logs committed (`application/logs/log-2026-10-19.php`, `php_errors.log`) — reveal absolute server paths and operational details. | Untrack and ignore `application/logs/*` (keep `.gitkeep`). |
 | K-04 | **Resolved** | Attachment/document **downloads fatal-errored**: `force_download()` is called in `Workorders::download_attachment()` and `Orders::download_document()` but CodeIgniter's `download` helper was never loaded. Uploads work; downloads returned 500. Files remain reachable by direct URL under `uploads/…` (names are timestamp-based, i.e. guessable — a confidentiality consideration for incident evidence). | Fixed in this revision: `download` added to `$autoload['helper']`. |
