@@ -356,7 +356,7 @@ class Materials extends MY_Controller {
 
         $this->inventory_excel->export_inventory($rows, $suppliers, $tmp, array(
             'title'        => 'INVENTORY STOCK LIST',
-            'generated_by' => is_array($user) && isset($user['full_name']) ? $user['full_name'] : '',
+            'generated_by' => wms_user_full_name($user),
             'filter_note'  => $this->_filter_note($filter),
         ));
         $this->_send_file($tmp, $fname);

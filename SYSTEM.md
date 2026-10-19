@@ -143,7 +143,10 @@ exists but is **not used** (`render()` loads `layouts/header.php`).
   immediately re-hashes to bcrypt. 63 of the 66 accounts in the shipped dump
   still hold MD5-format hashes, so the switch is currently load-bearing.
 - On success: throttle history cleared, `last_login` stamped, session vars
-  `user_id`, `role_id`, `user_data` (the full user row) set, session ID
+  `user_id`, `role_id` and `user_data` set — `user_data` is the whitelisted
+  view of the row (`wms_session_user()`: id, role, names, e-mail, position,
+  photo, signature, status, full name), **not** the row itself, so the
+  password hash never reaches `ci_sessions` (K-18). The session ID is
   regenerated with destroy. Logout is **POST-only** (405 otherwise) and
   destroys the session.
 - Failure messages never distinguish "locked" from "wrong password"; a failed
@@ -257,8 +260,14 @@ are assigned to (CSV match on `assigned_to`).
   `.example` templates are the only copies in the repository; the pre-rotation
   values are still in its public history and must be rotated (K-01,
   `SECURITY.md`).
-- Note: the full user row, including the password hash, is stored in the
-  server-side session record (`user_data`).
+- Sessions are DB-backed (`ci_sessions`). `user_data` holds only the fields a
+  view reads; the password hash is **not** stored (K-18). A session written by
+  an older build is rewritten on its next request by `MY_Controller::_check_auth()`,
+  which drops the extra columns.
+- `base_url` comes from `WMS_BASE_URL`, then `config.local.php`, then
+  auto-detection; detection accepts only a syntactically valid `host[:port]`
+  and answers 400 otherwise, so a crafted `Host` header cannot be reflected
+  into links (K-17).
 
 ## 5. Database
 
@@ -1411,13 +1420,14 @@ forecast used by Reports).
 
 | Item | Location / name | Notes |
 |---|---|---|
-| App config | `application/config/config.php` | `base_url` auto-detected from `HTTP_HOST`+script path (falls back to a hard-coded production URL on CLI); sessions/CSRF per §4.4; log threshold 1 (errors) to `application/logs/`; `index_page=''` (requires rewrite) |
+| App config | `application/config/config.php` | `base_url` from `WMS_BASE_URL`, else auto-detected from a validated `HTTP_HOST` + script path (CLI: `http://localhost/`); a malformed Host is refused with 400 (K-17). Sessions/CSRF per §4.4; log threshold 1 (errors) to `application/logs/`; `index_page=''` (requires rewrite) |
 | Local overrides | `application/config/config.local.php` | Loaded last by `config.php`; template: `config.local.php.example`. Typical keys: `encryption_key`, `legacy_password_login`, `cookie_secure` |
 | DB config | `application/config/database.php` | `mysqli`, `utf8mb4_unicode_ci`, `db_debug` only in development; credentials from env then local file; defines `WMS_DB_MISSING` when host/user/database empty → setup page in `MY_Controller`/`Auth` |
 | DB credentials | `application/config/database.local.php` or env `WMS_DB_HOST` (host[:port]), `WMS_DB_USER`, `WMS_DB_PASS`, `WMS_DB_NAME` | Local file wins over env |
 | Environment | server var `CI_ENV` | `production` (default: errors logged to `application/logs/php_errors.log`, deprecations suppressed), `development` (display errors, `db_debug`), `testing` |
 | `WMS_ENCRYPTION_KEY` | env | If unset **and** no local override, `config.php` derives a predictable fallback from a static salt + host (the Encryption library is not currently loaded anywhere, but do not rely on the fallback) |
 | `WMS_LEGACY_PASSWORD_LOGIN=0` | env | Disables MD5/SHA1 sign-in acceptance |
+| `WMS_BASE_URL` | env | Pins `base_url` (e.g. `https://wms.example.com`); takes precedence over detection. Can also be set as `$config['base_url']` in `config.local.php` |
 | `WMS_COOKIE_SECURE=0` | env | Forces non-secure cookies (local HTTP dev) |
 | Timezone | PHP `date.timezone` | Never set by the app; the dump's `SET time_zone='+00:00'` applies to the import session only |
 
@@ -1636,8 +1646,8 @@ are to the reviewed commit.
 | K-14 | Low | `Settings_model::save_many()`'s comment says `settings` has no unique index on `setting_key`; the dump defines one (`UNIQUE KEY setting_key`). Behaviour (select-then-upsert) is correct either way — comment only. | `Settings_model.php` vs dump. |
 | K-15 | **Resolved** | `Team::_make_transparent()` called GD functions without an availability guard → fatal error on hosts without `gd` when a signature image is uploaded. | Fixed in this revision: the function copies the upload unchanged when `gd` is absent. The per-pixel loop is still slow for very large images. |
 | K-16 | Low | Inspection defect priority depends on substring matching of free-text item categories (`no-go`, `go & fix`, FR variants). Renaming a template category in the DB silently changes P1/P2 behaviour. | `Inspection_model::_inspection_item_verdict()`. |
-| K-17 | Info | `base_url` is derived from the request `Host` header; behind a proxy or with host-header manipulation, generated URLs follow the supplied host. Pin `base_url` in `config.local.php` for production hardening. | `config.php`. |
-| K-18 | Low | The whole user row (including password hash) is stored in the DB-backed session (`user_data`) — hashes at rest in `ci_sessions` for every signed-in user. | `Auth::login()`. |
+| K-17 | **Resolved** | `base_url` was assembled from the raw request `Host` header: a crafted value was reflected into every generated link (attribute injection), and a proxy that rewrote Host changed every URL. | Fixed in this revision: `WMS_BASE_URL` → `config.local.php` → validated auto-detection, in that order. Detection accepts only `hostname[:port]`, IPv4 or `[IPv6][:port]`; anything else gets HTTP 400 and a log line. `SCRIPT_NAME` is validated too. Pin the value in production. |
+| K-18 | **Resolved** | The whole user row — including the password hash — was stored in the DB-backed session (`user_data`), so every signed-in user had a hash at rest in `ci_sessions`, rewritten on each session regeneration. | Fixed in this revision: `wms_session_user()` (`helpers/user_helper.php`) projects the row onto the fields a view actually reads; `Auth::login()` and the profile save use it, and `MY_Controller::_check_auth()` rewrites any pre-existing session payload that still carries `password`. Export headers now resolve `generated_by` through `wms_user_full_name()`. |
 | K-19 | **Resolved** | Workbook exports wrote to `sys_get_temp_dir()` under deterministic (label/timestamp) names — simultaneous exports of the same week shared one path, so a download could be truncated or contain another user's file. | Fixed in this revision: all 11 export sites use `wms_temp_path()` (`helpers/tmp_helper.php`), which prefixes a random token while keeping the offered filename. `uploads/tmp/` exports still use per-second names. |
 | K-20 | Info | Duplicate unique indexes on `material_transactions.import_key` (`uq_mt_import_key`, `uq_txn_import_key`) — harmless, double write cost on that column. | Dump. |
 | K-21 | Info | `README.md` in the original upload was a 20-byte UTF-16 placeholder ("# wmsv2"); replaced by the current `README.md`. | Git history. |

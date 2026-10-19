@@ -142,8 +142,9 @@ cd wmsv2
 ```
 
 Point the web server document root at the repository root (where `index.php`
-is). `base_url` is auto-detected from the request host, so no URL edit is
-normally needed.
+is). `base_url` is detected from the request host for local use; in production
+pin it with `WMS_BASE_URL` or `$config['base_url']` in `config.local.php`.
+A Host header that is not a valid `host[:port]` is refused with HTTP 400.
 
 ### 3. Create the database and import the schema
 
@@ -231,7 +232,7 @@ database dump stays usable until its password is reset — see `SECURITY.md` §5
 
 | Where | What |
 |---|---|
-| `application/config/config.php` | Committed defaults: auto-detected `base_url`, DB-backed sessions (`wms_session`, 2 h), CSRF protection **on** (`csrf_token_wms`, regenerated per request), cookie `Secure` auto-enabled on HTTPS, `legacy_password_login` |
+| `application/config/config.php` | Committed defaults: `base_url` from `WMS_BASE_URL` or a validated Host header, DB-backed sessions (`wms_session`, 2 h), CSRF protection **on** (`csrf_token_wms`, regenerated per request), cookie `Secure` auto-enabled on HTTPS, `legacy_password_login` |
 | `application/config/config.local.php` | Host-local overrides (encryption key, `legacy_password_login`, `cookie_secure`) — **secret, do not commit** |
 | `application/config/database.php` | Reads credentials from `WMS_DB_*` env vars, then `database.local.php`; defines `WMS_DB_MISSING` when unconfigured |
 | `CI_ENV` server variable | `production` (default) / `development` / `testing` — set in `index.php`; development enables error display and `db_debug` |

@@ -12,6 +12,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 | Use it for secrets and per-installation values, for example:
 |
 |$config['encryption_key'] = 'PUT-A-LONG-RANDOM-STRING-HERE';
+|$config['base_url']            = 'https://wms.example.com/'; // pin the site URL (K-17)
 |$config['cookie_secure']       = TRUE;   // once the site is HTTPS
 |$config['legacy_password_login'] = FALSE; // once every password hash is bcrypt
 |
@@ -19,7 +20,11 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 |   php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
 | or any password generator of at least 32 random characters.
 |
-| The environment variable equivalents (WMS_ENCRYPTION_KEY,
+| The environment variable equivalents (WMS_ENCRYPTION_KEY, WMS_BASE_URL,
 | WMS_LEGACY_PASSWORD_LOGIN) are read by config.php as well and work when
 | the host supports setting them.
+|
+| Pinning base_url is recommended in production: otherwise it is inferred
+| from the request's Host header (validated since K-17, but the deployment
+| should not depend on that).
 */

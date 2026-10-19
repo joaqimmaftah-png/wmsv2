@@ -240,9 +240,10 @@ class Users extends MY_Controller {
 
             $this->db->update('users', $update, array('id' => $this->user_id));
 
-            // Refresh session user_data
+            // Refresh the session payload. It is the whitelisted view of the
+            // row, never the row itself (K-18: no password hash in the session).
             $refreshed = $this->db->where('id', $this->user_id)->get('users')->row();
-            $this->session->set_userdata('user_data', $refreshed);
+            $this->session->set_userdata('user_data', wms_session_user($refreshed));
 
             $this->session->set_flashdata('success', 'Profile updated successfully.');
             redirect('users/profile');

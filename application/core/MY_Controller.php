@@ -224,6 +224,20 @@ class MY_Controller extends CI_Controller {
         $this->user_id   = $this->session->userdata('user_id');
         $this->role_id   = $this->session->userdata('role_id');
         $this->user_data = $this->session->userdata('user_data');
+
+        /*
+         * Sessions written before K-18 carry the entire `users` row, password
+         * hash included, in `ci_sessions`. Rewrite one the first time it is
+         * seen so existing rows stop holding it; new sign-ins are trimmed at
+         * the source (Auth::login). The check is a property test, so it costs
+         * nothing once the payload has been rewritten.
+         */
+        $legacy = (is_object($this->user_data) && isset($this->user_data->password))
+               || (is_array($this->user_data)  && isset($this->user_data['password']));
+        if ($legacy) {
+            $this->user_data = wms_session_user($this->user_data);
+            $this->session->set_userdata('user_data', $this->user_data);
+        }
     }
 
     protected function _load_settings() {

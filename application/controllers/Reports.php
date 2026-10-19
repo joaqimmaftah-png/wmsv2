@@ -180,7 +180,7 @@ class Reports extends MY_Controller {
         $user  = $this->user_data;
         $this->asset_excel->export_register($data, $tmp, array(
             'title'        => 'ASSET REGISTER',
-            'generated_by' => is_array($user) && isset($user['full_name']) ? $user['full_name'] : '',
+            'generated_by' => wms_user_full_name($user),
         ));
         $this->_send_file($tmp, $fname);
     }

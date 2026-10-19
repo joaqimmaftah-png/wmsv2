@@ -277,6 +277,20 @@ git filter-branch --force --prune-empty --index-filter \
 
   `.githooks/pre-commit` refuses a commit that stages a local config, an
   `.env` file, or a SQL dump.
+- Pin the site URL in production — otherwise it follows the request's `Host`
+  header (K-17: the value is now validated and a malformed one is refused, but
+  pinning is still the correct deployment):
+
+  ```php
+  // application/config/config.local.php
+  $config['base_url'] = 'https://wms.example.com/';
+  ```
+
+  or set `WMS_BASE_URL=https://wms.example.com`.
+- Keep the password hash out of the session (K-18): `user_data` holds only the
+  fields the views read, and any session written by an older build is rewritten
+  on its next request. If you add a screen that needs another user column, add
+  it to `wms_session_user()` rather than to the row.
 - On GitHub: **Settings → Code security** — confirm *Secret scanning* and
   *Push protection* are enabled for the repository. Public repositories get
   secret scanning for free; push protection blocks a credential before it is

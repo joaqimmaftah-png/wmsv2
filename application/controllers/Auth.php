@@ -131,10 +131,16 @@ class Auth extends CI_Controller {
                             );
                             $user->last_login = date('Y-m-d H:i:s');
 
+                            /*
+                             * Only the whitelisted view fields go into the
+                             * session, not the whole row: `$user` carries the
+                             * password hash, and sessions are rows in
+                             * `ci_sessions` (K-18).
+                             */
                             $this->session->set_userdata([
                                 'user_id'   => $user->id,
                                 'role_id'   => $user->role_id,
-                                'user_data' => $user,
+                                'user_data' => wms_session_user($user),
                             ]);
 
                             // Session fixation: keep the session data, change the
