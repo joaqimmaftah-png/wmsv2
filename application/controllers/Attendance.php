@@ -616,7 +616,9 @@ class Attendance extends MY_Controller {
             unset($map[$site_id]);
         }
         ksort($map);
-        $this->Settings_model->save('attendance_static_qr_sites', implode(',', array_keys($map)));
+        $this->Settings_model->save_many(array(
+            'attendance_static_qr_sites' => implode(',', array_keys($map)),
+        ));
     }
 
     /**

@@ -464,7 +464,8 @@ check('Attendance gate: Workorders::_assignment_picker filters to eligible on-si
 check('Attendance gate: Workorders::start_session enforces on-site & eligibility checks when gate is active',
     strpos($woControllerSrc, 'Cannot start work while the attendance gate is on') !== FALSE);
 check('Attendance punch: Attendance::record verifies active eligible user row live from database',
-    strpos($attControllerSrc, 'punchable_user($this->user_id)') !== FALSE);
+    strpos($attControllerSrc, 'punchable_user($this->user_id)') !== FALSE
+    && strpos($attControllerSrc, 'Settings_model->save(') === FALSE);
 check('Attendance navigation: sidebar exposes Punch Log to both Supervisors and Managers',
     strpos($sidebarSrc, '$is_supervisor || $is_manager') !== FALSE);
 
