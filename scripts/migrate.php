@@ -225,13 +225,26 @@ function wms_exec_sql_file($mysqli, $filePath) {
     return $n;
 }
 
-// 1. Optional `--schema`: load full baseline schema.sql first
-if ($opts['schema']) {
+// Check whether target database is currently completely empty (0 tables)
+$existingTableCount = 0;
+$resEmpty = @$mysqli->query("SELECT COUNT(*) AS c FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()");
+if ($resEmpty) {
+    $existingTableCount = (int)$resEmpty->fetch_assoc()['c'];
+    $resEmpty->free();
+}
+
+// 1. Load baseline schema.sql when `--schema` is explicitly passed OR when migrating an empty database (0 tables)
+$autoBootstrapped = (!$opts['schema'] && !$opts['status'] && !$opts['verify'] && $existingTableCount === 0);
+if ($opts['schema'] || $autoBootstrapped) {
     if (!is_file($schemaPath)) {
         fwrite(STDERR, "ERROR: {$schemaPath} not found.\n");
         exit(1);
     }
-    echo "Importing baseline schema from database/schema.sql into `{$dbName}`...\n";
+    if ($autoBootstrapped) {
+        echo "Empty database `{$dbName}` detected — bootstrapping baseline schema from database/schema.sql...\n";
+    } else {
+        echo "Importing baseline schema from database/schema.sql into `{$dbName}`...\n";
+    }
     try {
         $count = wms_exec_sql_file($mysqli, $schemaPath);
         echo "OK — executed {$count} statements from database/schema.sql.\n";
@@ -357,13 +370,37 @@ if ($opts['verify']) {
         $errors[] = "Expected at least 80 enforced InnoDB FOREIGN KEY constraints, found {$fkCount}.";
     }
 
+    $res = $mysqli->query("SELECT COUNT(*) AS c FROM `equipment`");
+    $eqCount = $res ? (int)$res->fetch_assoc()['c'] : 0;
+    if ($eqCount < 116) {
+        $errors[] = "Expected at least 116 fleet rows in `equipment`, found {$eqCount}.";
+    }
+
+    $res = $mysqli->query("SELECT COUNT(*) AS c FROM `equipment_specs`");
+    $specCount = $res ? (int)$res->fetch_assoc()['c'] : 0;
+    if ($specCount < 338) {
+        $errors[] = "Expected at least 338 specification rows in `equipment_specs`, found {$specCount}.";
+    }
+
+    $res = $mysqli->query("SELECT COUNT(*) AS c FROM `suppliers`");
+    $supCount = $res ? (int)$res->fetch_assoc()['c'] : 0;
+    if ($supCount < 14) {
+        $errors[] = "Expected at least 14 deduplicated vendor rows in `suppliers`, found {$supCount}.";
+    }
+
+    $res = $mysqli->query("SELECT COUNT(*) AS c FROM `materials`");
+    $matCount = $res ? (int)$res->fetch_assoc()['c'] : 0;
+    if ($matCount < 1697) {
+        $errors[] = "Expected at least 1,697 catalogue rows in `materials`, found {$matCount}.";
+    }
+
     if (!empty($errors)) {
         fwrite(STDERR, "SCHEMA VERIFICATION FAILED:\n  - " . implode("\n  - ", $errors) . "\n");
         exit(1);
     }
 
     echo sprintf(
-        "VERIFIED OK: %d tables | %d foreign keys | ci_sessions PK=1 | %d settings | %d templates | %d checklist items.\n",
-        $tableCount, $fkCount, $settingsCount, $tplCount, $itemCount
+        "VERIFIED OK: %d tables | %d foreign keys | ci_sessions PK=1 | %d settings | %d templates | %d checklist items | %d equipment | %d specs | %d suppliers | %d materials.\n",
+        $tableCount, $fkCount, $settingsCount, $tplCount, $itemCount, $eqCount, $specCount, $supCount, $matCount
     );
 }

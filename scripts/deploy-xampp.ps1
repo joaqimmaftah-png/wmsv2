@@ -3,9 +3,10 @@
     Automated deployment, database migration & health check for XAMPP (Windows).
 
 .DESCRIPTION
-    Pulls the latest branch from GitHub, applies any pending database migrations
-    in `database/migrations/`, runs unit & schema checks, and verifies that
-    Apache + MySQL serve `/wmsv2/login` with HTTP 200.
+    Pulls the latest branch from GitHub, auto-detects XAMPP on any drive letter
+    (e.g. D:\xampp\htdocs\workshop -> D:\xampp\php\php.exe & http://127.0.0.1/workshop/login),
+    applies any pending database migrations in `database/migrations/`, runs unit
+    & schema checks, and verifies that Apache + MySQL serve `/login` with HTTP 200.
 
 .PARAMETER Branch
     Git branch to track and deploy (default: main).
@@ -21,19 +22,39 @@
 #>
 param(
     [string]$Branch = "main",
-    [string]$XamppDir = "C:\xampp",
-    [string]$AppUrl = "http://127.0.0.1/wmsv2/login",
+    [string]$XamppDir = "",
+    [string]$AppUrl = "",
     [switch]$InstallScheduledTask
 )
 
 $ErrorActionPreference = "Stop"
-$RepoRoot = Split-Path -Parent $PSScriptRoot
-$PhpBin   = if (Test-Path "$XamppDir\php\php.exe") { "$XamppDir\php\php.exe" } else { "php" }
+$RepoRoot   = Split-Path -Parent $PSScriptRoot
+$ParentDir  = Split-Path -Parent $RepoRoot
+$AppFolder  = Split-Path -Leaf $RepoRoot
+
+if ([string]::IsNullOrWhiteSpace($XamppDir)) {
+    $CandidateXampp = Split-Path -Parent $ParentDir
+    if ($CandidateXampp -and (Test-Path (Join-Path $CandidateXampp "php\php.exe"))) {
+        $XamppDir = $CandidateXampp
+    } elseif ($env:XAMPP_ROOT -and (Test-Path (Join-Path $env:XAMPP_ROOT "php\php.exe"))) {
+        $XamppDir = $env:XAMPP_ROOT
+    } elseif (Test-Path "D:\xampp\php\php.exe") {
+        $XamppDir = "D:\xampp"
+    } else {
+        $XamppDir = "C:\xampp"
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($AppUrl)) {
+    $AppUrl = "http://127.0.0.1/$AppFolder/login"
+}
+
+$PhpBin = if (Test-Path "$XamppDir\php\php.exe") { "$XamppDir\php\php.exe" } else { "php" }
 
 if ($InstallScheduledTask) {
     $TaskName = "WMSv2-AutoDeploy"
     $ScriptPath = Join-Path $PSScriptRoot "deploy-xampp.ps1"
-    $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$ScriptPath`" -Branch `"$Branch`" -XamppDir `"$XamppDir`""
+    $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$ScriptPath`" -Branch `"$Branch`" -XamppDir `"$XamppDir`" -AppUrl `"$AppUrl`""
     $Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)
     Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Description "Auto-pulls latest WMSv2 commits from GitHub and runs pending DB migrations on XAMPP" -Force | Out-Null
     Write-Host "[OK] Scheduled task '$TaskName' installed (runs every 5 minutes)." -ForegroundColor Green
@@ -42,6 +63,8 @@ if ($InstallScheduledTask) {
 
 Push-Location $RepoRoot
 try {
+    Write-Host "==> XAMPP PHP : $PhpBin" -ForegroundColor Cyan
+    Write-Host "==> Target URL: $AppUrl" -ForegroundColor Cyan
     Write-Host "==> Checking Git upstream ($Branch)..." -ForegroundColor Cyan
     git fetch origin $Branch --quiet
 
@@ -56,7 +79,7 @@ try {
     }
 
     # Ensure writable upload/log directories exist
-    foreach ($dir in @("application\logs", "application\cache", "uploads\photos", "uploads\signatures", "uploads\wo_attachments", "uploads\order_docs")) {
+    foreach ($dir in @("application\logs", "application\cache", "uploads\photos", "uploads\signatures", "uploads\wo_attachments", "uploads\order_docs", "uploads\tmp")) {
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     }
 
