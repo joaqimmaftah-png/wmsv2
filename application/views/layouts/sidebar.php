@@ -291,6 +291,28 @@ $is_ceo        = ($role_id == 5);
       <span class="ni-tip"><?= $is_technician ? 'My Attendance Records' : 'Attendance Records'; ?></span>
     </a>
 
+    <!-- Check in / out — the QR + GPS punch page (ATTENDANCE_WORKFLOW.md).
+         The manager is view-only, so the link is not offered there. -->
+    <?php if (!$is_manager): ?>
+    <a href="<?= base_url('attendance/punch'); ?>" class="ni <?= ni_active('attendance/punch'); ?>" title="Check In / Out">
+      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
+      <span class="ni-label">Check In / Out</span>
+      <span class="ni-tip">Scan the site code to check in or out</span>
+    </a>
+    <?php endif; ?>
+    <?php if ($is_supervisor): ?>
+    <a href="<?= base_url('attendance/board'); ?>" class="ni <?= ni_active('attendance/board'); ?>" title="Site Screen">
+      <div class="ni-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM19 19h2v2h-2z"/></svg></div>
+      <span class="ni-label">Site Screen</span>
+      <span class="ni-tip">Rotating check-in QR for the site entrance</span>
+    </a>
+    <a href="<?= base_url('attendance/log'); ?>" class="ni <?= ni_active('attendance/log'); ?>" title="Punch Log">
+      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/><path d="M3 15h6"/></svg></div>
+      <span class="ni-label">Punch Log</span>
+      <span class="ni-tip">Who is on site, and supervisor corrections</span>
+    </a>
+    <?php endif; ?>
+
     <!-- Shifts — Supervisor, Technician (view), Manager -->
     <a href="<?= base_url('team/shift_roster'); ?>" class="ni <?= ni_active('team/shift'); ?>" title="Shift Roster">
       <div class="ni-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
@@ -315,6 +337,11 @@ $is_ceo        = ($role_id == 5);
       <span class="ni-label">My Attendance</span>
       <span class="ni-tip">My Attendance Records</span>
     </a>
+    <a href="<?= base_url('attendance/punch'); ?>" class="ni <?= ni_active('attendance/punch'); ?>" title="Check In / Out">
+      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
+      <span class="ni-label">Check In / Out</span>
+      <span class="ni-tip">Scan the site code to check in or out</span>
+    </a>
     <?php endif; ?>
 
     <!-- ── 6. ADMIN — Supervisor only ── -->
@@ -325,6 +352,11 @@ $is_ceo        = ($role_id == 5);
       <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></div>
       <span class="ni-label">User Management</span>
       <span class="ni-tip">Manage Users</span>
+    </a>
+    <a href="<?= base_url('attendance/sites'); ?>" class="ni <?= ni_active('attendance/sites'); ?>" title="Attendance Sites">
+      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
+      <span class="ni-label">Attendance Sites</span>
+      <span class="ni-tip">Geofence, site code and the assignment gate</span>
     </a>
     <a href="<?= base_url('settings'); ?>" class="ni <?= ni_active('settings'); ?>" title="Settings">
       <div class="ni-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M5.34 18.66l-1.41 1.41M21 12h-2M5 12H3M18.66 5.34l1.41-1.41M4.93 19.07l1.41-1.41"/></svg></div>

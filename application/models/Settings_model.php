@@ -73,6 +73,15 @@ class Settings_model extends CI_Model {
         // tracked (shown as "—"), which is how Maternity/Paternity/Training
         // behave until the business sets a figure.
         'leave_entitlements'               => '{"Annual Leave":21,"Sick Leave":10,"Emergency":3}',
+
+        /* ── attendance punches (ATTENDANCE_WORKFLOW.md) ─────────────
+           Managed on Attendance → Sites & policy, not on the general
+           settings screen. The gate starts OFF, so enabling the QR/GPS
+           workflow never silently empties the work-order picker. */
+        'attendance_gate_enabled'          => '0',
+        'attendance_open_session_policy'   => 'warn',
+        'attendance_qr_ttl_seconds'        => '60',
+        'attendance_qr_grace_seconds'      => '120',
     );
 
     const DESCRIPTIONS = array(
@@ -99,6 +108,11 @@ class Settings_model extends CI_Model {
 
         'cert_alert_days'                   => 'Days before a certification expiry at which it is flagged "Expiring Soon" (the tracker also lists already-expired certificates)',
         'leave_entitlements'                => 'Leave days per type per year, as JSON keyed by the leave type, e.g. {"Annual Leave":21,"Sick Leave":10,"Emergency":3}. A type not listed is not tracked (shown as "—")',
+
+        'attendance_gate_enabled'           => 'Attendance: 1 = only offer and accept technicians who are checked in on site and free of unfinished work orders; 0 = assignable as before (the default)',
+        'attendance_open_session_policy'    => 'Attendance: warn = accept a check-out with an open work session and name it; block = refuse the check-out until the session is closed',
+        'attendance_qr_ttl_seconds'         => 'Attendance: how long one signed site QR token stays valid, in seconds (10-3600)',
+        'attendance_qr_grace_seconds'       => 'Attendance: how long a just-expired site QR token is still accepted, in seconds (0-3600), to absorb the refresh moment',
     );
 
     const BREAKDOWN_COUNT_MODES = array('start_in_period', 'overlapping');
@@ -363,6 +377,22 @@ class Settings_model extends CI_Model {
 
             case 'login_ip_cap_enabled':
                 return ((int)$value === 0) ? '0' : '1';
+
+            /* ── attendance punches (ATTENDANCE_WORKFLOW.md) ─────────── */
+
+            case 'attendance_gate_enabled':
+                return ((string)$value === '1' || $value === TRUE || $value === 1) ? '1' : '0';
+
+            case 'attendance_open_session_policy':
+                return ((string)$value === 'block') ? 'block' : 'warn';
+
+            case 'attendance_qr_ttl_seconds':
+                $v = (int)$value;
+                return (string)(($v >= 10 && $v <= 3600) ? $v : 60);
+
+            case 'attendance_qr_grace_seconds':
+                $v = (int)$value;
+                return (string)(($v >= 0 && $v <= 3600) ? $v : 120);
 
             case 'pm_meter_stale_days':
                 $v = (int)$value;

@@ -35,7 +35,7 @@ this repository is **public**:
 - A **full production database dump** (`database/yzzme_43038742_aml.sql`,
   66 staff accounts, most hashes legacy **MD5**, the fleet and the stock
   ledger) was tracked until this revision. It is now untracked and ignored;
-  the repository ships `database/schema.sql`, which creates the same 59 tables
+  the repository ships `database/schema.sql`, which creates the same 61 application tables
   with reference data only. The old dump is still in public history — every
   account that existed in it must be treated as password-compromised
   (K-02; `SECURITY.md` §5).
@@ -62,6 +62,7 @@ passwords. See [`SYSTEM.md` §18](SYSTEM.md) for the full register.
 | Suppliers & Orders | Supplier master with contacts and part catalogue; purchase-order pipeline with measured lead-time estimates; partial deliveries, GRN (goods receipt note) per delivery, order documents |
 | Lubricants | Lube types, per-equipment-type specifications, consumption recording with variance, monthly budget, PM-driven requirement vs actual compliance |
 | Team | Staff list on the same `users` table, daily attendance, leave requests/approval with automatic attendance days and per-type balances, certifications with expiry refresh and document upload, monthly attendance report, editable shift roster (shift types + weekly assignments) |
+| Attendance punches | QR + GPS check-in / check-out: geofenced sites (coordinates + radius + accuracy limit), a supervisor's site screen showing a signed code that rotates every minute, a phone page that records a server-timestamped punch only when both the code and the position check out, supervisor corrections with a reason, and an optional gate that limits work-order assignment to technicians who are on site — see [`ATTENDANCE_WORKFLOW.md`](ATTENDANCE_WORKFLOW.md) |
 | Users & Settings | Role-based user administration (Supervisor only); system settings; sign-in security screen (throttling policy + security events) |
 | Reports | Daily/weekly/monthly reports, MTTR/MTBF, lube compliance, store registers (issue/receipt/reorder), asset register (+ Excel import), annual report/plan, service-kit recommendations, workshop daily/weekly reports, and the W36 weekly fleet report (screen, Excel, print, publish/freeze) |
 | Forecast | Planned-availability week planner (PM placement, maintenance jobs, weekly inspection rounds, standing/unplanned allowances), publish/freeze with revisions, plan-vs-actual, rolling 3-week plan, PM spare-parts forecast |
@@ -107,7 +108,7 @@ required) for an on-screen environment check.
 │   ├── cache/                 must be writable
 │   └── logs/                  must be writable (CI logs + php_errors.log)
 ├── database/
-│   ├── schema.sql              Schema + reference data only (59 tables, no staff/fleet/stock)
+│   ├── schema.sql              Schema + reference data only (61 application tables, no staff/fleet/stock)
 │   └── migrations/             Forward-only SQL for an existing database (K-16, K-20)
 ├── tests/run.php               Dependency-free test runner (no Composer/PHPUnit/database)
 ├── scripts/
@@ -166,7 +167,7 @@ Notes:
 - The file contains **no** `CREATE DATABASE`, `USE`, or `DROP TABLE`
   statements — import it into an empty database; importing twice will fail on
   existing tables.
-- It creates all 59 tables including `ci_sessions` (required before first
+- It creates all 61 application tables including `ci_sessions` (required before first
   sign-in) and loads the reference data the application needs: roles,
   equipment types, lubricant types, report groups/sites, shift definitions and
   settings. It contains **no staff accounts, no password hashes, no fleet, no

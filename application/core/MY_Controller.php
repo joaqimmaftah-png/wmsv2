@@ -51,6 +51,7 @@ class MY_Controller extends CI_Controller {
     public $Maintenance_plan_model;
     public $Kpi_engine_model;
     public $Auth_throttle_model;
+    public $Attendance_model;
 
     /**
      * PHP 8.x parameter guard: CodeIgniter 3 dispatches URL segments directly
@@ -163,6 +164,11 @@ class MY_Controller extends CI_Controller {
         // and publishes the plan, the manager reads it and the variance.
         'forecast'    => array(1, 4),
         'team'        => array(1, 2, 3, 4),
+        // Attendance punching (ATTENDANCE_WORKFLOW.md): technicians, store
+        // keepers, supervisors and the manager may punch/read. Site
+        // configuration, the site screen and corrections are guarded
+        // supervisor-only inside the controller.
+        'attendance'  => array(1, 2, 3, 4),
         'users'       => array(1),
         'settings'    => array(1),
     );
@@ -239,7 +245,16 @@ class MY_Controller extends CI_Controller {
 
     protected function _check_auth() {
         if (!$this->session->userdata('user_id')) {
-            redirect('login');
+            /*
+             * Come back here after signing in. The attendance punch page is the
+             * case that matters: a QR code scanned on a phone whose session has
+             * expired must not cost the technician the scanned token.
+             * Auth::_safe_next() only accepts a local path.
+             */
+            $here = trim((string)$this->uri->uri_string(), '/');
+            $qs   = isset($_SERVER['QUERY_STRING']) ? (string)$_SERVER['QUERY_STRING'] : '';
+            $next = '/' . $here . ($here !== '' && $qs !== '' ? '?' . $qs : '');
+            redirect($here !== '' ? 'login?next=' . rawurlencode($next) : 'login');
         }
         $this->user_id   = $this->session->userdata('user_id');
         $this->role_id   = $this->session->userdata('role_id');

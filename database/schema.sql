@@ -3,12 +3,12 @@
 -- Compatible with MySQL 8.0+ and MariaDB 10.4+ (XAMPP / cPanel / Linux VPS)
 -- Ordered cleanly:
 --   1. Session settings & transaction start
---   2. All 60 CREATE TABLE definitions
+--   2. All 62 CREATE TABLE definitions
 --   3. All PRIMARY KEY, UNIQUE KEY & secondary indexes
 --   4. All AUTO_INCREMENT definitions (active BEFORE any INSERT runs!)
 --   5. All FOREIGN KEY constraints
---   6. Master reference data, 25 system settings & 14 EN/FR checklists (630 items)
---   7. Baseline schema_migrations ledger (0001..0007 SHA-256 checksums)
+--   6. Master reference data, 29 system settings & 14 EN/FR checklists (630 items)
+--   7. Baseline schema_migrations ledger (0001..0010 SHA-256 checksums)
 -- =============================================================================
 
 
@@ -47,6 +47,40 @@ CREATE TABLE `attendance` (
   `notes` text DEFAULT NULL,
   `created_by` int(11) DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `attendance_sites` (
+  `id` int(11) NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `latitude` decimal(10,7) NOT NULL COMMENT 'Geofence centre - punch distance is measured from here',
+  `longitude` decimal(10,7) NOT NULL,
+  `radius_m` int(11) NOT NULL DEFAULT 150 COMMENT 'Accepted distance from the centre, metres (the form never pre-fills it: the site decides)',
+  `max_accuracy_m` int(11) NOT NULL DEFAULT 100 COMMENT 'Worst reported GPS accuracy accepted, metres',
+  `qr_secret` char(64) NOT NULL COMMENT '32 random bytes, hex - signs this site''s rotating QR tokens',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `attendance_punches` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL COMMENT 'The worker who punched (or whose punch was corrected)',
+  `site_id` int(11) DEFAULT NULL COMMENT 'NULL on a correction that is not tied to a site',
+  `work_date` date NOT NULL COMMENT 'Local work day the punch belongs to',
+  `punch_type` enum('check_in','check_out') NOT NULL,
+  `punched_at` datetime NOT NULL COMMENT 'Server time for a self punch, corrected time for a correction',
+  `origin` enum('self','supervisor') NOT NULL DEFAULT 'self',
+  `latitude` decimal(10,7) DEFAULT NULL,
+  `longitude` decimal(10,7) DEFAULT NULL,
+  `accuracy_m` decimal(7,1) DEFAULT NULL COMMENT 'Accuracy the phone reported, metres',
+  `distance_m` decimal(8,1) DEFAULT NULL COMMENT 'Server-computed distance from the site point',
+  `radius_m` int(11) DEFAULT NULL COMMENT 'Radius in force when the punch was accepted',
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` varchar(255) DEFAULT NULL,
+  `reason` varchar(300) DEFAULT NULL COMMENT 'Required for a supervisor correction',
+  `created_by` int(11) DEFAULT NULL COMMENT 'Who recorded the event (self punch: the worker)',
+  `created_at` datetime NOT NULL COMMENT 'When the row was written (audit clock)'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `backlogs` (
@@ -911,6 +945,18 @@ ALTER TABLE `attendance`
   ADD UNIQUE KEY `unique_attendance` (`user_id`,`date`),
   ADD KEY `created_by` (`created_by`);
 
+ALTER TABLE `attendance_sites`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_attendance_sites_active` (`is_active`),
+  ADD KEY `fk_attendance_sites_created_by` (`created_by`);
+
+ALTER TABLE `attendance_punches`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_punch_user_date` (`user_id`,`work_date`,`punched_at`),
+  ADD KEY `idx_punch_date` (`work_date`,`user_id`),
+  ADD KEY `fk_attendance_punches_site` (`site_id`),
+  ADD KEY `fk_attendance_punches_created_by` (`created_by`);
+
 ALTER TABLE `backlogs`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uq_backlog_source_ref` (`source_ref`),
@@ -1295,6 +1341,12 @@ ALTER TABLE `asset_import_logs`
 ALTER TABLE `attendance`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
+ALTER TABLE `attendance_sites`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+ALTER TABLE `attendance_punches`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
 ALTER TABLE `backlogs`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=64;
 
@@ -1470,6 +1522,14 @@ ALTER TABLE `inspection_items` AUTO_INCREMENT = 631;
 ALTER TABLE `attendance`
   ADD CONSTRAINT `attendance_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
   ADD CONSTRAINT `attendance_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`);
+
+ALTER TABLE `attendance_sites`
+  ADD CONSTRAINT `fk_attendance_sites_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+ALTER TABLE `attendance_punches`
+  ADD CONSTRAINT `fk_attendance_punches_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  ADD CONSTRAINT `fk_attendance_punches_site` FOREIGN KEY (`site_id`) REFERENCES `attendance_sites` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_attendance_punches_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
 
 ALTER TABLE `backlogs`
   ADD CONSTRAINT `fk_backlog_equipment` FOREIGN KEY (`equipment_id`) REFERENCES `equipment` (`id`) ON DELETE SET NULL;
@@ -1795,7 +1855,11 @@ INSERT INTO `settings` (`setting_key`, `setting_value`, `description`) VALUES
 ('unplanned_allowance_default_hours', '1', 'flat mode: planned breakdown allowance per day (hours)'),
 ('unplanned_allowance_lookback_weeks', '12', 'derived mode: lookback history in weeks'),
 ('forecast_show_excel_reference', '1', 'D29/D30: 1 = show historical Excel reference columns alongside approved KPI figures - 0 = hide'),
-('leave_entitlements', '{"Annual Leave":21,"Sick Leave":10,"Emergency":3}', 'Annual leave days per leave type as JSON');
+('leave_entitlements', '{"Annual Leave":21,"Sick Leave":10,"Emergency":3}', 'Annual leave days per leave type as JSON'),
+('attendance_gate_enabled', '0', 'Attendance: 1 = only offer and accept technicians who are checked in on site and free of unfinished work orders - 0 = assignable as before'),
+('attendance_open_session_policy', 'warn', 'Attendance: warn = accept a check-out with an open work session and name it - block = refuse the check-out until the session is closed'),
+('attendance_qr_ttl_seconds', '60', 'Attendance: how long one signed site QR token stays valid, seconds (10-3600)'),
+('attendance_qr_grace_seconds', '120', 'Attendance: how long a just-expired site QR token is still accepted, seconds (0-3600)');
 
 INSERT INTO `shifts` (`id`, `name`, `start_time`, `end_time`, `description`) VALUES
 (1, 'Day Shift', '06:00:00', '18:00:00', '12-hour day rotation'),
@@ -17779,7 +17843,8 @@ INSERT INTO `schema_migrations` (`version`, `filename`, `checksum`, `applied_at`
   ('0006', '0006_foreign_keys_integrity.sql', 'e2fb6e00b0bc193cffd5750de1bd1f5dd5cf98cd775e4e93a84921951637107e', NOW()),
   ('0007', '0007_seed_master_data_and_checklists.sql', 'dc0ab3217d181b6d26fccd8d27f8390dd09c51bee37ac57fafc20b7ebb10324a', NOW()),
   ('0008', '0008_restore_equipment_register.sql', 'd62da8c24acbda0556b6c60dd5e5f0f6a07d63ad8c628b9ab57c2144fab970dd', NOW()),
-  ('0009', '0009_restore_suppliers_and_inventory.sql', '35c544d5a38f264017934abda0b033ec4433ab1f988ad685d15a5f010c1afb21', NOW())
+  ('0009', '0009_restore_suppliers_and_inventory.sql', '35c544d5a38f264017934abda0b033ec4433ab1f988ad685d15a5f010c1afb21', NOW()),
+  ('0010', '0010_attendance_punches.sql', 'a31f2a2911fddf591a6eea7bef488956f1a0eefef3678152c66121c28a7080fb', NOW())
 ON DUPLICATE KEY UPDATE `filename` = VALUES(`filename`), `checksum` = VALUES(`checksum`);
 
 COMMIT;

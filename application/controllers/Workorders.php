@@ -9,10 +9,12 @@ class Workorders extends MY_Controller {
     public $Team_model;
     public $Lubricant_model;
     public $Spareparts_model;
+    public $Attendance_model;
+    public $Settings_model;
 
     public function __construct() {
         parent::__construct();
-        $this->load->model(array('Workorder_model','Equipment_model','Team_model','Lubricant_model','Materials_model','Spareparts_model'));
+        $this->load->model(array('Workorder_model','Equipment_model','Team_model','Lubricant_model','Materials_model','Spareparts_model','Attendance_model','Settings_model'));
         $this->Spareparts_model->materials = $this->Materials_model;
     }
 
@@ -28,7 +30,8 @@ class Workorders extends MY_Controller {
         );
         $data['work_orders']    = $this->Workorder_model->get_all($filter);
         $data['equipment_list'] = $this->Equipment_model->get_all_active();
-        $data['technicians']    = $this->Team_model->get_technicians();
+        $data['technicians']    = $this->_assignment_picker();
+        $data['attendance_gate']= $this->_attendance_gate();
         $data['filter']         = $filter;
         $data['page_title']     = 'Work Orders';
         $this->render('maintenance/workorders', $data);
@@ -42,6 +45,15 @@ class Workorders extends MY_Controller {
             $wo_number = $this->_generate_wo_number();
             $sys_csv   = $this->_get_systems_csv();
             $techs_csv = $this->input->post('assigned_to', TRUE) ?: NULL;
+
+            $problems = $this->_assignment_problems((string)$techs_csv);
+            if (!empty($problems)) {
+                $this->session->set_flashdata('error',
+                    'Only technicians who are checked in on site and free of unfinished work orders can be '
+                    .'assigned while the attendance gate is on. ' . implode(' ', $problems));
+                redirect('workorders/create');
+                return;
+            }
 
             $op_sig = $this->_save_operator_signature();
 
@@ -132,7 +144,8 @@ class Workorders extends MY_Controller {
         }
 
         $data['equipment_list'] = $this->Equipment_model->get_all_active();
-        $data['technicians']    = $this->Team_model->get_technicians();
+        $data['technicians']    = $this->_assignment_picker();
+        $data['attendance_gate']= $this->_attendance_gate();
         $data['spare_parts']    = array();
         $data['lubes']          = array();
         $data['page_title']     = 'Create New Work Order';
@@ -190,6 +203,15 @@ class Workorders extends MY_Controller {
         if ($this->input->post()) {
             $sys_csv   = $this->_get_systems_csv();
             $techs_csv = $this->input->post('assigned_to', TRUE) ?: NULL;
+
+            $problems = $this->_assignment_problems((string)$techs_csv, (string)$wo->assigned_to);
+            if (!empty($problems)) {
+                $this->session->set_flashdata('error',
+                    'Only technicians who are checked in on site and free of unfinished work orders can be '
+                    .'added while the attendance gate is on. ' . implode(' ', $problems));
+                redirect("workorders/edit/{$id}");
+                return;
+            }
 
             $op_sig = $this->_save_operator_signature();
 
@@ -316,7 +338,8 @@ class Workorders extends MY_Controller {
         $data['spare_parts']    = $this->Workorder_model->get_spare_parts($id);
         $data['lubes']          = $this->Workorder_model->get_oil_records($id);
         $data['equipment_list'] = $this->Equipment_model->get_all_active();
-        $data['technicians']    = $this->Team_model->get_technicians();
+        $data['technicians']    = $this->_assignment_picker($wo);
+        $data['attendance_gate']= $this->_attendance_gate();
         $data['incident']       = $this->Workorder_model->get_incident($id);
         $data['attachments']    = $this->Workorder_model->get_attachments($id, 'Incident Evidence');
         $data['page_title']     = 'Edit WO: ' . $wo->wo_number;
@@ -1002,6 +1025,109 @@ class Workorders extends MY_Controller {
             $csv = $arr ? implode(',', (array)$arr) : NULL;
         }
         return $csv;
+    }
+
+    /* ─────────────────────────────────────────────────────
+       ATTENDANCE GATE (ATTENDANCE_WORKFLOW.md)
+
+       When `attendance_gate_enabled` is on, only technicians who are on site
+       and free of unfinished work orders may be OFFERED for assignment, and
+       the same rule is re-checked here when the form is saved — a hidden name
+       in the picker is not a rule. The gate is off by default, so an
+       installation that has not configured an attendance site behaves exactly
+       as before.
+    ───────────────────────────────────────────────────── */
+    private function _attendance_gate() {
+        try {
+            return (string)$this->Settings_model->get('attendance_gate_enabled', '0') === '1';
+        } catch (Throwable $e) {
+            return FALSE;
+        }
+    }
+
+    /**
+     * The technicians a supervisor may pick in this form.
+     *
+     * On an edit, the technicians already named on the order are included even
+     * when they are no longer eligible: otherwise an unrelated edit would hide
+     * them, and the supervisor could not see whom to clear. They are flagged
+     * (`->eligible = FALSE`, `->block_reasons`) for the view.
+     *
+     * @param  object|null $wo the order being edited
+     * @return array
+     */
+    private function _assignment_picker($wo = NULL) {
+        if (!$this->_attendance_gate()) {
+            return $this->Team_model->get_technicians();
+        }
+
+        try {
+            if (!$this->Attendance_model->ready()) {
+                return $this->Team_model->get_technicians();
+            }
+
+            $list    = $this->Attendance_model->technicians_for_assignment();
+            $have    = array();
+            $current = array();
+            foreach ($list as $t) $have[(int)$t->id] = TRUE;
+
+            if ($wo && !empty($wo->assigned_to)) {
+                $current = preg_split('/[^0-9]+/', (string)$wo->assigned_to, -1, PREG_SPLIT_NO_EMPTY);
+            }
+
+            foreach (array_unique($current) as $id) {
+                $id = (int)$id;
+                if ($id <= 0 || isset($have[$id])) continue;
+
+                $row = $this->db->select('id, first_name, last_name, position, employee_id, role_id')
+                    ->where('id', $id)->get('users')->row();
+                if (!$row) continue;
+
+                $e = $this->Attendance_model->eligibility($id);
+                $row->on_site       = $e['on_site'];
+                $row->eligible      = $e['eligible'];
+                $row->block_reasons = $e['reasons'];
+                $list[] = $row;
+                $have[$id] = TRUE;
+            }
+
+            return $list;
+        } catch (Throwable $e) {
+            // The gate must never break the work-order form.
+            log_message('error', 'WMS: attendance gate could not be evaluated — ' . $e->getMessage());
+            return $this->Team_model->get_technicians();
+        }
+    }
+
+    /**
+     * Server-side re-check of what actually arrived in `assigned_to`.
+     *
+     * Only the ids being ADDED are checked: clearing an ineligible technician
+     * has to stay possible, and an unrelated edit must not be blocked by an
+     * assignment that already existed when the gate was switched on.
+     *
+     * @return array human-readable problems (empty = accept)
+     */
+    private function _assignment_problems($new_csv, $old_csv = '') {
+        if (!$this->_attendance_gate()) return array();
+
+        try {
+            if (!$this->Attendance_model->ready()) return array();
+        } catch (Throwable $e) {
+            return array();
+        }
+
+        $old = array();
+        foreach (preg_split('/[^0-9]+/', (string)$old_csv, -1, PREG_SPLIT_NO_EMPTY) as $id) $old[(int)$id] = TRUE;
+
+        $added = array();
+        foreach (preg_split('/[^0-9]+/', (string)$new_csv, -1, PREG_SPLIT_NO_EMPTY) as $id) {
+            $id = (int)$id;
+            if ($id > 0 && !isset($old[$id])) $added[] = $id;
+        }
+        if (empty($added)) return array();
+
+        return $this->Attendance_model->assignment_problems(implode(',', $added));
     }
 
     private function _generate_wo_number() {

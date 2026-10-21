@@ -80,6 +80,7 @@ $GLOBALS['wms_test_app'] = new WmsTestApp();
 
 require_once __DIR__ . '/../application/helpers/user_helper.php';
 require_once __DIR__ . '/../application/helpers/currency_helper.php';
+require_once __DIR__ . '/../application/helpers/attendance_helper.php';
 
 /* ─────────────────────────────────────────────────────────────────────────
    K-18 — the session payload
@@ -270,15 +271,109 @@ is_same('XlsxWriter: setRowHeight(null, ...) emits zero PHP 8.x warnings/depreca
 is_same('XlsxWriter: writes valid ZIP header PK\\x03\\x04', "PK\x03\x04", substr(file_get_contents($tmpXlsx), 0, 4));
 @unlink($tmpXlsx);
 
+/* ─────────────────────────────────────────────────────────────────────────
+   Attendance punches (ATTENDANCE_WORKFLOW.md)
+
+   The geofence arithmetic and the signed QR tokens are the two places where a
+   silent mistake is invisible in the UI but expensive in the field: a fence
+   that is off by a factor, or a token check that accepts an old code. Both are
+   pure functions, so they are pinned here.
+   ───────────────────────────────────────────────────────────────────────── */
+
+// Coordinates
+check('Attendance: a normal latitude is accepted', wms_valid_latitude('0.3475964'));
+check('Attendance: a latitude beyond 90 is rejected', !wms_valid_latitude('91'));
+check('Attendance: a latitude of text is rejected', !wms_valid_latitude('51.5N'));
+check('Attendance: an empty latitude is rejected', !wms_valid_latitude(''));
+check('Attendance: NULL is not a latitude', !wms_valid_latitude(NULL));
+check('Attendance: the south pole is a latitude', wms_valid_latitude(-90));
+check('Attendance: a normal longitude is accepted', wms_valid_longitude('32.5825197'));
+check('Attendance: a longitude beyond 180 is rejected', !wms_valid_longitude('181'));
+check('Attendance: an array is not a longitude', !wms_valid_longitude(array(1)));
+
+// Distance (haversine)
+$d_1km = wms_attendance_distance_m(0, 0, 0, 0.008993);   // ~1 km at the equator
+check('Attendance: ~1 km along the equator is ~1000 m', $d_1km > 990 && $d_1km < 1010, 'got ' . var_export($d_1km, TRUE));
+is_same('Attendance: the distance is symmetric',
+    wms_attendance_distance_m(0.3475964, 32.5825197, 0.3485964, 32.5835197),
+    wms_attendance_distance_m(0.3485964, 32.5835197, 0.3475964, 32.5825197));
+is_same('Attendance: the same point is 0 m', 0.0, wms_attendance_distance_m(0.3475964, 32.5825197, 0.3475964, 32.5825197));
+$d_111 = wms_attendance_distance_m(0, 0, 0.001, 0);
+check('Attendance: a point 0.001 deg north is ~111 m', $d_111 > 110 && $d_111 < 112, 'got ' . var_export($d_111, TRUE));
+is_same('Attendance: an invalid coordinate has no distance', NULL, wms_attendance_distance_m(0, 0, 200, 0));
+
+// The GPS verdict: order of the checks matters
+$v = wms_attendance_geo_verdict(NULL, 150, 10, 100);
+is_same('Attendance: no position is refused', 'no_location', $v['code']);
+$v = wms_attendance_geo_verdict(10, 150, NULL, 100);
+is_same('Attendance: a position with no accuracy is refused', 'no_accuracy', $v['code']);
+$v = wms_attendance_geo_verdict(10, 150, 700, 100);
+is_same('Attendance: poor accuracy is refused even inside the fence', 'accuracy', $v['code']);
+$v = wms_attendance_geo_verdict(400, 150, 20, 100);
+is_same('Attendance: a good fix outside the fence is refused', 'outside', $v['code']);
+$v = wms_attendance_geo_verdict(149, 150, 20, 100);
+check('Attendance: a good fix inside the fence is accepted', $v['ok']);
+$v = wms_attendance_geo_verdict(5000, 0, 5, 0);
+check('Attendance: a radius of 0 means no fence, only the accuracy rule applies', $v['ok']);
+
+// Signed, short-lived QR tokens
+$secret = str_repeat('ab', 32);
+$now    = 1_800_000_000;
+$token  = wms_attendance_qr_token(3, $secret, $now, 60);
+check('Attendance: a token is issued', is_string($token) && $token !== '');
+check('Attendance: the token carries no technician data', strpos((string)$token, '@') === FALSE);
+$ok = wms_attendance_qr_verify($token, $secret, $now, 60, 0);
+check('Attendance: the current token verifies', $ok['ok']);
+is_same('Attendance: the token names its site', 3, $ok['site_id']);
+
+$bad = wms_attendance_qr_verify($token, str_repeat('cd', 32), $now, 60, 0);
+is_same('Attendance: another secret is refused', 'bad_signature', $bad['code']);
+$bad = wms_attendance_qr_verify(substr($token, 0, -1) . (substr($token, -1) === 'a' ? 'b' : 'a'), $secret, $now, 60, 0);
+is_same('Attendance: a tampered MAC is refused', 'bad_signature', $bad['code']);
+$bad = wms_attendance_qr_verify('v2.3.1.' . str_repeat('0', 32), $secret, $now, 60, 0);
+is_same('Attendance: another version is refused', 'wrong_version', $bad['code']);
+foreach (array('', 'hello', 'v1.3', 'v1.3.x.' . str_repeat('0', 32), str_repeat('9', 200)) as $junk) {
+    $bad = wms_attendance_qr_verify($junk, $secret, $now, 60, 0);
+    is_same('Attendance: malformed token ' . var_export(substr($junk, 0, 12), TRUE) . ' is refused', 'malformed', $bad['code']);
+}
+
+// Expiry & grace: a token is valid for its window plus the grace only
+$in_window = wms_attendance_qr_verify($token, $secret, $now + 59, 60, 0);
+check('Attendance: the token still works one second before its window ends', $in_window['ok']);
+$expired = wms_attendance_qr_verify($token, $secret, $now + 61, 60, 0);
+is_same('Attendance: it stops working without grace', 'expired', $expired['code']);
+$graced = wms_attendance_qr_verify($token, $secret, $now + 61, 60, 120);
+check('Attendance: the grace window accepts the previous token', $graced['ok']);
+$past_grace = wms_attendance_qr_verify($token, $secret, $now + 200, 60, 120);
+is_same('Attendance: beyond the grace it expires', 'expired', $past_grace['code']);
+$future = wms_attendance_qr_verify(wms_attendance_qr_token(3, $secret, $now + 60, 60), $secret, $now, 60, 0);
+is_same('Attendance: a token from the future is refused', 'expired', $future['code']);
+check('Attendance: a site id of 0 issues no token', wms_attendance_qr_token(0, $secret, $now, 60) === NULL);
+check('Attendance: a short secret issues no token', wms_attendance_qr_token(3, 'abc', $now, 60) === NULL);
+
+// Punch sequencing
+is_same('Attendance: the first punch of the day is a check-in', 'check_in', wms_attendance_next_punch(NULL));
+is_same('Attendance: after a check-in the next punch is a check-out', 'check_out', wms_attendance_next_punch('check_in'));
+is_same('Attendance: after a check-out the next punch is a check-in', 'check_in', wms_attendance_next_punch('check_out'));
+check('Attendance: no punches means not on site', !wms_attendance_on_site(array()));
+check('Attendance: a standing check-in means on site', wms_attendance_on_site(array('check_in')));
+check('Attendance: a check-out means not on site', !wms_attendance_on_site(array('check_in', 'check_out')));
+check('Attendance: a return after a check-out means on site again', wms_attendance_on_site(array('check_in', 'check_out', 'check_in')));
+is_same('Attendance: punch labels', 'Check-out', wms_attendance_punch_label('check_out'));
+
 $schemaSql = file_get_contents(__DIR__ . '/../database/schema.sql');
 check('Schema: schema_migrations ledger table defined', strpos($schemaSql, 'CREATE TABLE IF NOT EXISTS `schema_migrations`') !== FALSE);
 check('Schema: ci_sessions uses single-column PRIMARY KEY (`id`) for sess_match_ip = FALSE', strpos($schemaSql, "ALTER TABLE `ci_sessions`\n  ADD PRIMARY KEY (`id`)") !== FALSE);
+check('Schema: attendance_sites defined', strpos($schemaSql, 'CREATE TABLE `attendance_sites`') !== FALSE);
+check('Schema: attendance_punches defined', strpos($schemaSql, 'CREATE TABLE `attendance_punches`') !== FALSE);
+check('Schema: attendance tables carry foreign keys', strpos($schemaSql, 'fk_attendance_punches_user') !== FALSE);
+check('Schema: seeds the attendance settings', strpos($schemaSql, "attendance_gate_enabled") !== FALSE);
 check('Schema: seeds all 14 bilingual inspection_templates', strpos($schemaSql, 'INSERT IGNORE INTO `inspection_templates`') !== FALSE);
 check('Schema: seeds all 630 inspection_items', strpos($schemaSql, 'INSERT IGNORE INTO `inspection_items`') !== FALSE);
 
 $migFiles = glob(__DIR__ . '/../database/migrations/[0-9][0-9][0-9][0-9]_*.sql');
 sort($migFiles, SORT_STRING);
-is_same('Migrations: all 9 ordered SQL migrations present (0001..0009)', 9, count($migFiles));
+is_same('Migrations: all 10 ordered SQL migrations present (0001..0010)', 10, count($migFiles));
 foreach ($migFiles as $mf) {
     $bn  = basename($mf);
     $sum = hash_file('sha256', $mf);
