@@ -17800,7 +17800,8 @@ INSERT INTO `schema_migrations` (`version`, `filename`, `checksum`, `applied_at`
   ('0005', '0005_unique_constraints_and_indexes.sql', 'e99e3aca0732b08abbbd8d1e794825132c4f9a113e6e2bd6e539461df7821f1b', NOW()),
   ('0006', '0006_foreign_keys_integrity.sql', 'e2fb6e00b0bc193cffd5750de1bd1f5dd5cf98cd775e4e93a84921951637107e', NOW()),
   ('0007', '0007_seed_master_data_and_checklists.sql', 'dc0ab3217d181b6d26fccd8d27f8390dd09c51bee37ac57fafc20b7ebb10324a', NOW()),
-  ('0008', '0008_restore_equipment_register.sql', '4e8cc26efd7f350ef6c5058227902d79755ebbc62a7e546da36c7133351cb5a8', NOW())
+  ('0008', '0008_restore_equipment_register.sql', '4e8cc26efd7f350ef6c5058227902d79755ebbc62a7e546da36c7133351cb5a8', NOW()),
+  ('0009', '0009_restore_suppliers_and_inventory.sql', 'c6d322a081eee091185e46383d21f7781decbd146789f1335c03648a625f5b80', NOW())
 ON DUPLICATE KEY UPDATE `filename` = VALUES(`filename`), `checksum` = VALUES(`checksum`);
 
 COMMIT;
