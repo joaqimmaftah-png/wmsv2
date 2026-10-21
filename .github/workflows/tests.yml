@@ -128,7 +128,7 @@ jobs:
             --data-urlencode "email=admin@ci.local" \
             --data-urlencode "password=AdminPass123!" >/dev/null
 
-          for ROUTE in dashboard equipment workorders pm inspections materials spareparts suppliers orders lubricants team attendance attendance/sites attendance/board attendance/log backlog reports forecast users settings; do
+          for ROUTE in dashboard equipment workorders pm inspections materials spareparts suppliers orders lubricants team attendance attendance/sites attendance/board attendance/print_qr attendance/log backlog reports forecast users settings; do
             BODY=$(curl -fsSL -b "$COOKIES" -c "$COOKIES" "http://127.0.0.1:8000/$ROUTE")
             if echo "$BODY" | grep -Eq "Severity: (Warning|Notice|Deprecated|Error)|Fatal error|Uncaught|Database Error"; then
               echo "PHP error output found on /$ROUTE!"
@@ -139,3 +139,102 @@ jobs:
           # Verify XLSX binary export starts with valid ZIP magic PK\x03\x04
           curl -fsSL -b "$COOKIES" -c "$COOKIES" "http://127.0.0.1:8000/reports/export_annual_report_xlsx" -o /tmp/annual.xlsx
           python3 -c 'data=open("/tmp/annual.xlsx","rb").read(); assert data[:4]==b"PK\x03\x04", f"Corrupt XLSX header: {data[:80]!r}"; print("Valid XLSX bytes:", len(data))'
+
+          # Live end-to-end verification of ATTENDANCE_WORKFLOW.md lifecycle
+          php scripts/create-admin.php tech1@ci.local "AdminPass123!" "John" "Moshi" 2
+          python3 - <<'PY'
+          import http.cookiejar, json, re, urllib.error, urllib.parse, urllib.request
+
+          cj = http.cookiejar.MozillaCookieJar('/tmp/cookies.txt')
+          cj.load(ignore_discard=True, ignore_expires=True)
+          opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+          BASE = 'http://127.0.0.1:8000'
+
+          def get(path):
+              return opener.open(BASE + path).read().decode('utf-8', 'replace')
+
+          def csrf_from(html):
+              m = re.search(r'name=["\x27]csrf_token_wms["\x27]\s+value=["\x27]([^"\x27]+)', html)
+              assert m, 'Missing csrf_token_wms in HTML'
+              return m.group(1)
+
+          def post(path, fields, ajax=False):
+              data = urllib.parse.urlencode(fields).encode()
+              headers = {'X-Requested-With': 'XMLHttpRequest'} if ajax else {}
+              req = urllib.request.Request(BASE + path, data=data, headers=headers)
+              try:
+                  r = opener.open(req)
+                  return r.status, r.read().decode('utf-8', 'replace')
+              except urllib.error.HTTPError as e:
+                  return e.code, e.read().decode('utf-8', 'replace')
+
+          # 1. Create active geofenced site with printed QR fallback enabled
+          tok = csrf_from(get('/attendance/sites'))
+          code, _ = post('/attendance/sites', {
+              'csrf_token_wms': tok,
+              'name': 'Workshop Main Gate',
+              'latitude': '-6.7924123',
+              'longitude': '39.2083456',
+              'radius_m': '150',
+              'max_accuracy_m': '100',
+              'is_active': '1',
+              'allow_static_qr': '1',
+          })
+          assert code == 200
+
+          # 2. Enable attendance assignment gate & retention/grace policy
+          tok = csrf_from(get('/attendance/sites'))
+          code, _ = post('/attendance/policy', {
+              'csrf_token_wms': tok,
+              'attendance_gate_enabled': '1',
+              'attendance_open_session_policy': 'block',
+              'attendance_qr_ttl_seconds': '60',
+              'attendance_qr_grace_seconds': '120',
+              'attendance_location_retention_days': '365',
+          })
+          assert code == 200
+
+          # 3. Before check-in, work-order picker must exclude unchecked-in technicians
+          wo_create_before = get('/workorders/create')
+          assert 'John Moshi' not in wo_create_before, 'Unchecked-in technician leaked into WO picker!'
+          assert 'No technicians are currently checked in on site' in wo_create_before
+
+          # 4. Issue rotating QR token; outside geofence must fail (422), inside must succeed (200)
+          token_json = json.loads(get('/attendance/token'))
+          assert token_json['ok'] is True
+          qr_token = token_json['token']
+
+          punch_page = get('/attendance/punch?t=' + urllib.parse.quote(qr_token))
+          code422, body422 = post('/attendance/record', {
+              'csrf_token_wms': csrf_from(punch_page),
+              't': qr_token,
+              'lat': '-6.8500000',
+              'lng': '39.2083456',
+              'acc': '12',
+              'format': 'json',
+          }, ajax=True)
+          assert code422 == 422 and json.loads(body422)['ok'] is False
+
+          punch_page = get('/attendance/punch?t=' + urllib.parse.quote(qr_token))
+          code200, body200 = post('/attendance/record', {
+              'csrf_token_wms': csrf_from(punch_page),
+              't': qr_token,
+              'lat': '-6.7924200',
+              'lng': '39.2083500',
+              'acc': '12',
+              'format': 'json',
+          }, ajax=True)
+          res200 = json.loads(body200)
+          assert code200 == 200 and res200['ok'] is True and res200['punch'] == 'check_in', body200
+
+          # 5. Checked-in user now appears in WO picker while unchecked-in John Moshi stays excluded
+          wo_create_after = get('/workorders/create')
+          assert 'CI Supervisor' in wo_create_after, 'Checked-in user missing from WO picker!'
+          assert 'John Moshi' not in wo_create_after, 'Unchecked-in technician leaked into WO picker!'
+
+          # 6. Printable fixed QR poster renders valid v1.<site>.0.<mac> token
+          print_html = get('/attendance/print_qr')
+          assert re.search(r'v1\.\d+\.0\.[0-9a-f]{32}', print_html), 'Static printed QR token missing!'
+          print('ALL LIVE ATTENDANCE WORKFLOW E2E CHECKS PASSED!')
+          PY
+

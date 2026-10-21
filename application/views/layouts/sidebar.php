@@ -291,6 +291,13 @@ $is_ceo        = ($role_id == 5);
       <span class="ni-tip"><?= $is_technician ? 'My Attendance Records' : 'Attendance Records'; ?></span>
     </a>
 
+    <!-- On-Site Overview — Supervisor, Technician, Manager -->
+    <a href="<?= base_url('attendance'); ?>" class="ni <?= ($uri==='attendance'||$uri==='attendance/index')?'on':''; ?>" title="On-Site Status">
+      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
+      <span class="ni-label">On-Site Status</span>
+      <span class="ni-tip">Live QR/GPS check-in status &amp; who is on site</span>
+    </a>
+
     <!-- Check in / out — the QR + GPS punch page (ATTENDANCE_WORKFLOW.md).
          The manager is view-only, so the link is not offered there. -->
     <?php if (!$is_manager): ?>
@@ -306,6 +313,8 @@ $is_ceo        = ($role_id == 5);
       <span class="ni-label">Site Screen</span>
       <span class="ni-tip">Rotating check-in QR for the site entrance</span>
     </a>
+    <?php endif; ?>
+    <?php if ($is_supervisor || $is_manager): ?>
     <a href="<?= base_url('attendance/log'); ?>" class="ni <?= ni_active('attendance/log'); ?>" title="Punch Log">
       <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/><path d="M3 15h6"/></svg></div>
       <span class="ni-label">Punch Log</span>
@@ -336,6 +345,11 @@ $is_ceo        = ($role_id == 5);
       <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg></div>
       <span class="ni-label">My Attendance</span>
       <span class="ni-tip">My Attendance Records</span>
+    </a>
+    <a href="<?= base_url('attendance'); ?>" class="ni <?= ($uri==='attendance'||$uri==='attendance/index')?'on':''; ?>" title="On-Site Status">
+      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
+      <span class="ni-label">On-Site Status</span>
+      <span class="ni-tip">Live QR/GPS check-in status &amp; who is on site</span>
     </a>
     <a href="<?= base_url('attendance/punch'); ?>" class="ni <?= ni_active('attendance/punch'); ?>" title="Check In / Out">
       <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>

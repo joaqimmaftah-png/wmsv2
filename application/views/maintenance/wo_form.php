@@ -424,7 +424,13 @@ function _v($is_edit, $wo, $field, $default = '') {
     <div style="margin-bottom:4px;">
       <label class="form-label">Assigned Technicians</label>
       <div class="tech-multi" id="tech-multi">
-        <?php foreach ($technicians as $tech):
+        <?php if (empty($technicians)): ?>
+          <div style="padding:10px 12px;font-size:12px;color:var(--amber);line-height:1.5;">
+            No technicians are currently checked in on site and free of unfinished work orders.
+            Have the technician scan the site QR code (or record a supervisor check-in on
+            <a href="<?= base_url('attendance/log'); ?>" style="color:var(--blue);text-decoration:underline;">Punch Log</a>).
+          </div>
+        <?php else: foreach ($technicians as $tech):
           $checked  = in_array((string)$tech->id, $assigned_ids);
           // Attendance gate: a technician already named on this order is still
           // listed when no longer eligible, so the supervisor can see whom to
@@ -433,14 +439,15 @@ function _v($is_edit, $wo, $field, $default = '') {
           $why      = $blocked && !empty($tech->block_reasons) ? implode('; ', $tech->block_reasons) : ''; ?>
         <label class="tech-option" <?= $blocked ? 'title="' . htmlspecialchars($why, ENT_QUOTES, 'UTF-8') . '"' : ''; ?>
                style="<?= $blocked ? 'opacity:.72;' : ''; ?>">
-          <input type="checkbox" name="assigned_techs[]" value="<?= $tech->id; ?>" <?= $checked?'checked':''; ?>>
+          <input type="checkbox" name="assigned_techs[]" value="<?= $tech->id; ?>"
+                 <?= $checked ? 'checked' : ''; ?> <?= ($blocked && !$checked) ? 'disabled' : ''; ?>>
           <?= htmlspecialchars((string)($tech->first_name.' '.$tech->last_name)); ?>
           <?php if ($blocked): ?>
-            <span style="font-size:10px;color:var(--amber);margin-left:8px;font-weight:600;">not eligible</span>
+            <span style="font-size:10px;color:var(--amber);margin-left:8px;font-weight:600;">not eligible<?= $why !== '' ? ' (' . htmlspecialchars($why) . ')' : '' ?></span>
           <?php endif; ?>
           <span style="font-size:10px;color:var(--t4);margin-left:auto;"><?= htmlspecialchars((string)($tech->position??'')); ?></span>
         </label>
-        <?php endforeach; ?>
+        <?php endforeach; endif; ?>
       </div>
       <input type="hidden" name="assigned_to" id="assigned_to_csv"
         value="<?= htmlspecialchars((string)(_v($is_edit,$wo,'assigned_to'))); ?>">

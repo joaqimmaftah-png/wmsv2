@@ -22,8 +22,11 @@ class Attendance_model extends CI_Model {
     /** Work-order statuses that still hold a technician (SYSTEM.md §7). */
     const UNFINISHED_STATUSES = array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools');
 
-    /** Roles that may punch / be assigned work: 1 = Supervisor, 2 = Technician. */
+    /** Roles that may be assigned to work orders: 1 = Supervisor, 2 = Technician. */
     const TECHNICIAN_ROLES = array(1, 2);
+
+    /** Active staff roles permitted to record site attendance punches: Supervisor, Technician, Store Keeper. */
+    const PUNCH_ROLES = array(1, 2, 3);
 
     /** Per-request memo: the picker asks for every technician's verdict. */
     protected $_cache = array();
@@ -268,38 +271,19 @@ class Attendance_model extends CI_Model {
         $punches = $this->get_punches($date, $user_id);
         if (empty($punches)) return FALSE;
 
-        $first_in   = NULL;
-        $last_out   = NULL;
-        $first_time = NULL;
-
-        foreach ($punches as $p) {
-            $time = date('H:i:s', strtotime((string)$p->punched_at));
-            if ($p->punch_type === 'check_in' && $first_in === NULL) {
-                $first_in   = $time;
-                $first_time = strtotime((string)$p->punched_at);
-            }
-            if ($p->punch_type === 'check_out') {
-                // A check-out only counts if a check-in preceded it.
-                if ($first_in !== NULL) $last_out = array($time, strtotime((string)$p->punched_at));
-            }
-        }
-
         $row = $this->db->select('id, status, notes, created_by')
             ->where('user_id', $user_id)->where('date', $date)
             ->get('attendance')->row();
 
         if ($row && $row->status === 'Leave') return FALSE;
 
-        $hours = NULL;
-        if ($first_time !== NULL && is_array($last_out) && $last_out[1] > $first_time) {
-            $hours = round(($last_out[1] - $first_time) / 3600, 2);
-        }
+        $summary = wms_attendance_day_summary($punches);
 
         $payload = array(
             'status'      => 'Present',
-            'check_in'    => $first_in,
-            'check_out'   => is_array($last_out) ? $last_out[0] : NULL,
-            'hours_worked'=> $hours,
+            'check_in'    => $summary['check_in'],
+            'check_out'   => $summary['check_out'],
+            'hours_worked'=> $summary['hours_worked'],
         );
 
         if ($row) {
@@ -311,6 +295,82 @@ class Attendance_model extends CI_Model {
             $this->db->insert('attendance', $payload);
         }
         return TRUE;
+    }
+
+    /**
+     * Scrub raw personal location & client evidence on punch events older than
+     * the configured retention window while preserving the immutable punch
+     * event audit rows and daily `attendance` summaries (ATTENDANCE_WORKFLOW.md).
+     *
+     * @param  int $retention_days 0 = retain indefinitely; >= 30 scrubs older rows
+     * @return int affected rows
+     */
+    public function prune_old_location_evidence($retention_days) {
+        $days = (int)$retention_days;
+        if ($days < 30 || !$this->db->table_exists('attendance_punches')) return 0;
+
+        $cutoff = date('Y-m-d', strtotime('-' . $days . ' days'));
+        $this->db->where('work_date <', $cutoff)
+            ->group_start()
+                ->where('latitude IS NOT NULL', NULL, FALSE)
+                ->or_where('longitude IS NOT NULL', NULL, FALSE)
+                ->or_where('ip_address IS NOT NULL', NULL, FALSE)
+                ->or_where('user_agent IS NOT NULL', NULL, FALSE)
+            ->group_end()
+            ->update('attendance_punches', array(
+                'latitude'   => NULL,
+                'longitude'  => NULL,
+                'accuracy_m' => NULL,
+                'ip_address' => NULL,
+                'user_agent' => NULL,
+            ));
+        return (int)$this->db->affected_rows();
+    }
+
+    /**
+     * Re-verify against the live `users` table that a signed-in session belongs
+     * to an active, eligible worker allowed to punch (ATTENDANCE_WORKFLOW.md
+     * → "Technician check-in", step 4).
+     *
+     * @param  int $user_id
+     * @return array{ok:bool,user:object|null,message:string}
+     */
+    public function punchable_user($user_id) {
+        $user_id = (int)$user_id;
+        if ($user_id <= 0 || !$this->db->table_exists('users')) {
+            return array('ok' => FALSE, 'user' => NULL, 'message' => 'Your user account could not be verified. Sign in again.');
+        }
+
+        $user = $this->db->select('id, first_name, last_name, role_id, status, employee_id')
+            ->where('id', $user_id)->get('users')->row();
+
+        if (!$user) {
+            return array('ok' => FALSE, 'user' => NULL, 'message' => 'Your user account no longer exists. Nothing was recorded.');
+        }
+        if ($user->status !== 'Active') {
+            return array('ok' => FALSE, 'user' => $user, 'message' => 'Your user account is inactive and cannot record attendance punches.');
+        }
+        if (!in_array((int)$user->role_id, self::PUNCH_ROLES, TRUE)) {
+            return array('ok' => FALSE, 'user' => $user, 'message' => 'Your role is view-only and does not record site punches.');
+        }
+
+        return array('ok' => TRUE, 'user' => $user, 'message' => 'OK');
+    }
+
+    /**
+     * Active punch-capable staff (including Store Keepers alongside Technicians)
+     * for the Supervisor correction form on `attendance/log`, so any worker who
+     * punched in can always have a missed check-out/check-in corrected.
+     *
+     * @return array
+     */
+    public function workers_for_correction() {
+        return $this->db->select('u.id, u.first_name, u.last_name, u.position, u.employee_id, u.role_id')
+            ->from('users u')
+            ->where_in('u.role_id', self::PUNCH_ROLES)
+            ->where('u.status', 'Active')
+            ->order_by('u.first_name', 'ASC')->order_by('u.last_name', 'ASC')
+            ->get()->result();
     }
 
     /* ═════════════════════════════════════════════════════════════════

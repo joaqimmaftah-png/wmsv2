@@ -82,6 +82,8 @@ class Settings_model extends CI_Model {
         'attendance_open_session_policy'   => 'warn',
         'attendance_qr_ttl_seconds'        => '60',
         'attendance_qr_grace_seconds'      => '120',
+        'attendance_location_retention_days'=> '365',
+        'attendance_static_qr_sites'       => '',
     );
 
     const DESCRIPTIONS = array(
@@ -113,6 +115,8 @@ class Settings_model extends CI_Model {
         'attendance_open_session_policy'    => 'Attendance: warn = accept a check-out with an open work session and name it; block = refuse the check-out until the session is closed',
         'attendance_qr_ttl_seconds'         => 'Attendance: how long one signed site QR token stays valid, in seconds (10-3600)',
         'attendance_qr_grace_seconds'       => 'Attendance: how long a just-expired site QR token is still accepted, in seconds (0-3600), to absorb the refresh moment',
+        'attendance_location_retention_days'=> 'Attendance: days to retain raw punch GPS coordinates/IP/UA before scrubbing location evidence (0 = keep indefinitely, 30-3650)',
+        'attendance_static_qr_sites'        => 'Attendance: comma-separated site IDs allowed to accept printed/fixed site QR codes alongside rotating QR',
     );
 
     const BREAKDOWN_COUNT_MODES = array('start_in_period', 'overlapping');
@@ -393,6 +397,21 @@ class Settings_model extends CI_Model {
             case 'attendance_qr_grace_seconds':
                 $v = (int)$value;
                 return (string)(($v >= 0 && $v <= 3600) ? $v : 120);
+
+            case 'attendance_location_retention_days':
+                $v = (int)$value;
+                if ($v === 0) return '0';
+                return (string)(($v >= 30 && $v <= 3650) ? $v : 365);
+
+            case 'attendance_static_qr_sites':
+                $ids = preg_split('/[^0-9]+/', (string)$value, -1, PREG_SPLIT_NO_EMPTY);
+                $clean = array();
+                foreach ($ids as $raw_id) {
+                    $sid = (int)$raw_id;
+                    if ($sid > 0) $clean[$sid] = $sid;
+                }
+                ksort($clean);
+                return implode(',', $clean);
 
             case 'pm_meter_stale_days':
                 $v = (int)$value;

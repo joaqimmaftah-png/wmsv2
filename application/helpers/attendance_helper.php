@@ -174,6 +174,41 @@ function wms_attendance_qr_mac($site_id, $window, $secret) {
 }
 
 /**
+ * Domain-separated MAC for a fixed/printed pilot site QR token.
+ *
+ * Uses a distinct HMAC domain prefix from rotating window tokens so window 0
+ * can never collide with a time-windowed token, while still invalidating
+ * immediately whenever the site's `qr_secret` is rotated.
+ *
+ * @return string 32 hex characters (128 bits)
+ */
+function wms_attendance_qr_static_mac($site_id, $secret) {
+    $payload = 'attendance-qr-static|' . (int)$site_id;
+    return substr(hash_hmac('sha256', $payload, (string)$secret), 0, 32);
+}
+
+/**
+ * Build a fixed/printable token for sites without a permanent gate screen
+ * (ATTENDANCE_WORKFLOW.md → "One-time site setup", step 3).
+ *
+ * Format: `v1.<site>.0.<mac>` — carries no technician data, requires the site
+ * explicitly allow printed QR codes, and is revoked immediately when the site
+ * secret is rotated. Live GPS geofence + accuracy checks still apply.
+ *
+ * @param  int    $site_id
+ * @param  string $secret
+ * @return string|null
+ */
+function wms_attendance_qr_static_token($site_id, $secret) {
+    $site_id = (int)$site_id;
+    $secret  = is_string($secret) ? trim($secret) : '';
+    if ($site_id <= 0 || strlen($secret) < 16) return NULL;
+
+    return WMS_ATTENDANCE_QR_VERSION . '.' . $site_id . '.0.'
+         . wms_attendance_qr_static_mac($site_id, $secret);
+}
+
+/**
  * Build the token for a site at a given moment.
  *
  * Format: `v1.<site>.<window>.<mac>` — short enough to encode in a low-density
@@ -203,21 +238,23 @@ function wms_attendance_qr_token($site_id, $secret, $time = NULL, $ttl = 60) {
  *
  * Accepted: the token for the current window, and tokens from windows that
  * ended less than $grace seconds ago (so a technician standing at the screen
- * when it flips is not punished for the refresh). Rejected: anything
- * malformed, signed with another secret, from another site, or older than
- * ttl + grace. Windows in the future are rejected too — the server's clock
- * issued the token, so a future window means the token was not issued by this
- * server.
+ * when it flips is not punished for the refresh). When $allow_static is TRUE
+ * for this site, a site-signed printed token (`window = 0`) is also accepted.
+ * Rejected: anything malformed, signed with another secret, from another site,
+ * or older than ttl + grace. Windows in the future are rejected too — the
+ * server's clock issued the token, so a future window means the token was not
+ * issued by this server.
  *
  * @param  string   $token
- * @param  string   $secret  the secret of the site the token claims to be for
- * @param  int|null $time    unix time (default: now)
- * @param  int      $ttl     seconds per window (clamped 10–3600)
- * @param  int      $grace   seconds a just-expired window is still accepted
+ * @param  string   $secret       the secret of the site the token claims to be for
+ * @param  int|null $time         unix time (default: now)
+ * @param  int      $ttl          seconds per window (clamped 10–3600)
+ * @param  int      $grace        seconds a just-expired window is still accepted
+ * @param  bool     $allow_static whether this site permits printed/fixed QR codes
  * @return array{ok:bool,code:string,site_id:int,window:int,expires_in:int,message:string}
- *         codes: ok | malformed | wrong_version | bad_signature | expired
+ *         codes: ok | malformed | wrong_version | bad_signature | expired | static_disabled
  */
-function wms_attendance_qr_verify($token, $secret, $time = NULL, $ttl = 60, $grace = 0) {
+function wms_attendance_qr_verify($token, $secret, $time = NULL, $ttl = 60, $grace = 0, $allow_static = FALSE) {
     $fail = function ($code, $message) {
         return array(
             'ok'         => FALSE,
@@ -244,11 +281,35 @@ function wms_attendance_qr_verify($token, $secret, $time = NULL, $ttl = 60, $gra
         return $fail('wrong_version', 'That site code is from an older version. Scan the QR code on the site screen again.');
     }
 
-    $site_id  = (int)$m[2];
-    $window   = (int)$m[3];
-    $expected = wms_attendance_qr_mac($site_id, $window, $secret);
+    $site_id = (int)$m[2];
+    $window  = (int)$m[3];
+    $mac_hex = strtolower($m[4]);
 
-    if ($site_id <= 0 || $secret === '' || !hash_equals($expected, strtolower($m[4]))) {
+    if ($site_id <= 0 || $secret === '') {
+        return $fail('bad_signature', 'That site code is not valid here. Scan the QR code on the site screen again.');
+    }
+
+    // Printed / fixed QR path (`v1.<site>.0.<static_mac>`)
+    if ($window === 0) {
+        $expected_static = wms_attendance_qr_static_mac($site_id, $secret);
+        if (!hash_equals($expected_static, $mac_hex)) {
+            return $fail('bad_signature', 'That site code is not valid here. Scan the QR code on the site screen again.');
+        }
+        if (!$allow_static) {
+            return $fail('static_disabled', 'Printed QR codes are disabled for this site. Scan the rotating code on the site screen instead.');
+        }
+        return array(
+            'ok'         => TRUE,
+            'code'       => 'ok',
+            'site_id'    => $site_id,
+            'window'     => 0,
+            'expires_in' => 0,
+            'message'    => 'Printed site code verified.',
+        );
+    }
+
+    $expected = wms_attendance_qr_mac($site_id, $window, $secret);
+    if (!hash_equals($expected, $mac_hex)) {
         return $fail('bad_signature', 'That site code is not valid here. Scan the QR code on the site screen again.');
     }
 
@@ -318,3 +379,50 @@ function wms_attendance_on_site(array $types) {
     $last = end($types);
     return $last === 'check_in';
 }
+
+/**
+ * Derive the daily `attendance` summary fields (`check_in`, `check_out`,
+ * `hours_worked`) from an ordered list of accepted punch rows.
+ *
+ * Sums paired (`check_in` → `check_out`) intervals so a technician who leaves
+ * midday (`08:00–12:00`, `15:00–17:00`) is credited with actual on-site time
+ * (`6.00 h`) rather than full span (`9.00 h`), while keeping `check_in` as the
+ * day's first arrival and `check_out` as the latest departure.
+ *
+ * @param  array $punches objects or associative arrays with `punch_type` & `punched_at`
+ * @return array{check_in:string|null,check_out:string|null,hours_worked:float|null}
+ */
+function wms_attendance_day_summary(array $punches) {
+    $first_in      = NULL;
+    $last_out      = NULL;
+    $open_in_ts    = NULL;
+    $total_seconds = 0;
+    $has_completed = FALSE;
+
+    foreach ($punches as $p) {
+        $type = is_array($p) ? (isset($p['punch_type']) ? $p['punch_type'] : '') : (isset($p->punch_type) ? $p->punch_type : '');
+        $raw  = is_array($p) ? (isset($p['punched_at']) ? $p['punched_at'] : '') : (isset($p->punched_at) ? $p->punched_at : '');
+        $ts   = strtotime((string)$raw);
+        if ($ts === FALSE) continue;
+        $hms  = date('H:i:s', $ts);
+
+        if ($type === 'check_in') {
+            if ($first_in === NULL) $first_in = $hms;
+            if ($open_in_ts === NULL) $open_in_ts = $ts;
+        } elseif ($type === 'check_out') {
+            $last_out = $hms;
+            if ($open_in_ts !== NULL && $ts >= $open_in_ts) {
+                $total_seconds += ($ts - $open_in_ts);
+                $has_completed  = TRUE;
+                $open_in_ts     = NULL;
+            }
+        }
+    }
+
+    return array(
+        'check_in'     => $first_in,
+        'check_out'    => $last_out,
+        'hours_worked' => ($has_completed && $total_seconds > 0) ? round($total_seconds / 3600, 2) : NULL,
+    );
+}
+
