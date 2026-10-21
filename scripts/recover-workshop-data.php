@@ -170,7 +170,9 @@ function wms_parse_dump_table($rawSql, $table) {
 function wms_sql_val($mysqli, $v) {
     if ($v === null) return 'NULL';
     if (is_int($v)) return (string)$v;
-    return "'" . $mysqli->real_escape_string((string)$v) . "'";
+    $s = (string)$v;
+    if (strpos($s, '0000-00-00') !== false) $s = '2026-10-06 15:26:03';
+    return "'" . $mysqli->real_escape_string($s) . "'";
 }
 
 // Recover optional non-credential catalogues from local Git history if requested

@@ -382,13 +382,25 @@ if ($opts['verify']) {
         $errors[] = "Expected at least 338 specification rows in `equipment_specs`, found {$specCount}.";
     }
 
+    $res = $mysqli->query("SELECT COUNT(*) AS c FROM `suppliers`");
+    $supCount = $res ? (int)$res->fetch_assoc()['c'] : 0;
+    if ($supCount < 22) {
+        $errors[] = "Expected at least 22 vendor rows in `suppliers`, found {$supCount}.";
+    }
+
+    $res = $mysqli->query("SELECT COUNT(*) AS c FROM `materials`");
+    $matCount = $res ? (int)$res->fetch_assoc()['c'] : 0;
+    if ($matCount < 1697) {
+        $errors[] = "Expected at least 1,697 catalogue rows in `materials`, found {$matCount}.";
+    }
+
     if (!empty($errors)) {
         fwrite(STDERR, "SCHEMA VERIFICATION FAILED:\n  - " . implode("\n  - ", $errors) . "\n");
         exit(1);
     }
 
     echo sprintf(
-        "VERIFIED OK: %d tables | %d foreign keys | ci_sessions PK=1 | %d settings | %d templates | %d checklist items | %d equipment | %d specs.\n",
-        $tableCount, $fkCount, $settingsCount, $tplCount, $itemCount, $eqCount, $specCount
+        "VERIFIED OK: %d tables | %d foreign keys | ci_sessions PK=1 | %d settings | %d templates | %d checklist items | %d equipment | %d specs | %d suppliers | %d materials.\n",
+        $tableCount, $fkCount, $settingsCount, $tplCount, $itemCount, $eqCount, $specCount, $supCount, $matCount
     );
 }

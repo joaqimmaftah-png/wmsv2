@@ -45,6 +45,9 @@ database/*.dump
 database/*.zip
 database/*.tar.gz
 
+# --- Local exports / scratch outputs --------------------------------------
+exports/
+
 # --- Editors / operating systems -------------------------------------------
 .DS_Store
 Thumbs.db
