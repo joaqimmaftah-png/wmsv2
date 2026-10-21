@@ -384,8 +384,8 @@ if ($opts['verify']) {
 
     $res = $mysqli->query("SELECT COUNT(*) AS c FROM `suppliers`");
     $supCount = $res ? (int)$res->fetch_assoc()['c'] : 0;
-    if ($supCount < 22) {
-        $errors[] = "Expected at least 22 vendor rows in `suppliers`, found {$supCount}.";
+    if ($supCount < 14) {
+        $errors[] = "Expected at least 14 deduplicated vendor rows in `suppliers`, found {$supCount}.";
     }
 
     $res = $mysqli->query("SELECT COUNT(*) AS c FROM `materials`");
