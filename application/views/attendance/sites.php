@@ -140,6 +140,12 @@ $has_saved_point = $editing && $editing->latitude !== NULL && $editing->longitud
           Site active (its QR code can be displayed and used)
         </label>
 
+        <label class="flex ai-c gap-10" style="margin-top:10px;font-size:12.5px;color:var(--t2);line-height:1.5;">
+          <input type="checkbox" name="allow_static_qr" value="1"
+                 <?= ($editing && !empty($static_site_map[(int)$editing->id])) ? 'checked' : '' ?>>
+          <span>Allow printed / fixed QR fallback (for remote sites with no gate screen — live GPS radius &amp; accuracy still apply; rotated secret invalidates prints)</span>
+        </label>
+
         <div class="flex ai-c gap-10" style="justify-content:flex-end;margin-top:16px;">
           <button type="submit" class="btn btn-primary"><?= $editing ? 'Save site' : 'Add site' ?></button>
         </div>
@@ -170,11 +176,26 @@ $has_saved_point = $editing && $editing->latitude !== NULL && $editing->longitud
           <div class="hint">Either way the session is never left silently open: a warning names the work order.</div>
         </div>
 
+        <div class="form-grid cols-2" style="margin-top:16px;">
+          <div>
+            <label class="form-label">Site code lifetime (seconds)</label>
+            <input type="number" name="attendance_qr_ttl_seconds" class="form-control" min="10" max="3600" step="10"
+                   value="<?= (int)$qr_ttl ?>">
+            <div class="hint">How long one rotating QR token stays valid (default 60 s).</div>
+          </div>
+          <div>
+            <label class="form-label">Refresh grace window (seconds)</label>
+            <input type="number" name="attendance_qr_grace_seconds" class="form-control" min="0" max="3600" step="10"
+                   value="<?= isset($qr_grace) ? (int)$qr_grace : 120 ?>">
+            <div class="hint">Accepts a just-refreshed screen code while scanning (default 120 s).</div>
+          </div>
+        </div>
+
         <div style="margin-top:16px;">
-          <label class="form-label">Site code lifetime (seconds)</label>
-          <input type="number" name="attendance_qr_ttl_seconds" class="form-control" min="10" max="3600" step="10"
-                 value="<?= (int)$qr_ttl ?>">
-          <div class="hint">How long one QR token stays valid. Shorter is safer; 60 s is comfortable to scan.</div>
+          <label class="form-label">Location evidence retention (days)</label>
+          <input type="number" name="attendance_location_retention_days" class="form-control" min="0" max="3650" step="1"
+                 value="<?= isset($retention_days) ? (int)$retention_days : 365 ?>">
+          <div class="hint">Scrubs raw GPS coordinates, IP &amp; browser strings on punches older than this window while keeping all daily attendance records &amp; audit events (<code>0</code> = retain indefinitely).</div>
         </div>
 
         <div class="flex ai-c gap-10" style="justify-content:flex-end;margin-top:16px;">
@@ -218,6 +239,8 @@ $has_saved_point = $editing && $editing->latitude !== NULL && $editing->longitud
           </td>
           <td style="text-align:right;white-space:nowrap;">
             <a href="<?= base_url('attendance/board?site_id=' . (int)$s->id) ?>" class="btn btn-ghost btn-sm">Screen</a>
+            <a href="<?= base_url('attendance/print_qr?site_id=' . (int)$s->id) ?>" class="btn btn-ghost btn-sm"
+               title="Printable gate QR poster for sites without a permanent screen">Print QR</a>
             <a href="<?= base_url('attendance/sites?edit=' . (int)$s->id . '&autolocate=1') ?>"
                class="btn btn-ghost btn-sm" title="Load this site and fill Latitude &amp; Longitude from your current GPS position">
               Set location
@@ -308,11 +331,11 @@ $has_saved_point = $editing && $editing->latitude !== NULL && $editing->longitud
     });
   }
 
+  // Per ATTENDANCE_WORKFLOW.md ("One-time site setup", step 1), never assume a default
+  // geofence radius — fill coordinates only so the supervisor explicitly chooses the site radius.
   function setCoordinates(la, lo, sourceNote) {
     lat.value = Number(la).toFixed(7);
     lng.value = Number(lo).toFixed(7);
-    if (radInput && !radInput.value) radInput.value = '150';
-    if (accInput && !accInput.value) accInput.value = '100';
     flashInputs();
     updateExternalMapLink();
     syncMapPin(true);

@@ -93,7 +93,8 @@ class Attendance extends MY_Controller {
                     $site->qr_secret,
                     NULL,
                     $this->_qr_ttl(),
-                    $this->_qr_grace()
+                    $this->_qr_grace(),
+                    $this->_site_allows_static_qr((int)$site->id)
                 );
                 if (!$site->is_active) {
                     $verdict = array('ok' => FALSE, 'code' => 'inactive', 'message' => 'This site is no longer in use.');
@@ -135,6 +136,12 @@ class Attendance extends MY_Controller {
             return $this->_finish(FALSE, 'Attendance punching is not set up on this installation yet.');
         }
 
+        /* ── 0. the signed-in account must still be active & eligible ── */
+        $who = $this->Attendance_model->punchable_user($this->user_id);
+        if (!$who['ok']) {
+            return $this->_finish(FALSE, $who['message']);
+        }
+
         $token = $this->input->post('t', TRUE);
         $token = is_scalar($token) ? trim((string)$token) : '';
         if ($token === '') {
@@ -147,7 +154,14 @@ class Attendance extends MY_Controller {
             return $this->_finish(FALSE, 'That site code is not recognised (or the site is inactive). Scan the QR code on the site screen again.');
         }
 
-        $verdict = wms_attendance_qr_verify($token, $site->qr_secret, NULL, $this->_qr_ttl(), $this->_qr_grace());
+        $verdict = wms_attendance_qr_verify(
+            $token,
+            $site->qr_secret,
+            NULL,
+            $this->_qr_ttl(),
+            $this->_qr_grace(),
+            $this->_site_allows_static_qr((int)$site->id)
+        );
         if (!$verdict['ok']) {
             return $this->_finish(FALSE, $verdict['message'] . ' Nothing was recorded.');
         }
@@ -213,6 +227,7 @@ class Attendance extends MY_Controller {
         }
 
         $this->Attendance_model->sync_attendance_row($this->user_id, $date);
+        $this->Attendance_model->prune_old_location_evidence($this->_retention_days());
 
         $e = $this->Attendance_model->eligibility($this->user_id, $date);
         $message = wms_attendance_punch_label($punch) . ' recorded at ' . date('H:i')
@@ -285,6 +300,36 @@ class Attendance extends MY_Controller {
         $this->load->view('attendance/board', $data);
     }
 
+    /**
+     * Printable A4 fixed gate QR poster for sites without a permanent screen
+     * (ATTENDANCE_WORKFLOW.md → "One-time site setup", step 3).
+     *
+     * Still validated server-side against live GPS coordinates + radius + accuracy
+     * and revocable immediately via "Rotate code".
+     */
+    public function print_qr() {
+        if (!$this->is_supervisor()) {
+            $this->session->set_flashdata('error', 'Printable gate QR sheets are for supervisors.');
+            redirect('attendance');
+            return;
+        }
+
+        $sites = $this->Attendance_model->get_sites(TRUE);
+        $selected = $this->Attendance_model->get_site((int)$this->input->get('site_id'));
+        if (!$selected) $selected = $sites ? $sites[0] : NULL;
+
+        $token = $selected ? wms_attendance_qr_static_token((int)$selected->id, $selected->qr_secret) : NULL;
+        $url   = $token ? (rtrim(base_url(), '/') . '/attendance/punch?t=' . rawurlencode($token)) : '';
+
+        $data['sites']          = $sites;
+        $data['site']           = $selected;
+        $data['static_enabled'] = $selected ? $this->_site_allows_static_qr((int)$selected->id) : FALSE;
+        $data['token']          = $token;
+        $data['url']            = $url;
+        $data['page_title']     = 'Printable gate QR';
+        $this->load->view('attendance/print_qr', $data);
+    }
+
     /* ═════════════════════════════════════════════════════════════════
        Supervisor: site configuration
        ═════════════════════════════════════════════════════════════════ */
@@ -320,13 +365,26 @@ class Attendance extends MY_Controller {
                 return;
             }
 
-            $id      = (int)$this->input->post('id', TRUE);
-            $name    = trim((string)$this->input->post('name', TRUE));
-            $lat     = $this->input->post('latitude', TRUE);
-            $lng     = $this->input->post('longitude', TRUE);
-            $radius  = (int)$this->input->post('radius_m', TRUE);
-            $max_acc = (int)$this->input->post('max_accuracy_m', TRUE);
-            $active  = $this->input->post('is_active') ? 1 : 0;
+            if ($action === 'enable_static_qr') {
+                $site = $this->Attendance_model->get_site((int)$this->input->post('id', TRUE));
+                if ($site) {
+                    $this->_set_site_static_qr((int)$site->id, TRUE);
+                    $this->session->set_flashdata('success', 'Printed QR fallback enabled for ' . $site->name . '.');
+                    redirect('attendance/print_qr?site_id=' . (int)$site->id);
+                    return;
+                }
+                redirect('attendance/sites');
+                return;
+            }
+
+            $id           = (int)$this->input->post('id', TRUE);
+            $name         = trim((string)$this->input->post('name', TRUE));
+            $lat          = $this->input->post('latitude', TRUE);
+            $lng          = $this->input->post('longitude', TRUE);
+            $radius       = (int)$this->input->post('radius_m', TRUE);
+            $max_acc      = (int)$this->input->post('max_accuracy_m', TRUE);
+            $active       = $this->input->post('is_active') ? 1 : 0;
+            $allow_static = (bool)$this->input->post('allow_static_qr');
 
             $errors = array();
             if ($name === '' || strlen($name) > 100) $errors[] = 'Give the site a name (up to 100 characters).';
@@ -352,27 +410,34 @@ class Attendance extends MY_Controller {
 
             if ($id > 0) {
                 $this->Attendance_model->update_site($id, $payload);
+                $this->_set_site_static_qr($id, $allow_static);
                 $this->session->set_flashdata('success', 'Site saved.');
             } else {
                 $payload['created_by'] = $this->user_id;
-                $this->Attendance_model->create_site($payload);
+                $new_id = $this->Attendance_model->create_site($payload);
+                if ($new_id > 0) {
+                    $this->_set_site_static_qr($new_id, $allow_static);
+                }
                 $this->session->set_flashdata('success', 'Site added. Open the site screen to start showing its code.');
             }
             redirect('attendance/sites');
             return;
         }
 
-        $data['ready']      = TRUE;
-        $data['sites']      = $this->Attendance_model->get_sites();
-        $data['editing']    = $this->Attendance_model->get_site((int)$this->input->get('edit'));
-        $data['gate_enabled'] = (string)$this->Settings_model->get('attendance_gate_enabled', '0') === '1';
+        $data['ready']               = TRUE;
+        $data['sites']               = $this->Attendance_model->get_sites();
+        $data['editing']             = $this->Attendance_model->get_site((int)$this->input->get('edit'));
+        $data['static_site_map']     = $this->_static_site_map();
+        $data['gate_enabled']        = (string)$this->Settings_model->get('attendance_gate_enabled', '0') === '1';
         $data['open_session_policy'] = (string)$this->Settings_model->get('attendance_open_session_policy', 'warn');
-        $data['qr_ttl']     = $this->_qr_ttl();
-        $data['page_title'] = 'Attendance sites';
+        $data['qr_ttl']              = $this->_qr_ttl();
+        $data['qr_grace']            = $this->_qr_grace();
+        $data['retention_days']      = $this->_retention_days();
+        $data['page_title']          = 'Attendance sites';
         $this->render('attendance/sites', $data);
     }
 
-    /** POST: the two policy switches shown on the sites screen. */
+    /** POST: policy settings shown on the sites screen. */
     public function policy() {
         if (!$this->require_post()) return;
         if (!$this->is_supervisor()) {
@@ -382,10 +447,13 @@ class Attendance extends MY_Controller {
         }
 
         $this->Settings_model->save_many(array(
-            'attendance_gate_enabled'      => $this->input->post('attendance_gate_enabled') ? 1 : 0,
-            'attendance_open_session_policy'=> (string)$this->input->post('attendance_open_session_policy', TRUE),
-            'attendance_qr_ttl_seconds'     => (int)$this->input->post('attendance_qr_ttl_seconds', TRUE),
+            'attendance_gate_enabled'            => $this->input->post('attendance_gate_enabled') ? 1 : 0,
+            'attendance_open_session_policy'     => (string)$this->input->post('attendance_open_session_policy', TRUE),
+            'attendance_qr_ttl_seconds'          => (int)$this->input->post('attendance_qr_ttl_seconds', TRUE),
+            'attendance_qr_grace_seconds'        => (int)$this->input->post('attendance_qr_grace_seconds', TRUE),
+            'attendance_location_retention_days' => (int)$this->input->post('attendance_location_retention_days', TRUE),
         ));
+        $this->Attendance_model->prune_old_location_evidence($this->_retention_days());
 
         $this->session->set_flashdata('success', 'Attendance policy saved.');
         redirect('attendance/sites');
@@ -408,14 +476,15 @@ class Attendance extends MY_Controller {
             $date = date('Y-m-d');
         }
 
-        $data['ready']      = $this->Attendance_model->ready();
-        $data['date']       = $date;
-        $data['punches']    = $this->Attendance_model->get_punches($date);
-        $data['on_site']    = $this->Attendance_model->on_site_map($date);
-        $data['workers']    = $this->Attendance_model->technicians_for_assignment($date);
-        $data['sites']      = $this->Attendance_model->get_sites();
-        $data['is_supervisor'] = $this->is_supervisor();
-        $data['page_title'] = 'Attendance log';
+        $data['ready']              = $this->Attendance_model->ready();
+        $data['date']               = $date;
+        $data['punches']            = $this->Attendance_model->get_punches($date);
+        $data['on_site']            = $this->Attendance_model->on_site_map($date);
+        $data['workers']            = $this->Attendance_model->technicians_for_assignment($date);
+        $data['correction_workers'] = $data['ready'] ? $this->Attendance_model->workers_for_correction() : array();
+        $data['sites']              = $this->Attendance_model->get_sites();
+        $data['is_supervisor']      = $this->is_supervisor();
+        $data['page_title']         = 'Attendance log';
         $this->render('attendance/log', $data);
     }
 
@@ -513,6 +582,41 @@ class Attendance extends MY_Controller {
     private function _qr_grace() {
         $v = (int)$this->Settings_model->get('attendance_qr_grace_seconds', 120);
         return ($v >= 0 && $v <= 3600) ? $v : 120;
+    }
+
+    private function _retention_days() {
+        $v = (int)$this->Settings_model->get('attendance_location_retention_days', 365);
+        if ($v === 0) return 0;
+        return ($v >= 30 && $v <= 3650) ? $v : 365;
+    }
+
+    /** @return array<int,bool> site_id => TRUE when printed QR codes are enabled */
+    private function _static_site_map() {
+        $raw = (string)$this->Settings_model->get('attendance_static_qr_sites', '');
+        $map = array();
+        foreach (preg_split('/[^0-9]+/', $raw, -1, PREG_SPLIT_NO_EMPTY) as $id) {
+            $sid = (int)$id;
+            if ($sid > 0) $map[$sid] = TRUE;
+        }
+        return $map;
+    }
+
+    private function _site_allows_static_qr($site_id) {
+        $map = $this->_static_site_map();
+        return isset($map[(int)$site_id]);
+    }
+
+    private function _set_site_static_qr($site_id, $enabled) {
+        $site_id = (int)$site_id;
+        if ($site_id <= 0) return;
+        $map = $this->_static_site_map();
+        if ($enabled) {
+            $map[$site_id] = TRUE;
+        } else {
+            unset($map[$site_id]);
+        }
+        ksort($map);
+        $this->Settings_model->save('attendance_static_qr_sites', implode(',', array_keys($map)));
     }
 
     /**

@@ -178,7 +178,8 @@ class Workorders extends MY_Controller {
             $data['breakdown_candidates'] = $this->Workorder_model->get_breakdown_event_candidates($wo->equipment_id, $id);
         }
         $data['history']     = $this->Workorder_model->get_status_history($id);
-        $data['technicians'] = $this->Team_model->get_technicians();
+        $data['technicians'] = !empty($wo->assigned_to) ? $this->Team_model->get_technicians() : $this->_assignment_picker($wo);
+        $data['attendance_gate'] = $this->_attendance_gate();
         $data['sessions']     = $this->Workorder_model->get_sessions($id);
         $data['open_session'] = $this->Workorder_model->get_open_session($id);
         $data['session_hours']= $this->Workorder_model->get_total_session_hours($id);
@@ -706,6 +707,34 @@ class Workorders extends MY_Controller {
             return;
         }
 
+        // Enforce attendance gate when clocking on to a work session (ATTENDANCE_WORKFLOW.md):
+        // 1. Any technician clocking on must currently be checked in on site (not absent / checked out).
+        // 2. If starting work on an unassigned work order (not already named in `assigned_to`),
+        //    the technician must also pass full work-order assignment eligibility.
+        if ($this->_attendance_gate() && $this->Attendance_model->ready()) {
+            $already_assigned = in_array(
+                $technician_id,
+                array_map('intval', preg_split('/[^0-9]+/', (string)$wo->assigned_to, -1, PREG_SPLIT_NO_EMPTY)),
+                TRUE
+            );
+            if (!$already_assigned) {
+                $gate_problems = $this->Attendance_model->assignment_problems((string)$technician_id);
+                if (!empty($gate_problems)) {
+                    $this->db->trans_rollback();
+                    $this->session->set_flashdata('error',
+                        'Cannot start work while the attendance gate is on: ' . implode(' ', $gate_problems));
+                    redirect('workorders/view/'.$id);
+                    return;
+                }
+            } elseif (!$this->Attendance_model->is_on_site($technician_id)) {
+                $this->db->trans_rollback();
+                $this->session->set_flashdata('error',
+                    'Cannot start work while the attendance gate is on: technician is not currently checked in on site.');
+                redirect('workorders/view/'.$id);
+                return;
+            }
+        }
+
         // A technician can only be actively clocked on one WO at a time.
         // If they have an open session elsewhere, close it with this new one.
         $switch_note = '';
@@ -1066,7 +1095,10 @@ class Workorders extends MY_Controller {
                 return $this->Team_model->get_technicians();
             }
 
-            $list    = $this->Attendance_model->technicians_for_assignment();
+            // Offer ONLY eligible technicians in the picker (ATTENDANCE_WORKFLOW.md
+            // → "Work-order assignment eligibility"), then re-attach anyone already
+            // named on this order when editing so a supervisor can still clear them.
+            $list    = $this->Attendance_model->technicians_for_assignment(NULL, TRUE);
             $have    = array();
             $current = array();
             foreach ($list as $t) $have[(int)$t->id] = TRUE;

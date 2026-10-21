@@ -118,50 +118,43 @@ Files added in this release:
 
 | File | Purpose |
 |---|---|
-| `database/migrations/0010_attendance_punches.sql` | `attendance_sites`, `attendance_punches`, four attendance settings (idempotent) |
-| `application/helpers/attendance_helper.php` | Geofence arithmetic, signed QR token issue/verify, punch sequencing — pure functions |
-| `application/models/Attendance_model.php` | Sites, punch events, derived day row, eligibility, assignment re-check |
-| `application/controllers/Attendance.php` | `punch`, `record`, `token`, `board`, `sites`, `policy`, `log`, `correction` |
-| `application/views/attendance/*.php` | Phone punch page, result page, site screen, sites & policy, punch log |
+| `database/migrations/0010_attendance_punches.sql` | `attendance_sites`, `attendance_punches`, baseline attendance settings (idempotent) |
+| `application/helpers/attendance_helper.php` | Geofence arithmetic, rotating & printable static HMAC-SHA256 QR token issue/verify, multi-stint day summary & punch sequencing |
+| `application/models/Attendance_model.php` | Sites, punch events, active worker re-verification, multi-stint day sync, location retention scrubbing, eligibility & assignment re-check |
+| `application/controllers/Attendance.php` | `index`, `punch`, `record`, `token`, `board`, `print_qr`, `sites`, `policy`, `log`, `correction` |
+| `application/views/attendance/*.php` | Phone punch page, result page, rotating site screen, printable gate QR poster, sites & policy (with GPS capture, map pin picker & Maps link parser), punch log |
 | `assets/vendor/qrcode/qrcode.js` | Vendored MIT QR encoder (qrcode-generator 1.4.4) |
 
 ### Decisions taken while implementing
 
-- **Open work session at check-out** — the open question is resolved as a
-  setting, `attendance_open_session_policy`, default **`warn`**: the check-out is
+- **Open work session at check-out** — resolved as a setting,
+  `attendance_open_session_policy`, default **`warn`**: the check-out is
   recorded and the open session is named in the message. Set it to `block` to
   refuse the check-out until the session is closed. Either way the session is
   never silently forgotten.
-- **Assignment gate is OFF by default** (`attendance_gate_enabled = 0`). Turning
-  it on without a configured site would empty every work-order picker; a
-  supervisor enables it on `attendance/sites` after the first site exists. When
-  it is on, the picker and the save handler enforce the rules; when it is off,
-  the WMS behaves exactly as before.
-- **Only newly added technicians are re-checked on edit.** Removing someone who
-  is no longer eligible, or editing an unrelated field of an order that was
-  assigned before the gate was switched on, must not be blocked.
-- **Token lifetime and grace** — `attendance_qr_ttl_seconds` (default 60) and
-  `attendance_qr_grace_seconds` (default 120) absorb the moment the screen
-  refreshes. A token from a *future* window is refused: only this server issues
-  tokens, so a future window means the code did not come from here.
-- **Double taps** — a second punch within 15 seconds is refused rather than
-  producing an accidental check-in/check-out pair.
-- **Rejected attempts are not stored.** The doc asks that a failed punch create
-  nothing; the phone page explains the reason, and the supervisor log is a record
-  of accepted events only. If failed-attempt analytics are ever wanted, they need
-  their own table and retention decision.
-- **Work day** is the server's calendar date of the punch. A shift that crosses
-  midnight still punches on the date it happens; splitting a night shift into a
-  single "work day" would need a shift-aware rule that this release does not
-  invent.
-- **The site screen is supervisor-only.** Issuing a token is issuing the site
-  key; a technician is meant to scan it on site, not fetch it remotely.
-- **Location retention** — coordinates/accuracy are stored on each accepted punch
-  (`attendance_punches`). No continuous history and no fingerprint data are
-  collected. Choose a retention window for old punches (the audit value usually
-  outweighs the storage); `DELETE FROM attendance_punches WHERE work_date < ...`
-  is the whole policy, and deleting punches does not change the derived
-  `attendance` day rows already written.
-- **HTTPS is required** for the browser geolocation API. Over plain HTTP the
-  phone page says so instead of failing silently; the server still refuses a
-  punch without coordinates.
+- **Assignment gate (`attendance_gate_enabled = 0` by default)** — turning it on
+  without a configured site would empty every work-order picker; a supervisor
+  enables it on `attendance/sites` after the first site exists. When enabled:
+  - `Workorders::_assignment_picker()` passes `$only_eligible = TRUE` so only
+    active technicians checked in today, not checked out, and free of unfinished
+    work orders (`Open`, `In Progress`, `Waiting Parts`, `Waiting Tools`) or
+    open sessions appear in the picker (with already-assigned ineligible
+    technicians shown disabled/removable on Edit).
+  - `Workorders::create()`, `Workorders::edit()` and `Workorders::start_session()`
+    all re-verify eligibility on the server so clocking onto an unassigned or
+    assigned work order cannot bypass check-in.
+- **Live account verification on punch** — `Attendance::record()` re-verifies the
+  live `users` row (`status = 'Active'` and eligible role) before accepting a
+  punch so deactivated accounts with lingering browser cookies are refused.
+- **Rotating QR (recommended) & Printed Gate QR fallback** — `attendance/board`
+  rotates `v1.<site>.<window>.<HMAC>` tokens every `attendance_qr_ttl_seconds`
+  (default 60 s) with `attendance_qr_grace_seconds` (default 120 s, configurable
+  on `attendance/sites`). Remote sites without a permanent screen can enable
+  `Allow printed / fixed QR fallback` (`attendance/print_qr`), which issues a
+  domain-separated `v1.<site>.0.<HMAC>` token still bound to live GPS geofence +
+  accuracy checks and immediately invalidated by **Rotate code**.
+- **Multi-stint daily summary & location retention** — `wms_attendance_day_summary()`
+  sums paired `check_in → check_out` intervals into `attendance.hours_worked`
+  while preserving `Leave` rows and human `notes`. `attendance_location_retention_days`
+  (default `365`, `0` = keep indefinitely) scrubs raw coordinates/IP/user-agent
+  on older `attendance_punches` rows while keeping the audit event rows intact.

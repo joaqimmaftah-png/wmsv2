@@ -422,6 +422,51 @@ check('Attendance sites UI: provides prominent Capture current location button, 
     && strpos($sitesView, 'parseCoordinateText') !== FALSE
     && strpos($sitesView, 'enableHighAccuracy: false') !== FALSE
     && strpos($sitesView, 'autolocate=1') !== FALSE);
+check('Attendance sites UI: respects "no assumed default radius" and exposes grace window, retention policy & printed QR fallback controls',
+    strpos($sitesView, "radInput.value = '150'") === FALSE
+    && strpos($sitesView, 'attendance_qr_grace_seconds') !== FALSE
+    && strpos($sitesView, 'attendance_location_retention_days') !== FALSE
+    && strpos($sitesView, 'allow_static_qr') !== FALSE);
+
+// Printed / fixed QR token fallback (ATTENDANCE_WORKFLOW.md Setup #3)
+$staticToken = wms_attendance_qr_static_token(3, $secret);
+check('Attendance: static printed QR token is issued without technician PII',
+    is_string($staticToken) && strpos($staticToken, 'v1.3.0.') === 0);
+$staticBlocked = wms_attendance_qr_verify($staticToken, $secret, $now, 60, 120, FALSE);
+is_same('Attendance: static QR token is refused unless enabled for that site', 'static_disabled', $staticBlocked['code']);
+$staticOk = wms_attendance_qr_verify($staticToken, $secret, $now + 999999, 60, 0, TRUE);
+check('Attendance: static QR token verifies across windows when explicitly enabled for the site', $staticOk['ok']);
+$staticRotated = wms_attendance_qr_verify($staticToken, str_repeat('ef', 32), $now, 60, 0, TRUE);
+is_same('Attendance: rotating site secret invalidates printed static QR token immediately', 'bad_signature', $staticRotated['code']);
+
+// Multi-stint daily summary derivation (`wms_attendance_day_summary`)
+$singleStint = wms_attendance_day_summary(array(
+    array('punch_type' => 'check_in',  'punched_at' => '2026-10-21 08:00:00'),
+    array('punch_type' => 'check_out', 'punched_at' => '2026-10-21 17:00:00'),
+));
+is_same('Attendance summary: single 08:00-17:00 shift yields 9.0h', 9.0, $singleStint['hours_worked']);
+
+$multiStint = wms_attendance_day_summary(array(
+    array('punch_type' => 'check_in',  'punched_at' => '2026-10-21 08:00:00'),
+    array('punch_type' => 'check_out', 'punched_at' => '2026-10-21 12:00:00'),
+    array('punch_type' => 'check_in',  'punched_at' => '2026-10-21 15:00:00'),
+    array('punch_type' => 'check_out', 'punched_at' => '2026-10-21 17:00:00'),
+));
+is_same('Attendance summary: multi-stint day (08:00-12:00 + 15:00-17:00) sums actual 6.0h on site', 6.0, $multiStint['hours_worked']);
+is_same('Attendance summary: keeps first arrival check_in', '08:00:00', $multiStint['check_in']);
+is_same('Attendance summary: keeps latest departure check_out', '17:00:00', $multiStint['check_out']);
+
+$woControllerSrc = file_get_contents(__DIR__ . '/../application/controllers/Workorders.php');
+$attControllerSrc = file_get_contents(__DIR__ . '/../application/controllers/Attendance.php');
+$sidebarSrc = file_get_contents(__DIR__ . '/../application/views/layouts/sidebar.php');
+check('Attendance gate: Workorders::_assignment_picker filters to eligible on-site technicians ($only_eligible = TRUE)',
+    strpos($woControllerSrc, 'technicians_for_assignment(NULL, TRUE)') !== FALSE);
+check('Attendance gate: Workorders::start_session enforces on-site & eligibility checks when gate is active',
+    strpos($woControllerSrc, 'Cannot start work while the attendance gate is on') !== FALSE);
+check('Attendance punch: Attendance::record verifies active eligible user row live from database',
+    strpos($attControllerSrc, 'punchable_user($this->user_id)') !== FALSE);
+check('Attendance navigation: sidebar exposes Punch Log to both Supervisors and Managers',
+    strpos($sidebarSrc, '$is_supervisor || $is_manager') !== FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
    Result

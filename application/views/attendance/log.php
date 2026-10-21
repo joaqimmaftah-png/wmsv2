@@ -101,7 +101,7 @@ foreach ($punches as $p) $by_user[(int)$p->user_id][] = $p;
             <label class="form-label">Worker</label>
             <select name="user_id" class="form-select" required>
               <option value="">Choose…</option>
-              <?php foreach ($workers as $w): ?>
+              <?php foreach ((!empty($correction_workers) ? $correction_workers : $workers) as $w): ?>
                 <option value="<?= (int)$w->id ?>"><?= $h(trim($w->first_name . ' ' . $w->last_name)) ?></option>
               <?php endforeach; ?>
             </select>
