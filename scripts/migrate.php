@@ -382,6 +382,18 @@ if ($opts['verify']) {
         $errors[] = "Expected verbatim Asset Register Machine IDs ('EX 006', 'C-HEADT 007', 'C-HEADT 008'), found {$verbatimIds}/3.";
     }
 
+    $res = $mysqli->query("SELECT COUNT(*) AS c FROM `equipment` WHERE (`serial_number` LIKE 'SN-%' AND `frame_no` IS NOT NULL AND `frame_no` != '') OR `brand` = 'CATERPILAR' OR `model` = 'TOYOTA LC'");
+    $staleCells = $res ? (int)$res->fetch_assoc()['c'] : 0;
+    if ($staleCells !== 0) {
+        $errors[] = "Expected 0 stale placeholder serials/brands/models in `equipment`, found {$staleCells}.";
+    }
+
+    $res = $mysqli->query("SELECT COUNT(*) AS c FROM `report_sites`");
+    $siteCount = $res ? (int)$res->fetch_assoc()['c'] : 0;
+    if ($siteCount < 36) {
+        $errors[] = "Expected >= 36 approved locations in `report_sites`, found {$siteCount}.";
+    }
+
     $res = $mysqli->query("SELECT COUNT(*) AS c FROM `equipment_specs`");
     $specCount = $res ? (int)$res->fetch_assoc()['c'] : 0;
     if ($specCount < 338) {

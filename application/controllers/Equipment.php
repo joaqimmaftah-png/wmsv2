@@ -13,13 +13,22 @@ class Equipment extends MY_Controller {
         $filter = [
             'status'       => $this->input->get('status'),
             'type'         => $this->input->get('type'),
+            'category'     => $this->input->get('category'),
+            'location'     => $this->input->get('location'),
             'search'       => $this->input->get('search'),
             'report_group' => $this->input->get('report_group'),   // W0.3
             'reportable'   => $this->input->get('reportable'),
         ];
 
         $data['equipment']     = $this->Equipment_model->get_all($filter);
-        $data['eq_types']      = $this->db->get('equipment_types')->result();
+        $data['eq_types']      = $this->db->order_by('name', 'ASC')->get('equipment_types')->result();
+        $cats = [];
+        foreach ($data['eq_types'] as $et) {
+            $c = trim((string)($et->category ?? ''));
+            if ($c !== '' && !in_array($c, $cats, TRUE)) $cats[] = $c;
+        }
+        sort($cats, SORT_STRING);
+        $data['eq_categories'] = $cats;
         $data['report_groups'] = $this->Equipment_model->report_groups();
         $data['reportability'] = $this->Equipment_model->reportability_summary();
         $data['report_sites']  = $this->Equipment_model->report_sites();      // W0.5
@@ -37,7 +46,7 @@ class Equipment extends MY_Controller {
 
         if ($this->input->post()) {
             $year_raw = $this->input->post('year', TRUE);
-            $reg_no   = strtoupper((string)(trim((string)$this->input->post('registration_no', TRUE))));
+            $reg_no   = trim((string)$this->input->post('registration_no', TRUE));
             if ($reg_no === '') {
                 $this->session->set_flashdata('error', 'Registration / Machine ID is required.');
                 redirect('equipment/create');
@@ -138,7 +147,7 @@ class Equipment extends MY_Controller {
             $year_raw = $this->input->post('year', TRUE);
             $data = [
                 'equipment_type_id' => $this->input->post('equipment_type_id', TRUE),
-                'registration_no'   => strtoupper((string)(trim((string)$this->input->post('registration_no', TRUE)))),
+                'registration_no'   => trim((string)$this->input->post('registration_no', TRUE)),
                 'brand'             => $this->input->post('brand', TRUE),
                 'model'             => $this->input->post('model', TRUE),
                 'year'              => ($year_raw !== '' && $year_raw !== null && is_numeric($year_raw)) ? (int)$year_raw : NULL,

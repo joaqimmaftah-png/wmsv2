@@ -6,31 +6,48 @@ class Equipment_model extends CI_Model {
     public function get_all($filter = []) {
         $this->db->select('e.*, et.name as type_name, et.category')
             ->from('equipment e')
-            ->join('equipment_types et', 'et.id = e.equipment_type_id');
+            ->join('equipment_types et', 'et.id = e.equipment_type_id', 'left');
 
-        if (!empty($filter['status'])) $this->db->where('e.status', $filter['status']);
-        if (!empty($filter['type']))   $this->db->where('e.equipment_type_id', $filter['type']);
+        if (!empty($filter['status']))   $this->db->where('e.status', $filter['status']);
+        if (!empty($filter['type']))     $this->db->where('e.equipment_type_id', $filter['type']);
+        if (!empty($filter['category'])) $this->db->where('et.category', $filter['category']);
         // W0.3 — weekly-report filters
-        if (!empty($filter['location']))    $this->db->where('e.location', $filter['location']);
+        if (!empty($filter['location']))     $this->db->where('e.location', $filter['location']);
         if (!empty($filter['report_group'])) $this->db->where('e.report_group', $filter['report_group']);
         if (!empty($filter['reportable']))   $this->db->where('e.include_in_weekly_report', 1)
                                                      ->where('e.status !=', 'Retired');
         if (!empty($filter['search'])) {
             $s = $filter['search'];
-            $this->db->group_start()->like('e.registration_no', $s)->or_like('e.brand', $s)->or_like('e.model', $s)->group_end();
+            $this->db->group_start()
+                ->like('e.registration_no', $s)
+                ->or_like('e.legacy_code', $s)
+                ->or_like('e.brand', $s)
+                ->or_like('e.model', $s)
+                ->or_like('e.serial_number', $s)
+                ->or_like('e.engine_model', $s)
+                ->or_like('e.location', $s)
+                ->or_like('et.name', $s)
+                ->or_like('et.category', $s)
+                ->group_end();
         }
         return $this->db->order_by('e.registration_no', 'ASC')->get()->result();
     }
 
     public function get_all_active() {
-        return $this->db->select('e.*, et.name as type_name')->from('equipment e')->join('equipment_types et', 'et.id = e.equipment_type_id')
-            ->where('e.status !=', 'Retired')->order_by('e.registration_no', 'ASC')->get()->result();
+        return $this->db->select('e.*, et.name as type_name, et.category')
+            ->from('equipment e')
+            ->join('equipment_types et', 'et.id = e.equipment_type_id', 'left')
+            ->where('e.status !=', 'Retired')
+            ->order_by('e.registration_no', 'ASC')
+            ->get()->result();
     }
 
     public function get_by_id($id) {
-        return $this->db->select('e.*, et.name as type_name, et.category')->from('equipment e')
-            ->join('equipment_types et', 'et.id = e.equipment_type_id')
-            ->where('e.id', $id)->get()->row();
+        return $this->db->select('e.*, et.name as type_name, et.category')
+            ->from('equipment e')
+            ->join('equipment_types et', 'et.id = e.equipment_type_id', 'left')
+            ->where('e.id', $id)
+            ->get()->row();
     }
 
 

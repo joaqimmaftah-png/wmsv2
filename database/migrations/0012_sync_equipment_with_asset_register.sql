@@ -1,0 +1,745 @@
+-- =============================================================================
+-- Migration 0012: Sync All Equipment Fields with Master Asset Register
+-- =============================================================================
+-- Authoritatively synchronizes all 116 fleet records, 21 equipment types/categories,
+-- 36 approved locations, and 338 specification rows with `Equipment_Register.xlsx`
+-- (`MACHINE ID`, `TYPE`, `CATEGORY`, `BRAND`, `MODEL`, `YEAR`, `SERIAL NO`,
+-- `ENGINE MODEL`, `CURRENT HOURS`, `CURRENT KM`, `LOCATION`, `STATUS`, dates, notes)
+-- on databases that ran earlier versions of migration 0008, preserving all
+-- integer `equipment.id` primary and foreign keys.
+-- =============================================================================
+
+SET NAMES utf8mb4;
+
+-- Align `C-HV-EX 006` -> `EX 006` safely (handles both normal upgrade and pre-existing `EX 006`)
+UPDATE `equipment` e_old
+LEFT JOIN `equipment` e_new ON e_new.`registration_no` = 'EX 006'
+SET e_old.`registration_no` = 'EX 006'
+WHERE e_old.`registration_no` = 'C-HV-EX 006' AND e_new.`id` IS NULL;
+
+DELETE e_dup FROM `equipment` e_dup
+INNER JOIN `equipment` e_keep ON e_keep.`registration_no` = 'EX 006'
+WHERE e_dup.`registration_no` = 'C-HV-EX 006';
+
+-- Align `C-HE-ADT 007` -> `C-HEADT 007` safely (handles both normal upgrade and pre-existing `C-HEADT 007`)
+UPDATE `equipment` e_old
+LEFT JOIN `equipment` e_new ON e_new.`registration_no` = 'C-HEADT 007'
+SET e_old.`registration_no` = 'C-HEADT 007'
+WHERE e_old.`registration_no` = 'C-HE-ADT 007' AND e_new.`id` IS NULL;
+
+DELETE e_dup FROM `equipment` e_dup
+INNER JOIN `equipment` e_keep ON e_keep.`registration_no` = 'C-HEADT 007'
+WHERE e_dup.`registration_no` = 'C-HE-ADT 007';
+
+-- Align `C-HE-ADT 008` -> `C-HEADT 008` safely (handles both normal upgrade and pre-existing `C-HEADT 008`)
+UPDATE `equipment` e_old
+LEFT JOIN `equipment` e_new ON e_new.`registration_no` = 'C-HEADT 008'
+SET e_old.`registration_no` = 'C-HEADT 008'
+WHERE e_old.`registration_no` = 'C-HE-ADT 008' AND e_new.`id` IS NULL;
+
+DELETE e_dup FROM `equipment` e_dup
+INNER JOIN `equipment` e_keep ON e_keep.`registration_no` = 'C-HEADT 008'
+WHERE e_dup.`registration_no` = 'C-HE-ADT 008';
+
+
+INSERT INTO `equipment_types` (`id`, `name`, `category`, `description`) VALUES
+(1, 'Heavy Truck', 'Transport', 'On-road and off-road heavy transport vehicles'),
+(2, 'Excavator', 'Earth Moving', 'Hydraulic tracked excavators'),
+(3, 'Wheel Loader', 'Loading', 'Front-loading rubber-tyre loaders'),
+(4, 'Bulldozer', 'Earth Moving', 'Track-type dozing and pushing machines'),
+(5, 'Crane', 'Lifting', 'Mobile and overhead lifting equipment'),
+(6, 'Compressor', 'Utilities', 'Air and gas compression equipment'),
+(7, 'Generator', 'Utilities', 'Diesel power generation sets'),
+(8, 'Forklift', 'Material Handling', 'Warehouse and yard material handling'),
+(9, 'Service Truck', 'Support', 'Field maintenance and support vehicles'),
+(10, 'Light Vehicle', 'Transport', 'Pickup trucks and utility vehicles'),
+(11, 'ADT', 'Hauling', 'Articulated Dump Trucks'),
+(12, 'Dozer', 'Earth Moving', 'Track-type bulldozers'),
+(13, 'Grader', 'Road Works', 'Motor graders for road maintenance'),
+(14, 'Bowser', 'Support', 'Water and fuel bowser trucks'),
+(15, 'Rig', 'Mining', 'Drill rigs'),
+(28, 'Concrete Mixer', 'Support', 'Imported from the workshop asset list'),
+(29, 'Bus', 'Transport', 'Imported from the workshop asset list'),
+(30, 'Attachment', 'Support', 'Imported from the workshop asset list'),
+(31, 'Water Pump', 'Utilities', 'Imported from the workshop asset list'),
+(32, 'Tower Light', 'Utilities', 'Imported from the workshop asset list'),
+(33, 'Welding Machine', 'Utilities', 'Imported from the workshop asset list')
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `category` = VALUES(`category`), `description` = VALUES(`description`);
+
+INSERT INTO `report_groups` (`id`, `code`, `label`, `sort_order`, `active`) VALUES
+(1, 'EXCAVATOR', 'EXCAVATORs', 10, 1),
+(2, 'DOZER', 'DOZERs', 20, 1),
+(3, 'ADT', 'ADTs', 30, 1),
+(4, 'GRADER', 'GRADERs', 40, 1),
+(5, 'BOWSER_DB', 'BOWSERs DB', 50, 1),
+(6, 'BOWSER_WB', 'BOWSERs WB', 60, 1),
+(7, 'RIG', 'RIG', 70, 1),
+(8, 'CRANE', 'CRANE', 80, 1),
+(9, 'FORKLIFT', 'FORKLIFT', 90, 1),
+(10, 'GENERATOR', 'GENERATOR', 100, 1),
+(11, 'TOWER_LIGHT', 'TOWER LIGHT', 110, 1),
+(12, 'BUS', 'BUS', 120, 1),
+(13, 'LV', 'LV', 130, 1),
+(14, 'WATER_PUMP', 'WATER PUMP', 140, 1),
+(15, 'COMPRESSOR', 'COMPRESSOR', 150, 1),
+(16, 'WELDING_PLANT', 'WELDING PLANT', 160, 1),
+(17, 'SERVICE_VAN', 'SERVICE VAN', 170, 1)
+ON DUPLICATE KEY UPDATE `label` = COALESCE(NULLIF(`report_groups`.`label`, ''), VALUES(`label`)), `sort_order` = VALUES(`sort_order`);
+
+INSERT INTO `report_sites` (`id`, `code`, `label`, `sort_order`, `is_active`, `created_at`) VALUES
+(1, 'WORKSHOP', 'WORKSHOP', 10, 1, '2026-10-19 07:22:49'),
+(2, 'MET_PLANT', 'MET PLANT', 20, 1, '2026-10-19 07:22:49'),
+(3, 'KALIMVA', 'KALIMVA', 30, 1, '2026-10-19 07:22:49'),
+(4, 'TTB_PAMAO', 'TTB PAMAO', 40, 1, '2026-10-19 07:22:49'),
+(5, 'RD', 'RD', 50, 1, '2026-10-19 07:22:49'),
+(6, 'DOKO', 'DOKO', 60, 1, '2026-10-19 07:22:49'),
+(7, 'IKAMVA', 'IKAMVA', 70, 1, '2026-10-19 07:22:49'),
+(8, 'BANDAYI', 'BANDAYI', 80, 1, '2026-10-19 07:22:49'),
+(9, 'CEO', 'CEO', 90, 1, '2026-10-19 07:22:49'),
+(10, 'STORE', 'STORE', 100, 1, '2026-10-19 07:22:49'),
+(11, 'PAKAKA', 'PAKAKA', 110, 1, '2026-10-19 07:22:49'),
+(12, 'AMS_WORKSHOP', 'AMS WORKSHOP', 120, 1, '2026-10-19 07:22:49'),
+(13, 'RIG 001', 'RIG 001', 130, 1, '2026-10-19 07:22:49'),
+(14, 'RIG 002', 'RIG 002', 140, 1, '2026-10-19 07:22:49'),
+(15, 'RIG 003', 'RIG 003', 150, 1, '2026-10-19 07:22:49'),
+(16, 'SECURITY', 'SECURITY', 160, 1, '2026-10-19 07:22:49'),
+(17, 'DRILLING', 'DRILLING', 170, 1, '2026-10-19 07:22:49'),
+(18, 'DRILLING (Operation)', 'DRILLING (Operation)', 180, 1, '2026-10-19 07:22:49'),
+(19, 'FINANCE', 'FINANCE', 190, 1, '2026-10-19 07:22:49'),
+(20, 'FLEET MANAGER', 'FLEET MANAGER', 200, 1, '2026-10-19 07:22:49'),
+(21, 'FUEL & SECURITY MANAGER', 'FUEL & SECURITY MANAGER', 210, 1, '2026-10-19 07:22:49'),
+(22, 'GENERAL MANAGER', 'GENERAL MANAGER', 220, 1, '2026-10-19 07:22:49'),
+(23, 'LOGISTIC', 'LOGISTIC', 230, 1, '2026-10-19 07:22:49'),
+(24, 'LOGISTICS MANAGER', 'LOGISTICS MANAGER', 240, 1, '2026-10-19 07:22:49'),
+(25, 'MAINTENANCE (Operation)', 'MAINTENANCE (Operation)', 250, 1, '2026-10-19 07:22:49'),
+(26, 'MINING', 'MINING', 260, 1, '2026-10-19 07:22:49'),
+(27, 'NDALA', 'NDALA', 270, 1, '2026-10-19 07:22:49'),
+(28, 'PROCUREMENT MANAGER', 'PROCUREMENT MANAGER', 280, 1, '2026-10-19 07:22:49'),
+(29, 'PRODUCTION (Operation)', 'PRODUCTION (Operation)', 290, 1, '2026-10-19 07:22:49'),
+(30, 'PRODUCTION MANAGER', 'PRODUCTION MANAGER', 300, 1, '2026-10-19 07:22:49'),
+(31, 'SAFETY MANAGER', 'SAFETY MANAGER', 310, 1, '2026-10-19 07:22:49'),
+(32, 'SUPER ATTENDANT', 'SUPER ATTENDANT', 320, 1, '2026-10-19 07:22:49'),
+(33, 'SUPPLY CHAIN', 'SUPPLY CHAIN', 330, 1, '2026-10-19 07:22:49'),
+(34, 'WORKSHOP MANAGER', 'WORKSHOP MANAGER', 340, 1, '2026-10-19 07:22:49'),
+(35, 'XCMG TEAM', 'XCMG TEAM', 350, 1, '2026-10-19 07:22:49'),
+(36, 'OPERATIONS', 'OPERATIONS', 360, 1, '2026-10-19 07:22:49')
+ON DUPLICATE KEY UPDATE `label` = COALESCE(NULLIF(`report_sites`.`label`, ''), VALUES(`label`)), `sort_order` = VALUES(`sort_order`);
+
+INSERT INTO `equipment` (`equipment_type_id`, `registration_no`, `legacy_code`, `machine_type`, `brand`, `model`, `year`, `serial_number`, `frame_no`, `engine_model`, `engine_description`, `engine_serial`, `current_hours`, `current_km`, `meter_type`, `location`, `masterdata_source`, `status`, `report_group`, `report_sort`, `include_in_weekly_report`, `photo`, `purchase_date`, `manufacture_date`, `commission_date`, `start_meter`, `fatigue_system`, `order_no`, `warranty_expiry`, `notes`, `created_at`, `updated_at`) VALUES
+(2, 'C-HV-EX 001', 'EX 001', 'Excavator', 'SANY', 'SY500H', 2019, 'SY048CE0007K8', 'SY048CE0007K8', '6WG1', '6WG1', NULL, '8420.00', '0.00', 'Hours', 'MET PLANT', 'W36 sample row 5', 'Breakdown', 'EXCAVATOR', 10003, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Broken Chain track Bolt', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(2, 'C-HV-EX 002', 'EX 002', 'Excavator', 'XCMG', 'XE500DK', 2020, 'XCGA500APKA03918', 'XCGA500APKA03918', 'QSM11', 'QSM11', NULL, '6180.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 6', 'Available', 'EXCAVATOR', 10004, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Pin Lock worn out - Fixed', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(2, 'C-HV-EX 003', 'EX 003', 'Excavator', 'CATERPILLAR', '390 FL', 2021, 'CAT0390FTGAY20127', 'CAT0390FTGAY20127', 'C18', 'C18', NULL, '3350.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 7', 'Breakdown', 'EXCAVATOR', 10005, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Damaged boom cylinder', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(2, 'C-HV-EX 004', 'EX 004', 'Excavator', 'XCMG', 'XE950', 2020, 'XUG09503PSWA03818', 'XUG09503PSWA03818', 'QSK19', 'QSK19', NULL, '4300.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 8', 'Available', 'EXCAVATOR', 10006, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(2, 'C-HV-EX 005', 'EX 005', 'Excavator', 'XCMG', 'XE950', 2020, 'XUG09503HSWA03828', 'XUG09503HSWA03828', 'QSK19', 'QSK19', NULL, '5100.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 9', 'Breakdown', 'EXCAVATOR', 10007, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Bucket Worn out', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(2, 'EX 006', 'EX 006', 'Excavator', 'XCMG', 'XE500', 2021, 'SN-EX-006', NULL, NULL, NULL, NULL, '4900.00', '0.00', 'Hours', 'NDALA', NULL, 'Available', 'EXCAVATOR', 10008, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(12, 'C-HV-DZ 001', 'DZ 001', 'Dozer', 'CATERPILLAR', 'D8R', 2018, 'GN0003844', 'GN0003844', '3406C', '3406C', NULL, '21900.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 11', 'Breakdown', 'DOZER', 20009, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Engine over heat', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(12, 'C-HV-DZ 002', 'DZ 002', 'Dozer', 'LIUGONG', 'CLG B230', 2019, 'LGCB230ZHRCO12870', 'LGCB230ZHRCO12870', 'NT855C280S20', 'NT855C280S20', NULL, '19200.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 12', 'Breakdown', 'DOZER', 20010, 1, NULL, NULL, NULL, '2025-11-01', '0.00', 'No', NULL, NULL, 'Steering system', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(12, 'C-HV-DZ 003', 'DZ 003', 'Dozer', 'LIUGONG', 'CLG B230', 2020, 'LGCB230ZCRC012829', 'LGCB230ZCRC012829', 'NT855C280S20', 'NT855C280S20', NULL, '16700.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 13', 'Breakdown', 'DOZER', 20011, 1, NULL, NULL, NULL, '2025-11-01', '0.00', 'No', NULL, NULL, 'Transmission problem', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(12, 'C-HV-DZ 004', 'DZ 004', 'Dozer', 'XCMG', 'D 260', 2020, 'XUG260T3CRDK00066', 'XUG260T3CRDK00066', 'SC9DF270G3', 'SC9DF270G3', NULL, '13200.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 14', 'Breakdown', 'DOZER', 20012, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Cabin mounting - Fuel tank damaged', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(12, 'C-HV-DZ 005', 'DZ 005', 'Dozer', 'XCMG', 'D 260', 2021, 'XUG260T3TRDK00067', 'XUG260T3TRDK00067', 'SC9DF270G3', 'SC9DF270G3', NULL, '11800.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 15', 'Breakdown', 'DOZER', 20013, 1, NULL, NULL, NULL, '2025-09-05', '0.00', 'No', NULL, NULL, 'Steering system and Joystick issue', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(12, 'C-HV-DZ 006', 'DZ 006', 'Dozer', 'XCMG', 'D 360', 2021, 'SN-DZ-006', NULL, NULL, NULL, NULL, '9600.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 16', 'Available', 'DOZER', 20014, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(12, 'C-HV-DZ 007', 'DZ 007', 'Dozer', 'XCMG', 'D 360', 2022, 'XUG360T2ASDK00063', 'XUG360T2ASDK00063', NULL, NULL, NULL, '7200.00', '0.00', 'Hours', 'MET PLANT', 'W36 sample row 18', 'Available', 'DOZER', 20015, 1, NULL, NULL, NULL, '2026-10-02', '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 001', 'ADT 001', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2019, 'CAT00745T3F602037', 'CAT00745T3F602037', 'C18', 'C18', NULL, '14200.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 19', 'Available', 'ADT', 30016, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, '', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 002', 'ADT 002', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2019, 'CAT00745E3F602018', 'CAT00745E3F602018', 'C18', 'C18', NULL, '13800.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 20', 'Available', 'ADT', 30017, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 003', 'ADT 003', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2020, 'CAT00745T3F602023', 'CAT00745T3F602023', 'C18', 'C18', NULL, '12400.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 21', 'Breakdown', 'ADT', 30018, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 004', 'ADT 004', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2020, 'CAT00745T3F601163', 'CAT00745T3F601163', 'C18', 'C18', NULL, '15100.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 22', 'Breakdown', 'ADT', 30019, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Cabin Pin Worn out', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 005', 'ADT 005', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2020, 'CAT00745P3F601195', 'CAT00745P3F601195', 'C18', 'C18', NULL, '11900.00', '0.00', 'Hours', 'MINING', NULL, 'Available', 'ADT', 30020, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 006', 'ADT 006', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2021, 'CAT00745C3F601193', 'CAT00745C3F601193', 'C18', 'C18', NULL, '10800.00', '0.00', 'Hours', 'MINING', NULL, 'Breakdown', 'ADT', 30021, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Engine no start', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HEADT 007', 'ADT 007', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2021, 'CAT00745P3F601164', 'CAT00745P3F601164', 'C18', 'C18', NULL, '13200.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 23', 'Breakdown', 'ADT', 30022, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Differential problem', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HEADT 008', 'ADT 008', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2021, 'CAT00745V3F601199', 'CAT00745V3F601199', 'C18', 'C18', NULL, '12100.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 24', 'Available', 'ADT', 30023, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 009', 'ADT 009', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2022, 'XUG00456VRWB00458', 'XUG00456VRWB00458', 'Benz OM502', 'Benz OM502', NULL, '9800.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 25', 'Available', 'ADT', 30024, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 010', 'ADT 010', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2022, 'XUG00456KRWB00438', 'XUG00456KRWB00438', 'Benz OM502', 'Benz OM502', NULL, '8900.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 26', 'Available', 'ADT', 30025, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 011', 'ADT 011', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2022, 'XUG00456ARWB00428', 'XUG00456ARWB00428', 'Benz OM502', 'Benz OM502', NULL, '8200.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 27', 'Available', 'ADT', 30026, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 012', 'ADT 012', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2023, 'XUG00456PRWB00468', 'XUG00456PRWB00468', 'Benz OM502', 'Benz OM502', NULL, '7100.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 28', 'Breakdown', 'ADT', 30027, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Turbo failure', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 013', 'ADT 013', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2023, 'XUG00456ERWB00448', 'XUG00456ERWB00448', 'Benz OM502', 'Benz OM502', NULL, '6800.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 29', 'Available', 'ADT', 30028, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Flat tire - Fixed', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 014', 'ADT 014', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2023, 'XUG00456VRWB00508', 'XUG00456VRWB00508', 'Benz OM502', 'Benz OM502', NULL, '4000.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 30', 'Available', 'ADT', 30029, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, '4000h service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 015', 'ADT 015', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2023, 'XUG00456CRWB00488', 'XUG00456CRWB00488', 'Benz OM502', 'Benz OM502', NULL, '5200.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 31', 'Available', 'ADT', 30030, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 016', 'ADT 016', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2022, 'XUG00456TRWB00498', 'XUG00456TRWB00498', 'Benz OM502', 'Benz OM502', NULL, '7000.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 32', 'Breakdown', 'ADT', 30031, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Radiator Leakage', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 017', 'ADT 017', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2022, 'XUG00456PRWB00518', 'XUG00456PRWB00518', 'Benz OM502', 'Benz OM502', NULL, '8700.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 33', 'Available', 'ADT', 30032, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 018', 'ADT 018', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2022, 'XUG00456HRWB00478', 'XUG00456HRWB00478', 'Benz OM502', 'Benz OM502', NULL, '8100.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 34', 'Breakdown', 'ADT', 30033, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(13, 'C-HE-GR 001', 'GR001', 'Graders', 'XCMG', 'GR2405T', 2020, 'XUG240T3ARDB00020', 'XUG240T3ARDB00020', NULL, NULL, NULL, '6200.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 41', 'Breakdown', 'GRADER', 40034, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Injectors issue', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(13, 'C-HE-GR 002', 'GR002', 'Graders', 'XCMG', 'GR2405T', 2021, 'XUG240T3ARDB00021', 'XUG240T3ARDB00021', NULL, NULL, NULL, '8900.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 42', 'Breakdown', 'GRADER', 40035, 1, NULL, NULL, NULL, '2025-02-17', '0.00', 'No', NULL, NULL, 'Engine and Transmission issue', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(14, 'C-HV-DB 001', 'DB 001', 'Diesel bowser', 'SINOTRUK', 'ZZ1257N4647B1R', 2020, 'LZZ5BLMFXRN296483', 'LZZ5BLMFXRN296483', NULL, NULL, NULL, '4200.00', '0.00', 'Kilometres', 'TTB PAMAO', 'W36 sample row 45', 'Available', 'BOWSER_DB', 50036, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(14, 'C-HV-DB 002', 'DB 002', 'Diesel bowser', 'SINOTRUK', 'ZZ1168G4525C1', 2020, 'LEZDD2CC1PF112146', 'LEZDD2CC1PF112146', NULL, NULL, NULL, '5100.00', '0.00', 'Kilometres', 'KALIMVA', 'W36 sample row 46', 'Breakdown', 'BOWSER_DB', 50037, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Pipe/line leakage', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(14, 'C-HV-DB 003', 'DB 003', 'Diesel bowser', 'SINOTRUK', 'BEIBEN', 2023, 'LBZF46GA5PA004464', 'LBZF46GA5PA004464', NULL, NULL, NULL, '3900.00', '0.00', 'Kilometres', 'KALIMVA', 'W36 sample row 47', 'Available', 'BOWSER_DB', 50038, 1, NULL, NULL, '2023-06-29', NULL, NULL, 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(14, 'C-HV-WB 001', 'WB 001', 'Water bowser', 'CNHTC', 'ZZ1257N4647B1R', 2021, 'LZZ5BLMF5RN290008', 'LZZ5BLMF5RN290008', NULL, NULL, NULL, '3200.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 48', 'Available', 'BOWSER_WB', 60039, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(14, 'C-HV-WB 002', 'WB 002', 'Water bowser', 'SINOTRUK', 'BEIBEN', 2023, 'LBZF56KA8PA004463', 'LBZF56KA8PA004463', 'WP10.380E32', 'WP10.380E32', NULL, '2800.00', '0.00', 'Kilometres', 'TTB PAMAO', 'W36 sample row 49', 'Available', 'BOWSER_WB', 60040, 1, NULL, NULL, '2023-06-29', NULL, NULL, 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(15, 'C-AML-RIG001', 'RIG 001', 'Drilling machines', 'PRD', 'PRD BH 15 100M', 2019, 'PRD252605BH150010', 'PRD252605BH150010', NULL, NULL, NULL, '6800.00', '0.00', 'Hours', 'IKAMVA', 'W36 sample row 50', 'Available', 'RIG', 70041, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(15, 'C-AML-RIG002', 'RIG 002', 'Drilling machines', 'PRD', 'PRD BH 15 100M', 2020, 'PRD252604BH150009', 'PRD252604BH150009', NULL, NULL, NULL, '5900.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 51', 'Breakdown', 'RIG', 70042, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(15, 'C-AML-RIG003', 'RIG 003', 'Drilling machines', 'TATA HITACHI', 'EX210LC-5G', 2021, 'THEDJLL2L00021947', 'THEDJLL2L00021947', NULL, NULL, NULL, '4800.00', '0.00', 'Hours', 'TTB PAMAO', 'W36 sample row 52', 'Available', 'RIG', 70043, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(6, 'C-AML-COMP001', 'COMP 001', 'Drilling machines', 'ATLAS COPCO', 'Atlas Copco', 2019, 'H250100935', NULL, NULL, NULL, NULL, '6740.00', '0.00', 'Hours', 'RIG 001', 'OPEN-9 answer 2026-10-07 (W36 sample row 103)', 'Available', 'COMPRESSOR', 150044, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(6, 'C-AML-COMP002', 'COMP 002', 'Drilling machines', 'ATLAS COPCO', 'Atlas Copco', 2020, 'H250100688', NULL, NULL, NULL, NULL, '5300.00', '0.00', 'Hours', 'RIG 002', 'OPEN-9 answer 2026-10-07 (W36 sample row 104)', 'Available', 'COMPRESSOR', 150045, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(6, 'C-AML-COMP003', 'COMP 003', 'Drilling machines', 'ELGI', 'PG 1100', 2021, 'BYED232758', NULL, NULL, NULL, NULL, '4100.00', '0.00', 'Hours', 'RIG 003', 'OPEN-9 answer 2026-10-07 (W36 sample row 105)', 'Available', 'COMPRESSOR', 150046, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 019', 'ADT 019', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2025, 'XUG00454KSWB00248', 'XUG00454KSWB00248', 'Benz OM502', 'Benz OM502', NULL, '0.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 35', 'Available', 'ADT', 30047, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, '', '2026-06-25 13:20:41', '2026-10-19 07:22:49'),
+(6, 'C-COMP-004', 'COMP 004', 'Compressor', 'AIRMEC', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 106', 'Available', 'COMPRESSOR', 150048, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 020', 'ADT 020', 'Articulated Dump Truck', 'XCMG', 'XDA45', NULL, NULL, 'XUG00454CSWB00228', 'Benz OM502', 'Benz OM502', NULL, '0.00', '0.00', 'Hours', 'TTB PAMAO', 'W36 sample row 36', 'Available', 'ADT', 30049, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 021', 'ADT 021', 'Articulated Dump Truck', 'XCMG', 'XDA45', NULL, NULL, 'XUG00454ASWB00238', 'Benz OM502', 'Benz OM502', NULL, '0.00', '0.00', 'Hours', 'TTB PAMAO', 'W36 sample row 37', 'Available', 'ADT', 30050, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 022', 'ADT 022', 'Articulated Dump Truck', 'XCMG', 'XDA45', NULL, NULL, 'XUG00454ESWB00258', 'Benz OM502', 'Benz OM502', NULL, '0.00', '0.00', 'Hours', 'TTB PAMAO', 'W36 sample row 38', 'Available', 'ADT', 30051, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 023', 'ADT 023', 'Articulated Dump Truck', 'XCMG', 'XDA45', NULL, NULL, 'XUG00454VSWB00268', 'Benz OM502', 'Benz OM502', NULL, '0.00', '0.00', 'Hours', 'TTB PAMAO', 'W36 sample row 39', 'Available', 'ADT', 30052, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(11, 'C-HE-ADT 024', 'ADT 024', 'Articulated Dump Truck', 'XCMG', 'XDA45', NULL, NULL, 'XUG00454JSWB00218', 'Benz OM502', 'Benz OM502', NULL, '0.00', '0.00', 'Hours', 'TTB PAMAO', 'W36 sample row 40', 'Available', 'ADT', 30053, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(5, 'C-HE-CR 001', 'CR001', 'CRANE', 'XCMG', 'XCT80_Y', 2023, '20230168', 'LXGCPA469PA009185', '93154658', '93154658', NULL, '0.00', '0.00', 'Hours', 'DOKO', 'W36 sample row 55', 'Available', 'CRANE', 80054, 1, NULL, NULL, '2023-06-01', NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(8, 'C-HE-FL001', 'FL001', 'Fork lift', 'XCMG', 'FD50T-P', NULL, '23D5000257', 'D502303027', NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 56', 'Available', 'FORKLIFT', 90055, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(8, 'C-HE-FL002', 'FL002', 'Fork lift', 'HELI', 'CPCD50', NULL, '010503M9991', NULL, '4C6-85U32', NULL, '4C6-85U32A250527189G', '0.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 57', 'Available', 'FORKLIFT', 90056, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(13, 'C-HE-GR 003', 'GR003', 'Graders', 'SANY', 'SMG200C - 8', NULL, NULL, 'PY1120CD0592', NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 43', 'Available', 'GRADER', 40057, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(13, 'C-HE-GR 004', 'GR004', 'Graders', 'SANY', 'SMG200C - 8', NULL, NULL, 'PY1120CD0605', NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 44', 'Available', 'GRADER', 40058, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(5, 'C-HE-TC 002', 'TC002', 'Crane truck', 'XCMG', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '0.00', '0.00', 'Kilometres', 'WORKSHOP', 'W36 sample row 54', 'Available', 'CRANE', 80059, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(29, 'C-HV-BS 001', 'BS001', 'Bus', 'TATA', 'TATA', NULL, NULL, 'MAT453567RFR09563', NULL, NULL, NULL, '0.00', '0.00', 'Kilometres', 'KALIMVA', 'W36 sample row 70', 'Available', 'BUS', 120060, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(29, 'C-HV-BS 002', 'BS002', 'Bus', 'TATA', 'TATA', NULL, NULL, NULL, NULL, NULL, NULL, '0.00', '0.00', 'Kilometres', 'KALIMVA', 'W36 sample row 71', 'Available', 'BUS', 120061, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(12, 'C-HV-DZ 008', 'DZ008', 'Dozer', 'LIUGONG', 'CLG B230', NULL, NULL, 'LGCB230ZVRC012833', NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 17', 'Available', 'DOZER', 20062, 1, NULL, NULL, NULL, '2025-11-12', '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49')
+ON DUPLICATE KEY UPDATE
+  `equipment_type_id` = VALUES(`equipment_type_id`),
+  `legacy_code` = VALUES(`legacy_code`),
+  `machine_type` = VALUES(`machine_type`),
+  `brand` = VALUES(`brand`),
+  `model` = VALUES(`model`),
+  `year` = VALUES(`year`),
+  `serial_number` = VALUES(`serial_number`),
+  `frame_no` = VALUES(`frame_no`),
+  `engine_model` = VALUES(`engine_model`),
+  `engine_description` = VALUES(`engine_description`),
+  `engine_serial` = VALUES(`engine_serial`),
+  `current_hours` = VALUES(`current_hours`),
+  `current_km` = VALUES(`current_km`),
+  `meter_type` = VALUES(`meter_type`),
+  `location` = VALUES(`location`),
+  `masterdata_source` = VALUES(`masterdata_source`),
+  `status` = VALUES(`status`),
+  `report_group` = VALUES(`report_group`),
+  `report_sort` = VALUES(`report_sort`),
+  `include_in_weekly_report` = VALUES(`include_in_weekly_report`),
+  `purchase_date` = VALUES(`purchase_date`),
+  `manufacture_date` = VALUES(`manufacture_date`),
+  `commission_date` = VALUES(`commission_date`),
+  `start_meter` = VALUES(`start_meter`),
+  `fatigue_system` = VALUES(`fatigue_system`),
+  `order_no` = VALUES(`order_no`),
+  `warranty_expiry` = VALUES(`warranty_expiry`),
+  `notes` = VALUES(`notes`);
+
+INSERT INTO `equipment` (`equipment_type_id`, `registration_no`, `legacy_code`, `machine_type`, `brand`, `model`, `year`, `serial_number`, `frame_no`, `engine_model`, `engine_description`, `engine_serial`, `current_hours`, `current_km`, `meter_type`, `location`, `masterdata_source`, `status`, `report_group`, `report_sort`, `include_in_weekly_report`, `photo`, `purchase_date`, `manufacture_date`, `commission_date`, `start_meter`, `fatigue_system`, `order_no`, `warranty_expiry`, `notes`, `created_at`, `updated_at`) VALUES
+(2, 'C-HV-EX 007', 'EX 007', 'Excavator', 'XCMG', 'XE950', NULL, NULL, 'XUG09503VSWA03968', 'QSK19', 'QSK19', NULL, '0.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 10', 'Available', 'EXCAVATOR', 10063, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(2, 'C-HV-EX 008', 'EX 008', 'Excavator', 'CATERPILLAR', '390 FL', NULL, NULL, 'CAT0390FTHJD00238', 'C18 ACERT', 'C18 ACERT', NULL, '0.00', '0.00', 'Hours', 'MINING', NULL, 'Available', 'EXCAVATOR', 10064, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(28, 'C-HV-MIX 001', 'MIX 001', 'Concrete mixer', NULL, 'CONCRETE MIXER (ZZ1257N3847B1)', NULL, NULL, 'LZZ5BLND3PN251055', NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'OPERATIONS', NULL, 'Available', NULL, 0, 0, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(9, 'C-HV-SV001', 'SV 001', 'Service Van', 'SINOTRUK', 'HOWO', NULL, NULL, 'LEZDD2CC4PF114604', NULL, NULL, NULL, '0.00', '0.00', 'Kilometres', 'WORKSHOP', 'W36 sample row 108', 'Available', 'SERVICE_VAN', 170066, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(5, 'C-HV-TC 001', 'TC001', 'Crane truck', 'SINOTRUK', 'ZZ1167G4715D1', NULL, NULL, 'LZZ1BBFF9RF121447', NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 53', 'Available', 'CRANE', 80067, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 001', 'LV001', 'Light vehicles', 'TOYOTA', 'LAND CRUISER PICKUP DC (HZJ79L-DKMRS)', 2021, NULL, 'JTEBB71J8RB075397', '1HZ 4200CC DIESEL 4164ml', '1HZ 4200CC DIESEL 4164ml', NULL, '0.00', '0.00', 'Kilometres', 'CEO', 'W36 sample row 72', 'Available', 'LV', 130068, 1, NULL, NULL, '2021-12-01', '2025-01-22', '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 002', 'LV002', 'Light vehicles', 'TOYOTA', 'LAND CRUISER 5D HARD TOP (HZJ76L-RKMRS)', NULL, NULL, 'JTEEB71JXOF030647', '1HZ 4164ml', '1HZ 4164ml', NULL, '0.00', '0.00', 'Kilometres', 'GENERAL MANAGER', 'W36 sample row 73', 'Available', 'LV', 130069, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 003', 'LV003', 'Light vehicles', 'TOYOTA', 'LAND CRUISER PICKUP DC', NULL, NULL, 'JTEBB71J3RB075582', NULL, NULL, NULL, '0.00', '0.00', 'Kilometres', 'PROCUREMENT MANAGER', 'W36 sample row 74', 'Available', 'LV', 130070, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 004', 'LV004', 'Light vehicles', 'GWM', 'PICKUP DOUBLE CABIN (CC1030QS71C)', 2024, NULL, 'LGWDCF198RJ641615', 'GW4D20M', '245A6027887', NULL, '0.00', '0.00', 'Kilometres', 'FINANCE', 'W36 sample row 75', 'Available', 'LV', 130071, 1, NULL, NULL, '2024-06-01', '2025-01-24', '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 005', 'LV005', 'Light vehicles', 'TOYOTA', 'LAND CRUISER PICKUP DC (HZJ79L-DKMRS)', NULL, NULL, 'JTEBB71J90B040435', '1HZ 4164ml', '1HZ 4164ml', NULL, '0.00', '0.00', 'Kilometres', 'WORKSHOP', 'W36 sample row 76', 'Available', 'LV', 130072, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 006', 'LV006', 'Light vehicles', 'TOYOTA', 'LAND CRUISER PICKUP DC (HZJ79L-DKMRS)', NULL, NULL, 'JTEBB71J1NB039948', '1HZ 4164ml', '1HZ 4164ml', NULL, '0.00', '0.00', 'Kilometres', 'SUPER ATTENDANT', 'W36 sample row 77', 'Available', 'LV', 130073, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 007', 'LV007', 'Light vehicles', 'GWM', 'PICKUP DOUBLE CABIN (CC1030QS71C)', NULL, NULL, 'LGWDCF197RJ641623', 'GW4D20M', '245A6027892', NULL, '0.00', '0.00', 'Kilometres', 'LOGISTICS MANAGER', 'W36 sample row 78', 'Available', 'LV', 130074, 1, NULL, NULL, NULL, '2025-01-24', '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 008', 'LV008', 'Light vehicles', 'TOYOTA', 'LAND CRUISER HARD TOP', NULL, NULL, 'JTERB71T0RF031823', NULL, NULL, NULL, '0.00', '0.00', 'Kilometres', 'SAFETY MANAGER', 'W36 sample row 79', 'Available', 'LV', 130075, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 009', 'LV009', 'Light vehicles', 'TOYOTA', 'LAND CRUISER HARD TOP', NULL, NULL, 'JTERB71J00F030576', NULL, NULL, NULL, '0.00', '0.00', 'Kilometres', 'MAINTENANCE (Operation)', 'W36 sample row 80', 'Available', 'LV', 130076, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 010', 'LV010', 'Light vehicles', 'TOYOTA', 'LAND CRUISER HARD TOP (HZJ78L-RJMRS)', NULL, NULL, 'JTERB71J60F030601', '1HZ 4164ml', '1HZ 4164ml', NULL, '0.00', '0.00', 'Kilometres', 'PRODUCTION (Operation)', 'W36 sample row 81', 'Available', 'LV', 130077, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 011', 'LV011', 'Light vehicles', 'TOYOTA', 'LAND CRUISER HARD TOP (HZJ78L-RJMRS)', NULL, NULL, 'JTERB71J10F028044', '1HZ 4164ml', '1HZ 4164ml', NULL, '0.00', '0.00', 'Kilometres', 'MAINTENANCE (Operation)', 'W36 sample row 82', 'Available', 'LV', 130078, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 012', 'LV012', 'Light vehicles', 'TOYOTA', 'LAND CRUISER HARD TOP', NULL, NULL, 'JTERB71J3RF031802', NULL, NULL, NULL, '0.00', '0.00', 'Kilometres', 'PRODUCTION (Operation)', 'W36 sample row 83', 'Available', 'LV', 130079, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 013', 'LV013', 'Light vehicles', 'TOYOTA', 'LAND CRUISER HARD TOP (HZJ78L-RJMRS)', NULL, NULL, 'JTERB71J7RF026473', '1HZ 4164ml', '1HZ 4164ml', NULL, '0.00', '0.00', 'Kilometres', 'SAFETY MANAGER', 'W36 sample row 84', 'Available', 'LV', 130080, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 014', 'LV014', 'Light vehicles', 'TOYOTA', 'LAND CRUISER HARD TOP (HZJ78L-RJMRS)', NULL, NULL, 'JTERB71J30F032581', '1HZ 4164 ml', '1HZ 4164 ml', NULL, '0.00', '0.00', 'Kilometres', 'DRILLING (Operation)', 'W36 sample row 85', 'Available', 'LV', 130081, 1, NULL, NULL, NULL, '2025-06-25', '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 015', 'LV015', 'Light vehicles', 'TOYOTA', 'LAND CRUISER HARD TOP (HZJ78L-RJMRS)', NULL, NULL, 'JTERB71J30F032578', '1HZ 4164 ml', '1HZ 4164 ml', NULL, '0.00', '0.00', 'Kilometres', 'SUPER ATTENDANT', 'W36 sample row 86', 'Available', 'LV', 130082, 1, NULL, NULL, NULL, '2025-06-25', '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 016', 'LV016', 'Light vehicles', 'TOYOTA', 'HILUX PICKUP DC (GUN125L-DTFSXN)', NULL, NULL, 'MROKB8CD801156864', '2GDFT', '2GDFT', NULL, '0.00', '0.00', 'Kilometres', 'LOGISTIC', 'W36 sample row 87', 'Available', 'LV', 130083, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 017', 'LV017', 'Light vehicles', 'TOYOTA', 'LAND CRUISER HARD TOP (HZJ78L-RJMRS)', NULL, NULL, 'JTERB71J7RF029714', '1HZ 4164ml', '1HZ 4164ml', NULL, '0.00', '0.00', 'Kilometres', 'MAINTENANCE (Operation)', 'W36 sample row 88', 'Available', 'LV', 130084, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 018', 'LV018', 'Light vehicles', 'TOYOTA', 'HILUX PICKUP DC (GUN125L-DTFSXN)', 2024, NULL, 'MROKB8CD801156945', '2GDFT', '2GDFT', NULL, '0.00', '0.00', 'Kilometres', 'FUEL & SECURITY MANAGER', 'W36 sample row 89', 'Available', 'LV', 130085, 1, NULL, NULL, '2024-11-01', NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 019', 'LV019', 'Light vehicles', 'TOYOTA', 'HILUX PICKUP DC (GUN125L-DTFLX)', NULL, NULL, 'MR0DB8CD300189480', '2GD-FTV 2393ml', '2GD-FTV 2393ml', NULL, '0.00', '0.00', 'Kilometres', 'WORKSHOP MANAGER', 'W36 sample row 90', 'Available', 'LV', 130086, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 020', 'LV020', 'Light vehicles', 'GWM', 'PICKUP DOUBLE CABIN', NULL, NULL, NULL, NULL, NULL, NULL, '0.00', '0.00', 'Kilometres', 'SUPPLY CHAIN', 'W36 sample row 91', 'Available', 'LV', 130087, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 021', 'LV021', 'Light vehicles', 'GWM', 'PICKUP DOUBLE CABIN (CC1030QS72C)', NULL, NULL, 'LGWDCF19XSJ640715', '255A7011949', '255A7011949', NULL, '0.00', '0.00', 'Kilometres', 'SECURITY', 'OPEN-9 answer 2026-10-07 (W36 sample row 92)', 'Available', 'LV', 130088, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 022', 'LV022', 'Light vehicles', 'GWM', 'PICKUP DOUBLE CABIN', NULL, NULL, NULL, NULL, NULL, NULL, '0.00', '0.00', 'Kilometres', 'XCMG TEAM', 'W36 sample row 93', 'Available', 'LV', 130089, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 023', 'LV023', 'Light vehicles', 'TOYOTA', 'HILUX PICKUP DC (GUN126R-DXTHXX)', 2025, NULL, 'MBJBA3CD006364446', '1GDFT', '1GDFT', NULL, '0.00', '0.00', 'Kilometres', 'CEO', 'W36 sample row 94', 'Available', 'LV', 130090, 1, NULL, NULL, '2025-11-01', '2026-07-07', '0.00', 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 024', 'LV024', 'Light vehicles', 'TOYOTA', 'LAND CRUISER PICKUP DC', NULL, NULL, NULL, NULL, NULL, NULL, '0.00', '0.00', 'Kilometres', 'FLEET MANAGER', 'W36 sample row 95', 'Available', 'LV', 130091, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(10, 'C-LV 025', 'LV025', 'Light vehicles', 'TOYOTA', 'LAND CRUISER PICKUP DC', NULL, NULL, NULL, NULL, NULL, NULL, '0.00', '0.00', 'Kilometres', 'PRODUCTION MANAGER', 'W36 sample row 96', 'Available', 'LV', 130092, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(32, 'C-TL-001', 'TL001', 'Tower Light', 'ATLAS COPCO', 'Highlight V5+ 2Cyl', 2024, NULL, NULL, 'Kubota Z482', 'Kubota Z482', '5410800016', '0.00', '0.00', 'Hours', 'MET PLANT', 'W36 sample row 62', 'Available', 'TOWER_LIGHT', 110093, 1, NULL, NULL, '2024-08-05', NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(32, 'C-TL-002', 'TL002', 'Tower Light', 'ATLAS COPCO', 'Highlight V5+ 2Cyl', 2024, 'PE2480116', NULL, 'Kubota Z482', 'Kubota Z482', NULL, '0.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 63', 'Available', 'TOWER_LIGHT', 110094, 1, NULL, NULL, '2024-06-05', NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(32, 'C-TL-003', 'TL003', 'Tower Light', 'ATLAS COPCO', 'Highlight V5+ 2Cyl', 2024, NULL, NULL, 'Kubota Z482', 'Kubota Z482', '5413600396', '0.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 64', 'Available', 'TOWER_LIGHT', 110095, 1, NULL, NULL, '2024-05-14', NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(32, 'C-TL-004', 'TL004', 'Tower Light', 'ATLAS COPCO', 'Highlight V5+ 2Cyl', 2025, NULL, NULL, 'Kubota Z482', 'Kubota Z482', '5410800206', '0.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 65', 'Available', 'TOWER_LIGHT', 110096, 1, NULL, NULL, '2025-08-05', NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(32, 'C-TL-005', 'TL005', 'Tower Light', 'ATLAS COPCO', 'Highlight V5+ 2Cyl', 2026, 'PE2480123', NULL, 'Kubota Z482', 'Kubota Z482', '5410800106', '0.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 66', 'Available', 'TOWER_LIGHT', 110097, 1, NULL, NULL, '2026-09-05', NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(32, 'C-TL-006', 'TL006', 'Tower Light', 'ATLAS COPCO', 'Highlight V5+ 2Cyl', 2027, 'PE2480117', NULL, 'Kubota Z482', 'Kubota Z482', '5410800096', '0.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 67', 'Available', 'TOWER_LIGHT', 110098, 1, NULL, NULL, '2027-05-23', NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(32, 'C-TL-007', 'TL007', 'Tower Light', 'ATLAS COPCO', 'Highlight V5+ 2Cyl', NULL, NULL, NULL, NULL, NULL, '5413600296', '0.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 68', 'Available', 'TOWER_LIGHT', 110099, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(32, 'C-TL-008', 'TL008', 'Tower Light', 'XINGNUO', 'SZMT9-1600/4L', NULL, NULL, '161849', NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 69', 'Available', 'TOWER_LIGHT', 110100, 1, NULL, NULL, NULL, NULL, '0.00', 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(32, 'C-TL-009', 'TL009', 'Tower Light', 'XINGNUO', 'SZMT9-1600/4L', NULL, NULL, '161886', NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'DRILLING', NULL, 'Available', 'TOWER_LIGHT', 110101, 1, NULL, NULL, NULL, NULL, '0.00', 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(32, 'C-TL-010', 'TL010', 'Tower Light', 'B3', '4TN4000', NULL, '2026040102', NULL, NULL, NULL, 'CZ380Q*C62502755A*', '0.00', '0.00', 'Hours', 'MINING', NULL, 'Available', 'TOWER_LIGHT', 110102, 1, NULL, NULL, NULL, '2026-08-24', '0.00', 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(32, 'C-TL-011', 'TL011', 'Tower Light', 'B3', '4TN4000', NULL, '2026032301', NULL, NULL, NULL, 'CZ380Q*C62502559A*', '0.00', '0.00', 'Hours', 'MINING', NULL, 'Available', 'TOWER_LIGHT', 110103, 1, NULL, NULL, NULL, '2026-08-24', '0.00', 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(32, 'C-TL-012', 'TL012', 'Tower Light', 'M3', '4TN4000', NULL, '2026032302', NULL, NULL, NULL, 'CZ380Q*C62502140A*', '0.00', '0.00', 'Hours', 'MINING', NULL, 'Available', 'TOWER_LIGHT', 110104, 1, NULL, NULL, NULL, '2026-08-25', '0.00', 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(32, 'C-TL-013', 'TL013', 'Tower Light', 'M3', '4TN4000', NULL, '2026040101', NULL, NULL, NULL, 'CZ380Q*C62502564A*', '0.00', '0.00', 'Hours', 'SECURITY', 'OPEN-9 answer 2026-10-07 (no sample row — the security pair)', 'Available', 'TOWER_LIGHT', 110105, 1, NULL, NULL, NULL, '2026-08-25', '0.00', 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(31, 'C-WP-001', 'WP001', 'Water Pump', 'GLOBAL', '6M21V2D0', NULL, NULL, 'BH09231981', NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 97', 'Available', 'WATER_PUMP', 140106, 1, NULL, NULL, NULL, NULL, '0.00', 'No', 'DHP13B0038*01', NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(31, 'C-WP-002', 'WP002', 'Water Pump', 'BAUDOUIN', '6M21V2D0', NULL, NULL, '4922F002020', NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'PAKAKA', 'W36 sample row 98', 'Available', 'WATER_PUMP', 140107, 1, NULL, NULL, NULL, NULL, '0.00', 'No', 'DHP10B0071*01', NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(31, 'C-WP-003', 'WP003', 'Water Pump', 'GLOBAL', '6M21V2D0', NULL, NULL, '5122J001324', '4M06V8D0', '4M06V8D0', '6M21V2D0 * 5122J001324*', '0.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 99', 'Available', 'WATER_PUMP', 140108, 1, NULL, NULL, NULL, NULL, '0.00', 'No', 'DHP13B0038*01', NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(31, 'C-WP-004', 'WP004', 'Water Pump', NULL, 'WATER BOWSER PUMP', NULL, NULL, NULL, NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'MET PLANT', 'W36 sample row 100', 'Available', 'WATER_PUMP', 140109, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(31, 'C-WP-005', 'WP005', 'Water Pump', 'ROYALTY', 'RT60DPE', NULL, NULL, NULL, 'RT192FE', NULL, NULL, '0.00', '0.00', 'Hours', 'MET PLANT', 'W36 sample row 101', 'Available', 'WATER_PUMP', 140110, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(31, 'C-WP-006', 'WP006', 'Water Pump', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'STORE', 'W36 sample row 102', 'Available', 'WATER_PUMP', 140111, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(7, 'GEN-001', 'GEN001', 'GENERATOR', 'ASHOK LEYLAND', 'AL4CTDG1', 2024, 'RMHM109009', NULL, 'A9N01700', 'A9N01700', NULL, '0.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 58', 'Available', 'GENERATOR', 100112, 1, NULL, NULL, '2024-03-26', NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(7, 'GEN-002', 'GEN002', 'GENERATOR', 'FG WILSON', 'P-50', NULL, NULL, NULL, NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'BANDAYI', 'W36 sample row 59', 'Available', 'GENERATOR', 100113, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(7, 'GEN-003', 'GEN003', 'GENERATOR', 'FG WILSON', 'P-33-3', NULL, 'FGWPEP37AJSA07906', NULL, NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'AMS WORKSHOP', 'W36 sample row 60', 'Available', 'GENERATOR', 100114, 1, NULL, NULL, NULL, NULL, '0.00', 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(7, 'GEN-004', 'GEN004', 'GENERATOR', NULL, NULL, NULL, NULL, NULL, '186FAE', NULL, NULL, '0.00', '0.00', 'Hours', 'STORE', 'W36 sample row 61', 'Available', 'GENERATOR', 100115, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(30, 'Loader Crane', NULL, 'Crane truck', NULL, 'SQ5SK3Q', 2024, NULL, '0533FIII230090', NULL, NULL, NULL, '0.00', '0.00', 'Hours', NULL, NULL, 'Available', NULL, 0, 0, NULL, NULL, '2024-03-01', NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(30, 'Tyre Clamps', NULL, 'Fork lift', NULL, 'LT22H-B4', NULL, '25-05-09812', NULL, NULL, NULL, NULL, '0.00', '0.00', 'Hours', NULL, NULL, 'Available', NULL, 0, 0, NULL, NULL, NULL, NULL, '0.00', 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
+(33, 'WM-001', 'WM 001', 'Welding machine', 'MILLER', 'BIG BLUE 600X', NULL, NULL, NULL, NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 107', 'Available', 'WELDING_PLANT', 160118, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49')
+ON DUPLICATE KEY UPDATE
+  `legacy_code` = COALESCE(NULLIF(`equipment`.`legacy_code`, ''), VALUES(`legacy_code`)),
+  `machine_type` = COALESCE(NULLIF(`equipment`.`machine_type`, ''), VALUES(`machine_type`)),
+  `brand` = VALUES(`brand`),
+  `model` = COALESCE(NULLIF(`equipment`.`model`, ''), VALUES(`model`)),
+  `year` = COALESCE(`equipment`.`year`, VALUES(`year`)),
+  `serial_number` = VALUES(`serial_number`),
+  `frame_no` = COALESCE(NULLIF(`equipment`.`frame_no`, ''), VALUES(`frame_no`)),
+  `engine_model` = COALESCE(NULLIF(`equipment`.`engine_model`, ''), VALUES(`engine_model`)),
+  `engine_description` = COALESCE(NULLIF(`equipment`.`engine_description`, ''), VALUES(`engine_description`)),
+  `engine_serial` = COALESCE(NULLIF(`equipment`.`engine_serial`, ''), VALUES(`engine_serial`)),
+  `meter_type` = COALESCE(NULLIF(`equipment`.`meter_type`, ''), VALUES(`meter_type`)),
+  `location` = COALESCE(NULLIF(`equipment`.`location`, ''), VALUES(`location`)),
+  `report_group` = COALESCE(NULLIF(`equipment`.`report_group`, ''), VALUES(`report_group`)),
+  `report_sort` = IF(`equipment`.`report_sort` = 9999, VALUES(`report_sort`), `equipment`.`report_sort`),
+  `include_in_weekly_report` = VALUES(`include_in_weekly_report`),
+  `purchase_date` = COALESCE(`equipment`.`purchase_date`, VALUES(`purchase_date`)),
+  `manufacture_date` = COALESCE(`equipment`.`manufacture_date`, VALUES(`manufacture_date`)),
+  `commission_date` = COALESCE(`equipment`.`commission_date`, VALUES(`commission_date`)),
+  `start_meter` = COALESCE(`equipment`.`start_meter`, VALUES(`start_meter`)),
+  `fatigue_system` = COALESCE(NULLIF(`equipment`.`fatigue_system`, ''), VALUES(`fatigue_system`)),
+  `order_no` = COALESCE(NULLIF(`equipment`.`order_no`, ''), VALUES(`order_no`)),
+  `warranty_expiry` = COALESCE(`equipment`.`warranty_expiry`, VALUES(`warranty_expiry`)),
+  `notes` = COALESCE(NULLIF(`equipment`.`notes`, ''), VALUES(`notes`));
+
+INSERT INTO `equipment_specs` (`equipment_id`, `spec_key`, `spec_label`, `spec_value`, `sort_order`, `created_at`, `updated_at`)
+SELECT e.`id`, s.`spec_key`, s.`spec_label`, s.`spec_value`, s.`sort_order`, s.`created_at`, s.`updated_at`
+FROM (
+  SELECT 'C-AML-COMP001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'COMPRESSOR' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-AML-COMP002' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'COMPRESSOR' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-AML-COMP003' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'COMPRESSOR' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-AML-COMP003' AS `reg`, 'capacity' AS `spec_key`, 'Capacity' AS `spec_label`, '1100 cfm' AS `spec_value`, 35 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-AML-RIG001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'CRAWLER' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-AML-RIG002' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'CRAWLER' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-AML-RIG002' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '27000 Kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-AML-RIG003' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'CRAWLER' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 002' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 003' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 004' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 004' AS `reg`, 'build' AS `spec_key`, 'Build' AS `spec_label`, '04A' AS `spec_value`, 16 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 005' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 006' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 009' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 009' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 009' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 009' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '350 Kw 1800 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 009' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11070 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 010' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 010' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 010' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 010' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '350 Kw 1800 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 010' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11070 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 011' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 011' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 011' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 011' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '350 Kw 1800 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 011' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11070 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 012' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 012' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 012' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 012' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '350 Kw 1800 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 012' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11070 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 013' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 013' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 013' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 013' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '350 Kw 1800 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 013' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11070 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 014' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 014' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 014' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 014' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '350 Kw 1800 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 014' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11070 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 015' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 015' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 015' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 015' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '350 Kw 1800 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 015' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11070 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 016' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 016' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 016' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 016' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '350 Kw 1800 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 016' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11070 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 017' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 017' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 017' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 017' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '350 Kw 1800 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 017' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11070 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+) AS s
+INNER JOIN `equipment` e ON e.`registration_no` = s.`reg`
+WHERE NOT EXISTS (
+  SELECT 1 FROM `equipment_specs` es WHERE es.`equipment_id` = e.`id` AND es.`spec_key` = s.`spec_key`
+);
+
+INSERT INTO `equipment_specs` (`equipment_id`, `spec_key`, `spec_label`, `spec_value`, `sort_order`, `created_at`, `updated_at`)
+SELECT e.`id`, s.`spec_key`, s.`spec_label`, s.`spec_value`, s.`sort_order`, s.`created_at`, s.`updated_at`
+FROM (
+  SELECT 'C-HE-ADT 018' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 018' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 018' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 018' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '350 Kw 1800 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 018' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11070 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 019' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 019' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 019' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 019' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '390 Kw 1600 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 019' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11071 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 020' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 020' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 020' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 020' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '390 Kw 1600 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 020' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11072 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 021' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 021' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 021' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 021' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '390 Kw 1600 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 021' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11073 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 022' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 022' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 022' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 022' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '390 Kw 1600 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 022' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11074 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 023' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 023' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 023' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 023' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '390 Kw 1600 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 023' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11075 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 024' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 024' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '75 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 024' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '41 000 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 024' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '390 Kw 1600 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-ADT 024' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '11076 x 3950 x 3846' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-CR 001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Lifting Equipment' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-FL001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Lifting Equipment' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-FL001' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '8215' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-FL001' AS `reg`, 'capacity' AS `spec_key`, 'Capacity' AS `spec_label`, '5 T' AS `spec_value`, 35 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-FL001' AS `reg`, 'license_no' AS `spec_key`, 'License No' AS `spec_label`, 'TS2510963-2025' AS `spec_value`, 36 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-FL001' AS `reg`, 'max_lift_height' AS `spec_key`, 'Max. Lift Height' AS `spec_label`, '3000 mm' AS `spec_value`, 37 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-FL001' AS `reg`, 'load_center' AS `spec_key`, 'Load Center' AS `spec_label`, '600 mm' AS `spec_value`, 38 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-FL002' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Lifting Equipment' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-FL002' AS `reg`, 'capacity' AS `spec_key`, 'Capacity' AS `spec_label`, '5 T' AS `spec_value`, 35 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-FL002' AS `reg`, 'max_lift_height' AS `spec_key`, 'Max. Lift Height' AS `spec_label`, '3000 mm' AS `spec_value`, 37 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-FL002' AS `reg`, 'load_center' AS `spec_key`, 'Load Center' AS `spec_label`, '500 mm' AS `spec_value`, 38 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-FL002' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '62,5 Kw' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-FL002' AS `reg`, 'manufacturer' AS `spec_key`, 'Manufacturer' AS `spec_label`, 'Quanchai Diesel Engine' AS `spec_value`, 51 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-FL002' AS `reg`, 'mm_yy' AS `spec_key`, 'MM/YY' AS `spec_label`, '2025-09-01' AS `spec_value`, 53 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-GR 001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Road Construction' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-GR 002' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Road Construction' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-GR 002' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '178 kw 2200 r/min' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-GR 002' AS `reg`, 'max_travel_speeds' AS `spec_key`, 'Max Travel Speeds' AS `spec_label`, '40 Km/h' AS `spec_value`, 40 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-GR 002' AS `reg`, 'operating_mass' AS `spec_key`, 'Operating Mass' AS `spec_label`, '17000 Kg' AS `spec_value`, 41 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-GR 002' AS `reg`, 'blade_length_height' AS `spec_key`, 'Blade Length & Height' AS `spec_label`, '3965 x 610 mm' AS `spec_value`, 43 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-GR 002' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '9343 x 2625 x 3432 mm' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-GR 003' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Road Construction' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-GR 004' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Road Construction' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HE-TC 002' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Lifting Equipment' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HEADT 007' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+) AS s
+INNER JOIN `equipment` e ON e.`registration_no` = s.`reg`
+WHERE NOT EXISTS (
+  SELECT 1 FROM `equipment_specs` es WHERE es.`equipment_id` = e.`id` AND es.`spec_key` = s.`spec_key`
+);
+
+INSERT INTO `equipment_specs` (`equipment_id`, `spec_key`, `spec_label`, `spec_value`, `sort_order`, `created_at`, `updated_at`)
+SELECT e.`id`, s.`spec_key`, s.`spec_label`, s.`spec_value`, s.`sort_order`, s.`created_at`, s.`updated_at`
+FROM (
+  SELECT 'C-HEADT 008' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HEADT 008' AS `reg`, 'build' AS `spec_key`, 'Build' AS `spec_label`, '04A' AS `spec_value`, 16 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DB 001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DB 001' AS `reg`, 'gvm_kg' AS `spec_key`, 'GVM (kg)' AS `spec_label`, '35000 Kg' AS `spec_value`, 21 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DB 001' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '340 Hp' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DB 002' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DB 002' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '160 Hp' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DB 003' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DB 003' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, 'WP10.380E32' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'CRAWLER' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 002' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'CRAWLER' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 002' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '179 Kw' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 002' AS `reg`, 'operating_mass' AS `spec_key`, 'Operating Mass' AS `spec_label`, '27140 Kg' AS `spec_value`, 41 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 003' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'CRAWLER' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 003' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '179 Kw' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 003' AS `reg`, 'operating_mass' AS `spec_key`, 'Operating Mass' AS `spec_label`, '27140 Kg' AS `spec_value`, 41 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 004' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'CRAWLER' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 005' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'CRAWLER' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 005' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '199 Kw' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 005' AS `reg`, 'operating_mass' AS `spec_key`, 'Operating Mass' AS `spec_label`, '23 800 Kg' AS `spec_value`, 41 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 005' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '5590x3725x3527 mm' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 006' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'CRAWLER' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 007' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'CRAWLER' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 007' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '257 kW' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 007' AS `reg`, 'operating_mass' AS `spec_key`, 'Operating Mass' AS `spec_label`, '34 600 Kg' AS `spec_value`, 41 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 007' AS `reg`, 'dimension_l_x_w_x_h' AS `spec_key`, 'Dimension (L x W x H)' AS `spec_label`, '6760x4130x3700 mm' AS `spec_value`, 44 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 008' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'CRAWLER' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 008' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '179 Kw' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-DZ 008' AS `reg`, 'operating_mass' AS `spec_key`, 'Operating Mass' AS `spec_label`, '27 140 Kg' AS `spec_value`, 41 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-EX 001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Earthmoving' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-EX 002' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Earthmoving' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-EX 003' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Earthmoving' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-EX 004' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Earthmoving' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-EX 005' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Earthmoving' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-EX 007' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Earthmoving' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-EX 008' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Earthmoving' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-EX 008' AS `reg`, 'max_power' AS `spec_key`, 'Max. Power' AS `spec_label`, '524 hp (391 kW)' AS `spec_value`, 27 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-EX 008' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '190,000–200,000 lbs' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-MIX 001' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '340 Hp' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-TC 001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Lifting Equipment' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-TC 001' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '160 Hp' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-WB 001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-WB 002' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-WB 002' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '11 860 Kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HV-WB 002' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '31 000 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 001' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '58' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 001' AS `reg`, 'trim' AS `spec_key`, 'Trim' AS `spec_label`, 'FA10' AS `spec_value`, 19 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 001' AS `reg`, 'plant' AS `spec_key`, 'Plant' AS `spec_label`, 'C25' AS `spec_value`, 20 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 001' AS `reg`, 'tm_a_built' AS `spec_key`, 'TM/A/BUILT' AS `spec_label`, 'R151F' AS `spec_value`, 22 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 001' AS `reg`, 'option' AS `spec_key`, 'Option' AS `spec_label`, '380' AS `spec_value`, 23 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 002' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '58' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 002' AS `reg`, 'trim' AS `spec_key`, 'Trim' AS `spec_label`, 'LA10' AS `spec_value`, 19 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 002' AS `reg`, 'plant' AS `spec_key`, 'Plant' AS `spec_label`, 'C41' AS `spec_value`, 20 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 002' AS `reg`, 'tm_a_built' AS `spec_key`, 'TM/A/BUILT' AS `spec_label`, 'R151F' AS `spec_value`, 22 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 002' AS `reg`, 'option' AS `spec_key`, 'Option' AS `spec_label`, '28' AS `spec_value`, 23 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 002' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, 'Tier 3' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 003' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, 'Tier 3' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 004' AS `reg`, 'piston_displacement' AS `spec_key`, 'Piston Displacement' AS `spec_label`, '1996 ml' AS `spec_value`, 17 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 004' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '09F' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 004' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '2030 Kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+) AS s
+INNER JOIN `equipment` e ON e.`registration_no` = s.`reg`
+WHERE NOT EXISTS (
+  SELECT 1 FROM `equipment_specs` es WHERE es.`equipment_id` = e.`id` AND es.`spec_key` = s.`spec_key`
+);
+
+INSERT INTO `equipment_specs` (`equipment_id`, `spec_key`, `spec_label`, `spec_value`, `sort_order`, `created_at`, `updated_at`)
+SELECT e.`id`, s.`spec_key`, s.`spec_label`, s.`spec_value`, s.`sort_order`, s.`created_at`, s.`updated_at`
+FROM (
+  SELECT 'C-LV 004' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '3028 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 004' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '675 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 004' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '120 Kw' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 005' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '58' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 005' AS `reg`, 'trim' AS `spec_key`, 'Trim' AS `spec_label`, 'LC10' AS `spec_value`, 19 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 005' AS `reg`, 'plant' AS `spec_key`, 'Plant' AS `spec_label`, 'C25' AS `spec_value`, 20 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 005' AS `reg`, 'tm_a_built' AS `spec_key`, 'TM/A/BUILT' AS `spec_label`, 'R151F A02A' AS `spec_value`, 22 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 005' AS `reg`, 'option' AS `spec_key`, 'Option' AS `spec_label`, '265' AS `spec_value`, 23 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 006' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '58' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 006' AS `reg`, 'trim' AS `spec_key`, 'Trim' AS `spec_label`, 'FE10' AS `spec_value`, 19 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 006' AS `reg`, 'plant' AS `spec_key`, 'Plant' AS `spec_label`, 'C25' AS `spec_value`, 20 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 006' AS `reg`, 'tm_a_built' AS `spec_key`, 'TM/A/BUILT' AS `spec_label`, 'R151F A02A' AS `spec_value`, 22 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 006' AS `reg`, 'option' AS `spec_key`, 'Option' AS `spec_label`, '831' AS `spec_value`, 23 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 007' AS `reg`, 'piston_displacement' AS `spec_key`, 'Piston Displacement' AS `spec_label`, '1996 ml' AS `spec_value`, 17 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 007' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '09F' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 007' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '2030 Kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 007' AS `reg`, 'gross_weight' AS `spec_key`, 'Gross Weight' AS `spec_label`, '3028 Kg' AS `spec_value`, 33 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 007' AS `reg`, 'payload' AS `spec_key`, 'Payload' AS `spec_label`, '675 Kg' AS `spec_value`, 34 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 007' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '120 Kw' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 009' AS `reg`, 'transmission' AS `spec_key`, 'Transmission' AS `spec_label`, 'MTM 5F' AS `spec_value`, 14 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 009' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '58' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 009' AS `reg`, 'trim' AS `spec_key`, 'Trim' AS `spec_label`, 'LA10' AS `spec_value`, 19 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 010' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '58' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 010' AS `reg`, 'trim' AS `spec_key`, 'Trim' AS `spec_label`, 'LA10' AS `spec_value`, 19 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 010' AS `reg`, 'plant' AS `spec_key`, 'Plant' AS `spec_label`, 'C41' AS `spec_value`, 20 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 010' AS `reg`, 'tm_a_built' AS `spec_key`, 'TM/A/BUILT' AS `spec_label`, 'R151F' AS `spec_value`, 22 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 010' AS `reg`, 'option' AS `spec_key`, 'Option' AS `spec_label`, '609' AS `spec_value`, 23 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 011' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '58' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 011' AS `reg`, 'trim' AS `spec_key`, 'Trim' AS `spec_label`, 'LA10' AS `spec_value`, 19 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 011' AS `reg`, 'plant' AS `spec_key`, 'Plant' AS `spec_label`, 'C41' AS `spec_value`, 20 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 011' AS `reg`, 'tm_a_built' AS `spec_key`, 'TM/A/BUILT' AS `spec_label`, 'R151F' AS `spec_value`, 22 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 011' AS `reg`, 'option' AS `spec_key`, 'Option' AS `spec_label`, '37' AS `spec_value`, 23 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 013' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '58' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 013' AS `reg`, 'trim' AS `spec_key`, 'Trim' AS `spec_label`, 'FA10' AS `spec_value`, 19 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 013' AS `reg`, 'plant' AS `spec_key`, 'Plant' AS `spec_label`, 'C41' AS `spec_value`, 20 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 013' AS `reg`, 'tm_a_built' AS `spec_key`, 'TM/A/BUILT' AS `spec_label`, 'R151F' AS `spec_value`, 22 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 013' AS `reg`, 'option' AS `spec_key`, 'Option' AS `spec_label`, '689' AS `spec_value`, 23 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 014' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '58' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 014' AS `reg`, 'trim' AS `spec_key`, 'Trim' AS `spec_label`, 'LA10' AS `spec_value`, 19 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 014' AS `reg`, 'plant' AS `spec_key`, 'Plant' AS `spec_label`, 'C41' AS `spec_value`, 20 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 014' AS `reg`, 'tm_a_built' AS `spec_key`, 'TM/A/BUILT' AS `spec_label`, 'R151F' AS `spec_value`, 22 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 014' AS `reg`, 'option' AS `spec_key`, 'Option' AS `spec_label`, '590' AS `spec_value`, 23 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 015' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '58' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 015' AS `reg`, 'trim' AS `spec_key`, 'Trim' AS `spec_label`, 'LA10' AS `spec_value`, 19 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 015' AS `reg`, 'plant' AS `spec_key`, 'Plant' AS `spec_label`, 'C41' AS `spec_value`, 20 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 015' AS `reg`, 'tm_a_built' AS `spec_key`, 'TM/A/BUILT' AS `spec_label`, 'R151F' AS `spec_value`, 22 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 015' AS `reg`, 'option' AS `spec_key`, 'Option' AS `spec_label`, '575' AS `spec_value`, 23 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 017' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '58' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 017' AS `reg`, 'trim' AS `spec_key`, 'Trim' AS `spec_label`, 'FA10' AS `spec_value`, 19 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 017' AS `reg`, 'plant' AS `spec_key`, 'Plant' AS `spec_label`, 'C41' AS `spec_value`, 20 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 017' AS `reg`, 'tm_a_built' AS `spec_key`, 'TM/A/BUILT' AS `spec_label`, 'R151F' AS `spec_value`, 22 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 017' AS `reg`, 'option' AS `spec_key`, 'Option' AS `spec_label`, '615' AS `spec_value`, 23 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 018' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '40' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 019' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '40' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 019' AS `reg`, 'trim' AS `spec_key`, 'Trim' AS `spec_label`, 'FC20' AS `spec_value`, 19 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 019' AS `reg`, 'plant' AS `spec_key`, 'Plant' AS `spec_label`, 'Z35' AS `spec_value`, 20 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 019' AS `reg`, 'gvm_kg' AS `spec_key`, 'GVM (kg)' AS `spec_label`, '2910 Kg' AS `spec_value`, 21 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 019' AS `reg`, 'tm_a_built' AS `spec_key`, 'TM/A/BUILT' AS `spec_label`, 'RC60F SEP 2022' AS `spec_value`, 22 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 021' AS `reg`, 'piston_displacement' AS `spec_key`, 'Piston Displacement' AS `spec_label`, '1996 ml' AS `spec_value`, 17 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 021' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '09F' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+) AS s
+INNER JOIN `equipment` e ON e.`registration_no` = s.`reg`
+WHERE NOT EXISTS (
+  SELECT 1 FROM `equipment_specs` es WHERE es.`equipment_id` = e.`id` AND es.`spec_key` = s.`spec_key`
+);
+
+INSERT INTO `equipment_specs` (`equipment_id`, `spec_key`, `spec_label`, `spec_value`, `sort_order`, `created_at`, `updated_at`)
+SELECT e.`id`, s.`spec_key`, s.`spec_label`, s.`spec_value`, s.`sort_order`, s.`created_at`, s.`updated_at`
+FROM (
+  SELECT 'C-LV 021' AS `reg`, 'gvm_kg' AS `spec_key`, 'GVM (kg)' AS `spec_label`, '3060 Kg' AS `spec_value`, 21 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 023' AS `reg`, 'color' AS `spec_key`, 'Color' AS `spec_label`, '1G3' AS `spec_value`, 18 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 023' AS `reg`, 'trim' AS `spec_key`, 'Trim' AS `spec_label`, 'LA20' AS `spec_value`, 19 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-LV 023' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '201 Hp (150 kW)' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Light plant' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-001' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '1000 Kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-001' AS `reg`, 'max_travel_speeds' AS `spec_key`, 'Max Travel Speeds' AS `spec_label`, '20 Km/h' AS `spec_value`, 40 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-001' AS `reg`, 'mm_yy' AS `spec_key`, 'MM/YY' AS `spec_label`, '2024-04-01' AS `spec_value`, 53 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-001' AS `reg`, 'ty' AS `spec_key`, 'TY' AS `spec_label`, 'KDW702GE515' AS `spec_value`, 54 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-001' AS `reg`, 'spec' AS `spec_key`, 'SPEC' AS `spec_label`, '637031SV00000-02' AS `spec_value`, 55 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-001' AS `reg`, 'under_carriage' AS `spec_key`, 'Under Carriage' AS `spec_label`, 'YA 127' AS `spec_value`, 56 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-001' AS `reg`, 'part_s_n' AS `spec_key`, 'Part # S/N' AS `spec_label`, '909746250-4' AS `spec_value`, 57 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-002' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Light plant' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-002' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '1000 Kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-002' AS `reg`, 'max_travel_speeds' AS `spec_key`, 'Max Travel Speeds' AS `spec_label`, '20 Km/h' AS `spec_value`, 40 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-002' AS `reg`, 'ty' AS `spec_key`, 'TY' AS `spec_label`, 'KDW702GE515' AS `spec_value`, 54 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-002' AS `reg`, 'spec' AS `spec_key`, 'SPEC' AS `spec_label`, '637031SV00000-02' AS `spec_value`, 55 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-002' AS `reg`, 'under_carriage' AS `spec_key`, 'Under Carriage' AS `spec_label`, 'YA 177' AS `spec_value`, 56 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-002' AS `reg`, 'part_s_n' AS `spec_key`, 'Part # S/N' AS `spec_label`, '909746250-4' AS `spec_value`, 57 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-003' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Light plant' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-003' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '1000 Kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-003' AS `reg`, 'max_travel_speeds' AS `spec_key`, 'Max Travel Speeds' AS `spec_label`, '20 Km/h' AS `spec_value`, 40 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-003' AS `reg`, 'mm_yy' AS `spec_key`, 'MM/YY' AS `spec_label`, '2024-05-01' AS `spec_value`, 53 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-003' AS `reg`, 'ty' AS `spec_key`, 'TY' AS `spec_label`, 'KDW702GE515' AS `spec_value`, 54 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-003' AS `reg`, 'spec' AS `spec_key`, 'SPEC' AS `spec_label`, '637031SV00000-02' AS `spec_value`, 55 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-003' AS `reg`, 'under_carriage' AS `spec_key`, 'Under Carriage' AS `spec_label`, 'YA 146' AS `spec_value`, 56 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-003' AS `reg`, 'part_s_n' AS `spec_key`, 'Part # S/N' AS `spec_label`, '909746250-4' AS `spec_value`, 57 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-004' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Light plant' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-004' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '1000 Kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-004' AS `reg`, 'max_travel_speeds' AS `spec_key`, 'Max Travel Speeds' AS `spec_label`, '20 Km/h' AS `spec_value`, 40 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-004' AS `reg`, 'mm_yy' AS `spec_key`, 'MM/YY' AS `spec_label`, '2024-04-01' AS `spec_value`, 53 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-004' AS `reg`, 'ty' AS `spec_key`, 'TY' AS `spec_label`, 'KDW702GE515' AS `spec_value`, 54 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-004' AS `reg`, 'spec' AS `spec_key`, 'SPEC' AS `spec_label`, '637031SV00000-02' AS `spec_value`, 55 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-004' AS `reg`, 'under_carriage' AS `spec_key`, 'Under Carriage' AS `spec_label`, 'YA 126' AS `spec_value`, 56 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-004' AS `reg`, 'part_s_n' AS `spec_key`, 'Part # S/N' AS `spec_label`, '909746250-4' AS `spec_value`, 57 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-005' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Light plant' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-005' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '1000 Kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-005' AS `reg`, 'max_travel_speeds' AS `spec_key`, 'Max Travel Speeds' AS `spec_label`, '20 Km/h' AS `spec_value`, 40 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-005' AS `reg`, 'mm_yy' AS `spec_key`, 'MM/YY' AS `spec_label`, '2024-04-01' AS `spec_value`, 53 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-005' AS `reg`, 'ty' AS `spec_key`, 'TY' AS `spec_label`, 'KDW702GE515' AS `spec_value`, 54 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-005' AS `reg`, 'spec' AS `spec_key`, 'SPEC' AS `spec_label`, '637031SV00000-02' AS `spec_value`, 55 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-005' AS `reg`, 'under_carriage' AS `spec_key`, 'Under Carriage' AS `spec_label`, 'YA 129' AS `spec_value`, 56 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-005' AS `reg`, 'part_s_n' AS `spec_key`, 'Part # S/N' AS `spec_label`, '909746250-4' AS `spec_value`, 57 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-006' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Light plant' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-006' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '1000 Kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-006' AS `reg`, 'max_travel_speeds' AS `spec_key`, 'Max Travel Speeds' AS `spec_label`, '20 Km/h' AS `spec_value`, 40 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-006' AS `reg`, 'mm_yy' AS `spec_key`, 'MM/YY' AS `spec_label`, '2024-04-01' AS `spec_value`, 53 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-006' AS `reg`, 'ty' AS `spec_key`, 'TY' AS `spec_label`, 'KDW702GE515' AS `spec_value`, 54 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-006' AS `reg`, 'spec' AS `spec_key`, 'SPEC' AS `spec_label`, '637031SV00000-02' AS `spec_value`, 55 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-006' AS `reg`, 'under_carriage' AS `spec_key`, 'Under Carriage' AS `spec_label`, 'YA 0*5' AS `spec_value`, 56 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-006' AS `reg`, 'part_s_n' AS `spec_key`, 'Part # S/N' AS `spec_label`, '909746250-4' AS `spec_value`, 57 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-007' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Light plant' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-007' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '1000 Kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-007' AS `reg`, 'mm_yy' AS `spec_key`, 'MM/YY' AS `spec_label`, '2024-05-01' AS `spec_value`, 53 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-007' AS `reg`, 'ty' AS `spec_key`, 'TY' AS `spec_label`, 'KDW702GE515' AS `spec_value`, 54 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-007' AS `reg`, 'spec' AS `spec_key`, 'SPEC' AS `spec_label`, '637031SV00000-02' AS `spec_value`, 55 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-007' AS `reg`, 'under_carriage' AS `spec_key`, 'Under Carriage' AS `spec_label`, 'YA 144' AS `spec_value`, 56 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-007' AS `reg`, 'part_s_n' AS `spec_key`, 'Part # S/N' AS `spec_label`, '909746250-4' AS `spec_value`, 57 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-008' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Light plant' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-008' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '1000 Kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+) AS s
+INNER JOIN `equipment` e ON e.`registration_no` = s.`reg`
+WHERE NOT EXISTS (
+  SELECT 1 FROM `equipment_specs` es WHERE es.`equipment_id` = e.`id` AND es.`spec_key` = s.`spec_key`
+);
+
+INSERT INTO `equipment_specs` (`equipment_id`, `spec_key`, `spec_label`, `spec_value`, `sort_order`, `created_at`, `updated_at`)
+SELECT e.`id`, s.`spec_key`, s.`spec_label`, s.`spec_value`, s.`sort_order`, s.`created_at`, s.`updated_at`
+FROM (
+  SELECT 'C-TL-008' AS `reg`, 'max_lift_height' AS `spec_key`, 'Max. Lift Height' AS `spec_label`, '4600 mm - 9000 mm' AS `spec_value`, 37 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-008' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '9 kW' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-008' AS `reg`, 'max_travel_speeds' AS `spec_key`, 'Max Travel Speeds' AS `spec_label`, '20 Km/h' AS `spec_value`, 40 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-009' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Light plant' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-009' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '1000 Kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-009' AS `reg`, 'max_lift_height' AS `spec_key`, 'Max. Lift Height' AS `spec_label`, '4600 mm - 9000 mm' AS `spec_value`, 37 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-009' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '9 kW' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-009' AS `reg`, 'max_travel_speeds' AS `spec_key`, 'Max Travel Speeds' AS `spec_label`, '20 Km/h' AS `spec_value`, 40 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-010' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Light plant' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-011' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Light plant' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-012' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Light plant' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-TL-013' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Light plant' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-WP-001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'WATER PUMP' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-WP-001' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '496 Hp 370 kW' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-WP-002' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'WATER PUMP' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-WP-002' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '342 HP 255 kW' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-WP-002' AS `reg`, 'speed' AS `spec_key`, 'Speed' AS `spec_label`, '2200 RPM' AS `spec_value`, 42 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-WP-003' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'WATER PUMP' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-WP-003' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '496 Hp 370 kW' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-WP-003' AS `reg`, 'speed' AS `spec_key`, 'Speed' AS `spec_label`, '2200 RPM' AS `spec_value`, 42 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-WP-004' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'WATER PUMP' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-WP-005' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'WATER PUMP' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-WP-005' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '13HP/3600rpm' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-WP-006' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'WATER PUMP' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'GEN-003' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '778 kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'GEN-003' AS `reg`, 'voltage' AS `spec_key`, 'Voltage' AS `spec_label`, '415/240 V' AS `spec_value`, 29 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'GEN-004' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '160 kg' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'GEN-004' AS `reg`, 'rated_power' AS `spec_key`, 'Rated Power' AS `spec_label`, '8.0 kVA' AS `spec_value`, 26 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'GEN-004' AS `reg`, 'max_power' AS `spec_key`, 'Max. Power' AS `spec_label`, '8.5 kVA' AS `spec_value`, 27 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'GEN-004' AS `reg`, 'power_factor' AS `spec_key`, 'Power Factor' AS `spec_label`, '1' AS `spec_value`, 28 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'GEN-004' AS `reg`, 'voltage' AS `spec_key`, 'Voltage' AS `spec_label`, '220-230 V' AS `spec_value`, 29 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'GEN-004' AS `reg`, 'phase' AS `spec_key`, 'Phase' AS `spec_label`, 'Single' AS `spec_value`, 30 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'GEN-004' AS `reg`, 'frequency' AS `spec_key`, 'Frequency' AS `spec_label`, '50/60Hz' AS `spec_value`, 31 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'GEN-004' AS `reg`, 'rated_current' AS `spec_key`, 'Rated Current' AS `spec_label`, '23A' AS `spec_value`, 32 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'GEN-004' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '3000 RPM' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'Tyre Clamps' AS `reg`, 'weight' AS `spec_key`, 'Weight' AS `spec_label`, '780 Kr' AS `spec_value`, 25 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'Tyre Clamps' AS `reg`, 'load_center' AS `spec_key`, 'Load Center' AS `spec_label`, '1950/800 Kg@mm' AS `spec_value`, 38 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'Tyre Clamps' AS `reg`, 'wp_max_wp' AS `spec_key`, 'WP / Max WP' AS `spec_label`, '140/160 Bar' AS `spec_value`, 47 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+) AS s
+INNER JOIN `equipment` e ON e.`registration_no` = s.`reg`
+WHERE NOT EXISTS (
+  SELECT 1 FROM `equipment_specs` es WHERE es.`equipment_id` = e.`id` AND es.`spec_key` = s.`spec_key`
+);
+
+INSERT INTO `equipment_meter_readings` (`equipment_id`, `reading_date`, `hours`, `km`, `source`, `work_order_id`, `recorded_by`, `created_at`)
+SELECT e.`id`, r.`reading_date`, r.`hours`, r.`km`, r.`source`, NULL, NULL, r.`created_at`
+FROM (
+  SELECT 'C-HV-EX 001' AS `reg`, '2026-10-19' AS `reading_date`, '8420.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-EX 002' AS `reg`, '2026-10-19' AS `reading_date`, '6180.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-EX 003' AS `reg`, '2026-10-19' AS `reading_date`, '3350.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-EX 004' AS `reg`, '2026-10-19' AS `reading_date`, '4300.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-EX 005' AS `reg`, '2026-10-19' AS `reading_date`, '5100.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'EX 006' AS `reg`, '2026-10-19' AS `reading_date`, '4900.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-DZ 001' AS `reg`, '2026-10-19' AS `reading_date`, '21900.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-DZ 002' AS `reg`, '2026-10-19' AS `reading_date`, '19200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-DZ 003' AS `reg`, '2026-10-19' AS `reading_date`, '16700.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-DZ 004' AS `reg`, '2026-10-19' AS `reading_date`, '13200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-DZ 005' AS `reg`, '2026-10-19' AS `reading_date`, '11800.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-DZ 006' AS `reg`, '2026-10-19' AS `reading_date`, '9600.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-DZ 007' AS `reg`, '2026-10-19' AS `reading_date`, '7200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 001' AS `reg`, '2026-10-19' AS `reading_date`, '14200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 002' AS `reg`, '2026-10-19' AS `reading_date`, '13800.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 003' AS `reg`, '2026-10-19' AS `reading_date`, '12400.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 004' AS `reg`, '2026-10-19' AS `reading_date`, '15100.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 005' AS `reg`, '2026-10-19' AS `reading_date`, '11900.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 006' AS `reg`, '2026-10-19' AS `reading_date`, '10800.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HEADT 007' AS `reg`, '2026-10-19' AS `reading_date`, '13200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HEADT 008' AS `reg`, '2026-10-19' AS `reading_date`, '12100.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 009' AS `reg`, '2026-10-19' AS `reading_date`, '9800.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 010' AS `reg`, '2026-10-19' AS `reading_date`, '8900.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 011' AS `reg`, '2026-10-19' AS `reading_date`, '8200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 012' AS `reg`, '2026-10-19' AS `reading_date`, '7100.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 013' AS `reg`, '2026-10-19' AS `reading_date`, '6800.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 014' AS `reg`, '2026-10-19' AS `reading_date`, '4000.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 015' AS `reg`, '2026-10-19' AS `reading_date`, '5200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 016' AS `reg`, '2026-10-19' AS `reading_date`, '7000.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 017' AS `reg`, '2026-10-19' AS `reading_date`, '8700.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-ADT 018' AS `reg`, '2026-10-19' AS `reading_date`, '8100.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-GR 001' AS `reg`, '2026-10-19' AS `reading_date`, '6200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HE-GR 002' AS `reg`, '2026-10-19' AS `reading_date`, '8900.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-DB 001' AS `reg`, '2026-10-19' AS `reading_date`, '4200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-DB 002' AS `reg`, '2026-10-19' AS `reading_date`, '5100.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-DB 003' AS `reg`, '2026-10-19' AS `reading_date`, '3900.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-WB 001' AS `reg`, '2026-10-19' AS `reading_date`, '3200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HV-WB 002' AS `reg`, '2026-10-19' AS `reading_date`, '2800.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-AML-RIG001' AS `reg`, '2026-10-19' AS `reading_date`, '6800.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-AML-RIG002' AS `reg`, '2026-10-19' AS `reading_date`, '5900.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-AML-RIG003' AS `reg`, '2026-10-19' AS `reading_date`, '4800.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-AML-COMP001' AS `reg`, '2026-10-19' AS `reading_date`, '6740.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-AML-COMP002' AS `reg`, '2026-10-19' AS `reading_date`, '5300.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-AML-COMP003' AS `reg`, '2026-10-19' AS `reading_date`, '4100.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+) AS r
+INNER JOIN `equipment` e ON e.`registration_no` = r.`reg`
+WHERE NOT EXISTS (
+  SELECT 1 FROM `equipment_meter_readings` mr
+  WHERE mr.`equipment_id` = e.`id` AND mr.`reading_date` = r.`reading_date` AND COALESCE(mr.`source`, '') = COALESCE(r.`source`, '')
+);

@@ -373,7 +373,7 @@ check('Schema: seeds all 630 inspection_items', strpos($schemaSql, 'INSERT IGNOR
 
 $migFiles = glob(__DIR__ . '/../database/migrations/[0-9][0-9][0-9][0-9]_*.sql');
 sort($migFiles, SORT_STRING);
-is_same('Migrations: all 11 ordered SQL migrations present (0001..0011)', 11, count($migFiles));
+is_same('Migrations: all 12 ordered SQL migrations present (0001..0012)', 12, count($migFiles));
 foreach ($migFiles as $mf) {
     $bn  = basename($mf);
     $sum = hash_file('sha256', $mf);
@@ -387,6 +387,29 @@ check('Schema: preserves verbatim Asset Register Machine IDs (EX 006, C-HEADT 00
     strpos($schemaSql, "'EX 006', 'EX 006'") !== FALSE
     && strpos($schemaSql, "'C-HEADT 007', 'ADT 007'") !== FALSE
     && strpos($schemaSql, "'C-HEADT 008', 'ADT 008'") !== FALSE);
+check('Schema: seeds all 36 Asset Register locations in report_sites (including OPERATIONS)',
+    strpos($schemaSql, "(36, 'OPERATIONS', 'OPERATIONS'") !== FALSE);
+check('Schema: contains zero synthetic SN-* placeholder serials where frame_no exists and zero CATERPILAR/TOYOTA LC typos',
+    strpos($schemaSql, "'SN-EX-001'") === FALSE
+    && strpos($schemaSql, "'SN-ADT-002'") === FALSE
+    && strpos($schemaSql, "'CATERPILAR'") === FALSE
+    && strpos($schemaSql, "'TOYOTA LC'") === FALSE);
+
+$eqListView = file_get_contents(__DIR__ . '/../application/views/maintenance/equipment.php');
+$eqDetailView = file_get_contents(__DIR__ . '/../application/views/maintenance/equipment_view.php');
+check('Equipment UI: list cards display registration_no (Asset Register Machine ID) instead of short legacy_code',
+    strpos($eqListView, '$eq->registration_no') !== FALSE && strpos($eqListView, 'equip_machine_id($eq)') === FALSE);
+check('Equipment UI: list cards surface Type, Category, Brand/Model, Serial No, Engine Model, Current Hours, Current KM & Year',
+    strpos($eqListView, '$eq->type_name') !== FALSE
+    && strpos($eqListView, '$eq->category') !== FALSE
+    && strpos($eqListView, 'Current Hours') !== FALSE
+    && strpos($eqListView, 'Current KM') !== FALSE);
+check('Equipment UI: detail page surfaces all Asset Register fields (Machine ID, Type, Category, Brand, Model, Year, Serial No., Engine Model, Current Hours, Current KM, Location)',
+    strpos($eqDetailView, "'Machine ID'") !== FALSE
+    && strpos($eqDetailView, "'Type'") !== FALSE
+    && strpos($eqDetailView, "'Category'") !== FALSE
+    && strpos($eqDetailView, "'Current Hours'") !== FALSE
+    && strpos($eqDetailView, "'Current KM'") !== FALSE);
 check('Schema: seeds all 338 manufacturer specs into equipment_specs', strpos($schemaSql, 'INSERT INTO `equipment_specs`') !== FALSE);
 check('Schema: seeds deduplicated vendor rows into suppliers', strpos($schemaSql, 'INSERT INTO `suppliers`') !== FALSE);
 check('Schema: seeds all 1,697 inventory items into materials', strpos($schemaSql, 'INSERT IGNORE INTO `materials`') !== FALSE);

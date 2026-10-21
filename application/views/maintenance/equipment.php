@@ -1,6 +1,9 @@
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <form method="get" class="flex ai-c gap-10" style="flex-wrap:wrap;">
-    <select name="status" class="form-select" style="width:auto;min-width:140px;">
+    <input type="text" name="search" class="form-control" style="width:auto;min-width:190px;"
+           placeholder="Search Machine ID, SN, Brand, Model…"
+           value="<?= htmlspecialchars((string)($filter['search'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+    <select name="status" class="form-select" style="width:auto;min-width:135px;">
       <option value="">All Status</option>
       <?php foreach (equip_statuses() as $s): ?>
       <option value="<?= $s ?>" <?= (isset($filter['status'])&&$filter['status']==$s)?'selected':'' ?>><?= $s ?></option>
@@ -12,6 +15,14 @@
       <option value="<?= $t->id ?>" <?= (isset($filter['type'])&&$filter['type']==$t->id)?'selected':'' ?>><?= htmlspecialchars((string)$t->name, ENT_QUOTES, 'UTF-8') ?></option>
       <?php endforeach; ?>
     </select>
+    <?php if (!empty($eq_categories)): ?>
+    <select name="category" class="form-select" style="width:auto;min-width:140px;">
+      <option value="">All Categories</option>
+      <?php foreach ($eq_categories as $cat): ?>
+      <option value="<?= htmlspecialchars((string)$cat, ENT_QUOTES, 'UTF-8') ?>" <?= (isset($filter['category'])&&$filter['category']===$cat)?'selected':'' ?>><?= htmlspecialchars((string)$cat, ENT_QUOTES, 'UTF-8') ?></option>
+      <?php endforeach; ?>
+    </select>
+    <?php endif; ?>
     <?php if (!empty($report_groups)): ?>
     <select name="report_group" class="form-select" style="width:auto;min-width:150px;">
       <option value="">All Report Groups</option>
@@ -22,7 +33,7 @@
     <?php endif; ?>
     <?php if (!empty($report_sites)): ?>
     <select name="location" class="form-select" style="width:auto;min-width:150px;">
-      <option value="">All Sites</option>
+      <option value="">All Locations</option>
       <?php foreach ($report_sites as $label => $code): ?>
       <option value="<?= htmlspecialchars((string)($label)) ?>" <?= (isset($filter['location'])&&$filter['location']===$label)?'selected':'' ?>><?= htmlspecialchars((string)($label)) ?></option>
       <?php endforeach; ?>
@@ -89,9 +100,15 @@
           <span class="badge <?= $sc ?>"><?= $eq->status ?></span>
         </div>
       </div>
-      <div class="fw-600" style="font-size:16px;letter-spacing:-0.3px;"><?= htmlspecialchars((string)(equip_machine_id($eq))) ?></div>
-      <div style="font-size:12px;color:var(--t3);margin-top:3px;"><?= htmlspecialchars((string)($eq->brand . ' ' . $eq->model)) ?></div>
-      <div style="font-size:11px;color:var(--t3);margin-top:2px;">
+      <div class="fw-600 mono" style="font-size:16px;letter-spacing:-0.3px;"><?= htmlspecialchars((string)($eq->registration_no), ENT_QUOTES, 'UTF-8') ?></div>
+      <div style="font-size:11.5px;color:var(--blue);font-weight:600;margin-top:2px;">
+        <?= htmlspecialchars((string)($eq->type_name ?: 'Other'), ENT_QUOTES, 'UTF-8') ?><?= !empty($eq->category) ? ' &middot; ' . htmlspecialchars((string)$eq->category, ENT_QUOTES, 'UTF-8') : '' ?>
+      </div>
+      <div style="font-size:12px;color:var(--t2);margin-top:3px;"><?= htmlspecialchars((string)(trim((string)$eq->brand . ' ' . (string)$eq->model) ?: '—'), ENT_QUOTES, 'UTF-8') ?></div>
+      <div class="mono" style="font-size:11px;color:var(--t3);margin-top:3px;">
+        SN: <?= htmlspecialchars((string)($eq->serial_number ?: '—'), ENT_QUOTES, 'UTF-8') ?><?= !empty($eq->engine_model) ? ' &middot; Eng: ' . htmlspecialchars((string)$eq->engine_model, ENT_QUOTES, 'UTF-8') : '' ?>
+      </div>
+      <div style="font-size:11px;color:var(--t3);margin-top:3px;">
         <?php
         // W0.5: the site is shown with the report's own vocabulary; a value that
         // is not an approved site says so instead of silently looking normal.
@@ -106,13 +123,17 @@
         ?>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--sep);margin:16px 0 0;">
-      <div style="background:var(--surface);padding:10px 14px;text-align:center;">
-        <div class="mono" style="font-size:15px;font-weight:500;color:var(--t1);"><?= number_format((float)($eq->current_hours),0) ?></div>
-        <div style="font-size:9.5px;color:var(--t3);font-weight:600;text-transform:none;letter-spacing:0;margin-top:2px;">Hours</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--sep);margin:14px 0 0;">
+      <div style="background:var(--surface);padding:10px 10px;text-align:center;">
+        <div class="mono" style="font-size:14px;font-weight:500;color:var(--t1);"><?= number_format((float)($eq->current_hours),0) ?></div>
+        <div style="font-size:9.5px;color:var(--t3);font-weight:600;text-transform:none;letter-spacing:0;margin-top:2px;">Current Hours</div>
       </div>
-      <div style="background:var(--surface);padding:10px 14px;text-align:center;">
-        <div class="mono" style="font-size:15px;font-weight:500;color:var(--t1);"><?= $eq->year ?></div>
+      <div style="background:var(--surface);padding:10px 10px;text-align:center;">
+        <div class="mono" style="font-size:14px;font-weight:500;color:var(--t1);"><?= number_format((float)($eq->current_km),0) ?></div>
+        <div style="font-size:9.5px;color:var(--t3);font-weight:600;text-transform:none;letter-spacing:0;margin-top:2px;">Current KM</div>
+      </div>
+      <div style="background:var(--surface);padding:10px 10px;text-align:center;">
+        <div class="mono" style="font-size:14px;font-weight:500;color:var(--t1);"><?= $eq->year ?: '—' ?></div>
         <div style="font-size:9.5px;color:var(--t3);font-weight:600;text-transform:none;letter-spacing:0;margin-top:2px;">Year</div>
       </div>
     </div>
