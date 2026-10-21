@@ -234,7 +234,7 @@ if ($resEmpty) {
 }
 
 // 1. Load baseline schema.sql when `--schema` is explicitly passed OR when migrating an empty database (0 tables)
-$autoBootstrapped = (!$opts['schema'] && !$opts['status'] && !$opts['verify'] && $existingTableCount === 0);
+$autoBootstrapped = (!$opts['schema'] && !$opts['status'] && $existingTableCount === 0);
 if ($opts['schema'] || $autoBootstrapped) {
     if (!is_file($schemaPath)) {
         fwrite(STDERR, "ERROR: {$schemaPath} not found.\n");
@@ -259,7 +259,7 @@ $files = glob($migDir . '/[0-9][0-9][0-9][0-9]_*.sql');
 sort($files, SORT_STRING);
 
 // Ensure tracking ledger exists when modifying DB
-if (!$opts['status'] && !$opts['verify']) {
+if (!$opts['status']) {
     $mysqli->query("CREATE TABLE IF NOT EXISTS `schema_migrations` (
       `version` varchar(20) NOT NULL,
       `filename` varchar(255) NOT NULL,
@@ -295,8 +295,8 @@ if ($opts['status']) {
     exit(0);
 }
 
-// 3. Apply pending (or forced) migrations unless purely verifying
-if (!$opts['verify'] || $opts['schema'] || $opts['force']) {
+// 3. Apply all pending (or `--force`d) migrations before optional `--verify`
+if (!$opts['status']) {
     $ranCount = 0;
     $skipCount = 0;
     foreach ($files as $f) {
@@ -385,7 +385,15 @@ if ($opts['verify']) {
     $res = $mysqli->query("SELECT COUNT(*) AS c FROM `equipment` WHERE (`serial_number` LIKE 'SN-%' AND `frame_no` IS NOT NULL AND `frame_no` != '') OR `brand` = 'CATERPILAR' OR `model` = 'TOYOTA LC'");
     $staleCells = $res ? (int)$res->fetch_assoc()['c'] : 0;
     if ($staleCells !== 0) {
-        $errors[] = "Expected 0 stale placeholder serials/brands/models in `equipment`, found {$staleCells}.";
+        $samples = array();
+        $sRes = $mysqli->query("SELECT `id`, `registration_no`, `brand`, `model`, `serial_number` FROM `equipment` WHERE (`serial_number` LIKE 'SN-%' AND `frame_no` IS NOT NULL AND `frame_no` != '') OR `brand` = 'CATERPILAR' OR `model` = 'TOYOTA LC' LIMIT 10");
+        if ($sRes) {
+            while ($sr = $sRes->fetch_assoc()) {
+                $samples[] = sprintf("#%d '%s' (%s / %s / %s)", (int)$sr['id'], $sr['registration_no'], $sr['brand'], $sr['model'], $sr['serial_number']);
+            }
+            $sRes->free();
+        }
+        $errors[] = "Expected 0 stale placeholder serials/brands/models in `equipment`, found {$staleCells}: " . implode('; ', $samples);
     }
 
     $res = $mysqli->query("SELECT COUNT(*) AS c FROM `report_sites`");
