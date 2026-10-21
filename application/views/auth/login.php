@@ -101,6 +101,9 @@ html,body{
     <?php endif; ?>
 
     <?= form_open('login') ?>
+    <?php if (!empty($next)): ?>
+      <input type="hidden" name="next" value="<?= htmlspecialchars((string)$next, ENT_QUOTES, 'UTF-8') ?>">
+    <?php endif; ?>
     <div class="field">
       <label>Email address</label>
       <input type="email" name="email" required autofocus placeholder="you@workshop.com" value="<?= set_value('email') ?>">

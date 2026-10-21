@@ -122,6 +122,7 @@ the noted gaps (§17 details).
 | 11 | `Orders` | `Order_model`, `Supplier_model`, `Materials_model`, `Spareparts_model` | Purchase orders, status pipeline, receiving + GRN, documents, lead-time estimate | Implemented |
 | 12 | `Lubricants` | `Lubricant_model`, `Equipment_model` | Lube types/specs, consumption + variance, budget, forecast & compliance widgets | Implemented |
 | 13 | `Team` | `Team_model` | Staff (= `users`) list/detail, attendance, leave, certifications, shift roster, monthly report | Implemented |
+| 14 | `Attendance` | `Attendance_model` | QR + GPS site check-in / check-out (`ATTENDANCE_WORKFLOW.md`): geofenced sites, rotating signed site code, server-validated punches, derived day rows, supervisor corrections, work-order assignment gate | Implemented (migration 0010) |
 | 14 | `Users` | `Team_model` (loaded, most work via `$this->db`) | Account administration, own profile & password | Implemented |
 | 15 | `Settings` | `Settings_model`, `Auth_throttle_model` | Business settings; sign-in security console | Implemented |
 | 16 | `Reports` | 14 models (dashboard/WO/team/lube/equipment/order/supplier/asset/materials/store/settings/KPI target/KPI engine/W36) | 20+ reports and exports incl. W36 and the asset-register import | Implemented |
@@ -273,8 +274,8 @@ are assigned to (CSV match on `assigned_to`).
 
 ### 5.1 Overview
 
-One MySQL/MariaDB database, 59 tables, `utf8mb4`. The schema artifact in the
-repo is `database/schema.sql`: all 59 tables with their indexes and foreign
+One MySQL/MariaDB database, 61 application tables (+ the `schema_migrations` ledger), `utf8mb4`. The schema artifact in the
+repo is `database/schema.sql`: all 61 application tables with their indexes and foreign
 keys, plus the master data the application needs to start (5 roles,
 21 equipment types, 7 lubricant types, 17 report groups, 35 report sites,
 19 settings rows, 3 shifts). It contains **no staff, fleet, supplier, stock,
@@ -401,7 +402,7 @@ not an audit log (24 h retention).
 `details`, `created_at NN`, `acknowledged_by`, `acknowledged_at`,
 `acknowledged_note`. 90-day retention (pruned opportunistically).
 
-**`settings`** (19 rows seeded) — `id AI`, `setting_key NN UQ`,
+**`settings`** (29 rows seeded) — `id AI`, `setting_key NN UQ`,
 `setting_value TEXT`, `description`. Business configuration; see §12.
 
 #### Equipment & meters
@@ -737,6 +738,22 @@ the work-order oil-line sync as well as the Lubricants screen),
 Present/Absent/Leave/Rest), `check_in`, `check_out`, `hours_worked`
 (not computed by the UI), `notes`, `created_by →users`, `created_at`;
 UQ (`user_id`,`date`) — saving a day uses `REPLACE` inside a transaction.
+
+**`attendance_sites`** — `id AI`, `name NN`, `latitude`/`longitude`
+`DECIMAL(10,7) NN` (geofence centre), `radius_m NN=150` (accepted distance),
+`max_accuracy_m NN=100` (worst GPS accuracy accepted), `qr_secret CHAR(64) NN`
+(per-site HMAC key that signs its rotating QR tokens), `is_active NN=1`,
+`created_by →users`, `created_at`, `updated_at`.  Migration `0010`.
+
+**`attendance_punches`** — `id AI`, `user_id NN →users`, `site_id →attendance_sites`,
+`work_date NN`, `punch_type ENUM(check_in,check_out) NN`,
+`punched_at NN` (server time; corrected time on a correction),
+`origin ENUM(self,supervisor) NN=self`, `latitude`, `longitude`, `accuracy_m`,
+`distance_m` (server-computed), `radius_m` (in force when accepted),
+`ip_address`, `user_agent`, `reason` (required on a correction), `created_by`,
+`created_at` (audit clock).  Append-only: no update/delete path exists in the
+application. The `attendance` day row is derived from these events.  Migration
+`0010`.
 
 **`leave_requests`** — `id AI`, `user_id NN →users`,
 `leave_type ENUM(Annual Leave,Sick Leave,Emergency,Unpaid,Maternity,Paternity,Training) NN`,
@@ -1155,6 +1172,23 @@ HTML, Forecast's plan-vs-actual actuals):
   (Annual 21 / Sick 10 / Emergency 3 by default); an untracked type shows
   "—". A request is never blocked by the balance — the requester is warned
   and the supervisor decides.
+- Attendance punches (`ATTENDANCE_WORKFLOW.md`): a punch is written only when
+  the scanned site token verifies AND the phone's position is inside the site
+  radius AND its reported accuracy is within the site's limit — all three on the
+  server. The token is `v1.<site>.<window>.<HMAC-SHA256>` with a per-site secret,
+  valid for the current window plus a grace; future windows, other sites' tokens
+  and tampered MACs are refused. The punch type alternates from the worker's own
+  history (the phone never chooses it), times are server times, and a second
+  punch within 15 s is refused. Each accepted punch rewrites the `attendance`
+  day row (first check-in, last check-out, hours, `Present`), except a row that
+  is `Leave`: leave wins and its note is never touched. `attendance_punches` is
+  append-only; a supervisor correction is a new `origin = supervisor` event with
+  a mandatory reason and author. With `attendance_gate_enabled = 1` (default 0)
+  the work-order picker offers only technicians who are on site and free of
+  unfinished work orders (Open / In Progress / Waiting Parts / Waiting Tools) and
+  no open labour session, and `Workorders` re-checks the ids being added on save;
+  an ineligible technician already on the order stays listed, flagged, so the
+  supervisor can clear them.
 - Certifications: adding and deleting a certificate is supervisor-only (the
   worker page's Add dialog is hidden from other roles and the endpoint refuses
   them); a certificate's document is deleted only after the row delete
@@ -1347,6 +1381,7 @@ POST (many also render a form on GET); POST-only endpoints return 405 on GET.
 | orders | `index`, `create`, `view(id)`, `update_status(id)` POST, `receive(id)` (GET form/POST), `grn(id, [receipt_id])` print, `upload_document(id)` POST, `download_document(doc_id)`, `api_lead_time_estimate` JSON GET |
 | lubricants | `index`, `record`, `types`, `specifications`, `budget`, `forecast` |
 | team | `index`, `create`, `view(id)`, `attendance` (GET/POST), `leave_request`, `edit(id)`, `approve_leave(id)` POST, `certifications([user_id])`, `delete_certification(id)` POST, `shift_roster` (`?week=YYYY-Www` or date), `shift_save` POST, `shift_delete(id)` POST, `assign_shift` POST, `report` |
+| attendance | `index`, `punch` (`?t=<site token>`; mobile page, no layout), `record` POST (the only write of a punch; JSON when asked), `token` GET JSON (supervisor: current signed site token), `board` (supervisor: full-screen rotating QR), `sites` (supervisor: geofence configuration, GET/POST), `policy` POST, `log` (supervisor/manager day view), `correction` POST (supervisor, reason required) |
 | users | `index`, `create`, `edit(id)`, `toggle_status(id)` POST, `change_role(id)` (reads POST), `reset_password(id)`, `profile`, `change_password`, `delete(id)` POST |
 | settings | `index`, `security` (POST actions: acknowledge, policy) |
 | forecast | `index` (`?week=`), `generate` POST, `create_inspection_rounds` POST, `save_cell` POST, `publish` POST, `jobs`, `save_job` POST, `delete_job` POST, `plan_vs_actual`, `rolling`, `parts(id)`, `save_part` POST, `delete_part` POST, `export([planned\|rolling])`, `spares`, `allowances` |
@@ -1462,6 +1497,10 @@ missing/invalid; the Settings screen edits the report + forecast groups;
 | `unplanned_allowance_default_hours` | `1` | Flat-mode breakdown allowance h/day |
 | `unplanned_allowance_lookback_weeks` | `12` | Derived-mode history window (1–104) |
 | `forecast_show_excel_reference` | `1` | Show historical-Excel reference figures in forecast |
+| `attendance_gate_enabled` | `0` | 1 = work-order assignment requires an on-site technician (QR+GPS checked in, no unfinished WO / open session); 0 = as before. Edited on Attendance → Sites & policy |
+| `attendance_open_session_policy` | `warn` | `warn` = accept a check-out with an open work session and name it; `block` = refuse until it is closed |
+| `attendance_qr_ttl_seconds` | `60` | Lifetime of one signed site token (10–3600) |
+| `attendance_qr_grace_seconds` | `120` | Extra acceptance after a token's window ends (0–3600), to absorb the screen's refresh |
 
 Seeded legacy keys `working_hours_per_day`, `work_days_per_month` and
 `pm_alert_days` exist in the dump but **no code reads them** (verified by
@@ -1637,7 +1676,7 @@ are to the reviewed commit.
 | ID | Sev | Issue | Evidence / notes |
 |---|---|---|---|
 | K-01 | **Critical — rotation outstanding** | The live MySQL password and the application `encryption_key` were committed in `application/config/database.local.php` and `config.local.php` in the first commit. The repository is **public**, so both values must be treated as compromised regardless of what happens next. | **Fixed in the tree:** both files removed from the index (still on disk for the running install), `.gitignore` now excludes `*.local.php`/`.env*`/logs/uploads, `.githooks/pre-commit` refuses them, and `database/.htaccess` closes direct HTTP access to the dump. `scripts/purge-secrets.sh` performs and verifies the history rewrite without pushing. **Operator action still required:** rotate the DB password and the key on the host and force-push the rewritten history — [`SECURITY.md`](SECURITY.md) is the step-by-step runbook. Nothing is encrypted with the old key (the Encryption library is never loaded), so its rotation needs no re-encryption. |
-| K-02 | **Critical — resets outstanding** | The production dump (`database/yzzme_43038742_aml.sql`) was tracked in a **public** repository. It exposed 66 staff accounts — 63 with unsalted **MD5** hashes — plus names, e-mails and phones, and the committed local config kept `legacy_password_login = TRUE`, so a cracked hash was directly usable. | **Fixed in the tree:** the dump is untracked and ignored; `database/schema.sql` (59 tables + master data, no people/fleet/stock) is the install artifact, and every "import the dump" message now names it. The Users screen counts and marks accounts still on a legacy hash so the reset campaign is measurable. **Operator action:** treat every account in that dump as compromised — reset each password (Users → Reset Password), then set `legacy_password_login = FALSE` in `config.local.php`; see `SECURITY.md` §5. The hashes are still in public history until the K-01 purge is run. |
+| K-02 | **Critical — resets outstanding** | The production dump (`database/yzzme_43038742_aml.sql`) was tracked in a **public** repository. It exposed 66 staff accounts — 63 with unsalted **MD5** hashes — plus names, e-mails and phones, and the committed local config kept `legacy_password_login = TRUE`, so a cracked hash was directly usable. | **Fixed in the tree:** the dump is untracked and ignored; `database/schema.sql` (61 application tables + master data, no people/fleet/stock) is the install artifact, and every "import the dump" message now names it. The Users screen counts and marks accounts still on a legacy hash so the reset campaign is measurable. **Operator action:** treat every account in that dump as compromised — reset each password (Users → Reset Password), then set `legacy_password_login = FALSE` in `config.local.php`; see `SECURITY.md` §5. The hashes are still in public history until the K-01 purge is run. |
 | K-03 | **Resolved** | Runtime logs were committed (`application/logs/log-2026-10-19.php`, `php_errors.log`), revealing absolute server paths and operational details. | Fixed in this revision: both files removed from the tree, `application/logs/*` ignored (`.gitkeep` kept), and `.gitignore` covers `*.log`. They remain in history — the K-01 purge covers that. |
 | K-04 | **Resolved** | Attachment/document **downloads fatal-errored**: `force_download()` is called in `Workorders::download_attachment()` and `Orders::download_document()` but CodeIgniter's `download` helper was never loaded. Uploads work; downloads returned 500. Files remain reachable by direct URL under `uploads/…` (names are timestamp-based, i.e. guessable — a confidentiality consideration for incident evidence). | Fixed in this revision: `download` added to `$autoload['helper']`. |
 | K-05 | **Resolved** | PM completion never recorded the meter reading for `Km`-interval schedules: `Pm::complete()` checked `['Hours','Kilometres']` but the enum value is `Km`. Hours schedules worked. | Fixed in this revision: the handler compares `Hours`/`Km` and translates to `Kilometres` only for the meter writer (`Pm.php`). |

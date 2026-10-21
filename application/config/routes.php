@@ -16,6 +16,10 @@ $route['dashboard'] = 'dashboard/index';
 $route['team'] = 'team/index';
 $route['team/(:any)'] = 'team/$1';
 
+// Attendance punches (QR + GPS check-in / check-out, ATTENDANCE_WORKFLOW.md)
+$route['attendance'] = 'attendance/index';
+$route['attendance/(:any)'] = 'attendance/$1';
+
 // NOTE: there is no `Maintenance` controller — `views/maintenance/` is used by
 // workorders/equipment/pm. The old `maintenance/*` routes (and
 // `dashboard/kpi_data`, a method that does not exist) were dead: every request

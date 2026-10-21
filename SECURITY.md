@@ -51,7 +51,7 @@ paths — removed from the tree, K-03).
   verify, no push) for when you are ready to do it.
 - The **production dump** is untracked and ignored (`.gitignore`:
   `database/*.sql` except `database/schema.sql`). `database/schema.sql` — all
-  59 tables, indexes, foreign keys and the reference data, with no staff,
+  61 application tables, indexes, foreign keys and the reference data, with no staff,
   fleet, supplier, stock, session or inspection rows — is the install artifact
   that replaced it (K-02).
 - The committed **runtime logs** are removed from the tree and ignored

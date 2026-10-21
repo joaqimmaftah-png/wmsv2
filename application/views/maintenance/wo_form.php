@@ -425,17 +425,32 @@ function _v($is_edit, $wo, $field, $default = '') {
       <label class="form-label">Assigned Technicians</label>
       <div class="tech-multi" id="tech-multi">
         <?php foreach ($technicians as $tech):
-          $checked = in_array((string)$tech->id, $assigned_ids); ?>
-        <label class="tech-option">
+          $checked  = in_array((string)$tech->id, $assigned_ids);
+          // Attendance gate: a technician already named on this order is still
+          // listed when no longer eligible, so the supervisor can see whom to
+          // clear — with the reason attached.
+          $blocked  = isset($tech->eligible) && !$tech->eligible;
+          $why      = $blocked && !empty($tech->block_reasons) ? implode('; ', $tech->block_reasons) : ''; ?>
+        <label class="tech-option" <?= $blocked ? 'title="' . htmlspecialchars($why, ENT_QUOTES, 'UTF-8') . '"' : ''; ?>
+               style="<?= $blocked ? 'opacity:.72;' : ''; ?>">
           <input type="checkbox" name="assigned_techs[]" value="<?= $tech->id; ?>" <?= $checked?'checked':''; ?>>
           <?= htmlspecialchars((string)($tech->first_name.' '.$tech->last_name)); ?>
+          <?php if ($blocked): ?>
+            <span style="font-size:10px;color:var(--amber);margin-left:8px;font-weight:600;">not eligible</span>
+          <?php endif; ?>
           <span style="font-size:10px;color:var(--t4);margin-left:auto;"><?= htmlspecialchars((string)($tech->position??'')); ?></span>
         </label>
         <?php endforeach; ?>
       </div>
       <input type="hidden" name="assigned_to" id="assigned_to_csv"
         value="<?= htmlspecialchars((string)(_v($is_edit,$wo,'assigned_to'))); ?>">
-      <div class="hint">Select one or more technicians to assign to this work order.</div>
+      <div class="hint">
+        Select one or more technicians to assign to this work order.
+        <?php if (!empty($attendance_gate)): ?>
+          Only technicians checked in on site, not yet checked out and free of unfinished work orders are
+          offered, and the server checks the same rule when this form is saved.
+        <?php endif; ?>
+      </div>
     </div>
 
     <!-- ══ SECTION 2 — TIME & METER ══ -->

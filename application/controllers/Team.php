@@ -3,9 +3,11 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 class Team extends MY_Controller {
 
+    public $Attendance_model;
+
     public function __construct() {
         parent::__construct();
-        $this->load->model('Team_model');
+        $this->load->model(array('Team_model', 'Attendance_model'));
     }
 
     public function index() {
@@ -211,6 +213,11 @@ class Team extends MY_Controller {
 
         $data['workers']    = $this->Team_model->get_all_active();
         $data['attendance'] = $this->Team_model->get_attendance_by_date($date);
+        // Read-only cross-check: the punch-derived on-site state. The times in
+        // the table below are the day row, which a punch keeps in sync, so the
+        // two can never tell different stories.
+        $data['on_site']    = $this->Attendance_model->on_site_map($date);
+        $data['punching']   = $this->Attendance_model->ready();
         $data['date']       = $date;
         $data['page_title'] = 'Daily Attendance';
         $this->render('team/attendance', $data);

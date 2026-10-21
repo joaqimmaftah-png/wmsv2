@@ -48,12 +48,41 @@ class Auth extends CI_Controller {
         $this->load->database();
     }
 
+    /**
+     * Where to go after a successful sign-in.
+     *
+     * Carried as `?next=` by pages that need a signed-in session to be useful —
+     * notably the attendance punch page a site QR code opens: scanning with an
+     * expired session must not cost the technician the scanned token.
+     *
+     * Only a same-site path is accepted (one leading slash, no scheme, no
+     * host, no backslash), so this can never become an open redirect.
+     *
+     * @param  mixed $raw
+     * @return string '' when the value is not a local path
+     */
+    private function _safe_next($raw) {
+        if (!is_string($raw) || $raw === '' || strlen($raw) > 300) return '';
+        $path = trim($raw);
+        if ($path === '' || $path[0] !== '/') return '';
+        if (strpos($path, '//') === 0) return '';
+        if (preg_match('#[\\\r\n\t]#', $path)) return '';
+        if (preg_match('#^/[a-z][a-z0-9+.-]*:#i', $path)) return '';
+        return $path;
+    }
+
     public function login() {
+        // GET carries it on the way in, the hidden field on the way back.
+        $raw = $this->input->post('next', TRUE);
+        if (!is_string($raw) || $raw === '') $raw = $this->input->get('next', TRUE);
+        $next = $this->_safe_next($raw);
+
         if ($this->session->userdata('user_id')) {
-            redirect('dashboard');
+            redirect($next !== '' ? $next : 'dashboard');
         }
 
-        $data = ['error' => ''];
+        // The form posts back to /login, so the destination rides along hidden.
+        $data = ['error' => '', 'next' => $next];
 
         if ($this->input->post()) {
             $this->form_validation->set_rules('email',    'Email',    'required|valid_email');
@@ -148,7 +177,7 @@ class Auth extends CI_Controller {
                             // sign-in (sess_regenerate_destroy = TRUE).
                             $this->session->sess_regenerate(TRUE);
 
-                            redirect('dashboard');
+                            redirect($next !== '' ? $next : 'dashboard');
                         } else {
                             $this->Auth_throttle_model->record_failure($email);
                             $data['error'] = 'Invalid email or password.';

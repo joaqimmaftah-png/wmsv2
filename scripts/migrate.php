@@ -337,7 +337,7 @@ if ($opts['verify']) {
     $res = $mysqli->query("SELECT COUNT(*) AS c FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()");
     $tableCount = $res ? (int)$res->fetch_assoc()['c'] : 0;
     if ($tableCount < 60) {
-        $errors[] = "Expected at least 60 tables (59 operational + schema_migrations), found {$tableCount}.";
+        $errors[] = "Expected at least 62 tables (61 operational + schema_migrations), found {$tableCount}.";
     }
 
     $res = $mysqli->query("SELECT COUNT(*) AS c FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ci_sessions' AND INDEX_NAME = 'PRIMARY'");

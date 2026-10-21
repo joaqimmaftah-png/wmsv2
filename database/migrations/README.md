@@ -3,10 +3,10 @@
 ## 1. Fresh Installation (XAMPP, Docker, Linux, or cPanel)
 
 `database/schema.sql` contains the complete, production-ready baseline schema:
-- All **60 tables** (59 application tables + `schema_migrations` tracking ledger)
+- All **62 tables** (61 application tables + `schema_migrations` tracking ledger)
 - Single-column `PRIMARY KEY (id)` on `ci_sessions` aligned with `$config['sess_match_ip'] = FALSE` (prevents IPv4/IPv6 `127.0.0.1` vs `::1` session/CSRF mismatches on Windows XAMPP)
-- All **88 InnoDB foreign-key constraints**, unique constraints, and reporting indexes
-- All **25 documented `settings` defaults** (`Settings_model::DEFAULTS`)
+- All **93 InnoDB foreign-key constraints**, unique constraints, and reporting indexes
+- All **29 documented `settings` defaults** (`Settings_model::DEFAULTS`)
 - All **14 bilingual (EN/FR) workshop `inspection_templates` + 630 `inspection_items`** (zero PII)
 
 ### Quick Setup on XAMPP (`C:\xampp\htdocs\wmsv2`)
@@ -23,7 +23,7 @@
 
 ---
 
-## 2. Upgrading an Existing Database (`0001` – `0007`)
+## 2. Upgrading an Existing Database (`0001` – `0010`)
 
 Every file in `database/migrations/` is **strictly idempotent** (safe on both **MySQL 8.0+** and **MariaDB 10.4+** without non-portable `IF NOT EXISTS` DDL syntax) and tracked in `schema_migrations`:
 
@@ -36,6 +36,9 @@ Every file in `database/migrations/` is **strictly idempotent** (safe on both **
 | `0005` | `0005_unique_constraints_and_indexes.sql` | Deduplicates `lube_specifications(equipment_type_id, lube_type_id)`, adds `uq_lube_spec_eq_lube` & 41 missing indexes |
 | `0006` | `0006_foreign_keys_integrity.sql` | Cleans orphaned nullable foreign IDs and enforces all 54 missing InnoDB `FOREIGN KEY` constraints |
 | `0007` | `0007_seed_master_data_and_checklists.sql` | Seeds all master reference tables, all 25 `settings` defaults (`INSERT IGNORE`), and all 14 bilingual EN/FR `inspection_templates` + 630 `inspection_items` + `P1` safety severities |
+| `0008` | `0008_restore_equipment_register.sql` | Restores the equipment register master data |
+| `0009` | `0009_restore_suppliers_and_inventory.sql` | Restores the cleaned suppliers, inventory items and stock history |
+| `0010` | `0010_attendance_punches.sql` | Creates `attendance_sites` and `attendance_punches` for the QR + GPS check-in workflow, and seeds the four attendance settings (gate off, warn policy, 60 s token, 120 s grace). No punch data is seeded |
 
 ### Cross-Platform Commands
 ```bash
@@ -56,7 +59,7 @@ php scripts/migrate.php --verify
 
 1. **Continuous Integration (`.github/workflows/tests.yml`)** — runs automatically on every `push` and `pull_request`:
    - Lints all `.php` files and runs `php tests/run.php` across **PHP 8.2, 8.3, and 8.4**
-   - Tests fresh `schema.sql` load, double-idempotent execution of `0001`–`0007`, and live authenticated HTTP + `.xlsx` export verification against **both MySQL 8.0 and MariaDB 10.4 (XAMPP engine)**
+   - Tests fresh `schema.sql` load, double-idempotent execution of `0001`–`0010`, and live authenticated HTTP + `.xlsx` export verification against **both MySQL 8.0 and MariaDB 10.4 (XAMPP engine)**
 2. **Continuous Deployment (`.github/workflows/deploy.yml` + XAMPP automation)**:
    - **Option A — Local / On-Premises Windows XAMPP (Zero Inbound Ports)**:
      - **Scheduled Auto-Pull + Migrate (Simplest — 1 command)**:
