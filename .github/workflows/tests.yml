@@ -101,17 +101,17 @@ jobs:
           trap "kill $SERVER_PID 2>/dev/null || true" EXIT
           sleep 2
 
-          # Authenticate via CSRF-protected POST /login and crawl key HTML + XLSX routes
+          # Authenticate via CSRF-protected POST /login (omit -X POST so -L follows 302 as GET!)
           COOKIES=/tmp/cookies.txt
           LOGIN_HTML=$(curl -fsSL -c "$COOKIES" http://127.0.0.1:8000/login)
           CSRF=$(python3 -c 'import re,sys; m=re.search(r"name=[\x27\"]csrf_token_wms[\x27\"]\s+value=[\x27\"]([^\x27\"]+)", sys.stdin.read()); assert m; print(m.group(1))' <<<"$LOGIN_HTML")
-          curl -fsSL -b "$COOKIES" -c "$COOKIES" -X POST http://127.0.0.1:8000/login \
+          curl -fsSL -b "$COOKIES" -c "$COOKIES" http://127.0.0.1:8000/login \
             --data-urlencode "csrf_token_wms=$CSRF" \
             --data-urlencode "email=admin@ci.local" \
             --data-urlencode "password=AdminPass123!" >/dev/null
 
           for ROUTE in dashboard equipment workorders pm inspections materials spareparts suppliers orders lubricants team backlog reports forecast users settings; do
-            BODY=$(curl -fsSL -b "$COOKIES" "http://127.0.0.1:8000/$ROUTE")
+            BODY=$(curl -fsSL -b "$COOKIES" -c "$COOKIES" "http://127.0.0.1:8000/$ROUTE")
             if echo "$BODY" | grep -Eq "Severity: (Warning|Notice|Deprecated|Error)|Fatal error|Uncaught|Database Error"; then
               echo "PHP error output found on /$ROUTE!"
               exit 1
@@ -119,5 +119,5 @@ jobs:
           done
 
           # Verify XLSX binary export starts with valid ZIP magic PK\x03\x04
-          curl -fsSL -b "$COOKIES" "http://127.0.0.1:8000/reports/export_annual_report_xlsx" -o /tmp/annual.xlsx
+          curl -fsSL -b "$COOKIES" -c "$COOKIES" "http://127.0.0.1:8000/reports/export_annual_report_xlsx" -o /tmp/annual.xlsx
           python3 -c 'data=open("/tmp/annual.xlsx","rb").read(); assert data[:4]==b"PK\x03\x04", f"Corrupt XLSX header: {data[:80]!r}"; print("Valid XLSX bytes:", len(data))'
