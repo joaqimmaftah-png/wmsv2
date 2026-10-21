@@ -376,6 +376,12 @@ if ($opts['verify']) {
         $errors[] = "Expected at least 116 fleet rows in `equipment`, found {$eqCount}.";
     }
 
+    $res = $mysqli->query("SELECT COUNT(*) AS c FROM `equipment` WHERE `registration_no` IN ('EX 006', 'C-HEADT 007', 'C-HEADT 008')");
+    $verbatimIds = $res ? (int)$res->fetch_assoc()['c'] : 0;
+    if ($verbatimIds !== 3) {
+        $errors[] = "Expected verbatim Asset Register Machine IDs ('EX 006', 'C-HEADT 007', 'C-HEADT 008'), found {$verbatimIds}/3.";
+    }
+
     $res = $mysqli->query("SELECT COUNT(*) AS c FROM `equipment_specs`");
     $specCount = $res ? (int)$res->fetch_assoc()['c'] : 0;
     if ($specCount < 338) {

@@ -23,7 +23,7 @@
 
 ---
 
-## 2. Upgrading an Existing Database (`0001` – `0010`)
+## 2. Upgrading an Existing Database (`0001` – `0011`)
 
 Every file in `database/migrations/` is **strictly idempotent** (safe on both **MySQL 8.0+** and **MariaDB 10.4+** without non-portable `IF NOT EXISTS` DDL syntax) and tracked in `schema_migrations`:
 
@@ -39,6 +39,7 @@ Every file in `database/migrations/` is **strictly idempotent** (safe on both **
 | `0008` | `0008_restore_equipment_register.sql` | Restores the equipment register master data |
 | `0009` | `0009_restore_suppliers_and_inventory.sql` | Restores the cleaned suppliers, inventory items and stock history |
 | `0010` | `0010_attendance_punches.sql` | Creates `attendance_sites` and `attendance_punches` for the QR + GPS check-in workflow, and seeds the four attendance settings (gate off, warn policy, 60 s token, 120 s grace). No punch data is seeded |
+| `0011` | `0011_restore_verbatim_asset_machine_ids.sql` | Aligns `equipment.registration_no` verbatim with the master Asset Register document (`EX 006`, `C-HEADT 007`, `C-HEADT 008`) while preserving all `equipment.id` foreign-key links |
 
 ### Cross-Platform Commands
 ```bash

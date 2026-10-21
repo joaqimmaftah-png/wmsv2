@@ -373,7 +373,7 @@ check('Schema: seeds all 630 inspection_items', strpos($schemaSql, 'INSERT IGNOR
 
 $migFiles = glob(__DIR__ . '/../database/migrations/[0-9][0-9][0-9][0-9]_*.sql');
 sort($migFiles, SORT_STRING);
-is_same('Migrations: all 10 ordered SQL migrations present (0001..0010)', 10, count($migFiles));
+is_same('Migrations: all 11 ordered SQL migrations present (0001..0011)', 11, count($migFiles));
 foreach ($migFiles as $mf) {
     $bn  = basename($mf);
     $sum = hash_file('sha256', $mf);
@@ -383,8 +383,12 @@ foreach ($migFiles as $mf) {
         strpos($mSql, 'INSERT INTO `users`') === FALSE && strpos($mSql, 'INSERT INTO `ci_sessions`') === FALSE);
 }
 check('Schema: seeds all 116 fleet rows into equipment', strpos($schemaSql, 'INSERT INTO `equipment`') !== FALSE);
+check('Schema: preserves verbatim Asset Register Machine IDs (EX 006, C-HEADT 007, C-HEADT 008)',
+    strpos($schemaSql, "'EX 006', 'EX 006'") !== FALSE
+    && strpos($schemaSql, "'C-HEADT 007', 'ADT 007'") !== FALSE
+    && strpos($schemaSql, "'C-HEADT 008', 'ADT 008'") !== FALSE);
 check('Schema: seeds all 338 manufacturer specs into equipment_specs', strpos($schemaSql, 'INSERT INTO `equipment_specs`') !== FALSE);
-check('Schema: seeds all 22 vendor rows into suppliers', strpos($schemaSql, 'INSERT INTO `suppliers`') !== FALSE);
+check('Schema: seeds deduplicated vendor rows into suppliers', strpos($schemaSql, 'INSERT INTO `suppliers`') !== FALSE);
 check('Schema: seeds all 1,697 inventory items into materials', strpos($schemaSql, 'INSERT IGNORE INTO `materials`') !== FALSE);
 check('Security (K-02): schema.sql never embeds staff accounts or session dumps',
     strpos($schemaSql, 'INSERT INTO `users`') === FALSE && strpos($schemaSql, 'INSERT INTO `ci_sessions`') === FALSE);
