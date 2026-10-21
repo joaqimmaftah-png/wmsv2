@@ -230,7 +230,7 @@ $label       = ($next_type === 'check_out') ? 'Check out' : 'Check in';
 
     say('wait', 'Reading your position… this can take a few seconds.');
 
-    navigator.geolocation.getCurrentPosition(function (pos) {
+    function accept(pos) {
       var c = pos.coords;
       latInput.value = c.latitude.toFixed(7);
       lngInput.value = c.longitude.toFixed(7);
@@ -238,14 +238,23 @@ $label       = ($next_type === 'check_out') ? 'Check out' : 'Check in';
       say(c.accuracy > 100 ? 'wait' : 'ok',
           'Position found (±' + Math.round(c.accuracy) + ' m).');
       button.disabled = false;
-    }, function (err) {
-      var map = {
-        1: 'Location permission was denied. Allow it for this site in the browser settings, then retry.',
-        2: 'The phone could not get a position. Move into the open, then retry.',
-        3: 'Reading the position took too long. Retry, or move into the open.'
-      };
-      say('bad', map[err.code] || 'Your position could not be read. Retry.');
-    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    }
+
+    navigator.geolocation.getCurrentPosition(accept, function (err) {
+      if (err.code === 1) {
+        say('bad', 'Location permission was denied. Allow it for this site in the browser settings, then retry.');
+        return;
+      }
+      say('wait', 'Refining via network location…');
+      navigator.geolocation.getCurrentPosition(accept, function (err2) {
+        var map = {
+          1: 'Location permission was denied. Allow it for this site in the browser settings, then retry.',
+          2: 'The phone could not get a position. Move into the open, then retry.',
+          3: 'Reading the position took too long. Retry, or move into the open.'
+        };
+        say('bad', map[err2.code] || 'Your position could not be read. Retry.');
+      }, { enableHighAccuracy: false, timeout: 12000, maximumAge: 60000 });
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
   }
 
   form.addEventListener('submit', function (e) {
