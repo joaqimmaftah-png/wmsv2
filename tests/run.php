@@ -416,6 +416,13 @@ check('Schema: seeds all 1,697 inventory items into materials', strpos($schemaSq
 check('Security (K-02): schema.sql never embeds staff accounts or session dumps',
     strpos($schemaSql, 'INSERT INTO `users`') === FALSE && strpos($schemaSql, 'INSERT INTO `ci_sessions`') === FALSE);
 
+$sitesView = file_get_contents(__DIR__ . '/../application/views/attendance/sites.php');
+check('Attendance sites UI: provides prominent Capture current location button, two-tier GPS fallback, Maps URL parser & map pin picker',
+    strpos($sitesView, 'Capture current location') !== FALSE
+    && strpos($sitesView, 'parseCoordinateText') !== FALSE
+    && strpos($sitesView, 'enableHighAccuracy: false') !== FALSE
+    && strpos($sitesView, 'autolocate=1') !== FALSE);
+
 /* ─────────────────────────────────────────────────────────────────────────
    Result
    ───────────────────────────────────────────────────────────────────────── */
