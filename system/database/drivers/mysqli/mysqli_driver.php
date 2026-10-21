@@ -51,6 +51,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * @author		EllisLab Dev Team
  * @link		https://codeigniter.com/userguide3/database/
  */
+#[AllowDynamicProperties]
 class CI_DB_mysqli_driver extends CI_DB {
 
 	/**
@@ -125,7 +126,7 @@ class CI_DB_mysqli_driver extends CI_DB {
 		}
 
 		// Do we have a socket path?
-		if ($this->hostname[0] === '/')
+		if (is_string($this->hostname) && $this->hostname !== '' && $this->hostname[0] === '/')
 		{
 			$hostname = NULL;
 			$port = NULL;
@@ -144,16 +145,16 @@ class CI_DB_mysqli_driver extends CI_DB {
 
 		$this->_mysqli->options(MYSQLI_OPT_CONNECT_TIMEOUT, 10);
 
+		$init_sql_mode = NULL;
 		if (isset($this->stricton))
 		{
 			if ($this->stricton)
 			{
-				$this->_mysqli->options(MYSQLI_INIT_COMMAND, 'SET SESSION sql_mode = CONCAT(@@sql_mode, ",", "STRICT_ALL_TABLES")');
+				$init_sql_mode = 'SET SESSION sql_mode = CONCAT(@@sql_mode, ",", "STRICT_ALL_TABLES")';
 			}
 			else
 			{
-				$this->_mysqli->options(MYSQLI_INIT_COMMAND,
-					'SET SESSION sql_mode =
+				$init_sql_mode = 'SET SESSION sql_mode =
 					REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
 					@@sql_mode,
 					"STRICT_ALL_TABLES,", ""),
@@ -161,8 +162,7 @@ class CI_DB_mysqli_driver extends CI_DB {
 					"STRICT_ALL_TABLES", ""),
 					"STRICT_TRANS_TABLES,", ""),
 					",STRICT_TRANS_TABLES", ""),
-					"STRICT_TRANS_TABLES", "")'
-				);
+					"STRICT_TRANS_TABLES", "")';
 			}
 		}
 
@@ -210,6 +210,11 @@ class CI_DB_mysqli_driver extends CI_DB {
 
 		if ($this->_mysqli->real_connect($hostname, $this->username, $this->password, $this->database, $port, $socket, $client_flags))
 		{
+			if ($init_sql_mode !== NULL)
+			{
+				$this->_mysqli->query($init_sql_mode);
+			}
+
 			// Prior to version 5.7.3, MySQL silently downgrades to an unencrypted connection if SSL setup fails
 			if (
 				($client_flags & MYSQLI_CLIENT_SSL)
@@ -346,10 +351,7 @@ class CI_DB_mysqli_driver extends CI_DB {
 	 */
 	protected function _trans_begin()
 	{
-		$this->conn_id->autocommit(FALSE);
-		return is_php('5.5')
-			? $this->conn_id->begin_transaction()
-			: $this->simple_query('START TRANSACTION'); // can also be BEGIN or BEGIN WORK
+		return (bool) $this->simple_query('START TRANSACTION');
 	}
 
 	// --------------------------------------------------------------------
@@ -361,13 +363,7 @@ class CI_DB_mysqli_driver extends CI_DB {
 	 */
 	protected function _trans_commit()
 	{
-		if ($this->conn_id->commit())
-		{
-			$this->conn_id->autocommit(TRUE);
-			return TRUE;
-		}
-
-		return FALSE;
+		return (bool) $this->simple_query('COMMIT');
 	}
 
 	// --------------------------------------------------------------------
@@ -379,13 +375,7 @@ class CI_DB_mysqli_driver extends CI_DB {
 	 */
 	protected function _trans_rollback()
 	{
-		if ($this->conn_id->rollback())
-		{
-			$this->conn_id->autocommit(TRUE);
-			return TRUE;
-		}
-
-		return FALSE;
+		return (bool) $this->simple_query('ROLLBACK');
 	}
 
 	// --------------------------------------------------------------------

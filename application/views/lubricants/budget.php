@@ -63,14 +63,14 @@
             </td>
             <td>
               <span class="budget-total" id="total-<?= $lt->id ?>" style="font-weight:600;">
-                <?= $b_total ? '$' . number_format($b_total, 2) : '—' ?>
+                <?= $b_total ? '$' . number_format((float)($b_total), 2) : '—' ?>
               </span>
             </td>
           </tr>
           <?php endforeach; ?>
           <tr style="background:#f8fafc;">
             <td colspan="5" class="text-end fw-700">TOTAL BUDGET:</td>
-            <td class="fw-700 text-primary" id="grandTotal">$<?= number_format($total_budget, 2) ?></td>
+            <td class="fw-700 text-primary" id="grandTotal">$<?= number_format((float)($total_budget), 2) ?></td>
           </tr>
         </tbody>
       </table>

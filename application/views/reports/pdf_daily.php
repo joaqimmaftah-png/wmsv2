@@ -48,19 +48,19 @@ h2{font-size:12pt;font-weight:700;margin:16px 0 8px;color:#1a3c5e;text-transform
   <tbody>
     <?php foreach ($work_orders as $wo): ?>
     <tr>
-      <td style="font-family:monospace;font-weight:600;"><?= htmlspecialchars($wo->wo_number); ?></td>
-      <td><?= htmlspecialchars(isset($wo->registration_no) ? $wo->registration_no : '—'); ?></td>
-      <td><?= htmlspecialchars($wo->type); ?></td>
+      <td style="font-family:monospace;font-weight:600;"><?= htmlspecialchars((string)($wo->wo_number)); ?></td>
+      <td><?= htmlspecialchars((string)(isset($wo->registration_no) ? $wo->registration_no : '—')); ?></td>
+      <td><?= htmlspecialchars((string)($wo->type)); ?></td>
       <td>
-        <?php $pc = strtolower(isset($wo->priority) ? $wo->priority : ''); ?>
-        <span class="badge badge-<?= $pc; ?>"><?= htmlspecialchars(isset($wo->priority) ? $wo->priority : ''); ?></span>
+        <?php $pc = strtolower((string)(isset($wo->priority) ? $wo->priority : '')); ?>
+        <span class="badge badge-<?= $pc; ?>"><?= htmlspecialchars((string)(isset($wo->priority) ? $wo->priority : '')); ?></span>
       </td>
       <td>
-        <?php $sc = strtolower(str_replace(' ','-',isset($wo->status)?$wo->status:'')); ?>
-        <span class="badge badge-<?= $sc; ?>"><?= htmlspecialchars($wo->status??''); ?></span>
+        <?php $sc = strtolower((string)(str_replace(' ','-',isset($wo->status)?$wo->status:''))); ?>
+        <span class="badge badge-<?= $sc; ?>"><?= htmlspecialchars((string)($wo->status??'')); ?></span>
       </td>
-      <td><?php $t=isset($wo->title)?$wo->title:''; echo htmlspecialchars(strlen($t)>55?substr($t,0,52).'...':$t); ?></td>
-      <td><?= htmlspecialchars(isset($wo->assigned_name) && $wo->assigned_name ? $wo->assigned_name : '—'); ?></td>
+      <td><?php $t=isset($wo->title)?$wo->title:''; echo htmlspecialchars((string)(strlen((string)($t))>55?substr($t,0,52).'...':$t)); ?></td>
+      <td><?= htmlspecialchars((string)(isset($wo->assigned_name) && $wo->assigned_name ? $wo->assigned_name : '—')); ?></td>
     </tr>
     <?php endforeach; ?>
   </tbody>
@@ -79,10 +79,10 @@ h2{font-size:12pt;font-weight:700;margin:16px 0 8px;color:#1a3c5e;text-transform
     <?php foreach ($attendance as $a): ?>
     <?php $status = isset($a->status) ? $a->status : ''; ?>
     <tr>
-      <td style="font-weight:600;"><?= htmlspecialchars(isset($a->full_name) ? $a->full_name : ''); ?></td>
-      <td><span class="badge badge-<?= strtolower($status); ?>"><?= htmlspecialchars($status); ?></span></td>
-      <td><?= htmlspecialchars(isset($a->check_in) ? $a->check_in : '—'); ?></td>
-      <td><?= htmlspecialchars(isset($a->check_out) ? $a->check_out : '—'); ?></td>
+      <td style="font-weight:600;"><?= htmlspecialchars((string)(isset($a->full_name) ? $a->full_name : '')); ?></td>
+      <td><span class="badge badge-<?= strtolower((string)($status)); ?>"><?= htmlspecialchars((string)($status)); ?></span></td>
+      <td><?= htmlspecialchars((string)(isset($a->check_in) ? $a->check_in : '—')); ?></td>
+      <td><?= htmlspecialchars((string)(isset($a->check_out) ? $a->check_out : '—')); ?></td>
     </tr>
     <?php endforeach; ?>
   </tbody>

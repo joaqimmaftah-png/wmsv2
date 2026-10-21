@@ -150,15 +150,15 @@ class Inspections extends MY_Controller {
         $id = $template ? (int)$template->id : 0;
         $errors = array();
 
-        $code = strtolower(trim(isset($post['code']) ? $post['code'] : ''));
+        $code = strtolower((string)(trim((string)(isset($post['code']) ? $post['code'] : ''))));
         if ($code === '' || !preg_match('/^[a-z0-9_]{2,50}$/D', $code)) {
             $errors[] = 'The code must be 2–50 characters: lower-case letters, digits and underscores only.';
         } elseif ($this->Inspection_model->template_code_taken($code, $id ?: NULL)) {
             $errors[] = 'Another template already uses the code "' . $code . '".';
         }
 
-        $name_en = trim(isset($post['name_en']) ? $post['name_en'] : '');
-        $name_fr = trim(isset($post['name_fr']) ? $post['name_fr'] : '');
+        $name_en = trim((string)(isset($post['name_en']) ? $post['name_en'] : ''));
+        $name_fr = trim((string)(isset($post['name_fr']) ? $post['name_fr'] : ''));
         if ($name_en === '' || $name_fr === '') {
             $errors[] = 'Both the English and the French template name are required.';
         }
@@ -167,7 +167,7 @@ class Inspections extends MY_Controller {
 
         $columns_json = NULL;
         if ($layout === 'matrix') {
-            $raw = trim(isset($post['columns_json']) ? (string)$post['columns_json'] : '');
+            $raw = trim((string)(isset($post['columns_json']) ? (string)$post['columns_json'] : ''));
             $cols = json_decode($raw, TRUE);
             if (!is_array($cols) || empty($cols)) {
                 $errors[] = 'A matrix template needs a non-empty columns JSON array '
@@ -197,8 +197,8 @@ class Inspections extends MY_Controller {
         foreach ($rows as $r) {
             if (!is_array($r)) continue;
             $row_type = (isset($r['row_type']) && $r['row_type'] === 'section') ? 'section' : 'item';
-            $text_en  = trim(isset($r['text_en']) ? (string)$r['text_en'] : '');
-            $text_fr  = trim(isset($r['text_fr']) ? (string)$r['text_fr'] : '');
+            $text_en  = trim((string)(isset($r['text_en']) ? (string)$r['text_en'] : ''));
+            $text_fr  = trim((string)(isset($r['text_fr']) ? (string)$r['text_fr'] : ''));
             if ($text_en === '' && $text_fr === '') continue;   // blank spare row
 
             $items[] = array(
@@ -210,6 +210,7 @@ class Inspections extends MY_Controller {
                 'text_en'     => $text_en,
                 'text_fr'     => $text_fr,
                 'na_columns'  => isset($r['na_columns']) ? $r['na_columns'] : '',
+                'priority'    => isset($r['priority']) ? trim((string)$r['priority']) : '',
             );
         }
         if (empty($items)) {
@@ -220,12 +221,12 @@ class Inspections extends MY_Controller {
             'code'          => $code,
             'name_en'       => $name_en,
             'name_fr'       => $name_fr,
-            'category_en'   => trim(isset($post['category_en']) ? $post['category_en'] : '') ?: 'General',
-            'category_fr'   => trim(isset($post['category_fr']) ? $post['category_fr'] : '') ?: 'Général',
+            'category_en'   => trim((string)(isset($post['category_en']) ? $post['category_en'] : '')) ?: 'General',
+            'category_fr'   => trim((string)(isset($post['category_fr']) ? $post['category_fr'] : '')) ?: 'Général',
             'layout_type'   => $layout,
             'columns_json'  => $columns_json,
-            'meter_label_en'=> substr(trim(isset($post['meter_label_en']) ? $post['meter_label_en'] : 'SMR') ?: 'SMR', 0, 20),
-            'meter_label_fr'=> substr(trim(isset($post['meter_label_fr']) ? $post['meter_label_fr'] : 'SMR') ?: 'SMR', 0, 20),
+            'meter_label_en'=> substr(trim((string)(isset($post['meter_label_en']) ? $post['meter_label_en'] : 'SMR')) ?: 'SMR', 0, 20),
+            'meter_label_fr'=> substr(trim((string)(isset($post['meter_label_fr']) ? $post['meter_label_fr'] : 'SMR')) ?: 'SMR', 0, 20),
             'active'        => !empty($post['active']) ? 1 : 0,
         );
 
@@ -259,7 +260,7 @@ class Inspections extends MY_Controller {
             if (!is_array($r)) continue;
             $text_en = isset($r['text_en']) ? (string)$r['text_en'] : '';
             $text_fr = isset($r['text_fr']) ? (string)$r['text_fr'] : '';
-            if (trim($text_en) === '' && trim($text_fr) === '') continue;
+            if (trim((string)($text_en)) === '' && trim((string)($text_fr)) === '') continue;
             $i++;
             $items[] = (object) array(
                 'id'          => isset($r['id']) ? (int)$r['id'] : 0,
@@ -271,6 +272,7 @@ class Inspections extends MY_Controller {
                 'text_en'     => $text_en,
                 'text_fr'     => $text_fr,
                 'na_columns'  => isset($r['na_columns']) ? (string)$r['na_columns'] : '',
+                'priority'    => isset($r['priority']) && in_array($r['priority'], array('P1', 'P2', 'P3'), TRUE) ? $r['priority'] : NULL,
             );
         }
         return $items;
@@ -467,6 +469,10 @@ class Inspections extends MY_Controller {
        RECORDS — list submitted inspections for a template
     ───────────────────────────────────────────────────── */
     public function records($code = NULL) {
+        if ($code === NULL || $code === '') {
+            redirect('inspections');
+            return;
+        }
         $template = $this->Inspection_model->get_template($code);
         if (!$template) show_404();
 
@@ -595,7 +601,7 @@ class Inspections extends MY_Controller {
             $this->_pdf_fail($message
                 . (ENVIRONMENT !== 'production' ? '<br><br><strong>'
                     . ($pdf_lang === 'fr' ? 'Détails :' : 'Details:')
-                    . '</strong><br><pre>' . htmlspecialchars($e->getMessage()) . '</pre>' : ''), $pdf_lang);
+                    . '</strong><br><pre>' . htmlspecialchars((string)($e->getMessage())) . '</pre>' : ''), $pdf_lang);
             return;
         }
 
@@ -607,10 +613,10 @@ class Inspections extends MY_Controller {
             return;
         }
 
-        $filename = strtoupper($template->code) . '_' . $id . '.pdf';
+        $filename = strtoupper((string)($template->code)) . '_' . $id . '.pdf';
         header('Content-Type: application/pdf');
         header('Content-Disposition: inline; filename="' . $filename . '"');
-        header('Content-Length: ' . strlen($pdf_bytes));
+        header('Content-Length: ' . strlen((string)($pdf_bytes)));
         echo $pdf_bytes;
         exit;
     }
@@ -623,7 +629,7 @@ class Inspections extends MY_Controller {
         if (!headers_sent()) header('HTTP/1.1 500 Internal Server Error');
         $title = $lang === 'fr' ? 'Impossible de générer le PDF' : 'Could not generate the PDF';
         echo '<div style="font-family:sans-serif;max-width:700px;margin:60px auto;padding:24px;border:1px solid #e2b8b8;background:#fff5f5;border-radius:10px;color:#7a1f1f;">'
-           . '<h3 style="margin-top:0;">' . htmlspecialchars($title) . '</h3>'
+           . '<h3 style="margin-top:0;">' . htmlspecialchars((string)($title)) . '</h3>'
            . '<p>' . $message . '</p>'
            . '</div>';
     }
@@ -653,7 +659,7 @@ class Inspections extends MY_Controller {
         foreach ($rows as $label => $ok) {
             $color = $ok ? '#1a7a34' : '#c0392b';
             $icon  = $ok ? '&#10004;' : '&#10008;';
-            echo '<tr><td style="padding:8px;border-bottom:1px solid #eee;">' . htmlspecialchars($label) . '</td>'
+            echo '<tr><td style="padding:8px;border-bottom:1px solid #eee;">' . htmlspecialchars((string)($label)) . '</td>'
                . '<td style="padding:8px;border-bottom:1px solid #eee;color:' . $color . ';font-weight:bold;">' . $icon . '</td></tr>';
         }
         echo '</table></div>';
@@ -672,7 +678,7 @@ class Inspections extends MY_Controller {
             $first = $last = '';
         }
 
-        $name = trim($first . ' ' . $last);
+        $name = trim((string)($first . ' ' . $last));
         if ($name !== '') return $name;
 
         // Older sessions may not carry user_data; fall back to the authenticated ID.

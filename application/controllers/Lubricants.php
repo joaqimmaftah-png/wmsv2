@@ -106,11 +106,14 @@ class Lubricants extends MY_Controller {
                 $this->session->set_flashdata('error', 'Access denied.');
                 redirect('lubricants/types');
             }
+            $cost = $this->input->post('unit_cost', TRUE);
             $data = [
-                'name'        => $this->input->post('name', TRUE),
+                'name'        => trim((string)$this->input->post('name', TRUE)),
                 'category'    => $this->input->post('category', TRUE),
-                'unit'        => $this->input->post('unit', TRUE),
-                'description' => $this->input->post('description', TRUE),
+                'grade'       => $this->input->post('grade', TRUE) ?: NULL,
+                'unit'        => $this->input->post('unit', TRUE) ?: 'L',
+                'unit_cost'   => ($cost !== '' && $cost !== null && is_numeric($cost)) ? (float)$cost : NULL,
+                'description' => $this->input->post('description', TRUE) ?: NULL,
             ];
             $this->db->insert('lube_types', $data);
             $this->session->set_flashdata('success', 'Lube type added.');
@@ -124,14 +127,23 @@ class Lubricants extends MY_Controller {
 
     public function specifications() {
         if ($this->input->post()) {
+            $eq_type_id   = (int)$this->input->post('equipment_type_id', TRUE);
+            $lube_type_id = (int)$this->input->post('lube_type_id', TRUE);
+            $rec_raw      = $this->input->post('recommended_qty', TRUE);
+            $int_raw      = $this->input->post('service_interval_hours', TRUE);
             $data = [
-                'equipment_type_id'       => $this->input->post('equipment_type_id', TRUE),
-                'lube_type_id'            => $this->input->post('lube_type_id', TRUE),
-                'recommended_qty'         => $this->input->post('recommended_qty', TRUE),
-                'service_interval_hours'  => $this->input->post('service_interval_hours', TRUE) ?: NULL,
-                'notes'                   => $this->input->post('notes', TRUE),
+                'equipment_type_id'       => $eq_type_id,
+                'lube_type_id'            => $lube_type_id,
+                'recommended_qty'         => ($rec_raw !== '' && $rec_raw !== null) ? (float)$rec_raw : 0.0,
+                'service_interval_hours'  => ($int_raw !== '' && $int_raw !== null && is_numeric($int_raw)) ? (int)$int_raw : NULL,
+                'notes'                   => $this->input->post('notes', TRUE) ?: NULL,
             ];
-            $this->db->insert('lube_specifications', $data);
+            $existing = $this->Lubricant_model->get_spec($eq_type_id, $lube_type_id);
+            if ($existing) {
+                $this->db->where('id', $existing->id)->update('lube_specifications', $data);
+            } else {
+                $this->db->insert('lube_specifications', $data);
+            }
             $this->session->set_flashdata('success', 'Specification saved.');
             redirect('lubricants/specifications');
         }
@@ -145,18 +157,24 @@ class Lubricants extends MY_Controller {
 
     public function budget() {
         if ($this->input->post()) {
-            $year  = $this->input->post('year', TRUE);
-            $month = $this->input->post('month', TRUE);
+            $year  = (int)$this->input->post('year', TRUE);
+            $month = (int)$this->input->post('month', TRUE);
             $items = $this->input->post('budget');
-            foreach ($items as $lube_id => $vals) {
-                $this->db->replace('lube_budget', [
-                    'lube_type_id' => $lube_id,
-                    'year'         => $year,
-                    'month'        => $month,
-                    'budget_qty'   => $vals['qty'],
-                    'unit_cost'    => $vals['cost'],
-                    'budget_cost'  => $vals['qty'] * $vals['cost'],
-                ]);
+            if (is_array($items)) {
+                foreach ($items as $lube_id => $vals) {
+                    $qty_raw  = isset($vals['qty'])  ? trim((string)$vals['qty'])  : '';
+                    $cost_raw = isset($vals['cost']) ? trim((string)$vals['cost']) : '';
+                    $qty      = ($qty_raw  !== '' && is_numeric($qty_raw))  ? (float)$qty_raw  : 0.0;
+                    $cost     = ($cost_raw !== '' && is_numeric($cost_raw)) ? (float)$cost_raw : 0.0;
+                    $this->db->replace('lube_budget', [
+                        'lube_type_id' => (int)$lube_id,
+                        'year'         => $year,
+                        'month'        => $month,
+                        'budget_qty'   => $qty,
+                        'unit_cost'    => $cost,
+                        'budget_cost'  => round($qty * $cost, 2),
+                    ]);
+                }
             }
             $this->session->set_flashdata('success', 'Budget saved.');
             redirect('lubricants/budget');

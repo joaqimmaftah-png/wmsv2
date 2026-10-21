@@ -23,13 +23,13 @@
           <div>
             <label class="form-label">Currency</label>
             <?php $site_currency = isset($s['currency']) && $s['currency']->setting_value !== ''
-                    ? strtoupper($s['currency']->setting_value) : wms_site_currency(); ?>
+                    ? strtoupper((string)($s['currency']->setting_value)) : wms_site_currency(); ?>
             <select name="settings[currency]" class="form-select">
               <?php foreach (wms_currencies() as $c): ?>
               <option value="<?= $c ?>" <?= $site_currency === $c ? 'selected' : '' ?>><?= $c ?></option>
               <?php endforeach; ?>
               <?php if (!in_array($site_currency, wms_currencies(), true)): ?>
-              <option value="<?= htmlspecialchars($site_currency) ?>" selected><?= htmlspecialchars($site_currency) ?> (current)</option>
+              <option value="<?= htmlspecialchars((string)($site_currency)) ?>" selected><?= htmlspecialchars((string)($site_currency)) ?> (current)</option>
               <?php endif; ?>
             </select>
             <div class="cs" style="margin-top:4px;">Used for spend totals and as the default in every currency picker.</div>
@@ -66,13 +66,13 @@
           <div>
             <label class="form-label"><?= $rlabel['weekly_open_hours'] ?></label>
             <input type="number" min="1" name="settings[weekly_open_hours]" class="form-control"
-                   value="<?= htmlspecialchars($rval('weekly_open_hours', $rdef['weekly_open_hours'])) ?>">
+                   value="<?= htmlspecialchars((string)($rval('weekly_open_hours', $rdef['weekly_open_hours']))) ?>">
             <div class="cs" style="margin-top:4px;"><?= $rdesc['weekly_open_hours'] ?></div>
           </div>
           <div>
             <label class="form-label"><?= $rlabel['daily_open_hours'] ?></label>
             <input type="number" min="1" max="24" name="settings[daily_open_hours]" class="form-control"
-                   value="<?= htmlspecialchars($rval('daily_open_hours', $rdef['daily_open_hours'])) ?>">
+                   value="<?= htmlspecialchars((string)($rval('daily_open_hours', $rdef['daily_open_hours']))) ?>">
             <div class="cs" style="margin-top:4px;"><?= $rdesc['daily_open_hours'] ?></div>
           </div>
         </div>
@@ -80,7 +80,7 @@
           <div>
             <label class="form-label"><?= $rlabel['default_availability_target'] ?></label>
             <input type="text" name="settings[default_availability_target]" class="form-control"
-                   value="<?= htmlspecialchars($rval('default_availability_target', $rdef['default_availability_target'])) ?>">
+                   value="<?= htmlspecialchars((string)($rval('default_availability_target', $rdef['default_availability_target']))) ?>">
             <div class="cs" style="margin-top:4px;">0.88 or 88 = 88 % — <?= $rdesc['default_availability_target'] ?></div>
           </div>
           <div>
@@ -118,7 +118,7 @@
           <div>
             <label class="form-label"><?= $rlabel['pm_meter_stale_days'] ?></label>
             <input type="number" min="0" name="settings[pm_meter_stale_days]" class="form-control"
-                   value="<?= htmlspecialchars($rval('pm_meter_stale_days', $rdef['pm_meter_stale_days'])) ?>">
+                   value="<?= htmlspecialchars((string)($rval('pm_meter_stale_days', $rdef['pm_meter_stale_days']))) ?>">
             <div class="cs" style="margin-top:4px;">0 = off — <?= $rdesc['pm_meter_stale_days'] ?></div>
           </div>
         </div>
@@ -147,7 +147,7 @@
           <div>
             <label class="form-label"><?= $flabel['standing_allowance_default_hours'] ?></label>
             <input type="number" min="0" max="24" step="0.5" name="settings[standing_allowance_default_hours]" class="form-control"
-                   value="<?= htmlspecialchars($rval('standing_allowance_default_hours', $rdef['standing_allowance_default_hours'])) ?>">
+                   value="<?= htmlspecialchars((string)($rval('standing_allowance_default_hours', $rdef['standing_allowance_default_hours']))) ?>">
             <div class="cs" style="margin-top:4px;"><?= $rdesc['standing_allowance_default_hours'] ?></div>
           </div>
           <div>
@@ -164,20 +164,20 @@
           <div>
             <label class="form-label"><?= $flabel['unplanned_allowance_default_hours'] ?></label>
             <input type="number" min="0" max="24" step="0.5" name="settings[unplanned_allowance_default_hours]" class="form-control"
-                   value="<?= htmlspecialchars($rval('unplanned_allowance_default_hours', $rdef['unplanned_allowance_default_hours'])) ?>">
+                   value="<?= htmlspecialchars((string)($rval('unplanned_allowance_default_hours', $rdef['unplanned_allowance_default_hours']))) ?>">
             <div class="cs" style="margin-top:4px;"><?= $rdesc['unplanned_allowance_default_hours'] ?></div>
           </div>
           <div>
             <label class="form-label"><?= $flabel['unplanned_allowance_lookback_weeks'] ?></label>
             <input type="number" min="1" max="104" name="settings[unplanned_allowance_lookback_weeks]" class="form-control"
-                   value="<?= htmlspecialchars($rval('unplanned_allowance_lookback_weeks', $rdef['unplanned_allowance_lookback_weeks'])) ?>">
+                   value="<?= htmlspecialchars((string)($rval('unplanned_allowance_lookback_weeks', $rdef['unplanned_allowance_lookback_weeks']))) ?>">
             <div class="cs" style="margin-top:4px;"><?= $rdesc['unplanned_allowance_lookback_weeks'] ?></div>
           </div>
         </div>
         <div>
           <label class="form-label"><?= $flabel['standing_allowance_hours'] ?></label>
           <textarea name="settings[standing_allowance_hours]" class="form-control" rows="3" spellcheck="false"
-                    style="font-family:ui-monospace,monospace;font-size:12px;"><?= htmlspecialchars($rval('standing_allowance_hours', $rdef['standing_allowance_hours'])) ?></textarea>
+                    style="font-family:ui-monospace,monospace;font-size:12px;"><?= htmlspecialchars((string)($rval('standing_allowance_hours', $rdef['standing_allowance_hours']))) ?></textarea>
           <div class="cs" style="margin-top:4px;"><?= $rdesc['standing_allowance_hours'] ?></div>
         </div>
         <div>
@@ -200,14 +200,14 @@
           <div>
             <label class="form-label">Certification Expiry Alert (days)</label>
             <input type="number" min="1" max="365" name="settings[cert_alert_days]" class="form-control"
-                   value="<?= htmlspecialchars($rval('cert_alert_days', $rdef['cert_alert_days'])) ?>">
+                   value="<?= htmlspecialchars((string)($rval('cert_alert_days', $rdef['cert_alert_days']))) ?>">
             <div class="cs" style="margin-top:4px;"><?= $rdesc['cert_alert_days'] ?></div>
           </div>
         </div>
         <div>
           <label class="form-label">Leave Entitlements (days per year, JSON)</label>
           <textarea name="settings[leave_entitlements]" class="form-control" rows="3" spellcheck="false"
-                    style="font-family:ui-monospace,monospace;font-size:12px;"><?= htmlspecialchars($rval('leave_entitlements', $rdef['leave_entitlements'])) ?></textarea>
+                    style="font-family:ui-monospace,monospace;font-size:12px;"><?= htmlspecialchars((string)($rval('leave_entitlements', $rdef['leave_entitlements']))) ?></textarea>
           <div class="cs" style="margin-top:4px;"><?= $rdesc['leave_entitlements'] ?></div>
         </div>
       </div>

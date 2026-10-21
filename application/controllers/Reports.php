@@ -309,10 +309,10 @@ class Reports extends MY_Controller {
     /* ── Asset register helpers ───────────────────────────── */
 
     private function _clean_upload_error($msg) {
-        $msg = trim(strip_tags((string)$msg));
+        $msg = trim((string)(strip_tags((string)$msg)));
         $msg = str_replace(array('The filetype you are attempting to upload is not allowed.',
                                  'The uploaded file exceeds the maximum allowed size.'), '', $msg);
-        return trim($msg) !== '' ? trim($msg) : 'the file could not be uploaded. Save the workbook as .xlsx and try again.';
+        return trim((string)($msg)) !== '' ? trim((string)($msg)) : 'the file could not be uploaded. Save the workbook as .xlsx and try again.';
     }
 
     private function _tmp_path($fname) {
@@ -417,7 +417,7 @@ class Reports extends MY_Controller {
 
         // Title
         $xlsx->setRowHeight(1, 28);
-        $tc = [['v'=>'MONTHLY MAINTENANCE PLAN — '.strtoupper(date('F Y',strtotime($plan['month'].'-01'))),'s'=>$sTitle]];
+        $tc = [['v'=>'MONTHLY MAINTENANCE PLAN — '.strtoupper((string)(date('F Y',strtotime($plan['month'].'-01')))),'s'=>$sTitle]];
         for ($i=1;$i<10;$i++) $tc[] = ['v'=>'','s'=>$sTitle];
         $xlsx->writeRowStyled($tc);
         $xlsx->mergeCells('A1','J1');
@@ -441,13 +441,13 @@ class Reports extends MY_Controller {
             foreach ($wk['pm'] as $pm) {
                 $xlsx->setRowHeight($row, 24);
                 $xlsx->writeRowStyled([
-                    ['v'=>strtoupper($pm->equip_type??''),'s'=>$sCellC],
+                    ['v'=>strtoupper((string)($pm->equip_type??'')),'s'=>$sCellC],
                     ['v'=>$pm->registration_no,'s'=>$sCellC],
                     ['v'=>($pm->brand??'').' '.($pm->model??''),'s'=>$sPm],
                     ['v'=>$pm->location,'s'=>$sCellC],
                     ['v'=>$pm->schedule_name,'s'=>$sPm],
                     ['v'=>$pm->next_due_date ? date('d/m/Y',strtotime($pm->next_due_date)) : '','s'=>$sCellC],
-                    ['v'=>$pm->next_due_hours ? number_format($pm->next_due_hours,0).' h' : '','s'=>$sCellC],
+                    ['v'=>$pm->next_due_hours ? number_format((float)($pm->next_due_hours),0).' h' : '','s'=>$sCellC],
                     ['v'=>'PM','s'=>$sCellC],
                     ['v'=>$pm->last_done_date ? date('d/m/Y',strtotime($pm->last_done_date)) : '','s'=>$sCellC],
                     ['v'=>'Scheduled','s'=>$sCellC],
@@ -468,7 +468,7 @@ class Reports extends MY_Controller {
                 $ps = $sPrio[$wo->priority] ?? $sCellC;
                 $xlsx->setRowHeight($row, 24);
                 $xlsx->writeRowStyled([
-                    ['v'=>strtoupper($wo->equip_type??''),'s'=>$sCellC],
+                    ['v'=>strtoupper((string)($wo->equip_type??'')),'s'=>$sCellC],
                     ['v'=>$wo->registration_no,'s'=>$sCellC],
                     ['v'=>($wo->brand??'').' '.($wo->model??''),'s'=>$sCor],
                     ['v'=>$wo->location,'s'=>$sCellC],
@@ -603,7 +603,7 @@ class Reports extends MY_Controller {
             $xlsx->setRowHeight(null,22);
             $xlsx->writeRowStyled([
                 ['v'=>$eq['type'],'s'=>$sCell],['v'=>$eq['machine_id'],'s'=>$sCell],
-                ['v'=>trim($eq['model']),'s'=>$sCell],['v'=>$eq['location'],'s'=>$sCell],
+                ['v'=>trim((string)($eq['model'])),'s'=>$sCell],['v'=>$eq['location'],'s'=>$sCell],
                 ['v'=>$eq['breakdowns'],'s'=>$sCell],['v'=>$eq['downtime'],'s'=>$sCell],
                 ['v'=>$eq['mttr'],'s'=>$sCell],['v'=>$eq['mtbf'],'s'=>$sCell],
                 ['v'=>$av,'s'=>$sp],
@@ -664,7 +664,7 @@ class Reports extends MY_Controller {
                     ['v'=>$pm->schedule_name,'s'=>$sPm],
                     ['v'=>$pm->interval_value.' '.$pm->interval_type,'s'=>$sCellC],
                     ['v'=>$pm->next_due_date ? date('d/m/Y',strtotime($pm->next_due_date)) : '','s'=>$sCellC],
-                    ['v'=>$pm->next_due_hours ? number_format($pm->next_due_hours,0).' h' : '','s'=>$sCellC],
+                    ['v'=>$pm->next_due_hours ? number_format((float)($pm->next_due_hours),0).' h' : '','s'=>$sCellC],
                 ]);
                 $row++;
             }
@@ -707,7 +707,7 @@ class Reports extends MY_Controller {
             foreach ($kits as $kit) {
                 // Machine header
                 $xlsx->setRowHeight($row,24);
-                $mc=[['v'=>'🔧 '.$kit['machine_id'].' — '.$kit['model'].' | '.$kit['location'].' | '.number_format($kit['hours'],0).' h','s'=>$sMach]];
+                $mc=[['v'=>'🔧 '.$kit['machine_id'].' — '.$kit['model'].' | '.$kit['location'].' | '.number_format((float)($kit['hours']),0).' h','s'=>$sMach]];
                 for($i=1;$i<7;$i++) $mc[]=['v'=>'','s'=>$sMach];
                 $xlsx->writeRowStyled($mc); $xlsx->mergeCells("A{$row}","G{$row}"); $row++;
 
@@ -1001,7 +1001,7 @@ class Reports extends MY_Controller {
 
         $groups = [];
         foreach ($equipment as $eq) {
-            $type = strtoupper($eq->equip_type ?: 'OTHER');
+            $type = strtoupper((string)($eq->equip_type ?: 'OTHER'));
             if (!isset($groups[$type])) {
                 $groups[$type] = ['type' => $type, 'machines' => []];
             }
@@ -1014,8 +1014,8 @@ class Reports extends MY_Controller {
             $actions      = [];
             $wo_dates     = [];
             foreach ($eq_wos as $idx => $wo) {
-                $obs = trim($wo->symptoms ?? ($wo->description ?? ($wo->title ?? '')));
-                $act = trim($wo->action_taken ?? '');
+                $obs = trim((string)($wo->symptoms ?? ($wo->description ?? ($wo->title ?? ''))));
+                $act = trim((string)($wo->action_taken ?? ''));
                 $dt  = !empty($wo->start_datetime) ? date('d/m/Y', strtotime($wo->start_datetime)) : 'N/A';
                 if ($obs) $observations[] = ($idx+1).'_ '.$obs;
                 if ($act) $actions[]      = ($idx+1).'_ '.$act;
@@ -1182,7 +1182,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
   <div class="hdr">
     <div>
       <div class="hdr-title">WORKSHOP WEEKLY REPORT</div>
-      <div class="hdr-sub"><?= htmlspecialchars($site) ?> &nbsp;|&nbsp; Week: <?= $wkLabel ?> &nbsp;|&nbsp; <?= $totalAvail ?> of <?= $totalEq ?> machines up &nbsp;|&nbsp; target <?= $fleetTarget ?>%</div>
+      <div class="hdr-sub"><?= htmlspecialchars((string)($site)) ?> &nbsp;|&nbsp; Week: <?= $wkLabel ?> &nbsp;|&nbsp; <?= $totalAvail ?> of <?= $totalEq ?> machines up &nbsp;|&nbsp; target <?= $fleetTarget ?>%</div>
     </div>
     <div style="display:flex;gap:10px;align-items:flex-start;">
       <div style="text-align:right;">
@@ -1207,7 +1207,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
       $kpiColor = $kpi >= $tgt ? '#375623' : ($kpi >= $tgt - 10 ? '#7F6000' : '#C00000');
     ?>
     <div class="sum-box">
-      <div class="sum-type"><?= htmlspecialchars($g['type']) ?>s</div>
+      <div class="sum-type"><?= htmlspecialchars((string)($g['type'])) ?>s</div>
       <div class="sum-nums"><?= $g['available'] ?> avail / <?= $g['down'] ?> down / <?= $g['total'] ?> total</div>
       <div class="sum-kpi" style="color:<?= $kpiColor ?>"><?= $kpi ?>%</div>
       <div style="font-size:5.5pt;color:#555;">Target: <?= $tgt ?>%</div>
@@ -1256,13 +1256,13 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
       $stClass  = $m['status_code']==='O' ? 'td-op' : ($m['status_code']==='WSP' ? 'td-wsp' : 'td-bd');
     ?>
     <tr>
-      <td class="td-type"><?= $first ? htmlspecialchars($g['type']) : '' ?></td>
+      <td class="td-type"><?= $first ? htmlspecialchars((string)($g['type'])) : '' ?></td>
       <td class="td-sum"><?= $first ? $g['total'] : '' ?></td>
       <td class="td-sum" style="color:#375623;"><?= $first ? $g['available'] : '' ?></td>
       <td class="td-sum" style="color:<?= $g['down']>0?'#C00000':'#555' ?>;"><?= $first ? $g['down'] : '' ?></td>
-      <td class="td-id"><?= htmlspecialchars($m['machine_id']) ?></td>
-      <td><?= htmlspecialchars($m['model']) ?></td>
-      <td class="td-c"><?= htmlspecialchars($m['location']) ?></td>
+      <td class="td-id"><?= htmlspecialchars((string)($m['machine_id'])) ?></td>
+      <td><?= htmlspecialchars((string)($m['model'])) ?></td>
+      <td class="td-c"><?= htmlspecialchars((string)($m['location'])) ?></td>
       <td class="td-c" style="font-size:6pt;"><?= $m['start_date'] ?></td>
       <td class="td-c" style="<?= $m['days_down']>7?'color:#C00000;font-weight:700':'' ?>"><?= $m['days_down']>0 ? $m['days_down'] : '' ?></td>
       <td class="<?= $avClass ?>"><?= $avail ?>%</td>
@@ -1271,12 +1271,12 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
       <td class="td-c" style="color:<?= $analysisColor ?>;font-weight:700;"><?= $analysis ?></td>
       <td style="font-size:6pt;">
         <?php foreach ($m['observations'] as $oi => $obs): ?>
-        <div class="ol-item"><?= htmlspecialchars($obs) ?></div>
+        <div class="ol-item"><?= htmlspecialchars((string)($obs)) ?></div>
         <?php endforeach; ?>
       </td>
       <td style="font-size:6pt;">
         <?php foreach ($m['actions'] as $ai => $act): ?>
-        <div class="ol-item"><?= htmlspecialchars($act) ?></div>
+        <div class="ol-item"><?= htmlspecialchars((string)($act)) ?></div>
         <?php if (isset($m['wo_dates'][$ai]) && $m['wo_dates'][$ai]): ?>
         <div style="color:#888;font-size:5.5pt;"><?= $m['wo_dates'][$ai] ?></div>
         <?php endif; ?>
@@ -1299,7 +1299,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
       $kpiColor = $kpi >= $ctgt ? '#375623' : ($kpi >= $ctgt - 10 ? '#7F6000' : '#C00000');
     ?>
     <div class="chart-box">
-      <div class="chart-title">Weekly <?= htmlspecialchars($g['type']) ?>s KPI</div>
+      <div class="chart-title">Weekly <?= htmlspecialchars((string)($g['type'])) ?>s KPI</div>
       <div class="chart-kpi" style="color:<?= $kpiColor ?>"><?= $kpi ?>%</div>
       <div class="bars">
         <?php foreach ($g['machines'] as $m):
@@ -1311,7 +1311,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         <div class="bar-wrap">
           <div class="bar-val" style="color:<?= $barColor ?>"><?= $avail ?>%</div>
           <div class="bar" style="height:<?= $barH ?>px;background:<?= $barColor ?>;opacity:.85;"></div>
-          <div class="bar-lbl"><?= htmlspecialchars($m['machine_id']) ?></div>
+          <div class="bar-lbl"><?= htmlspecialchars((string)($m['machine_id'])) ?></div>
         </div>
         <?php endforeach; ?>
       </div>
@@ -1421,7 +1421,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                     ['v' => $tgtPct,                   's' => $sTgt],
                     ['v' => $anaText,                  's' => $sAna],
                     ['v' => $obsText,                  's' => $sCell],
-                    ['v' => trim($actText),            's' => $sCell],
+                    ['v' => trim((string)($actText)),            's' => $sCell],
                     ['v' => $m['deadline'],            's' => $sCellC],
                     ['v' => $m['status_code'],         's' => $sStatus],
                     ['v' => $m['status_label'],        's' => $sStatus],
@@ -1553,7 +1553,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         // Group by type
         $groups = [];
         foreach ($equipment as $eq) {
-            $type = strtoupper($eq->equip_type ?: 'OTHER');
+            $type = strtoupper((string)($eq->equip_type ?: 'OTHER'));
             if (!isset($groups[$type])) {
                 $groups[$type] = ['type'=>$type, 'machines'=>[]];
             }
@@ -1726,7 +1726,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
   <div class="hdr">
     <div>
       <div class="hdr-title">WORKSHOP DAILY REPORT</div>
-      <div class="hdr-date"><?= htmlspecialchars($site) ?> &nbsp;|&nbsp; <?= date('l, d F Y', strtotime($date)) ?> &nbsp;|&nbsp; <?= $totalAvail ?> of <?= $totalEq ?> machines up &nbsp;|&nbsp; target <?= $fleetTarget ?>%</div>
+      <div class="hdr-date"><?= htmlspecialchars((string)($site)) ?> &nbsp;|&nbsp; <?= date('l, d F Y', strtotime($date)) ?> &nbsp;|&nbsp; <?= $totalAvail ?> of <?= $totalEq ?> machines up &nbsp;|&nbsp; target <?= $fleetTarget ?>%</div>
     </div>
     <div style="text-align:right;font-size:8pt;color:#555;">
       Overall Availability<br>
@@ -1742,7 +1742,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
       $kpiColor = $kpi >= $dtgt ? '#375623' : ($kpi >= $dtgt - 10 ? '#7F6000' : '#C00000');
     ?>
     <div class="sum-box">
-      <div class="sum-type"><?= htmlspecialchars($g['type']) ?>s</div>
+      <div class="sum-type"><?= htmlspecialchars((string)($g['type'])) ?>s</div>
       <div class="sum-nums"><?= $g['available'] ?> avail / <?= $g['down'] ?> down / <?= $g['total'] ?> total</div>
       <div class="sum-kpi" style="color:<?= $kpiColor ?>"><?= $kpi ?>%</div>
     </div>
@@ -1774,21 +1774,21 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
       $pctClass = $avail >= $mtgt ? 'td-pct-good' : ($avail >= $mtgt - 10 ? 'td-pct-warn' : 'td-pct-bad');
     ?>
     <tr>
-      <td class="td-type" rowspan="<?= $first && $count>1 ? '' : '' ?>"><?= $first ? htmlspecialchars($g['type']) : '' ?></td>
+      <td class="td-type" rowspan="<?= $first && $count>1 ? '' : '' ?>"><?= $first ? htmlspecialchars((string)($g['type'])) : '' ?></td>
       <td class="td-sum"><?= $first ? $g['total'] : '' ?></td>
       <td class="td-sum" style="color:#375623;"><?= $first ? $g['available'] : '' ?></td>
       <td class="td-sum" style="color:<?= $g['down']>0?'#C00000':'#555' ?>;"><?= $first ? $g['down'] : '' ?></td>
-      <td class="td-c" style="font-weight:700;color:#1F4E79;"><?= htmlspecialchars($m['machine_id']) ?></td>
-      <td><?= htmlspecialchars($m['model']) ?></td>
-      <td class="td-c"><?= htmlspecialchars($m['location']) ?></td>
-      <td><?= htmlspecialchars($m['observation']) ?></td>
-      <td><?= htmlspecialchars($m['action_taken']) ?></td>
-      <td class="td-c"><?= htmlspecialchars($m['est_time']) ?></td>
+      <td class="td-c" style="font-weight:700;color:#1F4E79;"><?= htmlspecialchars((string)($m['machine_id'])) ?></td>
+      <td><?= htmlspecialchars((string)($m['model'])) ?></td>
+      <td class="td-c"><?= htmlspecialchars((string)($m['location'])) ?></td>
+      <td><?= htmlspecialchars((string)($m['observation'])) ?></td>
+      <td><?= htmlspecialchars((string)($m['action_taken'])) ?></td>
+      <td class="td-c"><?= htmlspecialchars((string)($m['est_time'])) ?></td>
       <td class="<?= $m['status']==='Down'?'td-down':'td-avail' ?>"><?= $m['status'] ?></td>
-      <td class="td-c"><?= htmlspecialchars($m['down_time']) ?></td>
-      <td class="td-c"><?= htmlspecialchars($m['up_time']) ?></td>
+      <td class="td-c"><?= htmlspecialchars((string)($m['down_time'])) ?></td>
+      <td class="td-c"><?= htmlspecialchars((string)($m['up_time'])) ?></td>
       <td class="td-c" style="<?= $m['total_dt']>0?'color:#7F6000;font-weight:700':'' ?>">
-        <?= $m['total_dt'] > 0 ? number_format($m['total_dt'],1) : '' ?>
+        <?= $m['total_dt'] > 0 ? number_format((float)($m['total_dt']),1) : '' ?>
       </td>
       <td class="td-c"><?= $m['start_date'] ? date('d/m/Y',strtotime($m['start_date'])) : '' ?></td>
       <td class="td-c" style="<?= $m['days_down']>7?'color:#C00000;font-weight:700':($m['days_down']>0?'color:#7F6000;font-weight:700':'') ?>">
@@ -1810,7 +1810,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
       $kpiColor = $kpi >= $dtgt ? '#375623' : ($kpi >= $dtgt - 10 ? '#7F6000' : '#C00000');
     ?>
     <div class="chart-box">
-      <div class="chart-title">Daily <?= htmlspecialchars($g['type']) ?>s KPI</div>
+      <div class="chart-title">Daily <?= htmlspecialchars((string)($g['type'])) ?>s KPI</div>
       <div class="chart-kpi" style="color:<?= $kpiColor ?>"><?= $kpi ?>%</div>
       <div class="bars">
         <?php foreach ($g['machines'] as $m):
@@ -1822,7 +1822,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         <div class="bar-wrap">
           <div class="bar-val" style="color:<?= $barColor ?>"><?= $avail ?>%</div>
           <div class="bar" style="height:<?= $barH ?>px;background:<?= $barColor ?>;opacity:.85;"></div>
-          <div class="bar-lbl"><?= htmlspecialchars($m['machine_id']) ?></div>
+          <div class="bar-lbl"><?= htmlspecialchars((string)($m['machine_id'])) ?></div>
         </div>
         <?php endforeach; ?>
       </div>
@@ -2010,8 +2010,8 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                 header('Content-Type: text/csv');
                 header("Content-Disposition: attachment; filename={$filename}");
                 $out = fopen('php://output', 'w');
-                fputcsv($out, ['WO Number','Equipment','Type','Priority','Status','Title','Start','End','Downtime Hrs','Assigned To']);
-                foreach ($rows as $r) fputcsv($out, [$r->wo_number,$r->registration_no,$r->type,$r->priority,$r->status,$r->title,$r->start_datetime,$r->end_datetime,$r->downtime_hours,$r->assigned_name]);
+                fputcsv($out, ['WO Number','Equipment','Type','Priority','Status','Title','Start','End','Downtime Hrs','Assigned To'], ',', '"', '\\');
+                foreach ($rows as $r) fputcsv($out, [$r->wo_number,$r->registration_no,$r->type,$r->priority,$r->status,$r->title,$r->start_datetime,$r->end_datetime,$r->downtime_hours,$r->assigned_name], ',', '"', '\\');
                 fclose($out);
                 break;
             case 'attendance':
@@ -2020,8 +2020,8 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                 header('Content-Type: text/csv');
                 header("Content-Disposition: attachment; filename={$filename}");
                 $out = fopen('php://output', 'w');
-                fputcsv($out, ['Employee ID','Name','Position','Present','Absent','Leave','Rest','Holiday','Working Days','Attendance %']);
-                foreach ($rows as $r) fputcsv($out, [$r->employee_id,$r->full_name,$r->position,$r->present,$r->absent,$r->leave,$r->rest,$r->holiday,$r->total,$r->pct]);
+                fputcsv($out, ['Employee ID','Name','Position','Present','Absent','Leave','Rest','Holiday','Working Days','Attendance %'], ',', '"', '\\');
+                foreach ($rows as $r) fputcsv($out, [$r->employee_id,$r->full_name,$r->position,$r->present,$r->absent,$r->leave,$r->rest,$r->holiday,$r->total,$r->pct], ',', '"', '\\');
                 fclose($out);
                 break;
             case 'lubricants':
@@ -2030,10 +2030,13 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                 header('Content-Type: text/csv');
                 header("Content-Disposition: attachment; filename={$filename}");
                 $out = fopen('php://output', 'w');
-                fputcsv($out, ['Date','Equipment','Lube Type','Qty Used','Recommended','Variance','WO Number','Recorded By']);
-                foreach ($rows as $r) fputcsv($out, [$r->consumption_date,$r->registration_no,$r->lube_name,$r->quantity_used,$r->recommended_qty,$r->variance,$r->wo_number,$r->recorded_by_name]);
+                fputcsv($out, ['Date','Equipment','Lube Type','Qty Used','Recommended','Variance','WO Number','Recorded By'], ',', '"', '\\');
+                foreach ($rows as $r) fputcsv($out, [$r->consumption_date,$r->registration_no,$r->lube_name,$r->quantity_used,$r->recommended_qty,$r->variance,$r->wo_number,$r->recorded_by_name], ',', '"', '\\');
                 fclose($out);
                 break;
+            default:
+                show_404();
+                return;
         }
         exit;
     }

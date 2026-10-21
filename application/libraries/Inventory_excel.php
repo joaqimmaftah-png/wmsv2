@@ -19,6 +19,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * Everything runs on the project's own XlsxWriter helper — no external
  * libraries, no new server requirements.
  */
+#[AllowDynamicProperties]
 class Inventory_excel {
 
     /** Styles reused by every sheet */
@@ -63,14 +64,14 @@ class Inventory_excel {
         $lastCol = $this->_colLetter(count($cols));
 
         $x->setRowHeight(1, 28);
-        $titleRow = array(array('v' => $title.' — '.strtoupper(date('d F Y')), 's' => $s['title']));
+        $titleRow = array(array('v' => $title.' — '.strtoupper((string)(date('d F Y'))), 's' => $s['title']));
         for ($i = 1; $i < count($cols); $i++) $titleRow[] = array('v' => '', 's' => $s['title']);
         $x->writeRowStyled($titleRow);
         $x->mergeCells('A1', $lastCol.'1');
 
         $subtitle = 'Generated '.$stamp
                   . (isset($opts['generated_by']) && $opts['generated_by'] !== '' ? ' by '.$opts['generated_by'] : '')
-                  . '  •  '.number_format($count).' item'.($count == 1 ? '' : 's')
+                  . '  •  '.number_format((float)($count)).' item'.($count == 1 ? '' : 's')
                   . (isset($opts['filter_note']) && $opts['filter_note'] !== '' ? '  •  filter: '.$opts['filter_note'] : '')
                   . '  •  Final Stock is the balance stored by the system'
                   . '  •  To re-import changes, edit the "Import Data" sheet (the importer reads it first)';
@@ -106,7 +107,7 @@ class Inventory_excel {
             };
             $totals = array(
                 'id'             => array('v' => 'TOTAL', 's' => 'tot'),
-                'item_code'      => array('v' => number_format($count).' items', 's' => 'totC'),
+                'item_code'      => array('v' => number_format((float)($count)).' items', 's' => 'totC'),
                 'initial_stock'  => $sum('initial_stock'),
                 'qty_received'   => $sum('qty_received'),
                 'qty_sortie'     => $sum('qty_sortie'),
@@ -449,7 +450,7 @@ class Inventory_excel {
                 array('v' => $r['row'],            's' => $s['cellC']),
                 array('v' => $r['item_code'],      's' => $s['cellKey']),
                 array('v' => $r['description'],    's' => $s['cellWrap']),
-                array('v' => strtoupper($act),     's' => $st),
+                array('v' => strtoupper((string)($act)),     's' => $st),
                 array('v' => $msg,                 's' => $s['cellWrap']),
                 array('v' => implode(' | ', $r['warnings']), 's' => $s['cellWrap']),
                 array('v' => isset($r['stock_note']) ? $r['stock_note'] : '', 's' => $s['cellWrap']),
@@ -675,7 +676,7 @@ class Inventory_excel {
         if ($ts === false) return array('v' => $value, 's' => $s['cellC']);
         $v = $this->_serial($value);
         if ($v === null) return array('v' => $value, 's' => $s['cellC']);
-        if ($withTime && strlen($value) > 10 && strpos($value, '00:00:00') === false) {
+        if ($withTime && strlen((string)($value)) > 10 && strpos($value, '00:00:00') === false) {
             return array('v' => $v, 's' => $s['cellDateTime']);
         }
         return array('v' => $v, 's' => $s['cellDate']);
@@ -701,7 +702,7 @@ class Inventory_excel {
         $clean = array_values(array_unique($clean));
         if (empty($clean)) return null;
         $formula = '"'.implode(',', $clean).'"';
-        return (strlen($formula) <= 255) ? $formula : null;
+        return (strlen((string)($formula)) <= 255) ? $formula : null;
     }
 
     /**

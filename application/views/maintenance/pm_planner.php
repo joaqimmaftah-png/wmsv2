@@ -49,7 +49,7 @@
         ?>
         <tr>
           <td class="fw-600" style="font-size:12.5px;"><?= (isset($pm->registration_no) ? $pm->registration_no : '—') ?></td>
-          <td><?= htmlspecialchars($pm->schedule_name) ?></td>
+          <td><?= htmlspecialchars((string)($pm->schedule_name)) ?></td>
           <td class="mono" style="font-size:12px;">Every <?= $pm->interval_value ?> <?= $pm->interval_type ?></td>
           <td class="mono" style="font-size:11px;color:var(--t3);"><?= isset($pm->last_done_date)&&$pm->last_done_date ? date('d M Y',strtotime($pm->last_done_date)) : '—' ?></td>
           <td class="mono" style="font-size:11.5px;color:<?= $dc ?>;"><?= isset($pm->next_due_date)&&$pm->next_due_date ? date('d M Y',strtotime($pm->next_due_date)) : '—' ?></td>
@@ -91,7 +91,7 @@
         <option value="">— not linked to a work order —</option>
         <?php if (isset($open_wos)): foreach ($open_wos as $w): ?>
         <option value="<?= (int)$w->id ?>" data-equipment="<?= (int)$w->equipment_id ?>">
-          <?= htmlspecialchars($w->wo_number) ?> — <?= htmlspecialchars((string)$w->registration_no) ?> — <?= htmlspecialchars($w->title) ?>
+          <?= htmlspecialchars((string)($w->wo_number)) ?> — <?= htmlspecialchars((string)$w->registration_no) ?> — <?= htmlspecialchars((string)($w->title)) ?>
         </option>
         <?php endforeach; endif; ?>
       </select>

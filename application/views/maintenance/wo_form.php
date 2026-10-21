@@ -108,7 +108,7 @@ function _v($is_edit, $wo, $field, $default = '') {
 <div class="card">
   <div class="ch">
     <div>
-      <div class="ct"><?= $is_edit ? 'Edit Work Order: '.htmlspecialchars($wo->wo_number) : 'New Work Order'; ?></div>
+      <div class="ct"><?= $is_edit ? 'Edit Work Order: '.htmlspecialchars((string)($wo->wo_number)) : 'New Work Order'; ?></div>
       <div class="cs">Spare parts, oil top-up, work completed, pending work and remarks all save here and print on the Job Card</div>
     </div>
     <a href="<?= base_url('workorders'); ?>" class="ca">&larr; Back</a>
@@ -126,7 +126,7 @@ function _v($is_edit, $wo, $field, $default = '') {
           <option value="">Select Equipment…</option>
           <?php foreach ($equipment_list as $e): ?>
           <option value="<?= $e->id; ?>" <?= ($is_edit && $wo->equipment_id==$e->id)?'selected':''; ?>>
-            <?= htmlspecialchars($e->registration_no.' — '.$e->brand.' '.$e->model); ?>
+            <?= htmlspecialchars((string)($e->registration_no.' — '.$e->brand.' '.$e->model)); ?>
           </option>
           <?php endforeach; ?>
         </select>
@@ -152,15 +152,15 @@ function _v($is_edit, $wo, $field, $default = '') {
       </div>
       <div>
         <label class="form-label">Workplace / Location</label>
-        <input type="text" name="workplace" class="form-control" value="<?= htmlspecialchars(_v($is_edit,$wo,'workplace')); ?>" placeholder="e.g. Pit Area A, Workshop Bay 3">
+        <input type="text" name="workplace" class="form-control" value="<?= htmlspecialchars((string)(_v($is_edit,$wo,'workplace'))); ?>" placeholder="e.g. Pit Area A, Workshop Bay 3">
       </div>
       <div>
         <label class="form-label">Purchase Order / DA</label>
-        <input type="text" name="purchase_order" class="form-control" value="<?= htmlspecialchars(_v($is_edit,$wo,'purchase_order')); ?>" placeholder="PO or approval reference">
+        <input type="text" name="purchase_order" class="form-control" value="<?= htmlspecialchars((string)(_v($is_edit,$wo,'purchase_order'))); ?>" placeholder="PO or approval reference">
       </div>
       <div>
         <label class="form-label">Planner</label>
-        <input type="text" name="planner" class="form-control" value="<?= htmlspecialchars(_v($is_edit,$wo,'planner')); ?>" placeholder="Maintenance planner name">
+        <input type="text" name="planner" class="form-control" value="<?= htmlspecialchars((string)(_v($is_edit,$wo,'planner'))); ?>" placeholder="Maintenance planner name">
       </div>
       <div>
         <label class="form-label">Supervisor / Responsible</label>
@@ -187,7 +187,7 @@ function _v($is_edit, $wo, $field, $default = '') {
         <input type="hidden" name="supervisor_id" value="<?= isset($current_user) ? $current_user->id : '' ?>">
         <div style="display:flex;align-items:center;gap:12px;background:var(--g1);border:1px solid var(--sep);border-radius:var(--r1);padding:9px 13px;">
           <?php if ($sup_sig): ?>
-          <img src="<?= base_url(htmlspecialchars($sup_sig)) ?>"
+          <img src="<?= base_url(htmlspecialchars((string)($sup_sig))) ?>"
                style="height:32px;max-width:100px;object-fit:contain;background:#fff;border-radius:4px;padding:2px 4px;">
           <?php else: ?>
           <div style="width:36px;height:32px;border-radius:6px;background:linear-gradient(145deg,#1870ff,#0047cc);display:flex;align-items:center;justify-content:center;">
@@ -195,7 +195,7 @@ function _v($is_edit, $wo, $field, $default = '') {
           </div>
           <?php endif; ?>
           <div>
-            <div style="font-size:13px;font-weight:600;color:var(--t1);"><?= htmlspecialchars($sup_name) ?></div>
+            <div style="font-size:13px;font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($sup_name)) ?></div>
             <div style="font-size:10px;color:var(--t3);margin-top:1px;">Auto-assigned — logged-in user</div>
           </div>
         </div>
@@ -223,7 +223,7 @@ function _v($is_edit, $wo, $field, $default = '') {
           <?php $curHold = $is_edit && isset($wo->hold_code) ? (string)$wo->hold_code : '';
           foreach (wo_hold_codes() as $code => $label): ?>
           <option value="<?= $code; ?>" <?= ($curHold === $code) ? 'selected' : ''; ?>>
-            <?= $code; ?> — <?= htmlspecialchars($label); ?>
+            <?= $code; ?> — <?= htmlspecialchars((string)($label)); ?>
           </option>
           <?php endforeach; ?>
         </select>
@@ -251,15 +251,15 @@ function _v($is_edit, $wo, $field, $default = '') {
         </div>
         <div>
           <label class="form-label">Site</label>
-          <input type="text" name="incident_site" class="form-control" value="<?= htmlspecialchars($incident->site ?? '') ?>" placeholder="e.g. KALIMVA">
+          <input type="text" name="incident_site" class="form-control" value="<?= htmlspecialchars((string)($incident->site ?? '')) ?>" placeholder="e.g. KALIMVA">
         </div>
         <div>
           <label class="form-label">Department</label>
-          <input type="text" name="incident_department" class="form-control" value="<?= htmlspecialchars($incident->department ?? '') ?>" placeholder="e.g. PRODUCTION">
+          <input type="text" name="incident_department" class="form-control" value="<?= htmlspecialchars((string)($incident->department ?? '')) ?>" placeholder="e.g. PRODUCTION">
         </div>
         <div class="col-3">
           <label class="form-label">Location</label>
-          <input type="text" name="incident_location" class="form-control" value="<?= htmlspecialchars($incident->location ?? '') ?>" placeholder="e.g. Kalimva Site, Pit Area B">
+          <input type="text" name="incident_location" class="form-control" value="<?= htmlspecialchars((string)($incident->location ?? '')) ?>" placeholder="e.g. Kalimva Site, Pit Area B">
         </div>
       </div>
 
@@ -276,15 +276,15 @@ function _v($is_edit, $wo, $field, $default = '') {
         </div>
         <div>
           <label class="form-label">Staff ID</label>
-          <input type="text" name="staff_id" class="form-control" value="<?= htmlspecialchars($incident->staff_id ?? '') ?>">
+          <input type="text" name="staff_id" class="form-control" value="<?= htmlspecialchars((string)($incident->staff_id ?? '')) ?>">
         </div>
         <div>
           <label class="form-label">Name</label>
-          <input type="text" name="person_name" class="form-control" value="<?= htmlspecialchars($incident->person_name ?? '') ?>">
+          <input type="text" name="person_name" class="form-control" value="<?= htmlspecialchars((string)($incident->person_name ?? '')) ?>">
         </div>
         <div>
           <label class="form-label">Function</label>
-          <input type="text" name="person_function" class="form-control" value="<?= htmlspecialchars($incident->person_function ?? '') ?>" placeholder="e.g. Operator">
+          <input type="text" name="person_function" class="form-control" value="<?= htmlspecialchars((string)($incident->person_function ?? '')) ?>" placeholder="e.g. Operator">
         </div>
         <div>
           <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t2);margin-top:24px;">
@@ -298,11 +298,11 @@ function _v($is_edit, $wo, $field, $default = '') {
       <div class="form-grid cols-3" style="margin-bottom:14px;">
         <div>
           <label class="form-label">Fleet No.</label>
-          <input type="text" name="fleet_no" class="form-control" value="<?= htmlspecialchars($incident->fleet_no ?? '') ?>" placeholder="e.g. C-HE-DZ 004">
+          <input type="text" name="fleet_no" class="form-control" value="<?= htmlspecialchars((string)($incident->fleet_no ?? '')) ?>" placeholder="e.g. C-HE-DZ 004">
         </div>
         <div>
           <label class="form-label">Part</label>
-          <input type="text" name="part_affected" class="form-control" value="<?= htmlspecialchars($incident->part_affected ?? '') ?>">
+          <input type="text" name="part_affected" class="form-control" value="<?= htmlspecialchars((string)($incident->part_affected ?? '')) ?>">
         </div>
         <div>
           <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t2);margin-top:24px;">
@@ -316,15 +316,15 @@ function _v($is_edit, $wo, $field, $default = '') {
       <div class="form-grid cols-3" style="margin-bottom:14px;">
         <div class="col-3">
           <label class="form-label">Description of Incident</label>
-          <textarea name="incident_description" class="form-control" rows="3" placeholder="What happened, sequence of events…"><?= htmlspecialchars($incident->description ?? '') ?></textarea>
+          <textarea name="incident_description" class="form-control" rows="3" placeholder="What happened, sequence of events…"><?= htmlspecialchars((string)($incident->description ?? '')) ?></textarea>
         </div>
         <div class="col-3">
           <label class="form-label">Details of Injury / Damage / Impact</label>
-          <textarea name="injury_damage_details" class="form-control" rows="2"><?= htmlspecialchars($incident->injury_damage_details ?? '') ?></textarea>
+          <textarea name="injury_damage_details" class="form-control" rows="2"><?= htmlspecialchars((string)($incident->injury_damage_details ?? '')) ?></textarea>
         </div>
         <div class="col-3">
           <label class="form-label">Actions Taken by Line Management Following Incident</label>
-          <textarea name="actions_taken" class="form-control" rows="2"><?= htmlspecialchars($incident->actions_taken ?? '') ?></textarea>
+          <textarea name="actions_taken" class="form-control" rows="2"><?= htmlspecialchars((string)($incident->actions_taken ?? '')) ?></textarea>
         </div>
         <div>
           <label class="form-label">Activity Status</label>
@@ -347,7 +347,7 @@ function _v($is_edit, $wo, $field, $default = '') {
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
             <?php foreach ($existing_evidence as $ev): ?>
             <div style="font-size:10.5px;background:var(--g1);border:1px solid var(--sep);border-radius:6px;padding:5px 9px;">
-              📎 <?= htmlspecialchars($ev->original_name) ?>
+              📎 <?= htmlspecialchars((string)($ev->original_name)) ?>
             </div>
             <?php endforeach; ?>
           </div>
@@ -366,7 +366,7 @@ function _v($is_edit, $wo, $field, $default = '') {
         <div>
           <label class="form-label">Name</label>
           <input type="text" name="operator_name" class="form-control"
-            value="<?= htmlspecialchars(_v($is_edit,$wo,'operator_name')); ?>"
+            value="<?= htmlspecialchars((string)(_v($is_edit,$wo,'operator_name'))); ?>"
             placeholder="Full name — internal or external operator…">
           <div style="font-size:10.5px;color:var(--t4);margin-top:5px;">
             Anyone can be entered here, including contractors not in the system.
@@ -388,7 +388,7 @@ function _v($is_edit, $wo, $field, $default = '') {
             <!-- Show existing signature in edit mode -->
             <?php if ($is_edit && !empty($wo->operator_signature)): ?>
             <img id="op-sig-existing"
-                 src="<?= base_url(htmlspecialchars($wo->operator_signature)) ?>"
+                 src="<?= base_url(htmlspecialchars((string)($wo->operator_signature))) ?>"
                  style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;">
             <?php endif; ?>
             <!-- Placeholder hint -->
@@ -428,13 +428,13 @@ function _v($is_edit, $wo, $field, $default = '') {
           $checked = in_array((string)$tech->id, $assigned_ids); ?>
         <label class="tech-option">
           <input type="checkbox" name="assigned_techs[]" value="<?= $tech->id; ?>" <?= $checked?'checked':''; ?>>
-          <?= htmlspecialchars($tech->first_name.' '.$tech->last_name); ?>
-          <span style="font-size:10px;color:var(--t4);margin-left:auto;"><?= htmlspecialchars($tech->position??''); ?></span>
+          <?= htmlspecialchars((string)($tech->first_name.' '.$tech->last_name)); ?>
+          <span style="font-size:10px;color:var(--t4);margin-left:auto;"><?= htmlspecialchars((string)($tech->position??'')); ?></span>
         </label>
         <?php endforeach; ?>
       </div>
       <input type="hidden" name="assigned_to" id="assigned_to_csv"
-        value="<?= htmlspecialchars(_v($is_edit,$wo,'assigned_to')); ?>">
+        value="<?= htmlspecialchars((string)(_v($is_edit,$wo,'assigned_to'))); ?>">
       <div class="hint">Select one or more technicians to assign to this work order.</div>
     </div>
 
@@ -454,7 +454,7 @@ function _v($is_edit, $wo, $field, $default = '') {
       <div>
         <label class="form-label">Hour Meter / SMR</label>
         <input type="number" name="hours_reading" class="form-control" step="0.1"
-          value="<?= htmlspecialchars(_v($is_edit,$wo,'hours_reading')); ?>" placeholder="e.g. 4250.5">
+          value="<?= htmlspecialchars((string)(_v($is_edit,$wo,'hours_reading'))); ?>" placeholder="e.g. 4250.5">
       </div>
     </div>
 
@@ -463,13 +463,13 @@ function _v($is_edit, $wo, $field, $default = '') {
     <div style="margin-bottom:12px;">
       <label class="form-label">Title / Short Description <span class="req">*</span></label>
       <input type="text" name="title" class="form-control" required
-        value="<?= htmlspecialchars(_v($is_edit,$wo,'title')); ?>"
+        value="<?= htmlspecialchars((string)(_v($is_edit,$wo,'title'))); ?>"
         placeholder="Brief description of the problem or maintenance task…">
     </div>
     <div style="margin-bottom:4px;">
       <label class="form-label">Symptoms / Problem Detail</label>
       <textarea name="description" class="form-control" rows="4"
-        placeholder="Describe the fault, symptoms, or scope of work in detail…"><?= htmlspecialchars(_v($is_edit,$wo,'description') ?: _v($is_edit,$wo,'symptoms')); ?></textarea>
+        placeholder="Describe the fault, symptoms, or scope of work in detail…"><?= htmlspecialchars((string)(_v($is_edit,$wo,'description') ?: _v($is_edit,$wo,'symptoms'))); ?></textarea>
     </div>
 
     <!-- ══ SECTION 4 — EQUIPMENT SYSTEMS ══ -->
@@ -489,7 +489,7 @@ function _v($is_edit, $wo, $field, $default = '') {
       <?php endforeach; ?>
     </div>
     <input type="hidden" name="equipment_systems_csv" id="eq-sys-csv"
-      value="<?= htmlspecialchars(_v($is_edit,$wo,'equipment_systems')); ?>">
+      value="<?= htmlspecialchars((string)(_v($is_edit,$wo,'equipment_systems'))); ?>">
 
     <!-- ══ SECTION 5 — ROOT CAUSE ══ -->
     <div class="sec-head">
@@ -499,7 +499,7 @@ function _v($is_edit, $wo, $field, $default = '') {
     <div style="margin-bottom:4px;">
       <label class="form-label">Root Cause of Failure</label>
       <input type="text" name="root_cause" class="form-control"
-        value="<?= htmlspecialchars(_v($is_edit,$wo,'root_cause')); ?>"
+        value="<?= htmlspecialchars((string)(_v($is_edit,$wo,'root_cause'))); ?>"
         placeholder="What was the root cause of the fault?">
     </div>
 
@@ -511,7 +511,7 @@ function _v($is_edit, $wo, $field, $default = '') {
     <div style="margin-bottom:4px;">
       <label class="form-label">Work Completed / Actions Taken</label>
       <textarea name="action_taken" class="form-control" rows="5"
-        placeholder="Describe all work performed: parts replaced, adjustments made, alignments done, tests performed…"><?= htmlspecialchars(_v($is_edit,$wo,'action_taken')); ?></textarea>
+        placeholder="Describe all work performed: parts replaced, adjustments made, alignments done, tests performed…"><?= htmlspecialchars((string)(_v($is_edit,$wo,'action_taken'))); ?></textarea>
       <div class="hint">This text fills the WORK COMPLETED section of your printed Job Card.</div>
     </div>
 
@@ -543,29 +543,29 @@ function _v($is_edit, $wo, $field, $default = '') {
           <tr>
             <td>
               <input type="text" name="spares[item_code][]"
-                value="<?= htmlspecialchars($sp->item_code??''); ?>"
+                value="<?= htmlspecialchars((string)($sp->item_code??'')); ?>"
                 placeholder="ENG-001" class="spare-code"
                 oninput="lookupSpare(this)" autocomplete="off">
             </td>
             <td>
               <input type="text" name="spares[part_name][]"
-                value="<?= htmlspecialchars($sp->part_name??''); ?>"
+                value="<?= htmlspecialchars((string)($sp->part_name??'')); ?>"
                 placeholder="Auto-filled from DB" class="spare-name" readonly
                 style="background:var(--g2);">
               <div class="lookup-status"></div>
             </td>
-            <td><input type="text" name="spares[part_number][]"   value="<?= htmlspecialchars($sp->part_number??''); ?>"   placeholder="Ref number"></td>
+            <td><input type="text" name="spares[part_number][]"   value="<?= htmlspecialchars((string)($sp->part_number??'')); ?>"   placeholder="Ref number"></td>
             <td>
               <select name="spares[spare_type][]" onchange="toggleSource(this)">
                 <option value="New"          <?= (!isset($sp->spare_type)||$sp->spare_type==='New')?'selected':''; ?>>&#x1F7E2; New Spare</option>
                 <option value="From Machine" <?= (isset($sp->spare_type)&&$sp->spare_type==='From Machine')?'selected':''; ?>>&#x1F7E1; From Machine</option>
               </select>
             </td>
-            <td><input type="text" name="spares[source_machine][]" value="<?= htmlspecialchars($sp->source_machine??''); ?>"
+            <td><input type="text" name="spares[source_machine][]" value="<?= htmlspecialchars((string)($sp->source_machine??'')); ?>"
               placeholder="e.g. TRK-002"
               style="<?= (!isset($sp->spare_type)||$sp->spare_type!=='From Machine')?'opacity:.3;':'' ?>"></td>
             <td><input type="number" name="spares[quantity][]" value="<?= $sp->quantity??''; ?>" step="0.01" min="0"></td>
-            <td><input type="text"   name="spares[unit][]"     value="<?= htmlspecialchars($sp->unit??'pcs'); ?>"  placeholder="pcs"></td>
+            <td><input type="text"   name="spares[unit][]"     value="<?= htmlspecialchars((string)($sp->unit??'pcs')); ?>"  placeholder="pcs"></td>
             <td><button type="button" class="rm-btn" onclick="removeRow(this)">&#10005;</button></td>
           </tr>
   <?php endforeach; ?>
@@ -620,14 +620,14 @@ function _v($is_edit, $wo, $field, $default = '') {
           <tr>
             <td>
               <input type="text" name="lubes[item_code][]"
-                value="<?= htmlspecialchars(isset($oil->item_code)?$oil->item_code:''); ?>"
+                value="<?= htmlspecialchars((string)(isset($oil->item_code)?$oil->item_code:'')); ?>"
                 placeholder="LUB001" class="oil-code"
                 oninput="lookupOilCode(this)" autocomplete="off">
               <div class="stock-status"></div>
             </td>
-            <td><input type="text" name="lubes[oil_type][]" value="<?= htmlspecialchars($oil->oil_type??''); ?>" placeholder="Auto-filled from DB" class="oil-type" readonly style="background:var(--g2);"></td>
-            <td><input type="text" name="lubes[grade][]"    value="<?= htmlspecialchars($oil->grade??''); ?>"    placeholder="e.g. 15W40, SAE30" class="oil-grade" readonly style="background:var(--g2);"></td>
-            <td><input type="text" name="lubes[system][]"   value="<?= htmlspecialchars($oil->system_location??''); ?>" placeholder="e.g. Engine"></td>
+            <td><input type="text" name="lubes[oil_type][]" value="<?= htmlspecialchars((string)($oil->oil_type??'')); ?>" placeholder="Auto-filled from DB" class="oil-type" readonly style="background:var(--g2);"></td>
+            <td><input type="text" name="lubes[grade][]"    value="<?= htmlspecialchars((string)($oil->grade??'')); ?>"    placeholder="e.g. 15W40, SAE30" class="oil-grade" readonly style="background:var(--g2);"></td>
+            <td><input type="text" name="lubes[system][]"   value="<?= htmlspecialchars((string)($oil->system_location??'')); ?>" placeholder="e.g. Engine"></td>
             <td><input type="number" name="lubes[quantity][]" value="<?= $oil->quantity??''; ?>" step="0.1" min="0" class="oil-qty" oninput="checkOilStock(this)"></td>
             <td><button type="button" class="rm-btn" onclick="removeRow(this)">&#10005;</button></td>
           </tr>
@@ -657,7 +657,7 @@ function _v($is_edit, $wo, $field, $default = '') {
     </div>
     <div style="margin-bottom:4px;">
       <textarea name="pending_work" class="form-control" rows="3"
-        placeholder="Describe work that was deferred and must be carried out in a future intervention…"><?= htmlspecialchars(_v($is_edit,$wo,'pending_work')); ?></textarea>
+        placeholder="Describe work that was deferred and must be carried out in a future intervention…"><?= htmlspecialchars((string)(_v($is_edit,$wo,'pending_work'))); ?></textarea>
     </div>
 
     <!-- ══ SECTION 10 — REMARKS ══ -->
@@ -667,7 +667,7 @@ function _v($is_edit, $wo, $field, $default = '') {
     </div>
     <div style="margin-bottom:28px;">
       <textarea name="remarks" class="form-control" rows="4"
-        placeholder="Safety observations, machine condition after repair, recommendations…"><?= htmlspecialchars(_v($is_edit,$wo,'remarks')); ?></textarea>
+        placeholder="Safety observations, machine condition after repair, recommendations…"><?= htmlspecialchars((string)(_v($is_edit,$wo,'remarks'))); ?></textarea>
     </div>
 
     <!-- ══ ACTIONS ══ -->

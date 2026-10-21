@@ -2,8 +2,8 @@
 $u = isset($user) ? $user : null;
 $fd = isset($form_data) ? $form_data : array();
 $v = function($field, $default='') use ($u, $fd) {
-    if (!empty($fd[$field])) return htmlspecialchars($fd[$field]);
-    if ($u && isset($u->$field)) return htmlspecialchars($u->$field);
+    if (!empty($fd[$field])) return htmlspecialchars((string)($fd[$field]));
+    if ($u && isset($u->$field)) return htmlspecialchars((string)($u->$field));
     return $default;
 };
 ?>
@@ -13,7 +13,7 @@ $v = function($field, $default='') use ($u, $fd) {
     <div style="font-size:11px;color:var(--t3);margin-bottom:4px;">
       <a href="<?= base_url('users') ?>" style="color:var(--blue);text-decoration:none;">User Access</a> / <?= $edit_mode ? 'Edit User' : 'Create User' ?>
     </div>
-    <div class="page-heading" style="font-size:17px;"><?= $edit_mode ? 'Edit: '.htmlspecialchars($u->first_name.' '.$u->last_name) : 'Create New User Account' ?></div>
+    <div class="page-heading" style="font-size:17px;"><?= $edit_mode ? 'Edit: '.htmlspecialchars((string)($u->first_name.' '.$u->last_name)) : 'Create New User Account' ?></div>
   </div>
   <a href="<?= base_url('users') ?>" class="btn btn-ghost">← Back</a>
 </div>

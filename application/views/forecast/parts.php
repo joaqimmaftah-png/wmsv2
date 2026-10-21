@@ -15,9 +15,9 @@ $is_supervisor = $role_id === 1;
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Parts — <?=htmlspecialchars($schedule->schedule_name)?></div>
+    <div class="page-heading" style="font-size:16px;">Parts — <?=htmlspecialchars((string)($schedule->schedule_name))?></div>
     <div class="cs">
-      <?=htmlspecialchars(isset($schedule->registration_no) ? (string)$schedule->registration_no : '—')?>
+      <?=htmlspecialchars((string)(isset($schedule->registration_no) ? (string)$schedule->registration_no : '—'))?>
       · every <?=htmlspecialchars((string)$schedule->interval_value)?> <?=htmlspecialchars((string)$schedule->interval_type)?>
       <?php if (!empty($schedule->next_due_date)): ?>
         · next due <?=date('d M Y', strtotime($schedule->next_due_date))?>
@@ -71,11 +71,11 @@ $is_supervisor = $role_id === 1;
         </td>
         <td style="color:var(--t2);font-size:11px;"><?=htmlspecialchars((string)$r['description'])?></td>
         <td class="mono" style="text-align:right;font-weight:700;">
-          <?=rtrim(rtrim(number_format($r['qty'], 3, '.', ''), '0'), '.')?>
+          <?=rtrim(rtrim((string)(number_format((float)($r['qty']), 3, '.', '')), '0'), '.')?>
           <span style="color:var(--t3);font-size:9.5px;"><?=htmlspecialchars((string)$r['unit'])?></span>
         </td>
         <td class="mono" style="text-align:right;color:<?= $r['on_hand'] < $r['qty'] ? 'var(--red)' : 'var(--t3)' ?>;">
-          <?=rtrim(rtrim(number_format($r['on_hand'], 3, '.', ''), '0'), '.')?>
+          <?=rtrim(rtrim((string)(number_format((float)($r['on_hand']), 3, '.', '')), '0'), '.')?>
         </td>
         <td style="text-align:center;">
           <?php if ($r['is_critical']): ?>
@@ -123,7 +123,7 @@ $is_supervisor = $role_id === 1;
           <option value="">— choose a part —</option>
           <?php foreach ($materials as $mat): ?>
           <option value="<?= (int)$mat->id ?>">
-            <?=htmlspecialchars($mat->item_code . ' — ' . $mat->description)?>
+            <?=htmlspecialchars((string)($mat->item_code . ' — ' . $mat->description))?>
             (<?= (int)$mat->final_qty ?> on hand)
           </option>
           <?php endforeach; ?>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Job Card — <?= isset($wo->wo_number) ? htmlspecialchars($wo->wo_number) : 'JC'; ?></title>
+<title>Job Card — <?= isset($wo->wo_number) ? htmlspecialchars((string)($wo->wo_number)) : 'JC'; ?></title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:Arial,Helvetica,sans-serif;font-size:8pt;background:#d1d5db;color:#000;
@@ -131,7 +131,7 @@ if ($isSessionCard) {
 /* ── Helper: split text into fixed line array ── */
 function jcLines($text, $maxLines, $lineLen = 105) {
     if (!$text) return array_fill(0, $maxLines, '');
-    $text  = trim(str_replace("\r\n", "\n", $text));
+    $text  = trim((string)(str_replace("\r\n", "\n", $text)));
     $lines = array();
     foreach (explode("\n", $text) as $para) {
         $wrapped = wordwrap($para, $lineLen, "\n", true);
@@ -160,7 +160,7 @@ while (count($oil_rows)   < 2) $oil_rows[]   = null;
 
 /* ── Render helpers ── */
 function uvf($v) {
-    return '<span class="uv">'.htmlspecialchars(isset($v) ? $v : '').'</span>';
+    return '<span class="uv">'.htmlspecialchars((string)(isset($v) ? $v : '')).'</span>';
 }
 function boxf($on) {
     return '<span class="box'.($on?' box-on':'').'"></span>';
@@ -198,7 +198,7 @@ $sysRows = array(
       <div class="tb-brand">Workshop Intelligence</div>
       <div class="tb-sub">Maintenance Job Card</div>
     </div>
-    <div class="tb-wo"><?= htmlspecialchars(isset($wo->wo_number) ? $wo->wo_number : 'JC'); ?></div>
+    <div class="tb-wo"><?= htmlspecialchars((string)(isset($wo->wo_number) ? $wo->wo_number : 'JC')); ?></div>
   </div>
   <div class="tb-r">
     <span class="tb-hint">Ctrl+P &rarr; Save as PDF &middot; uncheck Headers &amp; Footers for clean output</span>
@@ -242,7 +242,7 @@ $sysRows = array(
     <td colspan="2" class="nb bb" style="padding:2px 5px!important;"><?= uvf($wdate); ?></td>
     <td class="lbl nb bb" style="width:14%;padding:2px 5px!important;">Work Order [OT]</td>
     <td class="nb bb" style="padding:2px 5px!important;">
-      <strong style="font-size:7pt;color:#0a50cc;"><?= htmlspecialchars($wo->wo_number??''); ?></strong>
+      <strong style="font-size:7pt;color:#0a50cc;"><?= htmlspecialchars((string)($wo->wo_number??'')); ?></strong>
     </td>
   </tr>
   <tr>
@@ -269,13 +269,13 @@ $sysRows = array(
       if (empty($techs) && !empty($wo->assigned_name)) { $techs = array($wo->assigned_name); }
       foreach ($techs as $techName):
       ?><div style="font-size:7pt;font-weight:600;border-bottom:1px solid #ccc;padding:2px 0;margin-bottom:2px;">
-          <span class="uv"><?= htmlspecialchars($techName); ?></span>
+          <span class="uv"><?= htmlspecialchars((string)($techName)); ?></span>
         </div><?php endforeach; ?>
     </td>
   </tr>
   <tr>
     <td class="lbl">SMR / HOURS</td>
-    <td colspan="4"><?= uvf((isset($wo->hours_reading)&&$wo->hours_reading)?number_format($wo->hours_reading,1).' h':''); ?></td>
+    <td colspan="4"><?= uvf((isset($wo->hours_reading)&&$wo->hours_reading)?number_format((float)($wo->hours_reading),1).' h':''); ?></td>
   </tr>
   <tr>
     <td class="lbl">DATE</td>
@@ -294,7 +294,7 @@ $sysRows = array(
   <?php if ($isSessionCard): ?>
   <tr>
     <td class="lbl">HOURS (THIS SESSION)</td>
-    <td><strong><?= uvf(($session->hours_worked !== null) ? number_format($session->hours_worked,2).' h' : ''); ?></strong></td>
+    <td><strong><?= uvf(($session->hours_worked !== null) ? number_format((float)($session->hours_worked),2).' h' : ''); ?></strong></td>
     <td class="lbl" style="width:5%;">REASON FOR STOP</td>
     <td colspan="2"><?= uvf(!empty($session->switched_to_wo_number) ? 'Switched to WO '.$session->switched_to_wo_number : ($session->interruption_reason ?: '')); ?></td>
   </tr>
@@ -330,7 +330,7 @@ $sysRows = array(
   <tr><td colspan="8" class="sh">DESCRIPTION OF INTERVENTION / WORK REQUESTED</td></tr>
   <?php foreach ($descLines as $k => $line): ?>
   <tr class="lr">
-    <td colspan="8" class="<?= ($k===count($descLines)-1)?'last-line':''; ?>"><?= htmlspecialchars($line); ?>&nbsp;</td>
+    <td colspan="8" class="<?= ($k===count($descLines)-1)?'last-line':''; ?>"><?= htmlspecialchars((string)($line)); ?>&nbsp;</td>
   </tr>
   <?php endforeach; ?>
 
@@ -338,7 +338,7 @@ $sysRows = array(
   <tr><td colspan="8" class="sh">ROOT CAUSE / CAUSE RACINE</td></tr>
   <?php foreach ($rootLines as $k => $line): ?>
   <tr class="lr">
-    <td colspan="8" class="<?= ($k===count($rootLines)-1)?'last-line':''; ?>"><?= htmlspecialchars($line); ?>&nbsp;</td>
+    <td colspan="8" class="<?= ($k===count($rootLines)-1)?'last-line':''; ?>"><?= htmlspecialchars((string)($line)); ?>&nbsp;</td>
   </tr>
   <?php endforeach; ?>
 
@@ -346,7 +346,7 @@ $sysRows = array(
   <tr><td colspan="8" class="sh">WORK COMPLETED / TRAVAUX EFFECTUÉS</td></tr>
   <?php foreach ($doneLines as $k => $line): ?>
   <tr class="lr">
-    <td colspan="8" class="<?= ($k===count($doneLines)-1)?'last-line':''; ?>"><?= htmlspecialchars($line); ?>&nbsp;</td>
+    <td colspan="8" class="<?= ($k===count($doneLines)-1)?'last-line':''; ?>"><?= htmlspecialchars((string)($line)); ?>&nbsp;</td>
   </tr>
   <?php endforeach; ?>
 
@@ -363,22 +363,22 @@ $sysRows = array(
   <?php foreach ($spare_rows as $sp): ?>
   <tr style="height:14px;">
     <td colspan="2" style="font-size:7pt;border:1px solid #aaa;padding:1px 4px;">
-      <?= htmlspecialchars($sp->item_code??''); ?>
+      <?= htmlspecialchars((string)($sp->item_code??'')); ?>
     </td>
     <td colspan="2" style="border:1px solid #aaa;font-size:7pt;padding:1px 4px;">
-      <?= htmlspecialchars($sp->part_name??''); ?>
+      <?= htmlspecialchars((string)($sp->part_name??'')); ?>
     </td>
     <td style="border:1px solid #aaa;font-size:7pt;padding:1px 4px;">
-      <?= htmlspecialchars($sp->part_number??''); ?>
+      <?= htmlspecialchars((string)($sp->part_number??'')); ?>
     </td>
     <td style="border:1px solid #aaa;font-size:6.5pt;text-align:center;padding:1px 3px;">
       <?php if ($sp && isset($sp->spare_type)): echo spareBadge($sp->spare_type); endif; ?>
     </td>
     <td style="border:1px solid #aaa;font-size:7pt;padding:1px 4px;">
-      <?= htmlspecialchars($sp->source_machine??''); ?>
+      <?= htmlspecialchars((string)($sp->source_machine??'')); ?>
     </td>
     <td style="border:1px solid #aaa;font-size:7pt;text-align:center;padding:1px 4px;">
-      <?= ($sp && isset($sp->quantity) && $sp->quantity > 0) ? htmlspecialchars($sp->quantity.(isset($sp->unit)&&$sp->unit?' '.$sp->unit:'')) : ''; ?>
+      <?= ($sp && isset($sp->quantity) && $sp->quantity > 0) ? htmlspecialchars((string)($sp->quantity.(isset($sp->unit)&&$sp->unit?' '.$sp->unit:''))) : ''; ?>
     </td>
   </tr>
   <?php endforeach; ?>
@@ -394,16 +394,16 @@ $sysRows = array(
   <?php foreach ($oil_rows as $oil): ?>
   <tr style="height:13px;">
     <td colspan="2" style="border:1px solid #aaa;font-size:7pt;padding:1px 4px;">
-      <?= htmlspecialchars($oil->system_location??''); ?>
+      <?= htmlspecialchars((string)($oil->system_location??'')); ?>
     </td>
     <td colspan="3" style="border:1px solid #aaa;font-size:7pt;padding:1px 4px;">
-      <?= htmlspecialchars($oil->oil_type??''); ?>
+      <?= htmlspecialchars((string)($oil->oil_type??'')); ?>
     </td>
     <td colspan="2" style="border:1px solid #aaa;font-size:7pt;padding:1px 4px;">
-      <?= htmlspecialchars($oil->grade??''); ?>
+      <?= htmlspecialchars((string)($oil->grade??'')); ?>
     </td>
     <td style="border:1px solid #aaa;font-size:7pt;text-align:center;padding:1px 4px;">
-      <?= ($oil && isset($oil->quantity) && $oil->quantity > 0) ? number_format($oil->quantity,1) : ''; ?>
+      <?= ($oil && isset($oil->quantity) && $oil->quantity > 0) ? number_format((float)($oil->quantity),1) : ''; ?>
     </td>
   </tr>
   <?php endforeach; ?>
@@ -414,42 +414,42 @@ $sysRows = array(
   <tr class="lr">
     <td colspan="8" style="font-size:7.5pt;padding:4px 6px;">
       <strong>Date/Time:</strong> <?= $incident->incident_datetime ? date('d M Y H:i', strtotime($incident->incident_datetime)) : '—'; ?>
-      &nbsp;&nbsp;<strong>Site:</strong> <?= htmlspecialchars($incident->site ?: '—'); ?>
-      &nbsp;&nbsp;<strong>Department:</strong> <?= htmlspecialchars($incident->department ?: '—'); ?>
-      &nbsp;&nbsp;<strong>Location:</strong> <?= htmlspecialchars($incident->location ?: '—'); ?>
+      &nbsp;&nbsp;<strong>Site:</strong> <?= htmlspecialchars((string)($incident->site ?: '—')); ?>
+      &nbsp;&nbsp;<strong>Department:</strong> <?= htmlspecialchars((string)($incident->department ?: '—')); ?>
+      &nbsp;&nbsp;<strong>Location:</strong> <?= htmlspecialchars((string)($incident->location ?: '—')); ?>
     </td>
   </tr>
   <tr class="lr">
     <td colspan="8" style="font-size:7.5pt;padding:4px 6px;">
-      <strong>Involved:</strong> <?= htmlspecialchars($incident->involved_party_type ?: '—'); ?>
-      <?= $incident->staff_id ? '&nbsp;&nbsp;<strong>Staff ID:</strong> '.htmlspecialchars($incident->staff_id) : ''; ?>
-      <?= $incident->person_name ? '&nbsp;&nbsp;<strong>Name:</strong> '.htmlspecialchars($incident->person_name) : ''; ?>
-      <?= $incident->person_function ? '&nbsp;&nbsp;<strong>Function:</strong> '.htmlspecialchars($incident->person_function) : ''; ?>
+      <strong>Involved:</strong> <?= htmlspecialchars((string)($incident->involved_party_type ?: '—')); ?>
+      <?= $incident->staff_id ? '&nbsp;&nbsp;<strong>Staff ID:</strong> '.htmlspecialchars((string)($incident->staff_id)) : ''; ?>
+      <?= $incident->person_name ? '&nbsp;&nbsp;<strong>Name:</strong> '.htmlspecialchars((string)($incident->person_name)) : ''; ?>
+      <?= $incident->person_function ? '&nbsp;&nbsp;<strong>Function:</strong> '.htmlspecialchars((string)($incident->person_function)) : ''; ?>
       <?= !empty($incident->injured) ? '&nbsp;&nbsp;<strong style="color:#b00;">⚠ Injured</strong>' : '&nbsp;&nbsp;<strong>Injured:</strong> No'; ?>
     </td>
   </tr>
   <tr class="lr">
     <td colspan="8" style="font-size:7.5pt;padding:4px 6px;">
-      <?= $incident->fleet_no ? '<strong>Fleet No:</strong> '.htmlspecialchars($incident->fleet_no) : ''; ?>
-      <?= $incident->part_affected ? '&nbsp;&nbsp;<strong>Part:</strong> '.htmlspecialchars($incident->part_affected) : ''; ?>
+      <?= $incident->fleet_no ? '<strong>Fleet No:</strong> '.htmlspecialchars((string)($incident->fleet_no)) : ''; ?>
+      <?= $incident->part_affected ? '&nbsp;&nbsp;<strong>Part:</strong> '.htmlspecialchars((string)($incident->part_affected)) : ''; ?>
       &nbsp;&nbsp;<strong>Damaged:</strong> <?= !empty($incident->equipment_damaged) ? 'YES' : 'No'; ?>
-      &nbsp;&nbsp;<strong>Activity Status:</strong> <?= htmlspecialchars($incident->activity_status ?: '—'); ?>
+      &nbsp;&nbsp;<strong>Activity Status:</strong> <?= htmlspecialchars((string)($incident->activity_status ?: '—')); ?>
     </td>
   </tr>
   <?php if (!empty($incident->description)): ?>
-  <tr class="lr"><td colspan="8" style="font-size:7.5pt;padding:4px 6px;"><strong>Description:</strong> <?= htmlspecialchars($incident->description); ?></td></tr>
+  <tr class="lr"><td colspan="8" style="font-size:7.5pt;padding:4px 6px;"><strong>Description:</strong> <?= htmlspecialchars((string)($incident->description)); ?></td></tr>
   <?php endif; ?>
   <?php if (!empty($incident->injury_damage_details)): ?>
-  <tr class="lr"><td colspan="8" style="font-size:7.5pt;padding:4px 6px;"><strong>Injury/Damage/Impact:</strong> <?= htmlspecialchars($incident->injury_damage_details); ?></td></tr>
+  <tr class="lr"><td colspan="8" style="font-size:7.5pt;padding:4px 6px;"><strong>Injury/Damage/Impact:</strong> <?= htmlspecialchars((string)($incident->injury_damage_details)); ?></td></tr>
   <?php endif; ?>
   <?php if (!empty($incident->actions_taken)): ?>
-  <tr class="lr"><td colspan="8" style="font-size:7.5pt;padding:4px 6px;"><strong>Actions Taken:</strong> <?= htmlspecialchars($incident->actions_taken); ?></td></tr>
+  <tr class="lr"><td colspan="8" style="font-size:7.5pt;padding:4px 6px;"><strong>Actions Taken:</strong> <?= htmlspecialchars((string)($incident->actions_taken)); ?></td></tr>
   <?php endif; ?>
   <?php if (!empty($attachments)): ?>
   <tr class="lr">
     <td colspan="8" style="font-size:7.5pt;padding:4px 6px;">
       <strong>Evidence on file (<?= count($attachments); ?>):</strong>
-      <?= htmlspecialchars(implode(', ', array_map(function($a){ return $a->original_name; }, $attachments))); ?>
+      <?= htmlspecialchars((string)(implode(', ', array_map(function($a){ return $a->original_name; }, $attachments)))); ?>
       — full files available in the system record for this Work Order.
     </td>
   </tr>
@@ -458,7 +458,7 @@ $sysRows = array(
   <tr><td colspan="8" class="sh" style="text-align:left;padding-left:6px!important;">PENDING WORK / TRAVAUX EN ATTENTE</td></tr>
   <?php foreach ($pendLines as $k => $line): ?>
   <tr class="lr">
-    <td colspan="8" class="<?= ($k===count($pendLines)-1)?'last-line':''; ?>"><?= htmlspecialchars($line); ?>&nbsp;</td>
+    <td colspan="8" class="<?= ($k===count($pendLines)-1)?'last-line':''; ?>"><?= htmlspecialchars((string)($line)); ?>&nbsp;</td>
   </tr>
   <?php endforeach; ?>
 
@@ -466,7 +466,7 @@ $sysRows = array(
   <tr><td colspan="8" class="sh" style="text-align:left;padding-left:6px!important;">REMARKS / REMARQUES</td></tr>
   <?php foreach ($remLines as $k => $line): ?>
   <tr class="lr">
-    <td colspan="8" class="<?= ($k===count($remLines)-1)?'last-line':''; ?>"><?= htmlspecialchars($line); ?>&nbsp;</td>
+    <td colspan="8" class="<?= ($k===count($remLines)-1)?'last-line':''; ?>"><?= htmlspecialchars((string)($line)); ?>&nbsp;</td>
   </tr>
   <?php endforeach; ?>
 
@@ -509,19 +509,19 @@ $sysRows = array(
 function renderSigBox($user, $role, $borderRight = true) {
     if ($user) {
         $ln   = !empty($user->last_name) ? ' ' . $user->last_name : '';
-        $name = htmlspecialchars($user->first_name . $ln);
+        $name = htmlspecialchars((string)($user->first_name . $ln));
     } else {
         $name = '';
     }
-    $pos  = ($user && !empty($user->position)) ? htmlspecialchars($user->position) : '';
+    $pos  = ($user && !empty($user->position)) ? htmlspecialchars((string)($user->position)) : '';
     $sig  = ($user && !empty($user->signature)) ? $user->signature : '';
     $border = 'border:1px solid #444;' . ($borderRight ? '' : 'border-right:none;');
     echo '<div style="flex:1;'.$border.'padding:5px 8px;">';
     echo '<div style="font-size:6.5pt;font-weight:bold;text-align:center;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">';
-    echo htmlspecialchars($role).'</div>';
+    echo htmlspecialchars((string)($role)).'</div>';
     if ($sig) {
         echo '<div style="text-align:center;height:46px;display:flex;align-items:center;justify-content:center;">';
-        echo '<img src="'.base_url(htmlspecialchars($sig)).'" alt="Signature"';
+        echo '<img src="'.base_url(htmlspecialchars((string)($sig))).'" alt="Signature"';
         echo ' style="max-height:44px;max-width:100%;object-fit:contain;">';
         echo '</div>';
     } else {
@@ -530,7 +530,7 @@ function renderSigBox($user, $role, $borderRight = true) {
     echo '<div style="border-top:1px solid #444;padding-top:3px;text-align:center;">';
     if ($name) echo '<div style="font-size:6.5pt;font-weight:700;">'.$name.'</div>';
     if ($pos)  echo '<div style="font-size:5.5pt;color:#777;">'.$pos.'</div>';
-    echo '<div style="font-size:5pt;color:#aaa;margin-top:1px;">'.htmlspecialchars($role).'</div>';
+    echo '<div style="font-size:5pt;color:#aaa;margin-top:1px;">'.htmlspecialchars((string)($role)).'</div>';
     echo '</div>';
     echo '</div>';
 }
@@ -544,8 +544,8 @@ function renderSigBox($user, $role, $borderRight = true) {
 </div>
 
 <div style="margin-top:3px;text-align:right;font-size:5.5pt;color:#bbb;">
-  <?= htmlspecialchars($company); ?> WMS &middot; Generated <?= date('d/m/Y H:i'); ?>
-  &middot; <?= htmlspecialchars($wo->wo_number??''); ?>
+  <?= htmlspecialchars((string)($company)); ?> WMS &middot; Generated <?= date('d/m/Y H:i'); ?>
+  &middot; <?= htmlspecialchars((string)($wo->wo_number??'')); ?>
 </div>
 
 </div></div><!-- /jc /wrap -->

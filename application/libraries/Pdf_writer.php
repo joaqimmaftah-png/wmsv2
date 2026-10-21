@@ -13,6 +13,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * GD image resource, e.g. a decoded signature PNG). Text is encoded as
  * CP1252/WinAnsi, which covers standard French accented characters.
  */
+#[AllowDynamicProperties]
 class Pdf_writer {
 
     private $pages = array();   // each: array('w'=>, 'h'=>, 'content'=>string)
@@ -82,7 +83,7 @@ class Pdf_writer {
     public function text_wrapped($x, $y_top, $text, $font, $size, $max_w, $line_h, $max_lines, $color = array(0, 0, 0)) {
         $lines = array();
         foreach (preg_split("/\r\n|\n|\r/", (string) $text) as $raw) {
-            $wrapped = self::wrap_line(trim($raw), $size, $max_w, ($font === 'F2'));
+            $wrapped = self::wrap_line(trim((string)($raw)), $size, $max_w, ($font === 'F2'));
             if (empty($wrapped)) $wrapped = array('');
             foreach ($wrapped as $w) $lines[] = $w;
         }
@@ -173,12 +174,12 @@ class Pdf_writer {
             $compressed = function_exists('gzcompress') ? gzcompress($img['raw'], 6) : null;
             if ($compressed !== null) {
                 $body[$img_base + $i] = "<< /Type /XObject /Subtype /Image /Width {$img['w']} /Height {$img['h']} "
-                    . "/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length " . strlen($compressed) . " >>\nstream\n"
+                    . "/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length " . strlen((string)($compressed)) . " >>\nstream\n"
                     . $compressed . "\nendstream";
             } else {
                 $raw = $img['raw'];
                 $body[$img_base + $i] = "<< /Type /XObject /Subtype /Image /Width {$img['w']} /Height {$img['h']} "
-                    . "/ColorSpace /DeviceRGB /BitsPerComponent 8 /Length " . strlen($raw) . " >>\nstream\n"
+                    . "/ColorSpace /DeviceRGB /BitsPerComponent 8 /Length " . strlen((string)($raw)) . " >>\nstream\n"
                     . $raw . "\nendstream";
             }
         }
@@ -187,7 +188,7 @@ class Pdf_writer {
         $kids = array();
         foreach ($this->pages as $page) {
             $content_bytes = $page['content'];
-            $body[$obj_num] = "<< /Length " . strlen($content_bytes) . " >>\nstream\n" . $content_bytes . "\nendstream";
+            $body[$obj_num] = "<< /Length " . strlen((string)($content_bytes)) . " >>\nstream\n" . $content_bytes . "\nendstream";
             $content_obj_num = $obj_num;
             $obj_num++;
 
@@ -208,11 +209,11 @@ class Pdf_writer {
         $out = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
         $offsets = array();
         for ($i = 1; $i <= $max_obj; $i++) {
-            $offsets[$i] = strlen($out);
+            $offsets[$i] = strlen((string)($out));
             $out .= "{$i} 0 obj\n" . $body[$i] . "\nendobj\n";
         }
 
-        $xref_offset = strlen($out);
+        $xref_offset = strlen((string)($out));
         $out .= "xref\n0 " . ($max_obj + 1) . "\n";
         $out .= "0000000000 65535 f \n";
         for ($i = 1; $i <= $max_obj; $i++) {

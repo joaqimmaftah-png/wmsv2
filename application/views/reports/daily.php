@@ -30,7 +30,7 @@
             <td><span class="badge bg-primary" style="font-size:11px;"><?= $wo->type ?></span></td>
             <td><span class="status-badge badge-<?= $wo->priority ?>"><?= $wo->priority ?></span></td>
             <td><span class="status-badge badge-<?= str_replace(' ','.', $wo->status) ?>"><?= $wo->status ?></span></td>
-            <td style="font-size:12px;"><?= htmlspecialchars((string)(strlen($wo->title)>50 ? substr($wo->title,0,50-3).'...' : $wo->title), ENT_QUOTES, 'UTF-8') ?></td>
+            <td style="font-size:12px;"><?= htmlspecialchars((string)(strlen((string)($wo->title))>50 ? substr($wo->title,0,50-3).'...' : $wo->title), ENT_QUOTES, 'UTF-8') ?></td>
             <td style="font-size:12px;"><?= (isset($wo->assigned_name) && $wo->assigned_name) ? $wo->assigned_name : '—' ?></td>
           </tr>
           <?php endforeach; ?>

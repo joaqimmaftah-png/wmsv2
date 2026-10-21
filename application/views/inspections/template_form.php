@@ -22,7 +22,7 @@ $val = function ($key, $default = '') use ($t) {
       </div>
       <div style="font-size:12.5px;color:var(--t2);margin-top:2px;">
         <?= $is_edit
-            ? htmlspecialchars($val('code')) . ' — ' . $records . ' submitted record(s)'
+            ? htmlspecialchars((string)($val('code'))) . ' — ' . $records . ' submitted record(s)'
             : 'Create a bilingual checklist; it appears on the Inspection Forms screen immediately.' ?>
       </div>
     </div>
@@ -34,7 +34,7 @@ $val = function ($key, $default = '') use ($t) {
   <div style="padding:12px 16px;border-radius:10px;background:var(--red-fill);border:1px solid rgba(192,57,43,0.2);margin-bottom:16px;">
     <div style="font-size:12.5px;font-weight:700;color:var(--red);margin-bottom:6px;">Nothing was saved:</div>
     <ul style="margin:0;padding-left:18px;font-size:12.5px;color:var(--red);">
-      <?php foreach ($errors as $e): ?><li><?= htmlspecialchars($e) ?></li><?php endforeach; ?>
+      <?php foreach ($errors as $e): ?><li><?= htmlspecialchars((string)($e)) ?></li><?php endforeach; ?>
     </ul>
   </div>
   <?php endif; ?>
@@ -48,27 +48,27 @@ $val = function ($key, $default = '') use ($t) {
         <div>
           <label class="form-label">Code *</label>
           <input type="text" name="code" class="form-control" required maxlength="50"
-                 value="<?= htmlspecialchars($val('code')) ?>" placeholder="e.g. excavator">
+                 value="<?= htmlspecialchars((string)($val('code'))) ?>" placeholder="e.g. excavator">
           <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">Lower-case letters, digits and underscores. Used in URLs and must be unique.</div>
         </div>
         <div>
           <label class="form-label">Category (English / French)</label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <input type="text" name="category_en" class="form-control" maxlength="100"
-                   value="<?= htmlspecialchars($val('category_en', 'General')) ?>" placeholder="Heavy Equipment">
+                   value="<?= htmlspecialchars((string)($val('category_en', 'General'))) ?>" placeholder="Heavy Equipment">
             <input type="text" name="category_fr" class="form-control" maxlength="100"
-                   value="<?= htmlspecialchars($val('category_fr', 'Général')) ?>" placeholder="Engins lourds">
+                   value="<?= htmlspecialchars((string)($val('category_fr', 'Général'))) ?>" placeholder="Engins lourds">
           </div>
         </div>
         <div>
           <label class="form-label">Name (English) *</label>
           <input type="text" name="name_en" class="form-control" required maxlength="255"
-                 value="<?= htmlspecialchars($val('name_en')) ?>" placeholder="Excavator Inspection Form">
+                 value="<?= htmlspecialchars((string)($val('name_en'))) ?>" placeholder="Excavator Inspection Form">
         </div>
         <div>
           <label class="form-label">Name (French) *</label>
           <input type="text" name="name_fr" class="form-control" required maxlength="255"
-                 value="<?= htmlspecialchars($val('name_fr')) ?>" placeholder="Formulaire d’inspection Excavatrice">
+                 value="<?= htmlspecialchars((string)($val('name_fr'))) ?>" placeholder="Formulaire d’inspection Excavatrice">
         </div>
         <div>
           <label class="form-label">Layout</label>
@@ -80,8 +80,8 @@ $val = function ($key, $default = '') use ($t) {
         <div>
           <label class="form-label">Meter label (EN / FR)</label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            <input type="text" name="meter_label_en" class="form-control" maxlength="20" value="<?= htmlspecialchars($val('meter_label_en', 'SMR')) ?>">
-            <input type="text" name="meter_label_fr" class="form-control" maxlength="20" value="<?= htmlspecialchars($val('meter_label_fr', 'SMR')) ?>">
+            <input type="text" name="meter_label_en" class="form-control" maxlength="20" value="<?= htmlspecialchars((string)($val('meter_label_en', 'SMR'))) ?>">
+            <input type="text" name="meter_label_fr" class="form-control" maxlength="20" value="<?= htmlspecialchars((string)($val('meter_label_fr', 'SMR'))) ?>">
           </div>
         </div>
       </div>
@@ -89,7 +89,7 @@ $val = function ($key, $default = '') use ($t) {
       <div id="columns-box" style="margin-top:14px;<?= $layout === 'matrix' ? '' : 'display:none;' ?>">
         <label class="form-label">Matrix columns (JSON) *</label>
         <textarea name="columns_json" class="form-control" rows="4" spellcheck="false"
-                  style="font-family:ui-monospace,monospace;font-size:11.5px;"><?= htmlspecialchars($columns_j) ?></textarea>
+                  style="font-family:ui-monospace,monospace;font-size:11.5px;"><?= htmlspecialchars((string)($columns_j)) ?></textarea>
         <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">
           Array of <code>{"key","label_en","label_fr"}</code> objects, e.g.
           <code>[{"key":"H","label_en":"Excavator","label_fr":"Excavatrice"}]</code>.

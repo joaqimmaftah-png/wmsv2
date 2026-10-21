@@ -38,17 +38,36 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 $active_group = 'default';
 $query_builder = TRUE;
 
-$env = function ($key) {
-    $value = getenv($key);
-    return ($value === FALSE) ? '' : (string) $value;
+$env = function ($key, $fallbackKey = NULL) {
+    $candidates = $fallbackKey ? array($key, $fallbackKey) : array($key);
+    foreach ($candidates as $k) {
+        $value = getenv($k);
+        if ($value !== FALSE) return (string) $value;
+        if (isset($_ENV[$k])) return (string) $_ENV[$k];
+        if (isset($_SERVER[$k])) return (string) $_SERVER[$k];
+        if (isset($_SERVER['REDIRECT_' . $k])) return (string) $_SERVER['REDIRECT_' . $k];
+    }
+    return '';
 };
+
+$_raw_db_host = $env('WMS_DB_HOST', 'DB_HOST');
+$_raw_db_port = $env('WMS_DB_PORT', 'DB_PORT');
+if ($_raw_db_host !== '' && $_raw_db_host[0] !== '/' && strpos($_raw_db_host, ':') !== FALSE) {
+    $_parts = explode(':', $_raw_db_host, 2);
+    if ($_parts[1] !== '' && ctype_digit($_parts[1])) {
+        $_raw_db_host = $_parts[0];
+        if ($_raw_db_port === '') $_raw_db_port = $_parts[1];
+    }
+    unset($_parts);
+}
 
 $db['default'] = array(
     'dsn'          => '',
-    'hostname'     => $env('WMS_DB_HOST'),
-    'username'     => $env('WMS_DB_USER'),
-    'password'     => $env('WMS_DB_PASS'),
-    'database'     => $env('WMS_DB_NAME'),
+    'hostname'     => $_raw_db_host,
+    'port'         => ($_raw_db_port !== '' && ctype_digit($_raw_db_port)) ? (int) $_raw_db_port : NULL,
+    'username'     => $env('WMS_DB_USER', 'DB_USER'),
+    'password'     => $env('WMS_DB_PASS', 'DB_PASS'),
+    'database'     => $env('WMS_DB_NAME', 'DB_NAME'),
     'dbdriver'     => 'mysqli',
     'dbprefix'     => '',
     'pconnect'     => FALSE,
@@ -98,7 +117,7 @@ if (empty($db['default']['hostname']) || empty($db['default']['username']) || em
             echo '<li>Copy <code>application/config/database.local.php.example</code> to <code>application/config/database.local.php</code></li>';
             echo '<li>Edit it with your cPanel database credentials (from MySQL Databases section)</li>';
             echo '<li>Example:<br><code>';
-            echo htmlspecialchars("<?php\ndefined('BASEPATH') OR exit('No direct script access allowed');\n\$db['default']['hostname'] = 'localhost';\n\$db['default']['username'] = 'your_cpaneluser_dbuser';\n\$db['default']['password'] = 'your_password';\n\$db['default']['database'] = 'your_cpaneluser_dbname';\n");
+            echo htmlspecialchars((string)("<?php\ndefined('BASEPATH') OR exit('No direct script access allowed');\n\$db['default']['hostname'] = 'localhost';\n\$db['default']['username'] = 'your_cpaneluser_dbuser';\n\$db['default']['password'] = 'your_password';\n\$db['default']['database'] = 'your_cpaneluser_dbname';\n"));
             echo '</code></li>';
             echo '</ol>';
             echo '<p>Also check cPanel &gt; Select PHP Version &gt; set to 8.1 or 8.2</p>';

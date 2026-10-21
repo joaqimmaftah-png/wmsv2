@@ -614,9 +614,9 @@ class Forecast_model extends CI_Model {
             $overdue   = $remaining <= 0;
             $days      = $overdue ? 0 : (int)ceil($remaining / $util - 1e-9);
             $date      = date('Y-m-d', strtotime($cur_date . ' +' . $days . ' days'));
-            $detail    = number_format($cur, 0) . ' h + ' . rtrim(rtrim(number_format($util, 2, '.', ''), '0'), '.')
+            $detail    = number_format((float)($cur), 0) . ' h + ' . rtrim(rtrim((string)(number_format((float)($util), 2, '.', '')), '0'), '.')
                        . ' h/day' . ($src === 'default' ? ' (default)' : '')
-                       . ' → due ≈ ' . $date . ' (' . number_format($due, 0) . ' h)';
+                       . ' → due ≈ ' . $date . ' (' . number_format((float)($due), 0) . ' h)';
 
             $out[$id] = array_merge($base, array('status' => 'projected', 'reason' => null, 'date' => $date,
                                                  'detail' => $detail, 'overdue' => $overdue,
@@ -637,8 +637,8 @@ class Forecast_model extends CI_Model {
             'equipment_id'    => (int)$ps->equipment_id,
             'registration_no' => isset($ps->registration_no) ? $ps->registration_no : null,
             'schedule_name'   => (string)$ps->schedule_name,
-            'interval'        => trim((isset($ps->interval_value) ? $ps->interval_value : '') . ' '
-                                      . (isset($ps->interval_type) ? $ps->interval_type : '')),
+            'interval'        => trim((string)((isset($ps->interval_value) ? $ps->interval_value : '') . ' '
+                                      . (isset($ps->interval_type) ? $ps->interval_type : ''))),
             'next_due_date'   => isset($ps->next_due_date) ? $ps->next_due_date : null,
             'reason'          => $reason,
         );
@@ -869,8 +869,8 @@ class Forecast_model extends CI_Model {
                         'excess_hours'    => round($booked - $daily_open, 4),
                         'message'         => sprintf('%s on %s is booked %s h on a %s h day',
                                                      $m->registration_no, $d,
-                                                     rtrim(rtrim(number_format($booked, 2, '.', ''), '0'), '.'),
-                                                     rtrim(rtrim(number_format($daily_open, 2, '.', ''), '0'), '.')),
+                                                     rtrim(rtrim((string)(number_format((float)($booked), 2, '.', '')), '0'), '.'),
+                                                     rtrim(rtrim((string)(number_format((float)($daily_open), 2, '.', '')), '0'), '.')),
                     );
                 }
                 $dt_kpi = min($dt, $req);

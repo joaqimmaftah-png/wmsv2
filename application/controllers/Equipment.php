@@ -36,20 +36,32 @@ class Equipment extends MY_Controller {
         }
 
         if ($this->input->post()) {
+            $year_raw = $this->input->post('year', TRUE);
+            $reg_no   = strtoupper((string)(trim((string)$this->input->post('registration_no', TRUE))));
+            if ($reg_no === '') {
+                $this->session->set_flashdata('error', 'Registration / Machine ID is required.');
+                redirect('equipment/create');
+                return;
+            }
+            if ($this->db->where('registration_no', $reg_no)->count_all_results('equipment') > 0) {
+                $this->session->set_flashdata('error', 'Equipment registration "' . $reg_no . '" already exists.');
+                redirect('equipment/create');
+                return;
+            }
             $data = [
                 'equipment_type_id' => $this->input->post('equipment_type_id', TRUE),
-                'registration_no'   => strtoupper($this->input->post('registration_no', TRUE)),
+                'registration_no'   => $reg_no,
                 'brand'             => $this->input->post('brand', TRUE),
                 'model'             => $this->input->post('model', TRUE),
-                'year'              => $this->input->post('year', TRUE),
-                'serial_number'     => $this->input->post('serial_number', TRUE),
-                'engine_model'      => $this->input->post('engine_model', TRUE),
+                'year'              => ($year_raw !== '' && $year_raw !== null && is_numeric($year_raw)) ? (int)$year_raw : NULL,
+                'serial_number'     => $this->input->post('serial_number', TRUE) ?: NULL,
+                'engine_model'      => $this->input->post('engine_model', TRUE) ?: NULL,
                 'current_hours'     => $this->input->post('current_hours', TRUE) ?: 0,
                 'current_km'        => $this->input->post('current_km', TRUE) ?: 0,
                 'location'          => $this->Equipment_model->sanitize_location($this->input->post('location', TRUE))['value'],   // W0.5
                 'purchase_date'     => $this->input->post('purchase_date', TRUE) ?: NULL,
                 'warranty_expiry'   => $this->input->post('warranty_expiry', TRUE) ?: NULL,
-                'notes'             => $this->input->post('notes', TRUE),
+                'notes'             => $this->input->post('notes', TRUE) ?: NULL,
                 'status'            => 'Available',
             ];
             // W0.3 — weekly-report classification (group / order / included)
@@ -60,7 +72,7 @@ class Equipment extends MY_Controller {
             ]));
 
             // Handle photo upload
-            if ($_FILES['photo']['name']) {
+            if (!empty($_FILES['photo']['name'])) {
                 $config = [
                     'upload_path'   => './uploads/photos/',
                     'allowed_types' => 'gif|jpg|jpeg|png',
@@ -123,21 +135,22 @@ class Equipment extends MY_Controller {
         if (!$equipment) show_404();
 
         if ($this->input->post()) {
+            $year_raw = $this->input->post('year', TRUE);
             $data = [
                 'equipment_type_id' => $this->input->post('equipment_type_id', TRUE),
-                'registration_no'   => strtoupper($this->input->post('registration_no', TRUE)),
+                'registration_no'   => strtoupper((string)(trim((string)$this->input->post('registration_no', TRUE)))),
                 'brand'             => $this->input->post('brand', TRUE),
                 'model'             => $this->input->post('model', TRUE),
-                'year'              => $this->input->post('year', TRUE),
-                'serial_number'     => $this->input->post('serial_number', TRUE),
-                'engine_model'      => $this->input->post('engine_model', TRUE),
+                'year'              => ($year_raw !== '' && $year_raw !== null && is_numeric($year_raw)) ? (int)$year_raw : NULL,
+                'serial_number'     => $this->input->post('serial_number', TRUE) ?: NULL,
+                'engine_model'      => $this->input->post('engine_model', TRUE) ?: NULL,
                 'current_hours'     => $this->input->post('current_hours', TRUE) ?: 0,
                 'current_km'        => $this->input->post('current_km', TRUE) ?: 0,
                 'location'          => $this->Equipment_model->sanitize_location($this->input->post('location', TRUE))['value'],   // W0.5
                 'status'            => $this->input->post('status', TRUE),
                 'purchase_date'     => $this->input->post('purchase_date', TRUE) ?: NULL,
                 'warranty_expiry'   => $this->input->post('warranty_expiry', TRUE) ?: NULL,
-                'notes'             => $this->input->post('notes', TRUE),
+                'notes'             => $this->input->post('notes', TRUE) ?: NULL,
             ];
             // W0.3 — weekly-report classification (group / order / included)
             $data = array_merge($data, $this->Equipment_model->sanitize_reportability([

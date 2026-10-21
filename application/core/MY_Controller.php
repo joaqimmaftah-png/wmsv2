@@ -52,6 +52,26 @@ class MY_Controller extends CI_Controller {
     public $Kpi_engine_model;
     public $Auth_throttle_model;
 
+    /**
+     * PHP 8.x parameter guard: CodeIgniter 3 dispatches URL segments directly
+     * via call_user_func_array(). On PHP 7 missing URL segments emitted a
+     * warning and hit show_404(); on PHP 8+ they throw an uncaught
+     * ArgumentCountError (HTTP 500). Return a clean 404 instead whenever a
+     * non-public method or missing required segment is requested.
+     */
+    public function _remap($method, $params = array()) {
+        if (!method_exists($this, $method) || $method === '_remap' || $method[0] === '_') {
+            show_404();
+            return;
+        }
+        $ref = new ReflectionMethod($this, $method);
+        if (!$ref->isPublic() || count($params) < $ref->getNumberOfRequiredParameters()) {
+            show_404();
+            return;
+        }
+        return call_user_func_array(array($this, $method), $params);
+    }
+
     public function __construct() {
         parent::__construct();
 
@@ -95,7 +115,7 @@ class MY_Controller extends CI_Controller {
         echo '<li>In File Manager, copy <code>application/config/database.local.php.example</code> to <code>database.local.php</code> (same folder)</li>';
         echo '<li>Edit <code>database.local.php</code> with your cPanel DB credentials:<br>';
         echo '<pre>';
-        echo htmlspecialchars("<?php\ndefined('BASEPATH') OR exit('No direct script access allowed');\n\n\$db['default']['hostname'] = 'localhost';\n\$db['default']['username'] = 'cpaneluser_dbuser';\n\$db['default']['password'] = 'your_password';\n\$db['default']['database'] = 'cpaneluser_dbname';\n");
+        echo htmlspecialchars((string)("<?php\ndefined('BASEPATH') OR exit('No direct script access allowed');\n\n\$db['default']['hostname'] = 'localhost';\n\$db['default']['username'] = 'cpaneluser_dbuser';\n\$db['default']['password'] = 'your_password';\n\$db['default']['database'] = 'cpaneluser_dbname';\n"));
         echo '</pre></li>';
         echo '<li>cPanel > MySQL Databases: Create DB + User + <strong>Add user to DB with ALL PRIVILEGES</strong></li>';
         echo '<li>cPanel > phpMyAdmin: Import <code>database/schema.sql</code></li>';
@@ -181,8 +201,8 @@ class MY_Controller extends CI_Controller {
     protected function _enforce_access() {
         if (!$this->router) return; // safety guard, shouldn't happen in practice
 
-        $class  = strtolower($this->router->fetch_class());
-        $method = strtolower($this->router->fetch_method());
+        $class  = strtolower((string)($this->router->fetch_class()));
+        $method = strtolower((string)($this->router->fetch_method()));
 
         if ($class === 'auth') return; // login/logout always reachable
 
@@ -199,7 +219,7 @@ class MY_Controller extends CI_Controller {
         }
 
         if ($this->role_id == self::ROLE_MANAGER) {
-            $is_post    = (strtolower($this->input->method()) === 'post');
+            $is_post    = (strtolower((string)($this->input->method())) === 'post');
             $name_match = (bool)preg_match(self::MUTATION_PATTERN, $method);
             $key        = $class . '/' . $method;
             // A manager changes only their OWN password/profile here, which is
@@ -325,7 +345,7 @@ class MY_Controller extends CI_Controller {
 
     /** Reject state-changing requests that did not use POST. */
     protected function require_post() {
-        if (strtolower($this->input->method()) === 'post') return true;
+        if (strtolower((string)($this->input->method())) === 'post') return true;
 
         $this->output->set_status_header(405);
         $this->output->set_header('Allow: POST');

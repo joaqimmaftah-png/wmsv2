@@ -31,6 +31,7 @@
  */
 defined('BASEPATH') OR exit('No direct script access allowed');
 
+#[AllowDynamicProperties]
 class Forecast_excel {
 
     /** 1899-12-30 — the serial-date epoch every Excel reader expects. */
@@ -162,7 +163,7 @@ class Forecast_excel {
             if (empty($by_group[$name])) continue;
 
             // group banner
-            $put('A', $row, strtoupper($name), self::S_GRP);
+            $put('A', $row, strtoupper((string)($name)), self::S_GRP);
             $blank_to($row, self::S_GRP);
             $merges[] = 'A' . $row . ':' . self::col_letter($last_col) . $row;
             $row++;
@@ -202,7 +203,7 @@ class Forecast_excel {
             }
 
             // capacity-weighted subtotal (D30) — the model's own figure
-            $put('A', $row, strtoupper($name) . ' — GROUP', self::S_SUBTOT);
+            $put('A', $row, strtoupper((string)($name)) . ' — GROUP', self::S_SUBTOT);
             $put('B', $row, $g['machines'] . ' machines', self::S_SUBTOT);
             $blank_to($row, self::S_SUBTOT, 3);
             $put(self::col_letter($c_pm),    $row, $g['pm_hours'],       self::S_SUB_N);
@@ -496,7 +497,7 @@ class Forecast_excel {
     public static function col_index($letters) {
         $letters = strtoupper((string)$letters);
         $n = 0;
-        for ($i = 0, $len = strlen($letters); $i < $len; $i++) {
+        for ($i = 0, $len = strlen((string)($letters)); $i < $len; $i++) {
             $n = $n * 26 + (ord($letters[$i]) - 64);
         }
         return $n;

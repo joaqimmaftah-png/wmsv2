@@ -43,17 +43,17 @@ $downtime = (isset($kpi['total_downtime']) ? $kpi['total_downtime'] : 0);
   <div class="kpi" style="animation-delay:.12s;">
     <div class="kpi-glow" style="background:var(--amber);"></div>
     <span class="kpi-tag">MTTR (hrs)</span>
-    <div class="kpi-num"><?= number_format($mttr, 1) ?></div>
+    <div class="kpi-num"><?= number_format((float)($mttr), 1) ?></div>
   </div>
   <div class="kpi" style="animation-delay:.16s;">
     <div class="kpi-glow" style="background:var(--blue);"></div>
     <span class="kpi-tag">MTBF (hrs)</span>
-    <div class="kpi-num"><?= number_format($mtbf, 1) ?></div>
+    <div class="kpi-num"><?= number_format((float)($mtbf), 1) ?></div>
   </div>
   <div class="kpi" style="animation-delay:.20s;">
     <div class="kpi-glow" style="background:var(--purple);"></div>
     <span class="kpi-tag">Total Downtime</span>
-    <div class="kpi-num"><?= number_format($downtime, 1) ?><span style="font-size:12px;">h</span></div>
+    <div class="kpi-num"><?= number_format((float)($downtime), 1) ?><span style="font-size:12px;">h</span></div>
   </div>
 </div>
 
@@ -76,11 +76,11 @@ $downtime = (isset($kpi['total_downtime']) ? $kpi['total_downtime'] : 0);
     ?>
     <tr>
       <td><a href="<?= base_url('workorders/view/'.$wo->id) ?>" class="mono" style="color:var(--blue);"><?= $wo->wo_number ?></a></td>
-      <td><?= htmlspecialchars((isset($wo->registration_no) ? $wo->registration_no : '—')) ?></td>
+      <td><?= htmlspecialchars((string)((isset($wo->registration_no) ? $wo->registration_no : '—'))) ?></td>
       <td><span class="badge <?= $tc ?>"><?= $wo->type ?></span></td>
       <td><span class="badge <?= $pc ?>"><?= $wo->priority ?></span></td>
       <td><span class="badge <?= $sc ?>"><?= $wo->status ?></span></td>
-      <td><?= htmlspecialchars((isset($wo->assigned_name) ? $wo->assigned_name : '—')) ?></td>
+      <td><?= htmlspecialchars((string)((isset($wo->assigned_name) ? $wo->assigned_name : '—'))) ?></td>
       <td class="mono" style="font-size:11px;"><?= date('d/m', strtotime($wo->created_at)) ?></td>
     </tr>
     <?php endforeach; ?>
@@ -136,7 +136,7 @@ $downtime = (isset($kpi['total_downtime']) ? $kpi['total_downtime'] : 0);
     <tbody>
     <?php foreach ($pm_done as $pm): ?>
     <tr>
-      <td><?= htmlspecialchars((isset($pm->schedule_name) ? $pm->schedule_name : '—')) ?></td>
+      <td><?= htmlspecialchars((string)((isset($pm->schedule_name) ? $pm->schedule_name : '—'))) ?></td>
       <td class="mono"><?= $pm->next_due_date ? date('d/m/Y', strtotime($pm->next_due_date)) : '—' ?></td>
       <td><span class="badge b-primary"><?= (isset($pm->status) ? $pm->status : '—') ?></span></td>
     </tr>

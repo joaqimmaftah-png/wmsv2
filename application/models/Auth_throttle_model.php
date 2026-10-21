@@ -146,7 +146,7 @@ class Auth_throttle_model extends CI_Model {
     }
 
     private function normalize_email($email) {
-        return substr(strtolower(trim((string) $email)), 0, 150);
+        return substr(strtolower((string)(trim((string) $email))), 0, 150);
     }
 
     private function window_start() {

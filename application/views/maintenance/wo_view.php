@@ -32,11 +32,11 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
       <span class="badge <?= $tc ?>"><?= $wo->type ?></span>
       <?php if (!empty($wo->hold_code)): ?>
       <span class="badge b-waiting" title="Hold code — why the work is waiting">
-        ⏸ <?= htmlspecialchars($wo->hold_code) ?><?= wo_hold_label($wo->hold_code) ? ' — '.htmlspecialchars(wo_hold_label($wo->hold_code)) : '' ?>
+        ⏸ <?= htmlspecialchars((string)($wo->hold_code)) ?><?= wo_hold_label($wo->hold_code) ? ' — '.htmlspecialchars((string)(wo_hold_label($wo->hold_code))) : '' ?>
       </span>
       <?php endif; ?>
     </div>
-    <div style="font-size:14px;font-weight:500;color:var(--t1);"><?= htmlspecialchars($wo->title) ?></div>
+    <div style="font-size:14px;font-weight:500;color:var(--t1);"><?= htmlspecialchars((string)($wo->title)) ?></div>
   </div>
   <div class="flex ai-c gap-10">
     <!-- PRINT JOB CARD BUTTON — primary action -->
@@ -64,7 +64,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
         <div class="kpi-glow" style="background:var(--blue);"></div>
         <span class="kpi-tag">Equipment</span>
         <div style="font-size:15px;font-weight:700;color:var(--t1);margin-top:4px;"><?= (isset($wo->registration_no) ? $wo->registration_no : '—') ?></div>
-        <div style="font-size:10px;color:var(--t3);margin-top:2px;"><?= htmlspecialchars((isset($wo->brand) ? $wo->brand : '') . ' ' . (isset($wo->model) ? $wo->model : '')) ?></div>
+        <div style="font-size:10px;color:var(--t3);margin-top:2px;"><?= htmlspecialchars((string)((isset($wo->brand) ? $wo->brand : '') . ' ' . (isset($wo->model) ? $wo->model : ''))) ?></div>
       </div>
       <div class="kpi" style="animation-delay:.09s;">
         <div class="kpi-glow" style="background:var(--amber);"></div>
@@ -83,7 +83,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
           <?php
           if ($wo->start_datetime && $wo->end_datetime) {
             $diff = (strtotime($wo->end_datetime) - strtotime($wo->start_datetime)) / 3600;
-            echo number_format($diff,1);
+            echo number_format((float)($diff),1);
           } else { echo (isset($wo->downtime_hours) ? $wo->downtime_hours : '—'); }
           ?><sup style="font-size:11px;">hrs</sup>
         </div>
@@ -93,7 +93,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
     <!-- Work Sessions (multi-stint time tracking) -->
     <div class="card mb-3" style="animation-delay:.18s;">
       <div class="ch">
-        <div><div class="ct">Work Sessions</div><div class="cs"><?= count($sessions) ?> session(s) &middot; <?= number_format($session_hours,2) ?> hrs logged</div></div>
+        <div><div class="ct">Work Sessions</div><div class="cs"><?= count($sessions) ?> session(s) &middot; <?= number_format((float)($session_hours),2) ?> hrs logged</div></div>
         <?php if (!$open_session): ?>
         <span class="ca" onclick="document.getElementById('start-session-form').style.display='block';this.style.display='none';">+ Start Session</span>
         <?php endif; ?>
@@ -105,7 +105,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
         <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--green-fill);border:1px solid rgba(28,140,60,0.18);border-radius:10px;margin-bottom:14px;">
           <div>
             <div style="font-size:12px;font-weight:600;color:var(--green);">● Session <?= (int)$open_session->session_no ?> in progress</div>
-            <div style="font-size:10.5px;color:var(--t3);margin-top:2px;"><?= htmlspecialchars($open_session->technician_name ?: 'Unassigned') ?> &middot; started <?= date('d M, H:i', strtotime($open_session->start_datetime)) ?></div>
+            <div style="font-size:10.5px;color:var(--t3);margin-top:2px;"><?= htmlspecialchars((string)($open_session->technician_name ?: 'Unassigned')) ?> &middot; started <?= date('d M, H:i', strtotime($open_session->start_datetime)) ?></div>
           </div>
         </div>
         <?= form_open('workorders/close_session/'.$open_session->id.'/'.$wo->id) ?>
@@ -144,7 +144,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
               <label class="form-label">Technician<?= $assigned_ids ? ' (assigned to this WO)' : '' ?></label>
               <select name="technician_id" class="form-select">
                 <?php foreach ($tech_choices as $t): ?>
-                <option value="<?= $t->id ?>" <?= $t->id==$default_id?'selected':'' ?>><?= htmlspecialchars($t->first_name.' '.$t->last_name) ?></option>
+                <option value="<?= $t->id ?>" <?= $t->id==$default_id?'selected':'' ?>><?= htmlspecialchars((string)($t->first_name.' '.$t->last_name)) ?></option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -164,19 +164,19 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
           <div class="row-list-item" style="cursor:default;padding:10px 0;">
             <div style="width:7px;height:7px;border-radius:50%;background:<?= $s->status==='Open'?'var(--green)':'var(--t4)' ?>;flex-shrink:0;margin-top:4px;"></div>
             <div style="flex:1;">
-              <div style="font-size:12px;font-weight:600;color:var(--t1);">Session <?= (int)$s->session_no ?> — <?= htmlspecialchars($s->technician_name ?: 'Unassigned') ?></div>
+              <div style="font-size:12px;font-weight:600;color:var(--t1);">Session <?= (int)$s->session_no ?> — <?= htmlspecialchars((string)($s->technician_name ?: 'Unassigned')) ?></div>
               <div style="font-size:10.5px;color:var(--t3);">
                 <?= date('d M, H:i', strtotime($s->start_datetime)) ?>
                 <?= $s->end_datetime ? ' → '.date('d M, H:i', strtotime($s->end_datetime)) : ' (in progress)' ?>
                 <?php if (!empty($s->switched_to_wo_id) && !empty($s->switched_to_wo_number)): ?>
-                &middot; switched to <a href="<?= base_url('workorders/view/'.$s->switched_to_wo_id) ?>" style="color:var(--blue);font-weight:600;"><?= htmlspecialchars($s->switched_to_wo_number) ?></a>
+                &middot; switched to <a href="<?= base_url('workorders/view/'.$s->switched_to_wo_id) ?>" style="color:var(--blue);font-weight:600;"><?= htmlspecialchars((string)($s->switched_to_wo_number)) ?></a>
                 <?php elseif ($s->interruption_reason): ?>
-                &middot; <?= htmlspecialchars($s->interruption_reason) ?>
+                &middot; <?= htmlspecialchars((string)($s->interruption_reason)) ?>
                 <?php endif; ?>
               </div>
             </div>
             <?php if ($s->status === 'Closed'): ?>
-            <div class="mono" style="font-size:11.5px;font-weight:600;color:var(--t1);margin-right:10px;"><?= number_format($s->hours_worked,2) ?>h</div>
+            <div class="mono" style="font-size:11.5px;font-weight:600;color:var(--t1);margin-right:10px;"><?= number_format((float)($s->hours_worked),2) ?>h</div>
             <a href="<?= base_url('workorders/session_jobcard/'.$s->id) ?>" target="_blank" class="btn btn-ghost btn-sm">Job Card</a>
             <?php endif; ?>
           </div>
@@ -193,7 +193,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
       </div>
       <div style="padding:16px 22px;">
         <?php if ($wo->symptoms || $wo->description): ?>
-        <div style="font-size:13px;color:var(--t2);line-height:1.6;"><?= nl2br(htmlspecialchars((isset($wo->symptoms) ? $wo->symptoms : (isset($wo->description) ? $wo->description : '')))) ?></div>
+        <div style="font-size:13px;color:var(--t2);line-height:1.6;"><?= nl2br((string)(htmlspecialchars((string)((isset($wo->symptoms) ? $wo->symptoms : (isset($wo->description) ? $wo->description : '')))))) ?></div>
         <?php else: ?>
         <div style="color:var(--t3);font-size:13px;">No description recorded.</div>
         <?php endif; ?>
@@ -207,7 +207,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
       </div>
       <div style="padding:16px 22px;">
         <?php if ($wo->root_cause): ?>
-        <div style="font-size:13px;color:var(--t2);line-height:1.6;"><?= nl2br(htmlspecialchars($wo->root_cause)) ?></div>
+        <div style="font-size:13px;color:var(--t2);line-height:1.6;"><?= nl2br((string)(htmlspecialchars((string)($wo->root_cause)))) ?></div>
         <?php else: ?>
         <div style="color:var(--t3);font-size:13px;">Not yet recorded.</div>
         <?php endif; ?>
@@ -230,7 +230,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
       'Unlinked'     => array('⚪', 'var(--t3)',    'b-secondary'),
       'From Machine' => array('🟡', 'var(--amber)', 'b-warning'),
     );
-    $sp_qty_fmt = function ($n) { return rtrim(rtrim(number_format((float)$n, 2, '.', ''), '0'), '.'); };
+    $sp_qty_fmt = function ($n) { return rtrim((string)(rtrim((string)(number_format((float)$n, 2, '.', '')), '0')), '.'); };
     ?>
     <div class="card mb-3" style="animation-delay:.28s;">
       <div class="ch">
@@ -274,19 +274,19 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
             $info = isset($pa_dot[$st]) ? $pa_dot[$st] : array('⚪','var(--t3)','b-secondary');
           ?>
           <tr>
-            <td style="white-space:nowrap;"><span class="badge <?= $info[2] ?>" style="font-size:10px;"><?= $info[0] ?> <?= htmlspecialchars($st) ?></span></td>
+            <td style="white-space:nowrap;"><span class="badge <?= $info[2] ?>" style="font-size:10px;"><?= $info[0] ?> <?= htmlspecialchars((string)($st)) ?></span></td>
             <td style="font-weight:500;">
-              <?= htmlspecialchars(isset($sp->part_name) ? $sp->part_name : '') ?>
+              <?= htmlspecialchars((string)(isset($sp->part_name) ? $sp->part_name : '')) ?>
               <?php if ($st === 'From Machine' && !empty($sp->source_machine)): ?>
-              <div style="font-size:10px;color:var(--t3);">from <?= htmlspecialchars($sp->source_machine) ?></div>
+              <div style="font-size:10px;color:var(--t3);">from <?= htmlspecialchars((string)($sp->source_machine)) ?></div>
               <?php endif; ?>
               <?php if ($st === 'Unlinked'): ?>
               <div style="font-size:10px;color:var(--t3);">item code missing / not in inventory</div>
               <?php endif; ?>
             </td>
-            <td class="mono" style="font-size:11px;"><?= htmlspecialchars(!empty($sp->item_code) ? $sp->item_code : '—') ?></td>
-            <td class="mono" style="font-size:11px;color:var(--t3);"><?= htmlspecialchars(isset($sp->part_number) ? $sp->part_number : '') ?></td>
-            <td class="mono" style="font-weight:600;"><?= isset($sp->quantity) ? $sp_qty_fmt($sp->quantity) : '' ?> <span style="color:var(--t4);font-size:10px;"><?= htmlspecialchars(isset($sp->unit) ? $sp->unit : 'pcs') ?></span></td>
+            <td class="mono" style="font-size:11px;"><?= htmlspecialchars((string)(!empty($sp->item_code) ? $sp->item_code : '—')) ?></td>
+            <td class="mono" style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)(isset($sp->part_number) ? $sp->part_number : '')) ?></td>
+            <td class="mono" style="font-weight:600;"><?= isset($sp->quantity) ? $sp_qty_fmt($sp->quantity) : '' ?> <span style="color:var(--t4);font-size:10px;"><?= htmlspecialchars((string)(isset($sp->unit) ? $sp->unit : 'pcs')) ?></span></td>
             <td class="mono" style="font-weight:600;color:<?= $st === 'From Machine' ? 'var(--t3)' : ($sp->stock_qty > 0 ? 'var(--t1)' : 'var(--red)') ?>;">
               <?= $st === 'From Machine' ? '—' : (isset($sp->stock_qty) ? $sp_qty_fmt($sp->stock_qty) : '—') ?>
             </td>
@@ -312,9 +312,9 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
         <tbody>
           <?php foreach ($spare_parts as $sp): ?>
           <tr>
-            <td class="mono" style="font-size:11px;"><?= htmlspecialchars((isset($sp->item_code) ? $sp->item_code : '—')); ?></td>
-            <td style="font-weight:500;"><?= htmlspecialchars((isset($sp->part_name) ? $sp->part_name : '')); ?></td>
-            <td class="mono" style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((isset($sp->part_number) ? $sp->part_number : '')); ?></td>
+            <td class="mono" style="font-size:11px;"><?= htmlspecialchars((string)((isset($sp->item_code) ? $sp->item_code : '—'))); ?></td>
+            <td style="font-weight:500;"><?= htmlspecialchars((string)((isset($sp->part_name) ? $sp->part_name : ''))); ?></td>
+            <td class="mono" style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)((isset($sp->part_number) ? $sp->part_number : ''))); ?></td>
             <td><?php
               $stype = isset($sp->spare_type) ? $sp->spare_type : 'New';
               if ($stype === 'From Machine') {
@@ -323,7 +323,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
                 echo '<span class="badge b-success" style="font-size:10px;">New</span>';
               }
             ?></td>
-            <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars(isset($sp->source_machine) ? $sp->source_machine : ''); ?></td>
+            <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars((string)(isset($sp->source_machine) ? $sp->source_machine : '')); ?></td>
             <td class="mono" style="font-weight:600;"><?= isset($sp->quantity) ? $sp->quantity : ''; ?> <span style="color:var(--t4);font-size:10px;"><?= isset($sp->unit) ? $sp->unit : 'pcs'; ?></span></td>
           </tr>
           <?php endforeach; ?>
@@ -368,13 +368,13 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
             $posted = (!empty($lc_by_qty[$q])) ? array_shift($lc_by_qty[$q]) : null;
           ?>
           <tr>
-            <td style="font-weight:500;"><?= htmlspecialchars(isset($oil->system_location) ? $oil->system_location : ''); ?></td>
-            <td><?= htmlspecialchars(isset($oil->oil_type) ? $oil->oil_type : ''); ?></td>
-            <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars(isset($oil->grade) ? $oil->grade : ''); ?></td>
-            <td class="mono fw-600"><?= isset($oil->quantity) && $oil->quantity ? number_format($oil->quantity,1) : '—'; ?> <span style="color:var(--t4);font-size:10px;">L</span></td>
+            <td style="font-weight:500;"><?= htmlspecialchars((string)(isset($oil->system_location) ? $oil->system_location : '')); ?></td>
+            <td><?= htmlspecialchars((string)(isset($oil->oil_type) ? $oil->oil_type : '')); ?></td>
+            <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars((string)(isset($oil->grade) ? $oil->grade : '')); ?></td>
+            <td class="mono fw-600"><?= isset($oil->quantity) && $oil->quantity ? number_format((float)($oil->quantity),1) : '—'; ?> <span style="color:var(--t4);font-size:10px;">L</span></td>
             <td>
               <?php if ($posted): ?>
-                <span class="badge b-success" style="font-size:10px;">✓ <?= htmlspecialchars($posted->lube_name) ?></span>
+                <span class="badge b-success" style="font-size:10px;">✓ <?= htmlspecialchars((string)($posted->lube_name)) ?></span>
                 <?php if ($posted->recommended_qty !== null): ?>
                 <span style="font-size:10px;color:var(--t3);"> var. <?= ($posted->variance > 0 ? '+' : '') . number_format((float)$posted->variance, 1) ?> L</span>
                 <?php endif; ?>
@@ -422,15 +422,15 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
             <div style="flex:1;">
               <div style="font-size:12px;font-weight:600;color:var(--t1);">
                 <?php if ((int)$g->id === (int)$wo->id): ?>
-                  <?= htmlspecialchars($g->wo_number) ?> <span style="font-weight:400;color:var(--t3);">(this one)</span>
+                  <?= htmlspecialchars((string)($g->wo_number)) ?> <span style="font-weight:400;color:var(--t3);">(this one)</span>
                 <?php else: ?>
-                  <a href="<?= base_url('workorders/view/'.$g->id) ?>" style="color:var(--blue);text-decoration:none;"><?= htmlspecialchars($g->wo_number) ?></a>
+                  <a href="<?= base_url('workorders/view/'.$g->id) ?>" style="color:var(--blue);text-decoration:none;"><?= htmlspecialchars((string)($g->wo_number)) ?></a>
                 <?php endif; ?>
                 <?php if ($be_root !== null && (int)$g->id === $be_root): ?>
                   <span class="badge b-secondary" style="font-size:9.5px;margin-left:6px;">event start</span>
                 <?php endif; ?>
               </div>
-              <div style="font-size:10.5px;color:var(--t3);"><?= htmlspecialchars($g->title) ?> · <?= htmlspecialchars($g->status) ?></div>
+              <div style="font-size:10.5px;color:var(--t3);"><?= htmlspecialchars((string)($g->title)) ?> · <?= htmlspecialchars((string)($g->status)) ?></div>
             </div>
             <div class="mono" style="font-size:10px;color:var(--t4);">
               <?= $g->start_datetime ? date('d M y H:i', strtotime($g->start_datetime)) : '' ?>
@@ -448,8 +448,8 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
             <option value="0">— no other work order (stand alone) —</option>
             <?php foreach ($be_candidates as $cand): ?>
             <option value="<?= (int)$cand->id ?>" <?= ($be_root !== null && (int)$cand->id === $be_root && count($be_group) > 1) ? 'selected' : '' ?>>
-              <?= htmlspecialchars($cand->wo_number) ?> — <?= htmlspecialchars($cand->title) ?>
-              (<?= htmlspecialchars($cand->status) ?><?= $cand->start_datetime ? ', '.date('d M Y', strtotime($cand->start_datetime)) : '' ?>)
+              <?= htmlspecialchars((string)($cand->wo_number)) ?> — <?= htmlspecialchars((string)($cand->title)) ?>
+              (<?= htmlspecialchars((string)($cand->status)) ?><?= $cand->start_datetime ? ', '.date('d M Y', strtotime($cand->start_datetime)) : '' ?>)
             </option>
             <?php endforeach; ?>
           </select>
@@ -504,18 +504,18 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
         <?php else: ?>
         <div class="form-grid cols-3" style="margin-bottom:14px;font-size:12px;">
           <div><span style="color:var(--t3);">Date/Time:</span> <strong><?= $incident->incident_datetime ? date('d M Y, H:i', strtotime($incident->incident_datetime)) : '—' ?></strong></div>
-          <div><span style="color:var(--t3);">Site / Dept:</span> <strong><?= htmlspecialchars($incident->site ?: '—') ?><?= $incident->department ? ' / '.htmlspecialchars($incident->department) : '' ?></strong></div>
-          <div><span style="color:var(--t3);">Location:</span> <strong><?= htmlspecialchars($incident->location ?: '—') ?></strong></div>
+          <div><span style="color:var(--t3);">Site / Dept:</span> <strong><?= htmlspecialchars((string)($incident->site ?: '—')) ?><?= $incident->department ? ' / '.htmlspecialchars((string)($incident->department)) : '' ?></strong></div>
+          <div><span style="color:var(--t3);">Location:</span> <strong><?= htmlspecialchars((string)($incident->location ?: '—')) ?></strong></div>
         </div>
 
         <div class="form-grid cols-3" style="margin-bottom:14px;font-size:12px;">
-          <div><span style="color:var(--t3);">Involved:</span> <strong><?= htmlspecialchars($incident->involved_party_type ?: '—') ?></strong><?= $incident->person_name ? ' — '.htmlspecialchars($incident->person_name) : '' ?><?= $incident->person_function ? ' ('.htmlspecialchars($incident->person_function).')' : '' ?></div>
-          <div><span style="color:var(--t3);">Staff ID:</span> <strong><?= htmlspecialchars($incident->staff_id ?: '—') ?></strong></div>
+          <div><span style="color:var(--t3);">Involved:</span> <strong><?= htmlspecialchars((string)($incident->involved_party_type ?: '—')) ?></strong><?= $incident->person_name ? ' — '.htmlspecialchars((string)($incident->person_name)) : '' ?><?= $incident->person_function ? ' ('.htmlspecialchars((string)($incident->person_function)).')' : '' ?></div>
+          <div><span style="color:var(--t3);">Staff ID:</span> <strong><?= htmlspecialchars((string)($incident->staff_id ?: '—')) ?></strong></div>
           <div><span style="color:var(--t3);">Activity Status:</span>
             <?php if ($incident->activity_status): ?>
             <span style="padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;
               color:<?= $incident->activity_status==='Uncontrolled'?'var(--red)':($incident->activity_status==='Monitored'?'var(--amber)':'var(--green)') ?>;
-              background:<?= $incident->activity_status==='Uncontrolled'?'var(--red-d)':($incident->activity_status==='Monitored'?'var(--amber-d)':'var(--green-d)') ?>;"><?= htmlspecialchars($incident->activity_status) ?></span>
+              background:<?= $incident->activity_status==='Uncontrolled'?'var(--red-d)':($incident->activity_status==='Monitored'?'var(--amber-d)':'var(--green-d)') ?>;"><?= htmlspecialchars((string)($incident->activity_status)) ?></span>
             <?php else: ?>—<?php endif; ?>
           </div>
         </div>
@@ -523,22 +523,22 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
         <?php if ($incident->injured || $incident->equipment_damaged): ?>
         <div style="margin-bottom:10px;padding:8px 12px;background:var(--red-d);border-radius:6px;font-size:12px;color:var(--red);font-weight:600;">
           <?php if ($incident->injured): ?>⚠ Person Injured&nbsp;&nbsp;<?php endif; ?>
-          <?php if ($incident->equipment_damaged): ?>⚠ Equipment Damaged<?= $incident->part_affected ? ' — '.htmlspecialchars($incident->part_affected) : '' ?><?php endif; ?>
+          <?php if ($incident->equipment_damaged): ?>⚠ Equipment Damaged<?= $incident->part_affected ? ' — '.htmlspecialchars((string)($incident->part_affected)) : '' ?><?php endif; ?>
         </div>
         <?php endif; ?>
 
         <?php if ($incident->fleet_no): ?>
-        <div style="margin-bottom:10px;font-size:12px;"><span style="color:var(--t3);">Fleet No:</span> <strong class="mono"><?= htmlspecialchars($incident->fleet_no) ?></strong></div>
+        <div style="margin-bottom:10px;font-size:12px;"><span style="color:var(--t3);">Fleet No:</span> <strong class="mono"><?= htmlspecialchars((string)($incident->fleet_no)) ?></strong></div>
         <?php endif; ?>
 
         <?php if ($incident->description): ?>
-        <div style="margin-bottom:10px;"><span style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;">Description of Incident</span><div style="font-size:13px;color:var(--t2);margin-top:3px;white-space:pre-wrap;"><?= htmlspecialchars($incident->description) ?></div></div>
+        <div style="margin-bottom:10px;"><span style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;">Description of Incident</span><div style="font-size:13px;color:var(--t2);margin-top:3px;white-space:pre-wrap;"><?= htmlspecialchars((string)($incident->description)) ?></div></div>
         <?php endif; ?>
         <?php if ($incident->injury_damage_details): ?>
-        <div style="margin-bottom:10px;"><span style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;">Details of Injury / Damage / Impact</span><div style="font-size:13px;color:var(--t2);margin-top:3px;white-space:pre-wrap;"><?= htmlspecialchars($incident->injury_damage_details) ?></div></div>
+        <div style="margin-bottom:10px;"><span style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;">Details of Injury / Damage / Impact</span><div style="font-size:13px;color:var(--t2);margin-top:3px;white-space:pre-wrap;"><?= htmlspecialchars((string)($incident->injury_damage_details)) ?></div></div>
         <?php endif; ?>
         <?php if ($incident->actions_taken): ?>
-        <div style="margin-bottom:4px;"><span style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;">Actions Taken by Line Management</span><div style="font-size:13px;color:var(--t2);line-height:1.6;margin-top:3px;white-space:pre-wrap;"><?= htmlspecialchars($incident->actions_taken) ?></div></div>
+        <div style="margin-bottom:4px;"><span style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;">Actions Taken by Line Management</span><div style="font-size:13px;color:var(--t2);line-height:1.6;margin-top:3px;white-space:pre-wrap;"><?= htmlspecialchars((string)($incident->actions_taken)) ?></div></div>
         <?php endif; ?>
         <?php endif; ?>
 
@@ -555,7 +555,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
           <?php else: ?>
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
             <?php foreach ($attachments as $att):
-              $ext = strtolower(pathinfo($att->file_name, PATHINFO_EXTENSION));
+              $ext = strtolower((string)(pathinfo($att->file_name, PATHINFO_EXTENSION)));
               $isImg = in_array($ext, array('jpg','jpeg','png','gif'));
             ?>
             <div style="text-align:center;">
@@ -566,7 +566,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
               <?php else: ?>
               <a href="<?= base_url('workorders/download_attachment/'.$att->id) ?>" style="display:flex;align-items:center;justify-content:center;width:84px;height:84px;border-radius:8px;border:1px solid var(--sep);background:var(--g1);color:var(--t3);font-size:24px;text-decoration:none;">📄</a>
               <?php endif; ?>
-              <div style="font-size:9px;color:var(--t4);margin-top:3px;width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars($att->original_name) ?></div>
+              <div style="font-size:9px;color:var(--t4);margin-top:3px;width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars((string)($att->original_name)) ?></div>
             </div>
             <?php endforeach; ?>
           </div>
@@ -643,7 +643,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
             <option value="">— none —</option>
             <?php foreach (wo_hold_codes() as $code => $label): ?>
             <option value="<?= $code ?>" <?= (isset($wo->hold_code) && (string)$wo->hold_code === $code) ? 'selected' : '' ?>>
-              <?= $code ?> — <?= htmlspecialchars($label) ?>
+              <?= $code ?> — <?= htmlspecialchars((string)($label)) ?>
             </option>
             <?php endforeach; ?>
           </select>
@@ -679,8 +679,8 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
         <div class="row-list-item" style="cursor:default;">
           <div style="width:7px;height:7px;border-radius:50%;background:var(--blue);flex-shrink:0;margin-top:3px;"></div>
           <div style="flex:1;">
-            <div style="font-size:12px;font-weight:600;color:var(--t1);"><?= htmlspecialchars((isset($h->status_to) ? $h->status_to : (isset($h->new_status) ? $h->new_status : ''))) ?></div>
-            <div style="font-size:10.5px;color:var(--t3);"><?= htmlspecialchars((isset($h->notes) ? $h->notes : '')) ?></div>
+            <div style="font-size:12px;font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)((isset($h->status_to) ? $h->status_to : (isset($h->new_status) ? $h->new_status : '')))) ?></div>
+            <div style="font-size:10.5px;color:var(--t3);"><?= htmlspecialchars((string)((isset($h->notes) ? $h->notes : ''))) ?></div>
           </div>
           <div class="mono" style="font-size:10px;color:var(--t4);"><?= (isset($h->changed_at) && $h->changed_at) ? date('d M y', strtotime($h->changed_at)) : (isset($h->created_at) && $h->created_at ? date('d M y', strtotime($h->created_at)) : ''); ?></div>
         </div>

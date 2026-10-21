@@ -13,8 +13,8 @@
  * The variance is also split into its causes, which is the part the Excel
  * workbook could never do: it had no history to compare against.
  */
-$pct = function ($v, $d = 2) { return $v === null ? '—' : number_format($v * 100, $d) . '%'; };
-$hrs = function ($v) { return $v === null ? '—' : rtrim(rtrim(number_format((float)$v, 2, '.', ''), '0'), '.'); };
+$pct = function ($v, $d = 2) { return $v === null ? '—' : number_format((float)($v * 100), $d) . '%'; };
+$hrs = function ($v) { return $v === null ? '—' : rtrim((string)(rtrim((string)(number_format((float)$v, 2, '.', '')), '0')), '.'); };
 $col = function ($v) {
     if ($v === null) return 'var(--t3)';
     return $v >= 0.90 ? 'var(--green)' : ($v >= 0.70 ? 'var(--amber)' : 'var(--red)');
@@ -28,29 +28,29 @@ $vcol = function ($v) {
 };
 $signed = function ($v) {
     if ($v === null) return '—';
-    return ($v > 0 ? '+' : '') . number_format($v, 2);
+    return ($v > 0 ? '+' : '') . number_format((float)($v), 2);
 };
 ?>
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Plan vs Actual — <?=htmlspecialchars($iso_label)?></div>
+    <div class="page-heading" style="font-size:16px;">Plan vs Actual — <?=htmlspecialchars((string)($iso_label))?></div>
     <div class="cs"><?=date('d M Y', strtotime($week_start))?> – <?=date('d M Y', strtotime($week_end))?></div>
   </div>
   <form method="get" class="flex ai-c gap-10">
     <label style="font-size:11px;color:var(--t3);">Week</label>
-    <input type="week" name="week" class="form-control" style="width:170px;" value="<?=htmlspecialchars($iso_label)?>">
+    <input type="week" name="week" class="form-control" style="width:170px;" value="<?=htmlspecialchars((string)($iso_label))?>">
     <button class="btn btn-sm btn-primary" type="submit">Open</button>
   </form>
 </div>
 
 <?php if (!$published): ?>
 <div class="card" style="padding:44px;text-align:center;">
-  <div style="font-weight:700;margin-bottom:8px;">No published plan for <?=htmlspecialchars($iso_label)?></div>
+  <div style="font-weight:700;margin-bottom:8px;">No published plan for <?=htmlspecialchars((string)($iso_label))?></div>
   <div class="cs" style="font-size:12px;line-height:1.8;max-width:520px;margin:0 auto;">
     A week has to be <strong>published</strong> before it can be compared — the plan is frozen at
     publication so the variance measures what was actually committed, not what the draft says now.
-    <?php if (!empty($error)): ?><br><span style="color:var(--red);"><?=htmlspecialchars($error)?></span><?php endif; ?>
+    <?php if (!empty($error)): ?><br><span style="color:var(--red);"><?=htmlspecialchars((string)($error))?></span><?php endif; ?>
   </div>
   <a class="btn btn-sm btn-primary mt-4" href="<?= base_url('forecast?week=' . urlencode($iso_label)) ?>">
     Go to the plan
@@ -115,7 +115,7 @@ $signed = function ($v) {
     <tbody>
     <?php foreach ($groups as $g): ?>
       <tr>
-        <td style="font-weight:600;color:var(--t1);"><?=htmlspecialchars($g['group'])?></td>
+        <td style="font-weight:600;color:var(--t1);"><?=htmlspecialchars((string)($g['group']))?></td>
         <td style="text-align:center;"><?=$g['machines'] ?? '—'?></td>
         <td style="text-align:right;color:var(--t2);"><?=$pct($g['planned_availability'])?></td>
         <td style="text-align:right;font-weight:600;color:<?=$col($g['actual_availability'])?>;"><?=$pct($g['actual_availability'])?></td>

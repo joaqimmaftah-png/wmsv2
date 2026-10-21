@@ -33,9 +33,9 @@ $n = function($k) use ($import_result) {
     <select name="category" class="form-select" style="width:160px;">
       <option value="">All Categories</option>
       <?php foreach ($categories as $c): ?>
-      <option value="<?= htmlspecialchars($c->category) ?>"
+      <option value="<?= htmlspecialchars((string)($c->category)) ?>"
         <?= (!empty($f['category']) && $f['category'] == $c->category) ? 'selected' : '' ?>>
-        <?= htmlspecialchars($c->category) ?>
+        <?= htmlspecialchars((string)($c->category)) ?>
       </option>
       <?php endforeach; ?>
     </select>
@@ -46,7 +46,7 @@ $n = function($k) use ($import_result) {
       <option value="out" <?= (!empty($f['stock']) && $f['stock'] === 'out') ? 'selected' : '' ?>>Out of Stock</option>
     </select>
     <input type="text" name="search" class="form-control" style="width:190px;"
-      placeholder="Search items…" value="<?= htmlspecialchars(isset($f['search']) ? $f['search'] : '') ?>">
+      placeholder="Search items…" value="<?= htmlspecialchars((string)(isset($f['search']) ? $f['search'] : '')) ?>">
     <button type="submit" class="btn btn-primary btn-sm btn-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       Filter
@@ -93,12 +93,12 @@ $n = function($k) use ($import_result) {
   <div class="ch" style="padding:12px 18px 10px;border-bottom:1px solid var(--g2);">
     <div>
       <div class="ct" style="font-size:13px;">
-        Import summary<?= !empty($import_result['file_name']) ? ' — '.htmlspecialchars($import_result['file_name']) : '' ?>
+        Import summary<?= !empty($import_result['file_name']) ? ' — '.htmlspecialchars((string)($import_result['file_name'])) : '' ?>
       </div>
       <div class="cs">
-        <?= $import_result['mode'] === 'validate' ? 'Validation only — nothing was saved' : 'Sheet "'.htmlspecialchars($import_result['sheet']).'"' ?>
-        • duplicates: <?= htmlspecialchars(isset($import_result['duplicate_action']) ? $import_result['duplicate_action'] : 'skip') ?>
-        • stock: <?= htmlspecialchars(str_replace('ignore', 'unchanged', isset($import_result['stock_action']) ? $import_result['stock_action'] : 'ignore')) ?>
+        <?= $import_result['mode'] === 'validate' ? 'Validation only — nothing was saved' : 'Sheet "'.htmlspecialchars((string)($import_result['sheet'])).'"' ?>
+        • duplicates: <?= htmlspecialchars((string)(isset($import_result['duplicate_action']) ? $import_result['duplicate_action'] : 'skip')) ?>
+        • stock: <?= htmlspecialchars((string)(str_replace('ignore', 'unchanged', isset($import_result['stock_action']) ? $import_result['stock_action'] : 'ignore'))) ?>
         • <?= (isset($import_result['transaction']) && !$import_result['transaction']) ? 'no DB transaction support' : 'written in one transaction' ?>
       </div>
     </div>
@@ -120,18 +120,18 @@ $n = function($k) use ($import_result) {
 
   <?php if (!empty($import_result['rolled_back'])): ?>
   <div style="padding:0 18px 14px;color:var(--red);font-size:12.5px;font-weight:600;">
-    ⚠ Nothing was imported — the change was rolled back. <?= htmlspecialchars(isset($import_result['rollback_reason']) ? $import_result['rollback_reason'] : '') ?>
+    ⚠ Nothing was imported — the change was rolled back. <?= htmlspecialchars((string)(isset($import_result['rollback_reason']) ? $import_result['rollback_reason'] : '')) ?>
   </div>
   <?php endif; ?>
 
   <?php if (!empty($import_result['errors'])): ?>
   <div style="padding:0 18px 14px;color:var(--red);font-size:12.5px;">
-    <?php foreach ($import_result['errors'] as $e): ?><div>• <?= htmlspecialchars($e) ?></div><?php endforeach; ?>
+    <?php foreach ($import_result['errors'] as $e): ?><div>• <?= htmlspecialchars((string)($e)) ?></div><?php endforeach; ?>
   </div>
   <?php endif; ?>
   <?php if (!empty($import_result['warnings'])): ?>
   <div style="padding:0 18px 14px;color:var(--amber);font-size:12.5px;">
-    <?php foreach ($import_result['warnings'] as $w): ?><div>• <?= htmlspecialchars($w) ?></div><?php endforeach; ?>
+    <?php foreach ($import_result['warnings'] as $w): ?><div>• <?= htmlspecialchars((string)($w)) ?></div><?php endforeach; ?>
   </div>
   <?php endif; ?>
 
@@ -151,16 +151,16 @@ $n = function($k) use ($import_result) {
       ?>
       <tr>
         <td class="mono" style="color:var(--t3);"><?= (int)$r['row'] ?></td>
-        <td class="mono fw-600"><?= htmlspecialchars($r['item_code']) ?></td>
-        <td style="font-size:11.5px;color:var(--t3);"><?= htmlspecialchars(isset($r['description']) ? $r['description'] : '') ?></td>
-        <td><span class="badge <?= $cls ?>"><?= strtoupper($act) ?><?= !empty($r['rolled_back']) ? ' (ROLLED BACK)' : '' ?></span></td>
+        <td class="mono fw-600"><?= htmlspecialchars((string)($r['item_code'])) ?></td>
+        <td style="font-size:11.5px;color:var(--t3);"><?= htmlspecialchars((string)(isset($r['description']) ? $r['description'] : '')) ?></td>
+        <td><span class="badge <?= $cls ?>"><?= strtoupper((string)($act)) ?><?= !empty($r['rolled_back']) ? ' (ROLLED BACK)' : '' ?></span></td>
         <td style="font-size:11.5px;color:var(--t2);">
-          <?= htmlspecialchars(!empty($r['errors']) ? implode(' | ', $r['errors']) : '') ?>
+          <?= htmlspecialchars((string)(!empty($r['errors']) ? implode(' | ', $r['errors']) : '')) ?>
           <?php if (!empty($r['stock_note'])): ?>
-            <div style="color:var(--t3);"><?= htmlspecialchars($r['stock_note']) ?></div>
+            <div style="color:var(--t3);"><?= htmlspecialchars((string)($r['stock_note'])) ?></div>
           <?php endif; ?>
         </td>
-        <td style="font-size:11.5px;color:var(--amber);"><?= htmlspecialchars(implode(' | ', isset($r['warnings']) ? $r['warnings'] : array())) ?></td>
+        <td style="font-size:11.5px;color:var(--amber);"><?= htmlspecialchars((string)(implode(' | ', isset($r['warnings']) ? $r['warnings'] : array()))) ?></td>
       </tr>
       <?php endforeach; ?>
       </tbody>
@@ -276,7 +276,7 @@ if (location.hash === '#import') invImportToggle();
 <div class="cs" style="margin:-6px 0 16px;color:var(--t3);">
   Recent imports:
   <?php $h = array(); foreach ($import_history as $row) {
-      $h[] = date('d/m/Y H:i', strtotime($row->created_at)).' — '.htmlspecialchars($row->file_name)
+      $h[] = date('d/m/Y H:i', strtotime($row->created_at)).' — '.htmlspecialchars((string)($row->file_name))
            .' ('.(int)$row->inserted.' new, '.(int)$row->updated.' updated, '.(int)$row->failed.' failed)';
   } echo implode(' • ', $h); ?>
 </div>
@@ -292,17 +292,17 @@ if (location.hash === '#import') invImportToggle();
   <div class="kpi" style="animation-delay:.08s">
     <div class="kpi-glow" style="background:var(--green)"></div>
     <span class="kpi-tag">Total Received</span>
-    <div class="kpi-num"><?= number_format($t_recv) ?></div>
+    <div class="kpi-num"><?= number_format((float)($t_recv)) ?></div>
   </div>
   <div class="kpi" style="animation-delay:.12s">
     <div class="kpi-glow" style="background:var(--amber)"></div>
     <span class="kpi-tag">Total Issued</span>
-    <div class="kpi-num"><?= number_format($t_sort) ?></div>
+    <div class="kpi-num"><?= number_format((float)($t_sort)) ?></div>
   </div>
   <div class="kpi" style="animation-delay:.16s">
     <div class="kpi-glow" style="background:var(--cyan)"></div>
     <span class="kpi-tag">In Stock</span>
-    <div class="kpi-num"><?= number_format($t_fin) ?></div>
+    <div class="kpi-num"><?= number_format((float)($t_fin)) ?></div>
   </div>
 </div>
 
@@ -347,26 +347,26 @@ if (location.hash === '#import') invImportToggle();
         ?>
         <tr>
           <td style="font-weight:600;color:var(--blue);font-family:inherit,monospace;font-size:12px;">
-            <?= htmlspecialchars($m->item_code) ?>
+            <?= htmlspecialchars((string)($m->item_code)) ?>
           </td>
           <td>
             <span class="badge b-primary" style="font-size:9.5px;">
-              <?= htmlspecialchars($m->category) ?>
+              <?= htmlspecialchars((string)($m->category)) ?>
             </span>
           </td>
-          <td style="font-weight:500;"><?= htmlspecialchars($m->description) ?></td>
+          <td style="font-weight:500;"><?= htmlspecialchars((string)($m->description)) ?></td>
           <td style="font-size:11.5px;color:var(--t3);">
-            <?= htmlspecialchars($m->part_number_size !== null ? $m->part_number_size : '') ?>
+            <?= htmlspecialchars((string)($m->part_number_size !== null ? $m->part_number_size : '')) ?>
           </td>
-          <td style="text-align:center;color:var(--t3);font-size:11.5px;"><?= htmlspecialchars($m->unit) ?></td>
+          <td style="text-align:center;color:var(--t3);font-size:11.5px;"><?= htmlspecialchars((string)($m->unit)) ?></td>
           <td style="text-align:right;font-family:inherit,monospace;font-size:12px;"><?= number_format((int)$m->initial_stock) ?></td>
           <td style="text-align:right;font-family:inherit,monospace;font-size:12px;color:var(--green);"><?= number_format((int)$m->qty_received) ?></td>
           <td style="text-align:right;font-family:inherit,monospace;font-size:12px;color:var(--amber);"><?= number_format((int)$m->qty_sortie) ?></td>
           <td style="text-align:right;">
-            <span style="font-family:inherit,monospace;font-size:13px;font-weight:700;color:<?= $clr ?>;"><?= number_format($final) ?></span>
+            <span style="font-family:inherit,monospace;font-size:13px;font-weight:700;color:<?= $clr ?>;"><?= number_format((float)($final)) ?></span>
             <?= $badge ?>
           </td>
-          <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars($m->location !== null ? $m->location : '') ?></td>
+          <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars((string)($m->location !== null ? $m->location : '')) ?></td>
           <?php if ($role_id <= 2): ?>
           <td>
             <div class="flex ai-c gap-10" style="justify-content:center;">
@@ -383,10 +383,10 @@ if (location.hash === '#import') invImportToggle();
       <tfoot>
         <tr style="background:var(--g2);border-top:1px solid var(--sep);">
           <td colspan="5" style="padding:10px 18px;font-weight:700;font-size:12px;color:var(--t2);">TOTAL</td>
-          <td style="text-align:right;font-weight:700;font-family:inherit,monospace;padding:10px 18px;"><?= number_format($t_init) ?></td>
-          <td style="text-align:right;font-weight:700;font-family:inherit,monospace;padding:10px 18px;color:var(--green);"><?= number_format($t_recv) ?></td>
-          <td style="text-align:right;font-weight:700;font-family:inherit,monospace;padding:10px 18px;color:var(--amber);"><?= number_format($t_sort) ?></td>
-          <td style="text-align:right;font-weight:700;font-family:inherit,monospace;padding:10px 18px;"><?= number_format($t_fin) ?></td>
+          <td style="text-align:right;font-weight:700;font-family:inherit,monospace;padding:10px 18px;"><?= number_format((float)($t_init)) ?></td>
+          <td style="text-align:right;font-weight:700;font-family:inherit,monospace;padding:10px 18px;color:var(--green);"><?= number_format((float)($t_recv)) ?></td>
+          <td style="text-align:right;font-weight:700;font-family:inherit,monospace;padding:10px 18px;color:var(--amber);"><?= number_format((float)($t_sort)) ?></td>
+          <td style="text-align:right;font-weight:700;font-family:inherit,monospace;padding:10px 18px;"><?= number_format((float)($t_fin)) ?></td>
           <td colspan="<?= ($role_id <= 2) ? 2 : 1 ?>"></td>
         </tr>
       </tfoot>

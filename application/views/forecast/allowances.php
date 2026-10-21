@@ -12,7 +12,7 @@
  *                 103 machines; in `derived` mode it is each machine's own
  *                 measured loss rate from its corrective history (rule R4).
  */
-$num = function ($v) { return rtrim(rtrim(number_format((float)$v, 2, '.', ''), '0'), '.'); };
+$num = function ($v) { return rtrim((string)(rtrim((string)(number_format((float)$v, 2, '.', '')), '0')), '.'); };
 $derived_n = 0;
 foreach ($rows as $r) if ($r['source'] === 'derived') $derived_n++;
 ?>
@@ -20,11 +20,11 @@ foreach ($rows as $r) if ($r['source'] === 'derived') $derived_n++;
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
     <div class="page-heading" style="font-size:16px;">Planned Allowances</div>
-    <div class="cs">Standing and unplanned hours per machine — what the generators will write for <?=htmlspecialchars($iso_label)?></div>
+    <div class="cs">Standing and unplanned hours per machine — what the generators will write for <?=htmlspecialchars((string)($iso_label))?></div>
   </div>
   <form method="get" class="flex ai-c gap-10">
     <label style="font-size:11px;color:var(--t3);">Week</label>
-    <input type="week" name="week" class="form-control" style="width:170px;" value="<?=htmlspecialchars($iso_label)?>">
+    <input type="week" name="week" class="form-control" style="width:170px;" value="<?=htmlspecialchars((string)($iso_label))?>">
     <button class="btn btn-sm btn-primary" type="submit">Open</button>
   </form>
 </div>
@@ -32,7 +32,7 @@ foreach ($rows as $r) if ($r['source'] === 'derived') $derived_n++;
 <div class="grid g-3 mb-4">
   <div class="kpi"><div class="kpi-glow" style="background:var(--blue)"></div>
     <span class="kpi-tag">Unplanned allowance mode</span>
-    <div class="kpi-num" style="font-size:20px;text-transform:uppercase;"><?=htmlspecialchars($mode)?></div>
+    <div class="kpi-num" style="font-size:20px;text-transform:uppercase;"><?=htmlspecialchars((string)($mode))?></div>
     <div class="cs" style="font-size:10px;margin-top:3px;">
       <?=$mode === 'derived'
         ? 'per machine, from its own corrective history'
@@ -64,7 +64,7 @@ foreach ($rows as $r) if ($r['source'] === 'derived') $derived_n++;
     <?php $i = 0; $n = count($standing); foreach ($standing as $type => $h): $i++; ?>
     <div style="flex:1;min-width:130px;padding:12px 16px;border-right:1px solid var(--g2);<?=$i === $n ? 'border-right:none;' : ''?>">
       <div style="font-size:11px;color:var(--t3);margin-bottom:4px;">
-        <?=$type === '__default__' ? '<em>default</em>' : htmlspecialchars($type)?>
+        <?=$type === '__default__' ? '<em>default</em>' : htmlspecialchars((string)($type))?>
       </div>
       <div style="font-size:20px;font-weight:800;line-height:1;"><?=$num($h)?><span style="font-size:11px;font-weight:500;color:var(--t3);"> h/day</span></div>
     </div>
@@ -92,7 +92,7 @@ foreach ($rows as $r) if ($r['source'] === 'derived') $derived_n++;
     <tbody>
     <?php foreach ($rows as $r): ?>
       <tr>
-        <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars($r['registration_no'])?></td>
+        <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars((string)($r['registration_no']))?></td>
         <td style="color:var(--t3);font-size:10.5px;"><?=htmlspecialchars((string)$r['type'])?></td>
         <td class="mono" style="text-align:right;color:var(--t2);"><?=$num($r['standing'])?></td>
         <td class="mono" style="text-align:right;font-weight:600;color:<?= $r['source'] === 'derived' ? 'var(--t1)' : 'var(--t3)' ?>;"><?=$num($r['unplanned'])?></td>
@@ -104,7 +104,7 @@ foreach ($rows as $r) if ($r['source'] === 'derived') $derived_n++;
           <?php endif; ?>
         </td>
         <td class="mono" style="text-align:center;color:var(--t3);"><?=$r['events'] ?: '—'?></td>
-        <td style="font-size:10px;color:var(--t3);"><?=htmlspecialchars($r['note'])?></td>
+        <td style="font-size:10px;color:var(--t3);"><?=htmlspecialchars((string)($r['note']))?></td>
       </tr>
     <?php endforeach; ?>
     <?php if (!$rows): ?>

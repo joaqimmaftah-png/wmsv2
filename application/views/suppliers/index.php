@@ -6,7 +6,7 @@
     <select name="country" class="form-select" style="width:160px;">
       <option value="">All Countries</option>
       <?php foreach ($countries as $c): ?>
-      <option value="<?= htmlspecialchars($c) ?>" <?= (!empty($f['country']) && $f['country']==$c)?'selected':'' ?>><?= htmlspecialchars($c) ?></option>
+      <option value="<?= htmlspecialchars((string)($c)) ?>" <?= (!empty($f['country']) && $f['country']==$c)?'selected':'' ?>><?= htmlspecialchars((string)($c)) ?></option>
       <?php endforeach; ?>
     </select>
     <select name="status" class="form-select" style="width:150px;">
@@ -16,7 +16,7 @@
       <?php endforeach; ?>
     </select>
     <input type="text" name="search" class="form-control" style="width:190px;"
-      placeholder="Search supplier or tax ID…" value="<?= htmlspecialchars($f['search']??'') ?>">
+      placeholder="Search supplier or tax ID…" value="<?= htmlspecialchars((string)($f['search']??'')) ?>">
     <button type="submit" class="btn btn-primary btn-sm btn-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       Filter
@@ -74,10 +74,10 @@
         $bg    = $s->status==='Active' ? 'var(--green-d)' : ($s->status==='Blacklisted' ? 'var(--red-d)' : 'var(--g2)');
       ?>
       <tr>
-        <td style="font-weight:600;color:var(--t1);"><a href="<?= base_url('suppliers/view/'.$s->id) ?>" style="color:inherit;"><?= htmlspecialchars($s->company_name) ?></a></td>
-        <td><?= htmlspecialchars($s->country) ?><?= $s->city ? ', '.htmlspecialchars($s->city) : '' ?></td>
-        <td class="mono"><?= htmlspecialchars($s->currency) ?></td>
-        <td style="color:var(--t3);font-size:11.5px;"><?= htmlspecialchars($s->payment_terms ?: '—') ?></td>
+        <td style="font-weight:600;color:var(--t1);"><a href="<?= base_url('suppliers/view/'.$s->id) ?>" style="color:inherit;"><?= htmlspecialchars((string)($s->company_name)) ?></a></td>
+        <td><?= htmlspecialchars((string)($s->country)) ?><?= $s->city ? ', '.htmlspecialchars((string)($s->city)) : '' ?></td>
+        <td class="mono"><?= htmlspecialchars((string)($s->currency)) ?></td>
+        <td style="color:var(--t3);font-size:11.5px;"><?= htmlspecialchars((string)($s->payment_terms ?: '—')) ?></td>
         <td class="mono" style="text-align:center;"><?= $s->lead_time_guarantee_days ? $s->lead_time_guarantee_days.'d' : '—' ?></td>
         <td class="mono" style="text-align:center;"><?= $s->item_count ?></td>
         <td style="text-align:center;"><span style="padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;color:<?= $badge ?>;background:<?= $bg ?>;"><?= $s->status ?></span></td>

@@ -38,7 +38,7 @@ $wms_is_https = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTP
 if (!function_exists('wms_base_url_from_host')) {
     function wms_base_url_from_host($host, $script_name, $is_https)
     {
-        $host = strtolower(trim((string) $host));
+        $host = strtolower((string)(trim((string) $host)));
 
         // No quotes, spaces, slashes, backslashes, CR/LF or userinfo can pass.
         if (!preg_match('/^(?:\[[0-9a-f:.]+\]|[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)(?::[0-9]{1,5})?$/D', $host)
@@ -61,7 +61,7 @@ if (!function_exists('wms_base_url_from_host')) {
 
 $wms_base_env = (string) getenv('WMS_BASE_URL');
 if ($wms_base_env !== '' && preg_match('#^https?://[A-Za-z0-9._~:/\[\]-]+$#D', $wms_base_env)) {
-    $config['base_url'] = rtrim($wms_base_env, '/') . '/';
+    $config['base_url'] = rtrim((string)($wms_base_env), '/') . '/';
 } elseif ($wms_base_env !== '') {
     // Set but unusable: say so rather than falling through silently.
     error_log('WMS: ignoring WMS_BASE_URL (expected an http(s) URL, e.g. https://wms.example.com)');
@@ -128,7 +128,16 @@ $config['cache_path'] = '';
 | to prevent 500 errors on fresh installs. For production, set a proper key
 | in config.local.php for security.
 */
-$enc_key = (string) getenv('WMS_ENCRYPTION_KEY');
+$wms_env = function ($key, $default = '') {
+    $val = getenv($key);
+    if ($val !== FALSE && $val !== '') return (string) $val;
+    if (isset($_ENV[$key]) && $_ENV[$key] !== '') return (string) $_ENV[$key];
+    if (isset($_SERVER[$key]) && $_SERVER[$key] !== '') return (string) $_SERVER[$key];
+    if (isset($_SERVER['REDIRECT_' . $key]) && $_SERVER['REDIRECT_' . $key] !== '') return (string) $_SERVER['REDIRECT_' . $key];
+    return $default;
+};
+
+$enc_key = $wms_env('WMS_ENCRYPTION_KEY', '');
 if (empty($enc_key)) {
     // Try to get from database name as fallback salt (better than empty)
     // This prevents session failures that cause 500 on cPanel
@@ -148,10 +157,10 @@ if (empty($enc_key)) {
 }
 $config['encryption_key'] = $enc_key;
 unset($enc_key, $fallback_salt, $db_local);
-$config['sess_driver'] = 'database';
+$config['sess_driver'] = $wms_env('WMS_SESS_DRIVER', 'database');
 $config['sess_cookie_name'] = 'wms_session';
 $config['sess_expiration'] = 7200;
-$config['sess_save_path'] = 'ci_sessions';
+$config['sess_save_path'] = $wms_env('WMS_SESS_SAVE_PATH', 'ci_sessions');
 $config['sess_match_ip'] = FALSE;
 $config['sess_time_to_update'] = 300;
 // Destroy the previous session record whenever the session id is regenerated
@@ -179,7 +188,7 @@ $config['cookie_path'] = '/';
 |                  (cookie_samesite). Set explicitly so the intent survives
 |                  future edits.
 */
-$config['cookie_secure']   = (getenv('WMS_COOKIE_SECURE') === '0') ? FALSE : $wms_is_https;
+$config['cookie_secure']   = ($wms_env('WMS_COOKIE_SECURE', '') === '0') ? FALSE : $wms_is_https;
 $config['cookie_httponly'] = TRUE;
 $config['sess_samesite']   = 'Lax';
 $config['cookie_samesite'] = 'Lax';
@@ -208,7 +217,7 @@ $config['proxy_ips'] = '';
 |         MD5/SHA1. Overridable per installation through the
 |         WMS_LEGACY_PASSWORD_LOGIN=0 environment variable or config.local.php.
 */
-$config['legacy_password_login'] = (getenv('WMS_LEGACY_PASSWORD_LOGIN') === '0') ? FALSE : TRUE;
+$config['legacy_password_login'] = ($wms_env('WMS_LEGACY_PASSWORD_LOGIN', '') === '0') ? FALSE : TRUE;
 
 /*
 | Host-local overrides — never committed. Copy config.local.php.example to
@@ -221,4 +230,4 @@ if (is_file($local_config)) {
     require $local_config;
 }
 
-unset($local_config, $wms_is_https);
+unset($local_config, $wms_is_https, $wms_env);

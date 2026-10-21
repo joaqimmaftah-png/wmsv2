@@ -14,10 +14,10 @@ $sub_title  = ($lang === 'fr') ? $template->name_en : $template->name_fr;
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-bottom:20px;">
     <div>
       <div style="font-size:22px;font-weight:700;color:var(--t1);letter-spacing:-0.2px;">
-        <?= htmlspecialchars($main_title); ?> — <?= $L('Records', 'Enregistrements'); ?>
+        <?= htmlspecialchars((string)($main_title)); ?> — <?= $L('Records', 'Enregistrements'); ?>
       </div>
       <div style="font-size:13px;color:var(--t2);margin-top:2px;">
-        <?= htmlspecialchars($sub_title); ?>
+        <?= htmlspecialchars((string)($sub_title)); ?>
       </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -43,13 +43,13 @@ $sub_title  = ($lang === 'fr') ? $template->name_en : $template->name_fr;
     <tbody>
       <?php foreach ($records as $r): ?>
       <tr style="border-bottom:1px solid var(--sep);">
-        <td style="padding:12px 14px;font-weight:500;"><?= htmlspecialchars($r->inspection_date); ?></td>
-        <td style="padding:12px 14px;font-weight:600;color:var(--t1);"><?= htmlspecialchars($r->fleet_number); ?></td>
-        <td style="padding:12px 14px;color:var(--t2);"><?= htmlspecialchars($r->equipment_type); ?></td>
-        <td style="padding:12px 14px;"><?= htmlspecialchars($r->mechanic_name); ?></td>
+        <td style="padding:12px 14px;font-weight:500;"><?= htmlspecialchars((string)($r->inspection_date)); ?></td>
+        <td style="padding:12px 14px;font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($r->fleet_number)); ?></td>
+        <td style="padding:12px 14px;color:var(--t2);"><?= htmlspecialchars((string)($r->equipment_type)); ?></td>
+        <td style="padding:12px 14px;"><?= htmlspecialchars((string)($r->mechanic_name)); ?></td>
         <td style="padding:12px 14px;">
           <span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;background:var(--g2);color:var(--t2);text-transform:uppercase;">
-            <?= htmlspecialchars($r->language); ?>
+            <?= htmlspecialchars((string)($r->language)); ?>
           </span>
         </td>
         <td style="padding:12px 14px;text-align:right;">

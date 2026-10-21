@@ -23,6 +23,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * For standalone tests a model-like object can be injected through the
  * 'model' parameter; it only has to provide the methods used below.
  */
+#[AllowDynamicProperties]
 class Asset_importer {
 
     /** Hard limits (protect the server against accidental huge uploads) */
@@ -139,10 +140,10 @@ class Asset_importer {
     public function normalise_header($h) {
         $h = trim((string)$h);
         $h = preg_replace('/\([^)]*\)|\[[^\]]*\]/', ' ', $h);   // units/notes in brackets
-        $h = function_exists('mb_strtolower') ? mb_strtolower($h, 'UTF-8') : strtolower($h);
+        $h = function_exists('mb_strtolower') ? mb_strtolower($h, 'UTF-8') : strtolower((string)($h));
         $h = preg_replace('/[^a-z0-9]+/u', ' ', $h);   // drop * / . - ( ) % [ ] … entirely
         $h = preg_replace('/\s+/', ' ', $h);
-        return trim($h);
+        return trim((string)($h));
     }
 
     private function header_field($normalised) {
@@ -165,18 +166,18 @@ class Asset_importer {
             $field = $this->header_field($norm);
             if ($field === null) {
                 // Column that is not part of the format
-                $unknown[] = trim($label);
+                $unknown[] = trim((string)($label));
                 continue;
             }
             if ($field === '@ignore') {
-                $ignored[] = trim($label);
+                $ignored[] = trim((string)($label));
                 continue;
             }
             if (isset($seen[$field])) {
-                $duplicates[] = trim($label).' (same as column "'.$seen[$field].'")';
+                $duplicates[] = trim((string)($label)).' (same as column "'.$seen[$field].'")';
                 continue;
             }
-            $seen[$field] = trim($label);
+            $seen[$field] = trim((string)($label));
             $map[$col] = $field;
         }
 
@@ -480,8 +481,8 @@ class Asset_importer {
             $errors[] = 'Machine ID is required (this column cannot be empty).';
         } else {
             $reg = preg_replace('/\s+/', ' ', $reg);
-            $v['registration_no'] = strtoupper($reg);
-            if (strlen($v['registration_no']) > $this->lengths['registration_no']) {
+            $v['registration_no'] = strtoupper((string)($reg));
+            if (strlen((string)($v['registration_no'])) > $this->lengths['registration_no']) {
                 $errors[] = 'Machine ID "'.$v['registration_no'].'" is longer than '
                           . $this->lengths['registration_no'].' characters.';
             }
@@ -504,7 +505,7 @@ class Asset_importer {
         foreach (array('brand', 'model', 'serial_number', 'engine_model', 'location') as $f) {
             $val = $get($f === 'serial_number' ? 'serial' : ($f === 'engine_model' ? 'engine' : $f));
             if ($val !== '') {
-                if (strlen($val) > $this->lengths[$f]) {
+                if (strlen((string)($val)) > $this->lengths[$f]) {
                     $errors[] = ucwords(str_replace('_', ' ', $f)).' "'.substr($val, 0, 40).'…" is longer than '
                               . $this->lengths[$f].' characters.';
                     $val = substr($val, 0, $this->lengths[$f]);
@@ -515,7 +516,7 @@ class Asset_importer {
 
         $notes = $get('notes');
         if ($notes !== '') {
-            if (strlen($notes) > self::MAX_NOTES) {
+            if (strlen((string)($notes)) > self::MAX_NOTES) {
                 $warnings[] = 'Notes were truncated to '.self::MAX_NOTES.' characters.';
                 $notes = substr($notes, 0, self::MAX_NOTES);
             }
@@ -663,7 +664,7 @@ class Asset_importer {
         $s = str_replace(array("\xC2\xA0", ' '), '', $s);          // non-breaking + normal spaces
         // drop a trailing unit ("8420 h", "12.5km", "900 miles") — never mid-string
         $s = preg_replace('/(h|hr|hrs|hour|hours|km|kms|kilometer|kilometers|kilometre|kilometres|mile|miles)\.?$/i', '', $s);
-        $s = trim($s);
+        $s = trim((string)($s));
         if ($s === '') return null;
 
         $hasDot   = strpos($s, '.') !== false;
@@ -747,7 +748,7 @@ class Asset_importer {
     }
 
     private function month_number($name) {
-        $n = strtolower(substr($name, 0, 3));
+        $n = strtolower((string)(substr($name, 0, 3)));
         $map = array('jan'=>1,'feb'=>2,'mar'=>3,'apr'=>4,'may'=>5,'jun'=>6,
                      'jul'=>7,'aug'=>8,'sep'=>9,'oct'=>10,'nov'=>11,'dec'=>12);
         return isset($map[$n]) ? $map[$n] : null;
@@ -756,7 +757,7 @@ class Asset_importer {
     /** Comparison key for duplicate detection */
     public function key($s) {
         $s = preg_replace('/\s+/', ' ', trim((string)$s));
-        return function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s);
+        return function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower((string)($s));
     }
 
     /** Closest known value (simple edit-distance hint for error messages) */

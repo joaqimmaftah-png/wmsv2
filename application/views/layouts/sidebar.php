@@ -17,8 +17,8 @@ if (isset($current_user)) {
     $fn = isset($current_user->first_name) ? $current_user->first_name : '';
     $ln = isset($current_user->last_name)  ? $current_user->last_name  : '';
 }
-$initials  = strtoupper(substr($fn,0,1).substr($ln,0,1)) ?: 'WS';
-$full_name = trim($fn.' '.$ln) ?: 'User';
+$initials  = strtoupper((string)(substr($fn,0,1).substr($ln,0,1))) ?: 'WS';
+$full_name = trim((string)($fn.' '.$ln)) ?: 'User';
 $email     = (isset($current_user) && isset($current_user->email)) ? $current_user->email : '';
 $rl        = array(1=>'Supervisor',2=>'Technician',3=>'Store Keeper',4=>'Manager',5=>'CEO');
 $role_lbl  = isset($rl[$role_id]) ? $rl[$role_id] : 'User';
@@ -42,7 +42,7 @@ $is_ceo        = ($role_id == 5);
            style="width:100%;height:100%;object-fit:contain;display:block;">
     </div>
     <div class="sb-logo-text">
-      <div class="sb-logo-name"><?= htmlspecialchars($company); ?></div>
+      <div class="sb-logo-name"><?= htmlspecialchars((string)($company)); ?></div>
       <div class="sb-logo-sub">Control Center</div>
     </div>
   </a>
@@ -351,7 +351,7 @@ $is_ceo        = ($role_id == 5);
     <div class="sb-user-card">
       <div class="sb-avatar"><?= $initials; ?></div>
       <div class="sb-user-info">
-        <div class="sb-user-name"><?= htmlspecialchars($full_name); ?></div>
+        <div class="sb-user-name"><?= htmlspecialchars((string)($full_name)); ?></div>
         <div class="sb-user-role"><?= $role_lbl; ?></div>
       </div>
       <?= form_open('logout', array('style' => 'display:inline-flex;margin:0;')) ?>
@@ -368,8 +368,8 @@ $is_ceo        = ($role_id == 5);
   <div class="topbar">
     <div class="topbar-row">
       <div>
-        <div class="topbar-greeting"><?= $greeting; ?>, <strong><?= htmlspecialchars($fn ?: 'there'); ?></strong> &mdash; <?= date('l, d F Y'); ?></div>
-        <div class="page-heading"><?= isset($page_title) ? htmlspecialchars($page_title) : 'Dashboard'; ?></div>
+        <div class="topbar-greeting"><?= $greeting; ?>, <strong><?= htmlspecialchars((string)($fn ?: 'there')); ?></strong> &mdash; <?= date('l, d F Y'); ?></div>
+        <div class="page-heading"><?= isset($page_title) ? htmlspecialchars((string)($page_title)) : 'Dashboard'; ?></div>
       </div>
       <div class="topbar-actions">
         <div class="live-pill">
@@ -400,14 +400,14 @@ $is_ceo        = ($role_id == 5);
         <div class="tb-user" id="tb-user-pill" onclick="wmsToggleDD(event)">
           <div class="tb-avatar"><?= $initials; ?></div>
           <div>
-            <div class="tb-name"><?= htmlspecialchars($full_name); ?></div>
+            <div class="tb-name"><?= htmlspecialchars((string)($full_name)); ?></div>
             <div class="tb-role"><?= $role_lbl; ?></div>
           </div>
           <div class="tb-chevron"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
           <div class="tb-dropdown" id="tb-dropdown">
             <div class="tbd-head">
-              <div class="tbd-name"><?= htmlspecialchars($full_name); ?></div>
-              <div class="tbd-email"><?= htmlspecialchars($email); ?></div>
+              <div class="tbd-name"><?= htmlspecialchars((string)($full_name)); ?></div>
+              <div class="tbd-email"><?= htmlspecialchars((string)($email)); ?></div>
             </div>
             <?php if ($is_supervisor): ?>
             <a href="<?= base_url('users'); ?>" class="tbd-item">

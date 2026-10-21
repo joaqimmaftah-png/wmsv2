@@ -29,17 +29,23 @@ class Suppliers extends MY_Controller {
     /* ── CREATE ─────────────────────────────────────────── */
     public function create() {
         if ($this->input->method() === 'post') {
+            $name = trim((string)$this->input->post('company_name', TRUE));
+            if ($name === '') {
+                $this->session->set_flashdata('error', 'Company name is required.');
+                redirect('suppliers/create');
+                return;
+            }
             $data = array(
-                'company_name'             => $this->input->post('company_name', TRUE),
-                'tax_id'                   => $this->input->post('tax_id', TRUE),
-                'country'                  => $this->input->post('country', TRUE),
-                'city'                     => $this->input->post('city', TRUE),
-                'address'                  => $this->input->post('address', TRUE),
+                'company_name'             => $name,
+                'tax_id'                   => $this->input->post('tax_id', TRUE) ?: NULL,
+                'country'                  => $this->input->post('country', TRUE) ?: 'Tanzania',
+                'city'                     => $this->input->post('city', TRUE) ?: NULL,
+                'address'                  => $this->input->post('address', TRUE) ?: NULL,
                 'currency'                 => wms_currency_code($this->input->post('currency', TRUE)),
-                'payment_terms'            => $this->input->post('payment_terms', TRUE),
+                'payment_terms'            => $this->input->post('payment_terms', TRUE) ?: NULL,
                 'lead_time_guarantee_days' => $this->input->post('lead_time_guarantee_days', TRUE) ?: NULL,
                 'status'                   => $this->input->post('status', TRUE) ?: 'Active',
-                'notes'                    => $this->input->post('notes', TRUE),
+                'notes'                    => $this->input->post('notes', TRUE) ?: NULL,
             );
             $id = $this->Supplier_model->insert($data);
             $this->session->set_flashdata('success', 'Supplier added successfully.');
@@ -95,19 +101,26 @@ class Suppliers extends MY_Controller {
     /* ── CONTACTS ───────────────────────────────────────── */
     public function add_contact($supplier_id) {
         if (!$this->require_post()) return;
+        $name = trim((string) $this->input->post('name', TRUE));
+        if ($name === '') {
+            $this->session->set_flashdata('error', 'Contact name is required.');
+            redirect('suppliers/view/'.$supplier_id);
+            return;
+        }
         $this->Supplier_model->add_contact(array(
-            'supplier_id' => $supplier_id,
-            'name'        => $this->input->post('name', TRUE),
-            'role'        => $this->input->post('role', TRUE),
-            'phone'       => $this->input->post('phone', TRUE),
-            'email'       => $this->input->post('email', TRUE),
+            'supplier_id' => (int) $supplier_id,
+            'name'        => $name,
+            'role'        => trim((string) $this->input->post('role', TRUE)),
+            'phone'       => trim((string) $this->input->post('phone', TRUE)),
+            'email'       => trim((string) $this->input->post('email', TRUE)),
         ));
         $this->session->set_flashdata('success', 'Contact added.');
         redirect('suppliers/view/'.$supplier_id);
     }
 
-    public function delete_contact($id, $supplier_id) {
+    public function delete_contact($id, $supplier_id = null) {
         if (!$this->require_post()) return;
+        if ($supplier_id === null) show_404();
         if (!$this->Supplier_model->delete_contact($id, $supplier_id)) show_404();
         $this->session->set_flashdata('success', 'Contact removed.');
         redirect('suppliers/view/'.$supplier_id);
@@ -116,11 +129,18 @@ class Suppliers extends MY_Controller {
     /* ── CATALOG (supplier ↔ material mapping) ──────────── */
     public function add_catalog_item($supplier_id) {
         if (!$this->require_post()) return;
+        $part_number = trim((string) $this->input->post('part_number', TRUE));
+        $description = trim((string) $this->input->post('description', TRUE));
+        if ($part_number === '' && $description === '') {
+            $this->session->set_flashdata('error', 'Part number or description is required.');
+            redirect('suppliers/view/'.$supplier_id);
+            return;
+        }
         $this->Supplier_model->add_catalog_item(array(
-            'supplier_id'    => $supplier_id,
+            'supplier_id'    => (int) $supplier_id,
             'material_id'    => $this->input->post('material_id', TRUE) ?: NULL,
-            'part_number'    => $this->input->post('part_number', TRUE),
-            'description'    => $this->input->post('description', TRUE),
+            'part_number'    => $part_number,
+            'description'    => $description,
             'unit_price'     => $this->input->post('unit_price', TRUE) ?: NULL,
             'currency'       => wms_currency_code($this->input->post('currency', TRUE)),
             'moq'            => $this->input->post('moq', TRUE) ?: NULL,
@@ -131,8 +151,9 @@ class Suppliers extends MY_Controller {
         redirect('suppliers/view/'.$supplier_id);
     }
 
-    public function delete_catalog_item($id, $supplier_id) {
+    public function delete_catalog_item($id, $supplier_id = null) {
         if (!$this->require_post()) return;
+        if ($supplier_id === null) show_404();
         if (!$this->Supplier_model->delete_catalog_item($id, $supplier_id)) show_404();
         $this->session->set_flashdata('success', 'Catalog item removed.');
         redirect('suppliers/view/'.$supplier_id);

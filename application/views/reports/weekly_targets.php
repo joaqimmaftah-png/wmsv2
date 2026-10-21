@@ -34,7 +34,7 @@ $prev_week    = date('Y-m-d', strtotime($week_start . ' -7 days'));
 $next_week    = date('Y-m-d', strtotime($week_start . ' +7 days'));
 $report_name  = isset($report_name) && $report_name !== '' ? $report_name : 'W'.(int)date('W', strtotime($week_start));
 
-$pct = function ($v) { return $v === null || $v === '' ? '—' : number_format(((float)$v) * 100, 2, '.', '') . ' %'; };
+$pct = function ($v) { return $v === null || $v === '' ? '—' : number_format((float)(((float)$v) * 100), 2, '.', '') . ' %'; };
 $src_short = array(
     'equipment-day'     => 'machine · day',
     'equipment-default' => 'machine',
@@ -77,12 +77,12 @@ $src_short = array(
     <div class="ch">
       <div>
         <div class="ct">Availability Targets</div>
-        <div class="cs"><?= htmlspecialchars($report_name) ?> — daily target per machine and per group, with single-day overrides</div>
+        <div class="cs"><?= htmlspecialchars((string)($report_name)) ?> — daily target per machine and per group, with single-day overrides</div>
       </div>
       <div class="tgt-bar" style="margin:0;">
         <a class="btn btn-sm" href="<?= base_url('reports/weekly_targets?week_start=' . $prev_week) ?>">&larr; Previous week</a>
         <form method="get" action="<?= base_url('reports/weekly_targets') ?>" style="display:flex;gap:8px;align-items:center;">
-          <input type="date" name="week_start" class="form-control" style="width:160px;" value="<?= htmlspecialchars($week_start) ?>">
+          <input type="date" name="week_start" class="form-control" style="width:160px;" value="<?= htmlspecialchars((string)($week_start)) ?>">
           <button class="btn btn-sm" type="submit">Go</button>
         </form>
         <a class="btn btn-sm" href="<?= base_url('reports/weekly_targets?week_start=' . $next_week) ?>">Next week &rarr;</a>
@@ -114,7 +114,7 @@ $src_short = array(
           <div class="ct" style="font-size:12.5px;margin-bottom:10px;"><?= $edit_row ? 'Edit target #' . (int)$edit_row->id : 'Add a target' ?></div>
           <form method="post" action="<?= base_url('reports/weekly_targets_save') ?>" class="tgt-form">
             <?= $csrf_field() ?>
-            <input type="hidden" name="week_start" value="<?= htmlspecialchars($week_start) ?>">
+            <input type="hidden" name="week_start" value="<?= htmlspecialchars((string)($week_start)) ?>">
             <?php if ($edit_row): ?><input type="hidden" name="id" value="<?= (int)$edit_row->id ?>"><?php endif; ?>
 
             <div class="row">
@@ -129,7 +129,7 @@ $src_short = array(
               <div>
                 <label class="form-label">Target</label>
                 <input type="text" name="target_pct" class="form-control" placeholder="88 or 0.88"
-                       value="<?= $edit_row ? htmlspecialchars($edit_row->target_pct) : '' ?>" required>
+                       value="<?= $edit_row ? htmlspecialchars((string)($edit_row->target_pct)) : '' ?>" required>
                 <div class="tgt-hint">88 or 88 % or 0.88 — all mean 88 %.</div>
               </div>
             </div>
@@ -140,7 +140,7 @@ $src_short = array(
                 <option value="">— choose a machine —</option>
                 <?php foreach ($machines as $m): ?>
                 <option value="<?= (int)$m->id ?>" <?= ($edit_row && $edit_row->scope === 'Equipment' && (int)$edit_row->equipment_id === (int)$m->id) ? 'selected' : '' ?>>
-                  <?= htmlspecialchars($m->registration_no) ?><?= !empty($m->type_name) ? ' — ' . htmlspecialchars($m->type_name) : '' ?><?= empty($m->report_group) ? ' (no report group)' : '' ?>
+                  <?= htmlspecialchars((string)($m->registration_no)) ?><?= !empty($m->type_name) ? ' — ' . htmlspecialchars((string)($m->type_name)) : '' ?><?= empty($m->report_group) ? ' (no report group)' : '' ?>
                 </option>
                 <?php endforeach; ?>
               </select>
@@ -151,8 +151,8 @@ $src_short = array(
               <select name="group_code" class="form-select">
                 <option value="">— choose a group —</option>
                 <?php foreach ($groups as $code => $label): ?>
-                <option value="<?= htmlspecialchars($code) ?>" <?= ($edit_row && $edit_row->scope === 'Group' && $edit_row->group_code === $code) ? 'selected' : '' ?>>
-                  <?= htmlspecialchars($label) ?> (<?= htmlspecialchars($code) ?>)
+                <option value="<?= htmlspecialchars((string)($code)) ?>" <?= ($edit_row && $edit_row->scope === 'Group' && $edit_row->group_code === $code) ? 'selected' : '' ?>>
+                  <?= htmlspecialchars((string)($label)) ?> (<?= htmlspecialchars((string)($code)) ?>)
                 </option>
                 <?php endforeach; ?>
               </select>
@@ -161,14 +161,14 @@ $src_short = array(
             <div>
               <label class="form-label">Day</label>
               <input type="date" name="target_date" class="form-control"
-                     value="<?= $edit_row && $edit_row->target_date ? htmlspecialchars($edit_row->target_date) : '' ?>">
+                     value="<?= $edit_row && $edit_row->target_date ? htmlspecialchars((string)($edit_row->target_date)) : '' ?>">
               <div class="tgt-hint">Leave empty to make this the <b>standing default</b>; pick a date to override one single day.</div>
             </div>
 
             <div>
               <label class="form-label">Note (optional)</label>
               <input type="text" name="note" class="form-control" maxlength="255"
-                     value="<?= $edit_row && $edit_row->note ? htmlspecialchars($edit_row->note) : '' ?>">
+                     value="<?= $edit_row && $edit_row->note ? htmlspecialchars((string)($edit_row->note)) : '' ?>">
             </div>
 
             <div style="display:flex;gap:10px;">
@@ -183,7 +183,7 @@ $src_short = array(
           <div class="ct" style="font-size:12.5px;margin-bottom:10px;">Apply to many machines at once</div>
           <form method="post" action="<?= base_url('reports/weekly_targets_bulk') ?>" class="tgt-form">
             <?= $csrf_field() ?>
-            <input type="hidden" name="week_start" value="<?= htmlspecialchars($week_start) ?>">
+            <input type="hidden" name="week_start" value="<?= htmlspecialchars((string)($week_start)) ?>">
             <div class="row">
               <div>
                 <label class="form-label">Target</label>
@@ -194,7 +194,7 @@ $src_short = array(
                 <select name="group_code" class="form-select">
                   <option value="">All reportable machines (<?= (int)($coverage['machines'] ?? 0) ?>)</option>
                   <?php foreach ($groups as $code => $label): ?>
-                  <option value="<?= htmlspecialchars($code) ?>"><?= htmlspecialchars($label) ?></option>
+                  <option value="<?= htmlspecialchars((string)($code)) ?>"><?= htmlspecialchars((string)($label)) ?></option>
                   <?php endforeach; ?>
                 </select>
               </div>
@@ -210,7 +210,7 @@ $src_short = array(
           <div class="ct" style="font-size:12.5px;margin:20px 0 10px;">Copy the previous week</div>
           <form method="post" action="<?= base_url('reports/weekly_targets_copy') ?>">
             <?= $csrf_field() ?>
-            <input type="hidden" name="week_start" value="<?= htmlspecialchars($week_start) ?>">
+            <input type="hidden" name="week_start" value="<?= htmlspecialchars((string)($week_start)) ?>">
             <div class="tgt-hint" style="margin:0 0 10px;">
               Copies every day-specific target of the week of <?= date('d M Y', strtotime($prev_week)) ?> onto the same
               weekday of this week. A target that already exists here is updated, never duplicated.
@@ -238,16 +238,16 @@ $src_short = array(
         <tbody>
         <?php foreach ($target_rows as $t): $r = $t['row']; ?>
           <tr>
-            <td><span class="tgt-pill <?= $r->scope === 'Group' ? 'grp' : 'eq' ?>"><?= htmlspecialchars($t['scope']) ?></span></td>
-            <td class="tgt-strong"><?= htmlspecialchars($t['who']) ?></td>
-            <td><?= htmlspecialchars($t['when']) ?></td>
-            <td class="tgt-num tgt-strong"><?= htmlspecialchars($t['pct']) ?></td>
+            <td><span class="tgt-pill <?= $r->scope === 'Group' ? 'grp' : 'eq' ?>"><?= htmlspecialchars((string)($t['scope'])) ?></span></td>
+            <td class="tgt-strong"><?= htmlspecialchars((string)($t['who'])) ?></td>
+            <td><?= htmlspecialchars((string)($t['when'])) ?></td>
+            <td class="tgt-num tgt-strong"><?= htmlspecialchars((string)($t['pct'])) ?></td>
             <td><?= htmlspecialchars((string)$r->note) ?></td>
             <?php if ($can_edit): ?>
             <td class="tgt-num" style="white-space:nowrap;">
               <a class="btn btn-sm" href="<?= base_url('reports/weekly_targets?week_start=' . $week_start . '&edit=' . (int)$r->id) ?>">Edit</a>
               <?= form_open('reports/weekly_targets_delete/' . (int)$r->id, array('style' => 'display:inline;margin:0;', 'onsubmit' => "return confirm('Delete this target?')")) ?>
-                <input type="hidden" name="week_start" value="<?= htmlspecialchars($week_start, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="week_start" value="<?= htmlspecialchars((string)($week_start), ENT_QUOTES, 'UTF-8') ?>">
                 <button type="submit" class="btn btn-sm">Delete</button>
               <?= form_close() ?>
             </td>
@@ -281,18 +281,18 @@ $src_short = array(
           <tbody>
           <?php foreach ($machines as $m): $rm = isset($resolved[(int)$m->id]) ? $resolved[(int)$m->id] : null; if (!$rm) continue; ?>
             <tr>
-              <td class="tgt-strong"><?= htmlspecialchars($m->registration_no) ?></td>
-              <td><?= empty($m->report_group) ? '<span class="tgt-pill">no group</span>' : htmlspecialchars($m->report_group) ?></td>
+              <td class="tgt-strong"><?= htmlspecialchars((string)($m->registration_no)) ?></td>
+              <td><?= empty($m->report_group) ? '<span class="tgt-pill">no group</span>' : htmlspecialchars((string)($m->report_group)) ?></td>
               <td class="tgt-num">
                 <?= $pct($rm['standing'] ? $rm['standing']['pct'] : null) ?>
-                <?php if ($rm['standing']): ?><span class="tgt-src"><?= htmlspecialchars($src_short[$rm['standing']['source']] ?? $rm['standing']['source']) ?></span><?php endif; ?>
+                <?php if ($rm['standing']): ?><span class="tgt-src"><?= htmlspecialchars((string)($src_short[$rm['standing']['source']] ?? $rm['standing']['source'])) ?></span><?php endif; ?>
               </td>
               <?php foreach ($days as $d): $cell = isset($rm['days'][$d]) ? $rm['days'][$d] : null; ?>
               <td class="tgt-num">
                 <?php if ($cell === null): ?>
                   <span style="color:#ff9c8f;">none</span>
                 <?php else: ?>
-                  <?= $pct($cell['pct']) ?><span class="tgt-src"><?= htmlspecialchars($src_short[$cell['source']] ?? $cell['source']) ?></span>
+                  <?= $pct($cell['pct']) ?><span class="tgt-src"><?= htmlspecialchars((string)($src_short[$cell['source']] ?? $cell['source'])) ?></span>
                 <?php endif; ?>
               </td>
               <?php endforeach; ?>

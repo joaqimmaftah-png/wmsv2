@@ -16,7 +16,7 @@
     <select name="report_group" class="form-select" style="width:auto;min-width:150px;">
       <option value="">All Report Groups</option>
       <?php foreach ($report_groups as $code => $label): ?>
-      <option value="<?= htmlspecialchars($code) ?>" <?= (isset($filter['report_group'])&&$filter['report_group']===$code)?'selected':'' ?>><?= htmlspecialchars($label) ?></option>
+      <option value="<?= htmlspecialchars((string)($code)) ?>" <?= (isset($filter['report_group'])&&$filter['report_group']===$code)?'selected':'' ?>><?= htmlspecialchars((string)($label)) ?></option>
       <?php endforeach; ?>
     </select>
     <?php endif; ?>
@@ -24,7 +24,7 @@
     <select name="location" class="form-select" style="width:auto;min-width:150px;">
       <option value="">All Sites</option>
       <?php foreach ($report_sites as $label => $code): ?>
-      <option value="<?= htmlspecialchars($label) ?>" <?= (isset($filter['location'])&&$filter['location']===$label)?'selected':'' ?>><?= htmlspecialchars($label) ?></option>
+      <option value="<?= htmlspecialchars((string)($label)) ?>" <?= (isset($filter['location'])&&$filter['location']===$label)?'selected':'' ?>><?= htmlspecialchars((string)($label)) ?></option>
       <?php endforeach; ?>
     </select>
     <?php endif; ?>
@@ -61,7 +61,7 @@
   <?php if (!empty($site_summary['blank'])): ?> &middot; <?= (int)$site_summary['blank'] ?> machine(s) with no site<?php endif; ?>
   <?php if (!empty($worst)): ?>
     &middot; <span style="color:var(--amber);"><?= array_sum($worst) ?> machine(s) hold a value that is not an approved site</span>
-    <?php if ($top): ?>(<?php $bits = array(); foreach ($top as $name => $n) $bits[] = htmlspecialchars($name).'&nbsp;×'.$n; echo implode(', ', $bits); ?>)<?php endif; ?>
+    <?php if ($top): ?>(<?php $bits = array(); foreach ($top as $name => $n) $bits[] = htmlspecialchars((string)($name)).'&nbsp;×'.$n; echo implode(', ', $bits); ?>)<?php endif; ?>
   <?php endif; ?>
 </div>
 <?php endif; ?>
@@ -82,15 +82,15 @@
           <?php if (!equip_is_reportable($eq)): ?>
           <span class="badge b-secondary" title="Excluded from the weekly report">not in weekly report</span>
           <?php elseif (isset($eq->report_group) && $eq->report_group): ?>
-          <span class="badge b-info" title="Weekly report group"><?= htmlspecialchars($eq->report_group) ?></span>
+          <span class="badge b-info" title="Weekly report group"><?= htmlspecialchars((string)($eq->report_group)) ?></span>
           <?php else: ?>
           <span class="badge b-warning" title="Reportable but not classified yet">no group</span>
           <?php endif; ?>
           <span class="badge <?= $sc ?>"><?= $eq->status ?></span>
         </div>
       </div>
-      <div class="fw-600" style="font-size:16px;letter-spacing:-0.3px;"><?= htmlspecialchars(equip_machine_id($eq)) ?></div>
-      <div style="font-size:12px;color:var(--t3);margin-top:3px;"><?= htmlspecialchars($eq->brand . ' ' . $eq->model) ?></div>
+      <div class="fw-600" style="font-size:16px;letter-spacing:-0.3px;"><?= htmlspecialchars((string)(equip_machine_id($eq))) ?></div>
+      <div style="font-size:12px;color:var(--t3);margin-top:3px;"><?= htmlspecialchars((string)($eq->brand . ' ' . $eq->model)) ?></div>
       <div style="font-size:11px;color:var(--t3);margin-top:2px;">
         <?php
         // W0.5: the site is shown with the report's own vocabulary; a value that
@@ -99,16 +99,16 @@
         if ($loc === '') {
             echo '<span style="color:var(--amber);">no site</span>';
         } elseif (!empty($report_sites) && equip_is_approved_site($loc, $report_sites)) {
-            echo htmlspecialchars(equip_site_label($loc, $report_sites));
+            echo htmlspecialchars((string)(equip_site_label($loc, $report_sites)));
         } else {
-            echo htmlspecialchars($loc) . ' <span class="badge b-warning" title="Not one of the approved sites">not approved</span>';
+            echo htmlspecialchars((string)($loc)) . ' <span class="badge b-warning" title="Not one of the approved sites">not approved</span>';
         }
         ?>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--sep);margin:16px 0 0;">
       <div style="background:var(--surface);padding:10px 14px;text-align:center;">
-        <div class="mono" style="font-size:15px;font-weight:500;color:var(--t1);"><?= number_format($eq->current_hours,0) ?></div>
+        <div class="mono" style="font-size:15px;font-weight:500;color:var(--t1);"><?= number_format((float)($eq->current_hours),0) ?></div>
         <div style="font-size:9.5px;color:var(--t3);font-weight:600;text-transform:none;letter-spacing:0;margin-top:2px;">Hours</div>
       </div>
       <div style="background:var(--surface);padding:10px 14px;text-align:center;">

@@ -1,51 +1,45 @@
-# Workshop Management System - cPanel Compatible .htaccess
-# This version is safe for shared hosting where some Apache directives are restricted
+# Workshop Management System - Apache / XAMPP / cPanel Compatible .htaccess
+# Works identically at domain root (https://wms.example.com/) AND in any
+# subfolder such as XAMPP's htdocs/wmsv2 (http://localhost/wmsv2/).
 
 # Prevent directory listing - use IfModule to avoid 500 if Options is not allowed
 <IfModule mod_autoindex.c>
     Options -Indexes
 </IfModule>
 
-# Protect .htaccess itself
-<Files .htaccess>
-    Order Allow,Deny
-    Deny from all
-</Files>
+# Protect sensitive files (.htaccess, .env*, composer.*, markdown docs)
+<FilesMatch "^(\.htaccess|\.env.*|composer\.(json|lock)|phpunit\.xml)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order Allow,Deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /
 
-    # Prevent access to hidden files/directories (like .git) but allow .well-known for SSL
-    RewriteCond %{REQUEST_URI} !^/\.well-known/
-    RewriteRule ^(.*/)?\.(.+)$ - [F,L]
+    # Prevent access to hidden files/directories (like .git) while allowing .well-known for SSL
+    RewriteCond %{REQUEST_URI} !/(.*)?\.well-known/ [NC]
+    RewriteRule (^|/)\.(?!well-known/) - [F,L]
 
-    # Remove index.php from URL - cPanel compatible
-    # If the request is for a real file or directory, serve it directly
+    # Prevent direct web access to internal application, system, database, scripts, and test directories
+    RewriteRule ^(application|system|database|scripts|tests)(/|$) - [F,L]
+
+    # Prevent PHP execution in uploads (double protection)
+    RewriteRule ^uploads/.*\.(php\d?|phtml|phar)$ - [F,L,NC]
+
+    # Route non-existent files/directories to relative index.php (no hardcoded RewriteBase /,
+    # so both root domain deployments and subfolder installs like /wmsv2/ resolve properly)
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
-    # Rewrite to index.php - try both formats for compatibility
     RewriteRule ^(.*)$ index.php/$1 [L]
-
-    # Fallback for servers that need ?/$1 format (some cPanel setups)
-    # The above rule should work, but if you get 404s, uncomment next line and comment previous:
-    # RewriteRule ^(.*)$ index.php?/$1 [L,QSA]
 </IfModule>
 
-# If mod_rewrite is not available, route everything through index.php via FallbackResource
-<IfModule !mod_rewrite.c>
-    <IfModule mod_dir.c>
-        FallbackResource /index.php
-    </IfModule>
-</IfModule>
-
-# Security headers (optional, wrapped to avoid 500)
+# Security headers (wrapped to avoid 500 if mod_headers is disabled)
 <IfModule mod_headers.c>
     Header set X-Content-Type-Options "nosniff"
     Header set X-Frame-Options "SAMEORIGIN"
-</IfModule>
-
-# Prevent PHP execution in uploads (double protection)
-<IfModule mod_rewrite.c>
-    RewriteRule ^uploads/.*\.php$ - [F,L]
 </IfModule>

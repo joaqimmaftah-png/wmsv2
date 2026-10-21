@@ -64,7 +64,7 @@ $spend_by_currency = isset($spend_by_currency) ? $spend_by_currency : array();
           $pct = $cur_max > 0 ? round($s->total_spend / $cur_max * 100, 1) : 0; ?>
     <div style="margin-bottom:12px;">
       <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px;">
-        <span style="font-weight:600;color:var(--t1);"><?= htmlspecialchars($s->company_name) ?> <span style="color:var(--t3);font-weight:400;">(<?= htmlspecialchars($s->country) ?>)</span></span>
+        <span style="font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($s->company_name)) ?> <span style="color:var(--t3);font-weight:400;">(<?= htmlspecialchars((string)($s->country)) ?>)</span></span>
         <span class="mono" style="color:var(--t3);"><?= wms_money($s->total_spend, $cur, 0) ?> &middot; <?= $s->order_count ?> orders</span>
       </div>
       <div style="background:var(--g2);border-radius:5px;height:9px;overflow:hidden;">
@@ -91,8 +91,8 @@ $spend_by_currency = isset($spend_by_currency) ? $spend_by_currency : array();
       $conf = $lt->n >= 5 ? array('High','var(--green)','var(--green-d)') : ($lt->n >= 3 ? array('Medium','var(--amber)','var(--amber-d)') : array('Low','var(--t3)','var(--g2)'));
     ?>
     <tr>
-      <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars($lt->country) ?></td>
-      <td><?= htmlspecialchars($lt->shipping_method) ?></td>
+      <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($lt->country)) ?></td>
+      <td><?= htmlspecialchars((string)($lt->shipping_method)) ?></td>
       <td class="mono" style="text-align:center;font-weight:600;"><?= round($lt->avg_days) ?> days</td>
       <td class="mono" style="text-align:center;color:var(--t3);"><?= $lt->n ?> order(s)</td>
       <td style="text-align:center;"><span style="padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;color:<?= $conf[1] ?>;background:<?= $conf[2] ?>;"><?= $conf[0] ?></span></td>

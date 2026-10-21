@@ -86,15 +86,15 @@ $trendMtbf   = array_column($trend, 'mtbf');
       $mttrBad = $eq['mttr'] > $summary['avg_mttr'] * 1.5;
     ?>
     <tr>
-      <td style="font-size:10.5px;color:var(--blue);font-weight:600;"><?=htmlspecialchars($eq['type'])?></td>
-      <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars($eq['machine_id'])?></td>
-      <td style="color:var(--t2);"><?=htmlspecialchars($eq['model'])?></td>
-      <td style="color:var(--t3);font-size:10.5px;"><?=htmlspecialchars($eq['location'])?></td>
-      <td class="mono" style="text-align:center;"><?=number_format($eq['hours'],0)?></td>
+      <td style="font-size:10.5px;color:var(--blue);font-weight:600;"><?=htmlspecialchars((string)($eq['type']))?></td>
+      <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars((string)($eq['machine_id']))?></td>
+      <td style="color:var(--t2);"><?=htmlspecialchars((string)($eq['model']))?></td>
+      <td style="color:var(--t3);font-size:10.5px;"><?=htmlspecialchars((string)($eq['location']))?></td>
+      <td class="mono" style="text-align:center;"><?=number_format((float)($eq['hours']),0)?></td>
       <td style="text-align:center;font-weight:700;color:<?=$eq['breakdowns']>3?'var(--red)':($eq['breakdowns']>1?'var(--amber)':'var(--t2)')?>;"><?=$eq['breakdowns']?></td>
-      <td class="mono" style="text-align:center;color:var(--t2);"><?=number_format($eq['total_down'],1)?> h</td>
+      <td class="mono" style="text-align:center;color:var(--t2);"><?=number_format((float)($eq['total_down']),1)?> h</td>
       <td style="text-align:center;font-weight:700;color:<?=$mttrBad?'var(--red)':'var(--green)'?>;"><?=$eq['mttr']?> h</td>
-      <td class="mono" style="text-align:center;"><?=number_format($eq['mtbf'],0)?> h</td>
+      <td class="mono" style="text-align:center;"><?=number_format((float)($eq['mtbf']),0)?> h</td>
       <td style="text-align:center;font-weight:700;color:<?=$avColor?>;"><?=$eq['availability']?>%</td>
       <td class="mono" style="text-align:center;color:var(--t3);"><?=$eq['max_down']?> h</td>
     </tr>

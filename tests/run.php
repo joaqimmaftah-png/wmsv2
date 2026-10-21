@@ -70,8 +70,10 @@ class WmsTestApp {
     }
 }
 
-function get_instance() {
-    return $GLOBALS['wms_test_app'];
+if (!function_exists('get_instance')) {
+    function get_instance() {
+        return $GLOBALS['wms_test_app'];
+    }
 }
 
 $GLOBALS['wms_test_app'] = new WmsTestApp();
@@ -240,6 +242,48 @@ unset($_SERVER['HTTP_HOST']);
 $config = load_config($config_copy);
 is_same('K-17: CLI falls back to localhost', 'http://localhost/', $config['base_url']);
 unlink($config_copy);
+
+/* ─────────────────────────────────────────────────────────────────────────
+   XAMPP subfolder routing, PHP 8.x XLSX stream cleanliness & schema sync
+   ───────────────────────────────────────────────────────────────────────── */
+
+foreach (array('.htaccess', '.htaccess.cpanel-alternative') as $htFile) {
+    $ht = file_get_contents(__DIR__ . '/../' . $htFile);
+    check("{$htFile}: no hardcoded RewriteBase / breaking subfolder installs", !preg_match('/^\s*RewriteBase\s+\/\s*$/m', $ht));
+    check("{$htFile}: rewrites non-files to relative index.php", strpos($ht, 'index.php') !== FALSE);
+}
+
+require_once __DIR__ . '/../application/helpers/xlsx_helper.php';
+$xlsxErr = NULL;
+set_error_handler(function ($errno, $errstr) use (&$xlsxErr) {
+    $xlsxErr = $errstr;
+    return TRUE;
+});
+$xlsx = new XlsxWriter();
+$xlsx->addSheet('Test');
+$xlsx->setRowHeight(NULL, 22);
+$xlsx->writeRow(array('Month', 'Availability %'));
+$tmpXlsx = sys_get_temp_dir() . '/wms_test_' . uniqid('', TRUE) . '.xlsx';
+$xlsx->save($tmpXlsx);
+restore_error_handler();
+is_same('XlsxWriter: setRowHeight(null, ...) emits zero PHP 8.x warnings/deprecations', NULL, $xlsxErr);
+is_same('XlsxWriter: writes valid ZIP header PK\\x03\\x04', "PK\x03\x04", substr(file_get_contents($tmpXlsx), 0, 4));
+@unlink($tmpXlsx);
+
+$schemaSql = file_get_contents(__DIR__ . '/../database/schema.sql');
+check('Schema: schema_migrations ledger table defined', strpos($schemaSql, 'CREATE TABLE IF NOT EXISTS `schema_migrations`') !== FALSE);
+check('Schema: ci_sessions uses single-column PRIMARY KEY (`id`) for sess_match_ip = FALSE', strpos($schemaSql, "ALTER TABLE `ci_sessions`\n  ADD PRIMARY KEY (`id`)") !== FALSE);
+check('Schema: seeds all 14 bilingual inspection_templates', strpos($schemaSql, 'INSERT IGNORE INTO `inspection_templates`') !== FALSE);
+check('Schema: seeds all 630 inspection_items', strpos($schemaSql, 'INSERT IGNORE INTO `inspection_items`') !== FALSE);
+
+$migFiles = glob(__DIR__ . '/../database/migrations/[0-9][0-9][0-9][0-9]_*.sql');
+sort($migFiles, SORT_STRING);
+is_same('Migrations: all 7 ordered SQL migrations present (0001..0007)', 7, count($migFiles));
+foreach ($migFiles as $mf) {
+    $bn  = basename($mf);
+    $sum = hash_file('sha256', $mf);
+    check("Migrations: schema.sql ledger checksum matches {$bn}", strpos($schemaSql, "'{$bn}', '{$sum}'") !== FALSE);
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    Result

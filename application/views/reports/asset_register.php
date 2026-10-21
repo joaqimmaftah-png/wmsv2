@@ -54,7 +54,7 @@ $role_id = isset($role_id) ? $role_id : 0;
 <div class="card mb-4" id="importResult">
   <div class="ch" style="padding:12px 18px 10px;border-bottom:1px solid var(--g2);">
     <div>
-      <div class="ct" style="font-size:13px;">Import summary<?= $import_result['file_name'] ? ' — '.htmlspecialchars($import_result['file_name']) : '' ?></div>
+      <div class="ct" style="font-size:13px;">Import summary<?= $import_result['file_name'] ? ' — '.htmlspecialchars((string)($import_result['file_name'])) : '' ?></div>
       <div class="cs">
         <?= $import_result['mode'] === 'validate' ? 'Validation only — nothing was saved' : 'Sheet "'.$import_result['sheet'].'"'.($import_result['duplicate_action'] ? ' • duplicates: '.$import_result['duplicate_action'] : '') ?>
       </div>
@@ -74,12 +74,12 @@ $role_id = isset($role_id) ? $role_id : 0;
 
   <?php if (!empty($import_result['errors'])): ?>
   <div style="padding:0 18px 14px;color:var(--red);font-size:12.5px;">
-    <?php foreach ($import_result['errors'] as $e): ?><div>• <?=htmlspecialchars($e)?></div><?php endforeach; ?>
+    <?php foreach ($import_result['errors'] as $e): ?><div>• <?=htmlspecialchars((string)($e))?></div><?php endforeach; ?>
   </div>
   <?php endif; ?>
   <?php if (!empty($import_result['warnings'])): ?>
   <div style="padding:0 18px 14px;color:var(--amber);font-size:12.5px;">
-    <?php foreach ($import_result['warnings'] as $w): ?><div>• <?=htmlspecialchars($w)?></div><?php endforeach; ?>
+    <?php foreach ($import_result['warnings'] as $w): ?><div>• <?=htmlspecialchars((string)($w))?></div><?php endforeach; ?>
   </div>
   <?php endif; ?>
 
@@ -99,15 +99,15 @@ $role_id = isset($role_id) ? $role_id : 0;
       ?>
       <tr>
         <td class="mono" style="color:var(--t3);"><?=$r['row']?></td>
-        <td class="mono fw-600"><?=htmlspecialchars($r['machine_id'])?></td>
-        <td><span class="badge <?=$cls?>"><?=strtoupper($act)?></span></td>
+        <td class="mono fw-600"><?=htmlspecialchars((string)($r['machine_id']))?></td>
+        <td><span class="badge <?=$cls?>"><?=strtoupper((string)($act))?></span></td>
         <td style="font-size:11.5px;color:var(--t2);">
-          <?=htmlspecialchars(implode(' | ', isset($r['errors']) && $r['errors'] ? $r['errors'] : array()))?>
+          <?=htmlspecialchars((string)(implode(' | ', isset($r['errors']) && $r['errors'] ? $r['errors'] : array())))?>
           <?php if (empty($r['errors']) && !empty($r['values']['type_name'])): ?>
-            <span style="color:var(--t3);"><?=htmlspecialchars(trim($r['values']['type_name'].' '.($r['values']['brand'] ?? '').' '.($r['values']['model'] ?? '')))?></span>
+            <span style="color:var(--t3);"><?=htmlspecialchars((string)(trim((string)($r['values']['type_name'].' '.($r['values']['brand'] ?? '').' '.($r['values']['model'] ?? '')))))?></span>
           <?php endif; ?>
         </td>
-        <td style="font-size:11.5px;color:var(--amber);"><?=htmlspecialchars(implode(' | ', isset($r['warnings']) ? $r['warnings'] : array()))?></td>
+        <td style="font-size:11.5px;color:var(--amber);"><?=htmlspecialchars((string)(implode(' | ', isset($r['warnings']) ? $r['warnings'] : array())))?></td>
       </tr>
       <?php endforeach; ?>
       </tbody>
@@ -191,7 +191,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <div class="cs" style="margin:-6px 0 16px;color:var(--t3);">
   Recent imports:
   <?php $h = array(); foreach ($import_history as $row) {
-      $h[] = date('d/m/Y H:i', strtotime($row->created_at)).' — '.htmlspecialchars($row->file_name)
+      $h[] = date('d/m/Y H:i', strtotime($row->created_at)).' — '.htmlspecialchars((string)($row->file_name))
            .' ('.(int)$row->imported.' created, '.(int)$row->updated.' updated, '.(int)$row->failed.' failed)';
   } echo implode(' • ', $h); ?>
 </div>
@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <div class="card mb-4" style="padding:0;overflow:hidden;">
   <div class="ch" style="padding:12px 18px 10px;border-bottom:1px solid var(--g2);">
     <div>
-      <div class="ct" style="font-size:13px;"><?=htmlspecialchars($type)?>s</div>
+      <div class="ct" style="font-size:13px;"><?=htmlspecialchars((string)($type))?>s</div>
       <div class="cs"><?=count($assets)?> unit<?=count($assets)>1?'s':''?></div>
     </div>
     <?php
@@ -264,20 +264,20 @@ document.addEventListener('DOMContentLoaded', function(){
       $wc  = $wd===null?'var(--t3)':($wd>0?'var(--green)':'var(--red)');
     ?>
     <tr>
-      <td class="mono" style="font-weight:700;color:var(--blue);"><?=htmlspecialchars($a['registration_no'])?></td>
-      <td style="color:var(--t2);"><?=htmlspecialchars($a['brand']??'')?></td>
-      <td style="color:var(--t2);"><?=htmlspecialchars($a['model']??'')?></td>
+      <td class="mono" style="font-weight:700;color:var(--blue);"><?=htmlspecialchars((string)($a['registration_no']))?></td>
+      <td style="color:var(--t2);"><?=htmlspecialchars((string)($a['brand']??''))?></td>
+      <td style="color:var(--t2);"><?=htmlspecialchars((string)($a['model']??''))?></td>
       <td style="text-align:center;color:var(--t3);"><?=$a['year']?></td>
-      <td class="mono" style="font-size:10.5px;color:var(--t3);"><?=htmlspecialchars($a['serial_number']??'')?></td>
-      <td style="font-size:10.5px;color:var(--t3);"><?=htmlspecialchars($a['engine_model']??'—')?></td>
-      <td style="text-align:center;font-size:10.5px;color:var(--t3);"><?=htmlspecialchars($a['location']??'')?></td>
+      <td class="mono" style="font-size:10.5px;color:var(--t3);"><?=htmlspecialchars((string)($a['serial_number']??''))?></td>
+      <td style="font-size:10.5px;color:var(--t3);"><?=htmlspecialchars((string)($a['engine_model']??'—'))?></td>
+      <td style="text-align:center;font-size:10.5px;color:var(--t3);"><?=htmlspecialchars((string)($a['location']??''))?></td>
       <td style="text-align:center;">
         <span style="padding:2px 8px;border-radius:5px;font-size:10.5px;font-weight:600;color:<?=$sc?>;background:<?=$sb?>;"><?=$a['status']?></span>
       </td>
-      <td class="mono" style="text-align:center;font-weight:600;"><?=number_format($a['current_hours'],0)?></td>
+      <td class="mono" style="text-align:center;font-weight:600;"><?=number_format((float)($a['current_hours']),0)?></td>
       <td style="text-align:center;color:var(--t2);"><?=$a['total_wo']?></td>
       <td style="text-align:center;font-weight:600;color:<?=$a['breakdowns']>5?'var(--red)':($a['breakdowns']>2?'var(--amber)':'var(--t2)')?>;"><?=$a['breakdowns']?></td>
-      <td class="mono" style="text-align:center;color:var(--t3);"><?=number_format($a['total_down'],1)?></td>
+      <td class="mono" style="text-align:center;color:var(--t3);"><?=number_format((float)($a['total_down']),1)?></td>
       <td style="text-align:center;font-weight:700;color:<?=$avC?>;"><?=$av?>%</td>
       <td style="text-align:center;font-size:10.5px;color:<?=$wc?>;">
         <?=$a['warranty_expiry'] ? date('d/m/Y',strtotime($a['warranty_expiry'])) : '—'?>
@@ -287,7 +287,7 @@ document.addEventListener('DOMContentLoaded', function(){
         <div style="font-size:9px;color:var(--red);">Expired</div>
         <?php endif;?>
       </td>
-      <td style="font-size:10.5px;color:var(--t2);"><?=htmlspecialchars($a['next_pm_name']??'—')?></td>
+      <td style="font-size:10.5px;color:var(--t2);"><?=htmlspecialchars((string)($a['next_pm_name']??'—'))?></td>
       <td class="mono" style="text-align:center;font-size:10.5px;color:<?=$a['next_pm_date']&&$a['next_pm_date']<date('Y-m-d')?'var(--red)':'var(--t3)'?>;">
         <?=$a['next_pm_date'] ? date('d/m/Y',strtotime($a['next_pm_date'])) : '—'?>
       </td>
@@ -311,9 +311,9 @@ document.addEventListener('DOMContentLoaded', function(){
     <tbody>
     <?php foreach($withNotes as $a):?>
     <tr>
-      <td class="mono" style="font-weight:600;color:var(--blue);width:100px;"><?=htmlspecialchars($a['registration_no'])?></td>
-      <td style="color:var(--t3);font-size:10.5px;width:100px;"><?=htmlspecialchars($a['type'])?></td>
-      <td style="color:var(--t2);font-size:10.5px;"><?=htmlspecialchars($a['notes'])?></td>
+      <td class="mono" style="font-weight:600;color:var(--blue);width:100px;"><?=htmlspecialchars((string)($a['registration_no']))?></td>
+      <td style="color:var(--t3);font-size:10.5px;width:100px;"><?=htmlspecialchars((string)($a['type']))?></td>
+      <td style="color:var(--t2);font-size:10.5px;"><?=htmlspecialchars((string)($a['notes']))?></td>
     </tr>
     <?php endforeach;?>
     </tbody>

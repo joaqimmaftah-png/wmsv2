@@ -73,7 +73,7 @@ $week_input = date('o-\WW', strtotime($week_start));
             <?php foreach ($week_dates as $d): ?>
             <td style="text-align:center;<?= $d == date('Y-m-d') ? 'background:rgba(0,113,227,0.03);' : '' ?>">
               <?php if ($shift): ?>
-                <span class="badge <?= $shift_color($shift_name) ?>" style="font-size:10px;"><?= htmlspecialchars($shift_name) ?></span>
+                <span class="badge <?= $shift_color($shift_name) ?>" style="font-size:10px;"><?= htmlspecialchars((string)($shift_name)) ?></span>
               <?php else: ?>
                 <span class="text-muted" style="font-size:12px;">—</span>
               <?php endif; ?>
@@ -88,7 +88,7 @@ $week_input = date('o-\WW', strtotime($week_start));
                   <option value="0">— none —</option>
                   <?php foreach ($shifts as $sh): ?>
                   <option value="<?= (int)$sh->id ?>" <?= ((int)$sh->id === $shift_id) ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($sh->name) ?>
+                    <?= htmlspecialchars((string)($sh->name)) ?>
                   </option>
                   <?php endforeach; ?>
                 </select>
@@ -109,7 +109,7 @@ $week_input = date('o-\WW', strtotime($week_start));
 <div class="flex ai-c gap-10 mb-4" style="flex-wrap:wrap;">
   <?php foreach ($shifts as $sh): ?>
   <span class="badge <?= $shift_color($sh->name) ?>" style="padding:6px 12px;">
-    <?= htmlspecialchars($sh->name) ?>: <?= date('H:i', strtotime($sh->start_time)) ?> – <?= date('H:i', strtotime($sh->end_time)) ?>
+    <?= htmlspecialchars((string)($sh->name)) ?>: <?= date('H:i', strtotime($sh->start_time)) ?> – <?= date('H:i', strtotime($sh->end_time)) ?>
   </span>
   <?php endforeach; ?>
 </div>
@@ -130,7 +130,7 @@ $week_input = date('o-\WW', strtotime($week_start));
       <input type="hidden" name="shift_id" value="<?= (int)$sh->id ?>">
       <input type="hidden" name="week" value="<?= $week_start ?>">
       <input type="text" name="name" class="form-control" style="width:160px;font-size:12px;padding:5px 8px;"
-             value="<?= htmlspecialchars($sh->name) ?>" required maxlength="50">
+             value="<?= htmlspecialchars((string)($sh->name)) ?>" required maxlength="50">
       <label style="font-size:11px;color:var(--t3);">from</label>
       <input type="time" name="start_time" class="form-control" style="width:115px;font-size:12px;padding:5px 8px;"
              value="<?= date('H:i', strtotime($sh->start_time)) ?>" required>
@@ -146,7 +146,7 @@ $week_input = date('o-\WW', strtotime($week_start));
       <?= form_open('team/shift_delete/'.$sh->id, array('style' => 'display:inline;')) ?>
         <input type="hidden" name="week" value="<?= $week_start ?>">
         <button type="submit" class="btn btn-outline-danger btn-sm" style="font-size:10.5px;padding:2px 8px;"
-                onclick="return confirm('Delete shift “<?= htmlspecialchars($sh->name, ENT_QUOTES, 'UTF-8') ?>”?');">Delete this shift</button>
+                onclick="return confirm('Delete shift “<?= htmlspecialchars((string)($sh->name), ENT_QUOTES, 'UTF-8') ?>”?');">Delete this shift</button>
       <?= form_close() ?>
       <?php if ($used > 0): ?>
       <span style="font-size:10.5px;color:var(--t3);margin-left:8px;">Still assigned — clear the roster first.</span>

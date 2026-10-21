@@ -8,10 +8,10 @@
  * a KPI is how a system ends up with two answers.
  */
 $pct = function ($v, $d = 2) {
-    return $v === null ? '—' : number_format($v * 100, $d) . '%';
+    return $v === null ? '—' : number_format((float)($v * 100), $d) . '%';
 };
 $hrs = function ($v) {
-    return $v === null ? '—' : rtrim(rtrim(number_format((float)$v, 2, '.', ''), '0'), '.');
+    return $v === null ? '—' : rtrim((string)(rtrim((string)(number_format((float)$v, 2, '.', '')), '0')), '.');
 };
 $col = function ($v) {
     if ($v === null) return 'var(--t3)';
@@ -48,14 +48,14 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Planned Availability — <?=htmlspecialchars($iso_label)?></div>
+    <div class="page-heading" style="font-size:16px;">Planned Availability — <?=htmlspecialchars((string)($iso_label))?></div>
     <div class="cs"><?=date('d M Y', strtotime($week_start))?> – <?=date('d M Y', strtotime($week_end))?></div>
   </div>
   <div class="flex ai-c gap-10">
     <form method="get" class="flex ai-c gap-10">
       <label style="font-size:11px;color:var(--t3);">Week</label>
       <input type="week" name="week" class="form-control" style="width:170px;"
-             value="<?=htmlspecialchars($iso_label)?>">
+             value="<?=htmlspecialchars((string)($iso_label))?>">
       <button class="btn btn-sm btn-primary" type="submit">Open</button>
     </form>
     <a class="btn btn-sm" href="<?= base_url('forecast/export?week=' . urlencode($iso_label)) ?>">
@@ -163,7 +163,7 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
     <?php if ($insp && $insp['ready']): ?>
     <div style="width:100%;font-size:11px;color:var(--t2);">
       Weekly inspection rounds: <b><?= (int)$insp['rounds'] ?></b> of <?= (int)$insp['machines'] ?> machines
-      (<?= rtrim(rtrim(number_format((float)$insp['default_hours'], 2, '.', ''), '0'), '.') ?> h each, set in Settings).
+      (<?= rtrim((string)(rtrim((string)(number_format((float)$insp['default_hours'], 2, '.', '')), '0')), '.') ?> h each, set in Settings).
       <?php if (!empty($insp['missing'])): ?>
       <form method="post" action="<?= base_url('forecast/create_inspection_rounds?week=' . urlencode($iso_label)) ?>" style="display:inline;">
         <?= csrf_field() ?>
@@ -222,7 +222,7 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
   </div>
   <ul style="margin:0;padding-left:18px;font-size:11.5px;line-height:1.7;">
     <?php foreach (array_slice($warnings, 0, 30) as $w): ?>
-    <li class="overbooked-warning"><?=htmlspecialchars($w['message'])?> (<?=$hrs($w['excess_hours'])?> h too many)</li>
+    <li class="overbooked-warning"><?=htmlspecialchars((string)($w['message']))?> (<?=$hrs($w['excess_hours'])?> h too many)</li>
     <?php endforeach; ?>
     <?php if (count($warnings) > 30): ?><li>… and <?=count($warnings) - 30?> more</li><?php endif; ?>
   </ul>
@@ -240,10 +240,10 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
             foreach ($pm_issues[$k] as $i): ?>
       <tr class="pm-issue pm-issue-<?=$k?>">
         <td class="mono"><?=htmlspecialchars((string)($i['registration_no'] !== null ? $i['registration_no'] : '#' . $i['equipment_id']))?></td>
-        <td><?=htmlspecialchars($i['schedule_name'])?></td>
-        <td><?=htmlspecialchars($i['interval'])?></td>
+        <td><?=htmlspecialchars((string)($i['schedule_name']))?></td>
+        <td><?=htmlspecialchars((string)($i['interval']))?></td>
         <td><?=htmlspecialchars((string)($i['next_due_date'] ?: '—'))?></td>
-        <td><strong><?=$lbl?></strong> — <?=htmlspecialchars($i['reason'])?></td>
+        <td><strong><?=$lbl?></strong> — <?=htmlspecialchars((string)($i['reason']))?></td>
       </tr>
     <?php endforeach; endforeach; ?>
     </tbody>
@@ -274,7 +274,7 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
     <tbody>
     <?php foreach ($groups as $g): ?>
       <tr>
-        <td style="font-weight:600;color:var(--t1);"><?=htmlspecialchars($g['group'])?></td>
+        <td style="font-weight:600;color:var(--t1);"><?=htmlspecialchars((string)($g['group']))?></td>
         <td style="text-align:center;"><?=$g['machines']?></td>
         <td class="mono" style="text-align:right;color:var(--t3);"><?=$hrs($g['required_hours'])?></td>
         <td class="mono" style="text-align:right;color:var(--t3);"><?=$hrs($g['pm_hours'])?></td>
@@ -316,7 +316,7 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
     <?php foreach ($group_order as $gname):
             if (empty($units_by_day[$gname])) continue; ?>
       <tr>
-        <td style="font-weight:600;color:var(--t1);"><?=htmlspecialchars($gname)?></td>
+        <td style="font-weight:600;color:var(--t1);"><?=htmlspecialchars((string)($gname))?></td>
         <?php foreach ($days as $d):
                 $c = isset($units_by_day[$gname][$d]) ? $units_by_day[$gname][$d] : null; ?>
         <td style="text-align:center;">
@@ -361,7 +361,7 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
 <?php foreach ($group_order as $gname): if (empty($by_group[$gname])) continue; ?>
 <div class="card mb-3" style="overflow-x:auto;">
   <div class="ch" style="padding:12px 18px 10px;">
-    <div class="ct" style="font-size:12px;"><?=htmlspecialchars($gname)?> — <?=count($by_group[$gname])?> machines</div>
+    <div class="ct" style="font-size:12px;"><?=htmlspecialchars((string)($gname))?> — <?=count($by_group[$gname])?> machines</div>
     <div class="cs">Planned hours per day<?= $jobs_ready ? ', with the job codes. Click a cell to see or edit its jobs' : '' ?><?= ($jobs_ready && !$frozen) ? ' (draft only)' : '' ?>.</div>
   </div>
   <table class="tbl">
@@ -369,7 +369,7 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
       <tr>
         <th>MACHINE</th><th>LOCATION</th>
         <?php foreach ($days as $d): ?>
-        <th style="text-align:center;" title="<?=htmlspecialchars($d)?>"><?=$day_lbl[$d]?><br>
+        <th style="text-align:center;" title="<?=htmlspecialchars((string)($d))?>"><?=$day_lbl[$d]?><br>
           <span style="font-weight:400;color:var(--t3);font-size:9.5px;"><?=date('d/m', strtotime($d))?></span></th>
         <?php endforeach; ?>
         <th style="text-align:right;">PM h</th>
@@ -380,7 +380,7 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
     <tbody>
     <?php foreach ($by_group[$gname] as $r): ?>
       <tr<?= $r['out_of_service'] ? ' style="background:rgba(180,83,9,0.05);"' : '' ?>>
-        <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars($r['registration_no'])?></td>
+        <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars((string)($r['registration_no']))?></td>
         <td style="color:var(--t3);font-size:10.5px;"><?=htmlspecialchars((string)$r['location'])?></td>
         <?php foreach ($days as $d):
           $cell = isset($r['daily'][$d]) ? $r['daily'][$d] : null;
@@ -401,7 +401,7 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
                                          . (int)$r['equipment_id'] . '&date=' . $d) : null;
         ?>
         <td class="<?=$ob ? 'cell-overbooked' : ''?>" style="text-align:center;<?=$total > 0 ? 'background:rgba(192,57,43,' . min(0.28, $total / 24 * 0.9) . ');' : ''?><?=$ob ? 'outline:2px solid var(--red);outline-offset:-2px;' : ''?>"
-            title="<?=htmlspecialchars($tip)?>">
+            title="<?=htmlspecialchars((string)($tip))?>">
           <?php if ($href): ?><a href="<?=$href?>" style="color:inherit;text-decoration:none;display:block;"><?php endif; ?>
           <?php if ($total > 0): ?>
             <span class="mono" style="font-size:10.5px;font-weight:600;<?=$ob ? 'color:var(--red);' : ''?>"><?=$hrs($total)?></span>
@@ -409,7 +409,7 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
             <span style="color:var(--g3);">·</span>
           <?php endif; ?>
           <?php if ($codes): ?>
-            <div class="job-codes" style="font-size:8.5px;font-weight:700;color:var(--t2);letter-spacing:.02em;"><?=htmlspecialchars(implode(' ', array_unique($codes)))?></div>
+            <div class="job-codes" style="font-size:8.5px;font-weight:700;color:var(--t2);letter-spacing:.02em;"><?=htmlspecialchars((string)(implode(' ', array_unique($codes))))?></div>
           <?php endif; ?>
           <?php if ($href): ?></a><?php endif; ?>
         </td>
@@ -449,7 +449,7 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
     <select name="equipment_id" class="form-control" style="width:190px;" required>
       <option value="">Machine…</option>
       <?php foreach ($rows as $r): ?>
-      <option value="<?=$r['equipment_id']?>"><?=htmlspecialchars($r['registration_no'])?></option>
+      <option value="<?=$r['equipment_id']?>"><?=htmlspecialchars((string)($r['registration_no']))?></option>
       <?php endforeach; ?>
     </select>
     <input type="date" name="plan_date" class="form-control" style="width:160px;"

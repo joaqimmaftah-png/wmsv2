@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GRN — <?= htmlspecialchars($receipt ? $receipt->grn_no : $order->order_no) ?></title>
+<title>GRN — <?= htmlspecialchars((string)($receipt ? $receipt->grn_no : $order->order_no)) ?></title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;background:#d1d5db;color:#000;
@@ -39,7 +39,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:middle;font-size:8.5p
 </head>
 <body>
 <div id="tb">
-  <div><div class="tb-brand">Goods Received Note</div><div class="tb-sub">Order <?= htmlspecialchars($order->order_no) ?><?= $receipt ? ' · '.htmlspecialchars($receipt->grn_no) : '' ?></div></div>
+  <div><div class="tb-brand">Goods Received Note</div><div class="tb-sub">Order <?= htmlspecialchars((string)($order->order_no)) ?><?= $receipt ? ' · '.htmlspecialchars((string)($receipt->grn_no)) : '' ?></div></div>
   <div style="display:flex;gap:10px;">
     <a href="<?= base_url('orders/view/'.$order->id) ?>" class="btn-bk">&larr; Back to Order</a>
     <button class="btn-pr" onclick="window.print()">🖨 Print / Save as PDF</button>
@@ -54,13 +54,13 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:middle;font-size:8.5p
       <div style="font-size:9pt;color:#444;">Workshop Store Department</div>
     </div>
     <div class="meta">
-      <div><strong>GRN Ref:</strong> <?= htmlspecialchars($receipt ? $receipt->grn_no : 'GRN-'.$order->order_no) ?></div>
+      <div><strong>GRN Ref:</strong> <?= htmlspecialchars((string)($receipt ? $receipt->grn_no : 'GRN-'.$order->order_no)) ?></div>
       <div><strong>Date Received:</strong> <?php
         $grn_date = $receipt ? $receipt->receipt_date : $order->actual_delivery_date;
         echo $grn_date ? date('d M Y', strtotime($grn_date)) : date('d M Y');
       ?></div>
       <?php if ($receipt): ?>
-      <div><strong>Received By:</strong> <?= htmlspecialchars(trim(($receipt->first_name ?? '').' '.($receipt->last_name ?? '')) ?: '—') ?></div>
+      <div><strong>Received By:</strong> <?= htmlspecialchars((string)(trim((string)(($receipt->first_name ?? '').' '.($receipt->last_name ?? ''))) ?: '—')) ?></div>
       <?php else: ?>
       <div style="color:#a00;"><strong>No delivery recorded</strong> — order-level document</div>
       <?php endif; ?>
@@ -69,12 +69,12 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:middle;font-size:8.5p
 
   <div class="sec">Order &amp; Supplier Details</div>
   <div class="kv">
-    <div><span>Order No:</span> <strong><?= htmlspecialchars($order->order_no) ?></strong></div>
-    <div><span>Supplier:</span> <strong><?= htmlspecialchars(($receipt ? $receipt->supplier_name : $order->supplier_name) ?: '—') ?></strong></div>
-    <div><span>Country of Origin:</span> <?= htmlspecialchars(($receipt ? $receipt->country : $order->country) ?: '—') ?></div>
-    <div><span>Shipping Method:</span> <?= htmlspecialchars(($receipt ? $receipt->shipping_method : $order->shipping_method) ?: '—') ?></div>
+    <div><span>Order No:</span> <strong><?= htmlspecialchars((string)($order->order_no)) ?></strong></div>
+    <div><span>Supplier:</span> <strong><?= htmlspecialchars((string)(($receipt ? $receipt->supplier_name : $order->supplier_name) ?: '—')) ?></strong></div>
+    <div><span>Country of Origin:</span> <?= htmlspecialchars((string)(($receipt ? $receipt->country : $order->country) ?: '—')) ?></div>
+    <div><span>Shipping Method:</span> <?= htmlspecialchars((string)(($receipt ? $receipt->shipping_method : $order->shipping_method) ?: '—')) ?></div>
     <div><span>Order Date:</span> <?= date('d M Y', strtotime(($receipt ? $receipt->order_date : $order->order_date))) ?></div>
-    <div><span>Tracking No:</span> <?= htmlspecialchars(($receipt ? $receipt->tracking_number : $order->tracking_number) ?: '—') ?></div>
+    <div><span>Tracking No:</span> <?= htmlspecialchars((string)(($receipt ? $receipt->tracking_number : $order->tracking_number) ?: '—')) ?></div>
   </div>
 
   <div class="sec">Items Received<?= $receipt ? ' — This Delivery' : '' ?></div>
@@ -92,23 +92,23 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:middle;font-size:8.5p
           if ((float)$l->qty_outstanding_after > 0) $any_out = true; ?>
     <tr>
       <td style="text-align:center;"><?= $i+1 ?></td>
-      <td><?= htmlspecialchars($l->description ?: '—') ?></td>
-      <td><?= htmlspecialchars(isset($l->part_number) && $l->part_number !== null && $l->part_number !== '' ? $l->part_number : '—') ?></td>
-      <td style="text-align:center;"><?= number_format($l->qty_ordered,2) ?> <?= htmlspecialchars($l->unit ?: '') ?></td>
-      <td style="text-align:center;"><?= number_format($l->qty_previously_received,2) ?></td>
-      <td style="text-align:center;font-weight:bold;"><?= number_format($l->qty_delivered,2) ?></td>
+      <td><?= htmlspecialchars((string)($l->description ?: '—')) ?></td>
+      <td><?= htmlspecialchars((string)(isset($l->part_number) && $l->part_number !== null && $l->part_number !== '' ? $l->part_number : '—')) ?></td>
+      <td style="text-align:center;"><?= number_format((float)($l->qty_ordered),2) ?> <?= htmlspecialchars((string)($l->unit ?: '')) ?></td>
+      <td style="text-align:center;"><?= number_format((float)($l->qty_previously_received),2) ?></td>
+      <td style="text-align:center;font-weight:bold;"><?= number_format((float)($l->qty_delivered),2) ?></td>
       <td style="text-align:center;<?= (float)$l->qty_outstanding_after > 0 ? 'color:#b00;font-weight:bold;' : '' ?>">
-        <?= number_format($l->qty_outstanding_after,2) ?>
+        <?= number_format((float)($l->qty_outstanding_after),2) ?>
       </td>
     </tr>
     <?php endforeach; ?>
     <?php if ($lines): ?>
     <tr style="font-weight:bold;background:#f3f4f6;">
       <td colspan="3" style="text-align:right;">Totals</td>
-      <td style="text-align:center;"><?= number_format($t_ordered,2) ?></td>
-      <td style="text-align:center;"><?= number_format($t_before,2) ?></td>
-      <td style="text-align:center;"><?= number_format($t_now,2) ?></td>
-      <td style="text-align:center;<?= $any_out ? 'color:#b00;' : '' ?>"><?= number_format($t_out,2) ?></td>
+      <td style="text-align:center;"><?= number_format((float)($t_ordered),2) ?></td>
+      <td style="text-align:center;"><?= number_format((float)($t_before),2) ?></td>
+      <td style="text-align:center;"><?= number_format((float)($t_now),2) ?></td>
+      <td style="text-align:center;<?= $any_out ? 'color:#b00;' : '' ?>"><?= number_format((float)($t_out),2) ?></td>
     </tr>
     <?php endif; ?>
     </tbody>
@@ -117,7 +117,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:middle;font-size:8.5p
   <?php if ($any_out): ?>
   <div style="margin-top:10px;font-size:9pt;border:1px solid #b00;padding:8px;background:#fff5f5;">
     <strong>Part delivery.</strong> This GRN covers the goods that have arrived. The quantities under
-    "Outstanding After" have not been delivered yet and remain due on order <?= htmlspecialchars($order->order_no) ?>.
+    "Outstanding After" have not been delivered yet and remain due on order <?= htmlspecialchars((string)($order->order_no)) ?>.
   </div>
   <?php else: ?>
   <div style="margin-top:10px;font-size:9pt;">Order received in full.</div>
@@ -130,11 +130,11 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:middle;font-size:8.5p
     <?php foreach ($items as $i => $it): $var = $it->qty_received - $it->qty_ordered; ?>
     <tr>
       <td style="text-align:center;"><?= $i+1 ?></td>
-      <td><?= htmlspecialchars($it->description) ?></td>
-      <td><?= htmlspecialchars($it->part_number ?: '—') ?></td>
-      <td style="text-align:center;"><?= number_format($it->qty_ordered,2) ?> <?= htmlspecialchars($it->unit) ?></td>
-      <td style="text-align:center;"><?= number_format($it->qty_received,2) ?></td>
-      <td style="text-align:center;<?= $var<0?'color:#b00;font-weight:bold;':'' ?>"><?= $var==0?'—':($var>0?'+':'').number_format($var,2) ?></td>
+      <td><?= htmlspecialchars((string)($it->description)) ?></td>
+      <td><?= htmlspecialchars((string)($it->part_number ?: '—')) ?></td>
+      <td style="text-align:center;"><?= number_format((float)($it->qty_ordered),2) ?> <?= htmlspecialchars((string)($it->unit)) ?></td>
+      <td style="text-align:center;"><?= number_format((float)($it->qty_received),2) ?></td>
+      <td style="text-align:center;<?= $var<0?'color:#b00;font-weight:bold;':'' ?>"><?= $var==0?'—':($var>0?'+':'').number_format((float)($var),2) ?></td>
     </tr>
     <?php endforeach; ?>
     </tbody>
@@ -142,8 +142,8 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:middle;font-size:8.5p
   <?php endif; ?>
 
   <?php if ($order->discrepancy_flag !== 'None'): ?>
-  <div class="sec" style="color:#b00;">Discrepancy Reported: <?= htmlspecialchars($order->discrepancy_flag) ?></div>
-  <div style="font-size:9pt;border:1px solid #b00;padding:8px;background:#fff5f5;"><?= htmlspecialchars($order->discrepancy_notes ?: 'No further details provided.') ?></div>
+  <div class="sec" style="color:#b00;">Discrepancy Reported: <?= htmlspecialchars((string)($order->discrepancy_flag)) ?></div>
+  <div style="font-size:9pt;border:1px solid #b00;padding:8px;background:#fff5f5;"><?= htmlspecialchars((string)($order->discrepancy_notes ?: 'No further details provided.')) ?></div>
   <?php else: ?>
   <div class="sec">Discrepancy</div>
   <div style="font-size:9pt;">None — quantities received match the order.</div>

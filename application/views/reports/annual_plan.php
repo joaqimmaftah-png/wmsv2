@@ -145,11 +145,11 @@ $monthHasData = array_filter($months, fn($m) => !empty($m['pm']));
       $dueCol = $overdue ? 'var(--red)' : ($soon ? 'var(--amber)' : 'var(--green)');
     ?>
     <tr style="background:<?= $rowBg ?>;">
-      <td style="font-size:10px;font-weight:700;color:var(--blue);text-align:center;"><?= $ii===0 ? htmlspecialchars($type) : '' ?></td>
-      <td class="mono" style="font-weight:600;color:var(--blue);"><?= htmlspecialchars($pm->registration_no) ?></td>
-      <td style="color:var(--t2);font-size:10.5px;"><?= htmlspecialchars(($pm->brand??'').' '.($pm->model??'')) ?></td>
-      <td style="text-align:center;color:var(--t3);font-size:10.5px;"><?= htmlspecialchars($pm->location??'') ?></td>
-      <td style="font-weight:500;"><?= htmlspecialchars($pm->schedule_name) ?></td>
+      <td style="font-size:10px;font-weight:700;color:var(--blue);text-align:center;"><?= $ii===0 ? htmlspecialchars((string)($type)) : '' ?></td>
+      <td class="mono" style="font-weight:600;color:var(--blue);"><?= htmlspecialchars((string)($pm->registration_no)) ?></td>
+      <td style="color:var(--t2);font-size:10.5px;"><?= htmlspecialchars((string)(($pm->brand??'').' '.($pm->model??''))) ?></td>
+      <td style="text-align:center;color:var(--t3);font-size:10.5px;"><?= htmlspecialchars((string)($pm->location??'')) ?></td>
+      <td style="font-weight:500;"><?= htmlspecialchars((string)($pm->schedule_name)) ?></td>
       <td style="text-align:center;font-size:10.5px;color:var(--t3);">
         <?= $pm->interval_value ?> <?= $pm->interval_type ?>
       </td>
@@ -157,7 +157,7 @@ $monthHasData = array_filter($months, fn($m) => !empty($m['pm']));
         <?= $due ? date('d/m/Y',strtotime($due)) : '—' ?>
       </td>
       <td class="mono" style="text-align:center;color:var(--t3);">
-        <?= $pm->next_due_hours ? number_format($pm->next_due_hours,0).' h' : '—' ?>
+        <?= $pm->next_due_hours ? number_format((float)($pm->next_due_hours),0).' h' : '—' ?>
       </td>
       <td class="mono" style="text-align:center;color:var(--t3);font-size:10.5px;">
         <?= $pm->last_done_date ? date('d/m/Y',strtotime($pm->last_done_date)) : '—' ?>

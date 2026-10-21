@@ -75,15 +75,15 @@ $qs = array_filter((array)$f, function ($v) { return $v !== null && $v !== ''; }
   <select name="equipment_id" class="form-select" style="width:150px;">
     <option value="">All machines</option>
     <?php foreach ($equipment as $e): ?>
-    <option value="<?= (int)$e->id ?>" <?= (string)$g('equipment_id') === (string)$e->id ? 'selected' : '' ?>><?= htmlspecialchars($e->registration_no) ?></option>
+    <option value="<?= (int)$e->id ?>" <?= (string)$g('equipment_id') === (string)$e->id ? 'selected' : '' ?>><?= htmlspecialchars((string)($e->registration_no)) ?></option>
     <?php endforeach; ?>
   </select>
-  <input type="date" name="date_from" class="form-control" style="width:150px;" value="<?= htmlspecialchars($g('date_from')) ?>" title="Raised from">
-  <input type="date" name="date_to" class="form-control" style="width:150px;" value="<?= htmlspecialchars($g('date_to')) ?>" title="Raised to">
+  <input type="date" name="date_from" class="form-control" style="width:150px;" value="<?= htmlspecialchars((string)($g('date_from'))) ?>" title="Raised from">
+  <input type="date" name="date_to" class="form-control" style="width:150px;" value="<?= htmlspecialchars((string)($g('date_to'))) ?>" title="Raised to">
   <label class="flex ai-c gap-10" style="font-size:12px;">
     <input type="checkbox" name="overdue" value="1" <?= $g('overdue') ? 'checked' : '' ?>> Overdue only
   </label>
-  <input type="text" name="search" class="form-control" style="width:200px;" placeholder="Search defect / person…" value="<?= htmlspecialchars($g('search')) ?>">
+  <input type="text" name="search" class="form-control" style="width:200px;" placeholder="Search defect / person…" value="<?= htmlspecialchars((string)($g('search'))) ?>">
   <button type="submit" class="btn btn-primary btn-sm">Filter</button>
   <a href="<?= base_url('backlog') ?>" class="btn btn-ghost btn-sm">Reset</a>
 </form>
@@ -117,7 +117,7 @@ $qs = array_filter((array)$f, function ($v) { return $v !== null && $v !== ''; }
         $scls    = $b->status === 'Closed' ? 'b-success' : ($b->status === 'Cancelled' ? 'b-secondary' : ($overdue ? 'b-danger' : 'b-warning'));
       ?>
         <tr>
-          <td class="mono" style="font-weight:600;color:var(--blue);"><?= htmlspecialchars($b->equipment_code ?: $b->asset_label) ?>
+          <td class="mono" style="font-weight:600;color:var(--blue);"><?= htmlspecialchars((string)($b->equipment_code ?: $b->asset_label)) ?>
             <?php if (!$b->equipment_id): ?><span class="badge b-secondary" style="font-size:9px;" title="Not linked to a machine in the asset register">?</span><?php endif; ?>
           </td>
           <td style="font-size:12px;"><?= htmlspecialchars((string)$b->model) ?></td>
@@ -132,7 +132,7 @@ $qs = array_filter((array)$f, function ($v) { return $v !== null && $v !== ''; }
           <td style="font-size:12px;<?= $overdue ? 'color:var(--red);font-weight:600;' : '' ?>"><?= htmlspecialchars((string)$b->deadline) ?></td>
           <td style="font-size:12px;white-space:pre-line;color:var(--t3);"><?= htmlspecialchars((string)($b->status === 'Closed' ? $b->closing_remarks : $b->observation)) ?></td>
           <td style="font-size:11px;"><?= htmlspecialchars((string)$b->machine_status) ?></td>
-          <td><span class="badge <?= $scls ?>" style="font-size:10px;"><?= htmlspecialchars($b->status) ?></span></td>
+          <td><span class="badge <?= $scls ?>" style="font-size:10px;"><?= htmlspecialchars((string)($b->status)) ?></span></td>
           <?php if (!empty($can_write)): ?>
           <td style="white-space:nowrap;">
             <a href="<?= base_url('backlog/edit/'.$b->id) ?>" class="btn btn-ghost btn-xs">Edit</a>
@@ -164,7 +164,7 @@ $qs = array_filter((array)$f, function ($v) { return $v !== null && $v !== ''; }
       <tbody>
       <?php foreach ($by_asset as $a): ?>
         <tr>
-          <td class="mono" style="font-weight:600;"><?= htmlspecialchars($a->asset) ?></td>
+          <td class="mono" style="font-weight:600;"><?= htmlspecialchars((string)($a->asset)) ?></td>
           <td class="mono text-right"><?= (int)$a->items ?></td>
           <td class="mono text-right text-red"><?= (int)$a->p1 ?></td>
           <td class="mono text-right"><?= (int)$a->oldest_days ?></td>

@@ -26,7 +26,9 @@ switch (ENVIRONMENT) {
         if (is_dir(dirname($log_path)) && is_writable(dirname($log_path))) {
             ini_set('error_log', $log_path);
         }
-        error_reporting(E_ALL & ~E_NOTICE & ~E_DEPRECATED & ~E_STRICT & ~E_USER_NOTICE & ~E_USER_DEPRECATED);
+        error_reporting(PHP_VERSION_ID >= 80400
+            ? (E_ALL & ~E_NOTICE & ~E_DEPRECATED & ~E_USER_NOTICE & ~E_USER_DEPRECATED)
+            : (E_ALL & ~E_NOTICE & ~E_DEPRECATED & ~E_STRICT & ~E_USER_NOTICE & ~E_USER_DEPRECATED));
     break;
     default:
         header('HTTP/1.1 503 Service Unavailable.', TRUE, 503);

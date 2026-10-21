@@ -93,7 +93,7 @@ foreach ($role_info as $rname => $ri):
 
   <!-- Filters -->
   <form method="get" style="display:flex;gap:10px;padding:16px 22px 0;flex-wrap:wrap;">
-    <input type="text" name="q" class="form-control" style="width:220px;" placeholder="Search name, email, ID..." value="<?= htmlspecialchars(isset($filter['search']) ? $filter['search'] : '') ?>">
+    <input type="text" name="q" class="form-control" style="width:220px;" placeholder="Search name, email, ID..." value="<?= htmlspecialchars((string)(isset($filter['search']) ? $filter['search'] : '')) ?>">
     <select name="role" class="form-select" style="width:160px;">
       <option value="">All Roles</option>
       <?php foreach ($roles as $r): ?>
@@ -127,7 +127,7 @@ foreach ($role_info as $rname => $ri):
     <?php if (empty($users)): ?>
     <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--t3);">No users found.</td></tr>
     <?php else: foreach ($users as $u):
-      $initials = strtoupper(substr($u->first_name,0,1).substr($u->last_name,0,1));
+      $initials = strtoupper((string)(substr($u->first_name,0,1).substr($u->last_name,0,1)));
       $grad     = $grad_colors[abs(crc32($u->id)) % count($grad_colors)];
       $rc       = isset($role_colors[$u->role_name])  ? $role_colors[$u->role_name]  : 'b-secondary';
       $sc       = isset($status_colors[$u->status])   ? $status_colors[$u->status]   : 'b-secondary';
@@ -156,9 +156,9 @@ foreach ($role_info as $rname => $ri):
             <?php endif; ?>
           </div>
           <div>
-            <div style="font-size:13px;font-weight:600;color:var(--t1);"><?= htmlspecialchars($u->first_name.' '.$u->last_name) ?><?php if ($is_me): ?> <span style="font-size:9.5px;color:var(--blue);font-weight:700;"> YOU</span><?php endif; ?></div>
+            <div style="font-size:13px;font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($u->first_name.' '.$u->last_name)) ?><?php if ($is_me): ?> <span style="font-size:9.5px;color:var(--blue);font-weight:700;"> YOU</span><?php endif; ?></div>
             <div style="font-size:10.5px;color:var(--t3);">
-              <?= htmlspecialchars($u->email) ?>
+              <?= htmlspecialchars((string)($u->email)) ?>
               <?php if (!empty($stats['legacy_ids'][$u->id])): ?>
               <span class="badge b-warning" style="font-size:9px;margin-left:4px;" title="Sign-in still uses a legacy MD5/SHA1 hash — reset this password">legacy hash</span>
               <?php endif; ?>
@@ -166,7 +166,7 @@ foreach ($role_info as $rname => $ri):
           </div>
         </div>
       </td>
-      <td><span class="mono" style="font-size:12px;color:var(--t2);"><?= htmlspecialchars($u->employee_id) ?></span></td>
+      <td><span class="mono" style="font-size:12px;color:var(--t2);"><?= htmlspecialchars((string)($u->employee_id)) ?></span></td>
       <td>
         <!-- Quick role change (inline dropdown) -->
         <form method="post" action="<?= base_url('users/change_role/'.$u->id) ?>" style="display:inline-flex;align-items:center;gap:6px;">
@@ -203,7 +203,7 @@ foreach ($role_info as $rname => $ri):
           ?>
           <?= form_open('users/toggle_status/'.$u->id, array(
                 'style'   => 'display:inline;margin:0;',
-                'onsubmit'=> "return confirm('".$verb." ".htmlspecialchars($u->first_name, ENT_QUOTES, 'UTF-8')."?')",
+                'onsubmit'=> "return confirm('".$verb." ".htmlspecialchars((string)($u->first_name), ENT_QUOTES, 'UTF-8')."?')",
               )) ?>
           <button type="submit"
              class="btn btn-sm btn-icon <?= $u->status === 'Active' ? 'btn-danger' : 'btn-success' ?>"

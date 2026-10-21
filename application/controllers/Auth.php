@@ -165,7 +165,7 @@ class Auth extends CI_Controller {
     }
 
     public function logout() {
-        if (strtolower($this->input->method()) !== 'post') {
+        if (strtolower((string)($this->input->method())) !== 'post') {
             $this->output->set_status_header(405);
             $this->output->set_header('Allow: POST');
             $this->output->set_content_type('text/plain', 'utf-8');

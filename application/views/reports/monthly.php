@@ -23,7 +23,7 @@ foreach ($work_orders as $wo_item) {
   </div>
   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
     <form method="get" style="display:flex;align-items:center;gap:8px;">
-      <input type="month" name="month" class="form-control" style="width:160px;" value="<?= htmlspecialchars($month); ?>">
+      <input type="month" name="month" class="form-control" style="width:160px;" value="<?= htmlspecialchars((string)($month)); ?>">
       <button type="submit" class="btn btn-primary btn-sm">Load</button>
     </form>
     <button onclick="window.print()" class="btn btn-ghost btn-sm btn-icon">
@@ -66,7 +66,7 @@ foreach ($work_orders as $wo_item) {
     <div class="kpi-glow" style="background:var(--red);"></div>
     <span class="kpi-tag">Breakdowns</span>
     <div class="kpi-num" style="font-size:28px;color:var(--red);"><?= $kpi_bkd; ?></div>
-    <div style="font-size:10px;color:var(--t4);margin-top:6px;"><?= number_format($kpi_dt,1); ?> hrs downtime</div>
+    <div style="font-size:10px;color:var(--t4);margin-top:6px;"><?= number_format((float)($kpi_dt),1); ?> hrs downtime</div>
   </div>
 </div>
 
@@ -90,7 +90,7 @@ foreach ($work_orders as $wo_item) {
         <div style="font-family:inherit;font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--t4);margin-bottom:8px;">By Type</div>
         <?php foreach ($wo_by_type as $type => $cnt): ?>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;font-size:12px;">
-          <span style="color:var(--t2);"><?= htmlspecialchars($type); ?></span>
+          <span style="color:var(--t2);"><?= htmlspecialchars((string)($type)); ?></span>
           <span style="font-family:inherit;font-weight:500;color:var(--t1);"><?= $cnt; ?></span>
         </div>
         <?php endforeach; ?>
@@ -107,7 +107,7 @@ foreach ($work_orders as $wo_item) {
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
           <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--t2);">
             <span style="width:6px;height:6px;border-radius:50%;background:<?= $sc; ?>;flex-shrink:0;"></span>
-            <?= htmlspecialchars($status); ?>
+            <?= htmlspecialchars((string)($status)); ?>
           </span>
           <span style="font-family:inherit;font-size:12px;font-weight:500;color:var(--t1);"><?= $cnt; ?></span>
         </div>
@@ -151,14 +151,14 @@ foreach ($work_orders as $wo_item) {
           $sc = isset($smap[$wo_item->status])   ? $smap[$wo_item->status]   : 'b-secondary';
         ?>
         <tr>
-          <td class="mono" style="font-size:11.5px;font-weight:500;color:var(--blue);"><?= htmlspecialchars($wo_item->wo_number); ?></td>
-          <td style="font-weight:600;font-size:12px;"><?= htmlspecialchars($wo_item->registration_no??'—'); ?></td>
-          <td><span class="badge b-primary" style="font-size:10px;"><?= htmlspecialchars($wo_item->type); ?></span></td>
-          <td><span class="badge <?= $pc; ?>"><?= htmlspecialchars($wo_item->priority); ?></span></td>
-          <td><span class="badge <?= $sc; ?>"><?= htmlspecialchars($wo_item->status); ?></span></td>
+          <td class="mono" style="font-size:11.5px;font-weight:500;color:var(--blue);"><?= htmlspecialchars((string)($wo_item->wo_number)); ?></td>
+          <td style="font-weight:600;font-size:12px;"><?= htmlspecialchars((string)($wo_item->registration_no??'—')); ?></td>
+          <td><span class="badge b-primary" style="font-size:10px;"><?= htmlspecialchars((string)($wo_item->type)); ?></span></td>
+          <td><span class="badge <?= $pc; ?>"><?= htmlspecialchars((string)($wo_item->priority)); ?></span></td>
+          <td><span class="badge <?= $sc; ?>"><?= htmlspecialchars((string)($wo_item->status)); ?></span></td>
           <td class="mono" style="font-size:11px;color:var(--t3);"><?= $wo_item->start_datetime ? date('d M H:i', strtotime($wo_item->start_datetime)) : '—'; ?></td>
           <td class="mono" style="font-size:11px;color:var(--t3);"><?= $wo_item->end_datetime ? date('d M H:i', strtotime($wo_item->end_datetime)) : '—'; ?></td>
-          <td class="mono" style="font-size:11px;"><?= $wo_item->downtime_hours ? number_format($wo_item->downtime_hours,1).' hrs' : '—'; ?></td>
+          <td class="mono" style="font-size:11px;"><?= $wo_item->downtime_hours ? number_format((float)($wo_item->downtime_hours),1).' hrs' : '—'; ?></td>
           <td><a href="<?= base_url('workorders/view/'.$wo_item->id); ?>" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 12px;">View</a></td>
         </tr>
         <?php endforeach; ?>
@@ -184,8 +184,8 @@ foreach ($work_orders as $wo_item) {
           $bar_color = $pct >= 90 ? 'var(--green)' : ($pct >= 75 ? 'var(--amber)' : 'var(--red)');
         ?>
         <tr>
-          <td style="font-weight:600;font-size:12.5px;"><?= htmlspecialchars($a->full_name); ?></td>
-          <td style="font-size:11.5px;color:var(--t3);"><?= htmlspecialchars($a->position); ?></td>
+          <td style="font-weight:600;font-size:12.5px;"><?= htmlspecialchars((string)($a->full_name)); ?></td>
+          <td style="font-size:11.5px;color:var(--t3);"><?= htmlspecialchars((string)($a->position)); ?></td>
           <td style="font-family:inherit;font-size:12px;color:var(--green);font-weight:500;"><?= $a->present; ?></td>
           <td style="font-family:inherit;font-size:12px;color:var(--red);font-weight:500;"><?= $a->absent; ?></td>
           <td style="font-family:inherit;font-size:12px;color:var(--amber);font-weight:500;"><?= $a->leave; ?></td>
@@ -224,12 +224,12 @@ foreach ($work_orders as $wo_item) {
           $var_color = ($var === null) ? 'var(--t3)' : (($var > 0) ? 'var(--red)' : (($var < 0) ? 'var(--blue)' : 'var(--green)'));
         ?>
         <tr>
-          <td style="font-weight:600;font-size:12.5px;"><?= htmlspecialchars($l->lube_name); ?></td>
-          <td><span class="badge b-primary" style="font-size:10px;"><?= htmlspecialchars($l->category??''); ?></span></td>
-          <td style="font-family:inherit;font-size:12px;font-weight:500;"><?= number_format($l->total_used,1); ?> <span style="color:var(--t4);font-size:10px;"><?= htmlspecialchars($l->unit??''); ?></span></td>
-          <td style="font-family:inherit;font-size:12px;color:var(--t3);"><?= isset($l->total_rec)&&$l->total_rec ? number_format($l->total_rec,1) : '—'; ?></td>
+          <td style="font-weight:600;font-size:12.5px;"><?= htmlspecialchars((string)($l->lube_name)); ?></td>
+          <td><span class="badge b-primary" style="font-size:10px;"><?= htmlspecialchars((string)($l->category??'')); ?></span></td>
+          <td style="font-family:inherit;font-size:12px;font-weight:500;"><?= number_format((float)($l->total_used),1); ?> <span style="color:var(--t4);font-size:10px;"><?= htmlspecialchars((string)($l->unit??'')); ?></span></td>
+          <td style="font-family:inherit;font-size:12px;color:var(--t3);"><?= isset($l->total_rec)&&$l->total_rec ? number_format((float)($l->total_rec),1) : '—'; ?></td>
           <td style="font-family:inherit;font-size:12px;font-weight:500;color:<?= $var_color; ?>;">
-            <?= ($var !== null) ? (($var > 0 ? '+' : '') . number_format($var,1)) : '—'; ?>
+            <?= ($var !== null) ? (($var > 0 ? '+' : '') . number_format((float)($var),1)) : '—'; ?>
           </td>
           <td style="font-family:inherit;font-size:12px;"><?= isset($l->records) ? $l->records : 0; ?></td>
         </tr>

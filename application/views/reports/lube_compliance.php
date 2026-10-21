@@ -30,12 +30,12 @@ $underCount = count(array_filter($rows, fn($r) => $r['variance_pct'] !== null &&
 <div class="grid g-4 mb-4">
   <div class="kpi"><div class="kpi-glow" style="background:var(--blue)"></div>
     <span class="kpi-tag">PM-Required Qty</span>
-    <div class="kpi-num"><?=number_format($totalReq,1)?></div>
+    <div class="kpi-num"><?=number_format((float)($totalReq),1)?></div>
     <div class="cs" style="margin-top:4px;">Across all lube types</div>
   </div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--green)"></div>
     <span class="kpi-tag">Actual Used</span>
-    <div class="kpi-num"><?=number_format($totalAct,1)?></div>
+    <div class="kpi-num"><?=number_format((float)($totalAct),1)?></div>
   </div>
   <div class="kpi"><div class="kpi-glow" style="background:<?=$overallVariancePct===null?'var(--t3)':($overallVariancePct>10?'var(--red)':($overallVariancePct<-10?'var(--amber)':'var(--green)'))?>"></div>
     <span class="kpi-tag">Overall Variance</span>
@@ -77,11 +77,11 @@ $underCount = count(array_filter($rows, fn($r) => $r['variance_pct'] !== null &&
       else                     { $label='ON TARGET'; $col='var(--green)'; $bg='var(--green-d)'; }
     ?>
     <tr>
-      <td style="color:var(--t1);font-weight:600;"><?=htmlspecialchars($r['lube_name'])?></td>
-      <td style="color:var(--t3);font-size:10.5px;"><?=htmlspecialchars($r['category'])?></td>
+      <td style="color:var(--t1);font-weight:600;"><?=htmlspecialchars((string)($r['lube_name']))?></td>
+      <td style="color:var(--t3);font-size:10.5px;"><?=htmlspecialchars((string)($r['category']))?></td>
       <td class="mono" style="text-align:center;"><?=$r['required_services']?></td>
-      <td class="mono" style="text-align:center;font-weight:600;"><?=number_format($r['required_qty'],1)?> <?=htmlspecialchars($r['unit'])?></td>
-      <td class="mono" style="text-align:center;font-weight:600;"><?=number_format($r['actual_qty'],1)?> <?=htmlspecialchars($r['unit'])?></td>
+      <td class="mono" style="text-align:center;font-weight:600;"><?=number_format((float)($r['required_qty']),1)?> <?=htmlspecialchars((string)($r['unit']))?></td>
+      <td class="mono" style="text-align:center;font-weight:600;"><?=number_format((float)($r['actual_qty']),1)?> <?=htmlspecialchars((string)($r['unit']))?></td>
       <td class="mono" style="text-align:center;color:var(--t3);"><?=$r['actual_records']?></td>
       <td class="mono" style="text-align:center;font-weight:700;color:<?=$col?>;">
         <?=$pct===null?'—':(($pct>0?'+':'').$pct.'%')?>

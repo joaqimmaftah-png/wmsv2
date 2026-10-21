@@ -1,12 +1,12 @@
 <div style="max-width:920px;margin:0 auto;">
 <div class="card">
   <div class="ch">
-    <div><div class="ct">Receive Order <?= htmlspecialchars($order->order_no) ?></div><div class="cs">Enter what arrived in <strong>this delivery</strong> — catalogued items go into stock, and the balance stays outstanding on the order</div></div>
+    <div><div class="ct">Receive Order <?= htmlspecialchars((string)($order->order_no)) ?></div><div class="cs">Enter what arrived in <strong>this delivery</strong> — catalogued items go into stock, and the balance stays outstanding on the order</div></div>
     <a href="<?= base_url('orders/view/'.$order->id) ?>" class="ca">&larr; Back</a>
   </div>
   <div style="padding:24px 28px 32px;">
     <?= form_open('orders/receive/'.$order->id) ?>
-    <input type="hidden" name="submit_token" value="<?= htmlspecialchars($submit_token) ?>">
+    <input type="hidden" name="submit_token" value="<?= htmlspecialchars((string)($submit_token)) ?>">
 
     <table class="tbl" style="margin-bottom:12px;">
       <thead><tr>
@@ -21,14 +21,14 @@
       <?php $open = (float)$it->qty_outstanding > 0; if ($open) $any_open = true; ?>
       <tr<?= $open ? '' : ' style="opacity:.55;"' ?>>
         <td>
-          <?= htmlspecialchars($it->description) ?>
+          <?= htmlspecialchars((string)($it->description)) ?>
           <?php if (!$it->material_id): ?><span style="color:var(--amber);font-size:10px;"> (not in inventory catalog — won't update stock)</span><?php endif; ?>
         </td>
-        <td class="mono"><?= htmlspecialchars($it->part_number ?: '—') ?></td>
-        <td class="mono" style="text-align:right;"><?= number_format($it->qty_ordered,2) ?> <?= htmlspecialchars($it->unit) ?></td>
-        <td class="mono" style="text-align:right;"><?= number_format($it->qty_previously_received,2) ?></td>
+        <td class="mono"><?= htmlspecialchars((string)($it->part_number ?: '—')) ?></td>
+        <td class="mono" style="text-align:right;"><?= number_format((float)($it->qty_ordered),2) ?> <?= htmlspecialchars((string)($it->unit)) ?></td>
+        <td class="mono" style="text-align:right;"><?= number_format((float)($it->qty_previously_received),2) ?></td>
         <td class="mono" style="text-align:right;<?= $open ? 'font-weight:700;' : '' ?>">
-          <?= number_format($it->qty_outstanding,2) ?>
+          <?= number_format((float)($it->qty_outstanding),2) ?>
           <?php if ($open): ?><span style="font-size:10px;color:var(--t3);"> left</span><?php endif; ?>
         </td>
         <td style="text-align:right;">

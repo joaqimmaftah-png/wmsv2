@@ -15,11 +15,11 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
     <div class="flex ai-c gap-10">
-      <div class="page-heading" style="font-size:16px;"><?= htmlspecialchars($order->order_no) ?></div>
-      <span style="padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;color:<?= $col ?>;background:<?= $bg ?>;"><?= htmlspecialchars($order->status) ?></span>
+      <div class="page-heading" style="font-size:16px;"><?= htmlspecialchars((string)($order->order_no)) ?></div>
+      <span style="padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;color:<?= $col ?>;background:<?= $bg ?>;"><?= htmlspecialchars((string)($order->status)) ?></span>
       <?php if ($overdueFlag): ?><span style="padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;color:var(--red);background:var(--red-d);">OVERDUE</span><?php endif; ?>
     </div>
-    <div class="cs"><a href="<?= base_url('suppliers/view/'.$order->supplier_id) ?>" style="color:var(--blue);"><?= htmlspecialchars($order->supplier_name) ?></a> &middot; <?= htmlspecialchars($order->country) ?> &middot; <?= htmlspecialchars($order->shipping_method) ?></div>
+    <div class="cs"><a href="<?= base_url('suppliers/view/'.$order->supplier_id) ?>" style="color:var(--blue);"><?= htmlspecialchars((string)($order->supplier_name)) ?></a> &middot; <?= htmlspecialchars((string)($order->country)) ?> &middot; <?= htmlspecialchars((string)($order->shipping_method)) ?></div>
   </div>
   <a href="<?= base_url('orders') ?>" class="btn btn-ghost btn-sm">&larr; Back to Orders</a>
 </div>
@@ -50,11 +50,11 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
     <div class="cs" style="margin-top:4px;">Est. ~<?= $lead['days'] ?>d (<?= $lead['source']==='history' ? $lead['sample'].' past orders' : $lead['source'] ?>)</div>
   </div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--green)"></div>
-    <span class="kpi-tag">Total Cost</span><div class="kpi-num" style="font-size:16px;"><?= number_format($order->total_cost,2) ?> <?= htmlspecialchars($order->currency) ?></div>
+    <span class="kpi-tag">Total Cost</span><div class="kpi-num" style="font-size:16px;"><?= number_format((float)($order->total_cost),2) ?> <?= htmlspecialchars((string)($order->currency)) ?></div>
   </div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--amber)"></div>
-    <span class="kpi-tag">Tracking #</span><div class="kpi-num" style="font-size:16px;"><?= htmlspecialchars($order->tracking_number ?: '—') ?></div>
-    <div class="cs" style="margin-top:4px;"><?= htmlspecialchars($order->carrier ?: 'No carrier set') ?></div>
+    <span class="kpi-tag">Tracking #</span><div class="kpi-num" style="font-size:16px;"><?= htmlspecialchars((string)($order->tracking_number ?: '—')) ?></div>
+    <div class="cs" style="margin-top:4px;"><?= htmlspecialchars((string)($order->carrier ?: 'No carrier set')) ?></div>
   </div>
 </div>
 
@@ -69,12 +69,12 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
         <tbody>
         <?php foreach ($items as $it): $out = (float)$it->qty_outstanding; ?>
         <tr>
-          <td><?= htmlspecialchars($it->description) ?></td>
-          <td class="mono"><?= htmlspecialchars($it->part_number ?: '—') ?></td>
-          <td class="mono" style="text-align:right;"><?= number_format($it->qty_ordered,2) ?> <?= htmlspecialchars($it->unit) ?></td>
-          <td class="mono" style="text-align:right;<?= $out > 0 ? 'color:var(--amber);' : '' ?>"><?= number_format($it->qty_previously_received,2) ?></td>
-          <td class="mono" style="text-align:right;<?= $out > 0 ? 'font-weight:700;' : '' ?>"><?= $out > 0 ? number_format($out,2) : '✓' ?></td>
-          <td class="mono" style="text-align:right;"><?= $it->unit_price ? number_format($it->unit_price,2) : '—' ?></td>
+          <td><?= htmlspecialchars((string)($it->description)) ?></td>
+          <td class="mono"><?= htmlspecialchars((string)($it->part_number ?: '—')) ?></td>
+          <td class="mono" style="text-align:right;"><?= number_format((float)($it->qty_ordered),2) ?> <?= htmlspecialchars((string)($it->unit)) ?></td>
+          <td class="mono" style="text-align:right;<?= $out > 0 ? 'color:var(--amber);' : '' ?>"><?= number_format((float)($it->qty_previously_received),2) ?></td>
+          <td class="mono" style="text-align:right;<?= $out > 0 ? 'font-weight:700;' : '' ?>"><?= $out > 0 ? number_format((float)($out),2) : '✓' ?></td>
+          <td class="mono" style="text-align:right;"><?= $it->unit_price ? number_format((float)($it->unit_price),2) : '—' ?></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
@@ -92,11 +92,11 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
         <tbody>
         <?php foreach ($receipts as $r): ?>
         <tr>
-          <td class="mono"><?= htmlspecialchars($r->grn_no) ?></td>
+          <td class="mono"><?= htmlspecialchars((string)($r->grn_no)) ?></td>
           <td class="mono"><?= date('d M Y', strtotime($r->receipt_date)) ?></td>
-          <td><?= htmlspecialchars(trim(($r->first_name ?? '').' '.($r->last_name ?? '')) ?: '—') ?></td>
+          <td><?= htmlspecialchars((string)(trim((string)(($r->first_name ?? '').' '.($r->last_name ?? ''))) ?: '—')) ?></td>
           <td><?= $r->discrepancy_flag !== 'None'
-                ? '<span style="color:var(--amber);font-weight:700;">'.htmlspecialchars($r->discrepancy_flag).'</span>'
+                ? '<span style="color:var(--amber);font-weight:700;">'.htmlspecialchars((string)($r->discrepancy_flag)).'</span>'
                 : '<span style="color:var(--t3);">None</span>' ?></td>
           <td style="text-align:right;"><a href="<?= base_url('orders/grn/'.$order->id.'/'.$r->id) ?>" target="_blank" class="btn btn-ghost btn-sm">Print GRN</a></td>
         </tr>
@@ -110,8 +110,8 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
   <?php if ($order->discrepancy_flag !== 'None'): ?>
   <div class="card mb-4" style="border-color:var(--amber);">
     <div style="padding:14px 18px;">
-      <div style="font-weight:700;color:var(--amber);font-size:12.5px;">⚠ Discrepancy Reported: <?= htmlspecialchars($order->discrepancy_flag) ?></div>
-      <div style="font-size:12px;color:var(--t3);margin-top:4px;"><?= htmlspecialchars($order->discrepancy_notes ?: '') ?></div>
+      <div style="font-weight:700;color:var(--amber);font-size:12.5px;">⚠ Discrepancy Reported: <?= htmlspecialchars((string)($order->discrepancy_flag)) ?></div>
+      <div style="font-size:12px;color:var(--t3);margin-top:4px;"><?= htmlspecialchars((string)($order->discrepancy_notes ?: '')) ?></div>
     </div>
   </div>
   <?php endif; ?>
@@ -125,7 +125,7 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
       <div style="color:var(--t3);font-size:12px;padding:6px 0;">No documents uploaded yet.</div>
       <?php else: foreach ($documents as $d): ?>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--g2);font-size:12px;">
-        <span><strong><?= htmlspecialchars($d->doc_type) ?></strong> — <?= htmlspecialchars($d->original_name) ?></span>
+        <span><strong><?= htmlspecialchars((string)($d->doc_type)) ?></strong> — <?= htmlspecialchars((string)($d->original_name)) ?></span>
         <a href="<?= base_url('orders/download_document/'.$d->id) ?>" class="btn btn-ghost btn-sm">Download</a>
       </div>
       <?php endforeach; endif; ?>
@@ -152,7 +152,7 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
         <?php if ($order->status === 'Received at Store'): ?>
         <?php if ($can_receive): ?>
         <div style="border:1px solid var(--amber);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:11.5px;color:var(--t2);">
-          <?= number_format($outstanding_total,2) ?> unit(s) are still outstanding on this order — book them in before verifying and closing it.
+          <?= number_format((float)($outstanding_total),2) ?> unit(s) are still outstanding on this order — book them in before verifying and closing it.
         </div>
         <a href="<?= base_url('orders/receive/'.$order->id) ?>" class="btn btn-ghost btn-sm" style="width:100%;display:block;text-align:center;margin-bottom:10px;">Receive Outstanding Balance</a>
         <?php endif; ?>
@@ -161,7 +161,7 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
         <button type="submit" class="btn btn-primary btn-sm" style="width:100%;">Verify &amp; Close Order</button>
         <?= form_close() ?>
         <?php else: ?>
-        <div style="color:var(--t3);font-size:12px;">This order is <?= strtolower($order->status) ?>.</div>
+        <div style="color:var(--t3);font-size:12px;">This order is <?= strtolower((string)($order->status)) ?>.</div>
         <?php endif; ?>
       <?php elseif ($order->status === 'Customs Clearance' || $order->status === 'In Transit'): ?>
         <a href="<?= base_url('orders/receive/'.$order->id) ?>" class="btn btn-primary btn-sm" style="width:100%;display:block;text-align:center;margin-bottom:10px;">Receive Items at Store</a>
@@ -173,8 +173,8 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
           <option value="<?= $s ?>" <?= $s===$order->status?'selected':'' ?>><?= $s ?></option>
           <?php endforeach; ?>
         </select>
-        <input type="text" name="tracking_number" class="form-control" placeholder="Tracking Number" value="<?= htmlspecialchars($order->tracking_number ?? '') ?>" style="margin-bottom:8px;">
-        <input type="text" name="carrier" class="form-control" placeholder="Carrier" value="<?= htmlspecialchars($order->carrier ?? '') ?>" style="margin-bottom:8px;">
+        <input type="text" name="tracking_number" class="form-control" placeholder="Tracking Number" value="<?= htmlspecialchars((string)($order->tracking_number ?? '')) ?>" style="margin-bottom:8px;">
+        <input type="text" name="carrier" class="form-control" placeholder="Carrier" value="<?= htmlspecialchars((string)($order->carrier ?? '')) ?>" style="margin-bottom:8px;">
         <input type="text" name="notes" class="form-control" placeholder="Notes (optional)" style="margin-bottom:8px;">
         <button type="submit" class="btn btn-ghost btn-sm" style="width:100%;">Update Status</button>
         <?= form_close() ?>
@@ -188,8 +188,8 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
           <option value="<?= $s ?>"><?= $s ?></option>
           <?php endforeach; ?>
         </select>
-        <input type="text" name="tracking_number" class="form-control" placeholder="Tracking Number" value="<?= htmlspecialchars($order->tracking_number ?? '') ?>" style="margin-bottom:8px;">
-        <input type="text" name="carrier" class="form-control" placeholder="Carrier" value="<?= htmlspecialchars($order->carrier ?? '') ?>" style="margin-bottom:8px;">
+        <input type="text" name="tracking_number" class="form-control" placeholder="Tracking Number" value="<?= htmlspecialchars((string)($order->tracking_number ?? '')) ?>" style="margin-bottom:8px;">
+        <input type="text" name="carrier" class="form-control" placeholder="Carrier" value="<?= htmlspecialchars((string)($order->carrier ?? '')) ?>" style="margin-bottom:8px;">
         <input type="text" name="notes" class="form-control" placeholder="Notes (optional)" style="margin-bottom:8px;">
         <button type="submit" class="btn btn-primary btn-sm" style="width:100%;">Update Status</button>
         <?= form_close() ?>
@@ -204,9 +204,9 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
     <div style="padding:6px 18px 16px;">
       <?php foreach ($history as $h): ?>
       <div style="padding:8px 0;border-bottom:1px solid var(--g2);">
-        <div style="font-size:12px;font-weight:600;color:var(--t1);"><?= htmlspecialchars($h->status) ?></div>
-        <div style="font-size:10.5px;color:var(--t3);"><?= date('d M Y, H:i', strtotime($h->changed_at)) ?><?= $h->first_name ? ' · '.htmlspecialchars($h->first_name) : '' ?></div>
-        <?php if ($h->notes): ?><div style="font-size:11px;color:var(--t3);margin-top:2px;"><?= htmlspecialchars($h->notes) ?></div><?php endif; ?>
+        <div style="font-size:12px;font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($h->status)) ?></div>
+        <div style="font-size:10.5px;color:var(--t3);"><?= date('d M Y, H:i', strtotime($h->changed_at)) ?><?= $h->first_name ? ' · '.htmlspecialchars((string)($h->first_name)) : '' ?></div>
+        <?php if ($h->notes): ?><div style="font-size:11px;color:var(--t3);margin-top:2px;"><?= htmlspecialchars((string)($h->notes)) ?></div><?php endif; ?>
       </div>
       <?php endforeach; ?>
     </div>

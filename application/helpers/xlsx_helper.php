@@ -14,6 +14,7 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 if (!class_exists('XlsxWriter')) {
+#[AllowDynamicProperties]
 class XlsxWriter {
 
     private $sheets = [];
@@ -97,7 +98,7 @@ class XlsxWriter {
         $size = @getimagesize($file);
         if ($size === false) return $this;                      // not an image a reader can use
 
-        $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        $ext = strtolower((string)(pathinfo($file, PATHINFO_EXTENSION)));
         $allowed = array('png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'gif' => 'image/gif');
         if (!isset($allowed[$ext])) $ext = 'png';
 
@@ -129,7 +130,7 @@ class XlsxWriter {
             'file'   => $file,
             'ext'    => $ext,
             'type'   => $allowed[$ext],
-            'col'    => $this->_colNumber(strtoupper($m[1])) - 1,   // 0-based, as the drawing wants
+            'col'    => $this->_colNumber(strtoupper((string)($m[1]))) - 1,   // 0-based, as the drawing wants
             'row'    => (int)$m[2] - 1,
             'x'      => isset($opts['x']) ? (int)$opts['x'] : 0,
             'y'      => isset($opts['y']) ? (int)$opts['y'] : 0,
@@ -152,7 +153,7 @@ class XlsxWriter {
      */
     public function addTable(array $opts = array()) {
         if (empty($opts['range'])) return $this;
-        $range = strtoupper(str_replace('$', '', trim((string)$opts['range'])));
+        $range = strtoupper((string)(str_replace('$', '', trim((string)$opts['range']))));
         if (strpos($range, ':') === false) return $this;
 
         $columns = (isset($opts['columns']) && is_array($opts['columns'])) ? array_values($opts['columns']) : array();
@@ -209,7 +210,10 @@ class XlsxWriter {
     }
 
     public function setRowHeight($row, $height) {
-        $this->currentSheet['rowHeights'][$row] = $height;
+        if ($row === null || $row === '') {
+            $row = count($this->currentSheet['rows']) + 1;
+        }
+        $this->currentSheet['rowHeights'][(int)$row] = $height;
         return $this;
     }
 
@@ -345,7 +349,7 @@ class XlsxWriter {
     /** Excel sheet names: max 31 chars, no []:*?/\ characters. */
     private function _sheetName($name) {
         $name = str_replace(['[',']',':','*','?','/','\\'], ' ', (string)$name);
-        $name = trim($name);
+        $name = trim((string)($name));
         if ($name === '') $name = 'Sheet';
         if (function_exists('mb_substr')) return mb_substr($name, 0, 31, 'UTF-8');
         return substr($name, 0, 31);
@@ -374,7 +378,7 @@ class XlsxWriter {
     }
 
     private function _xml($s) {
-        return htmlspecialchars($this->_utf8($s), ENT_XML1 | ENT_QUOTES, 'UTF-8');
+        return htmlspecialchars((string)($this->_utf8($s)), ENT_XML1 | ENT_QUOTES, 'UTF-8');
     }
 
     private function _str($s) {
@@ -408,7 +412,7 @@ class XlsxWriter {
 
     /** One <xdr:oneCellAnchor> — the anchor the approved workbook uses for its logo. */
     private function _anchorXml($img, $rid) {
-        $name = htmlspecialchars($img['name'], ENT_XML1);
+        $name = htmlspecialchars((string)($img['name']), ENT_XML1);
         return '<xdr:oneCellAnchor>'
             . '<xdr:from><xdr:col>' . $img['col'] . '</xdr:col><xdr:colOff>' . $img['x'] . '</xdr:colOff>'
             . '<xdr:row>' . $img['row'] . '</xdr:row><xdr:rowOff>' . $img['y'] . '</xdr:rowOff></xdr:from>'
@@ -426,15 +430,15 @@ class XlsxWriter {
 
     /** Quote a sheet-local print area the way Excel writes it: $B$1:$CB$108. */
     private function printAreaRef($range) {
-        $range = trim($range);
+        $range = trim((string)($range));
         if (strpos($range, ':') === false) $range = $range . ':' . $range;
         list($from, $to) = explode(':', $range, 2);
         return $this->_absRef($from) . ':' . $this->_absRef($to);
     }
 
     private function _absRef($ref) {
-        if (!preg_match('/^([A-Za-z]{1,3})(\d+)$/', trim($ref), $m)) return '$A$1';
-        return '$' . strtoupper($m[1]) . '$' . $m[2];
+        if (!preg_match('/^([A-Za-z]{1,3})(\d+)$/', trim((string)($ref)), $m)) return '$A$1';
+        return '$' . strtoupper((string)($m[1])) . '$' . $m[2];
     }
 
     /** A1 → column number (1-based), for the anchors. */
@@ -498,7 +502,7 @@ class XlsxWriter {
 
         $style = '';
         if ($t['style'] !== null) {
-            $style = '<tableStyleInfo name="' . htmlspecialchars($t['style'], ENT_XML1) . '"'
+            $style = '<tableStyleInfo name="' . htmlspecialchars((string)($t['style']), ENT_XML1) . '"'
                    . ' showFirstColumn="0" showLastColumn="0"'
                    . ' showRowStripes="' . ($t['stripes'] ? '1' : '0') . '" showColumnStripes="0"/>';
         }
@@ -528,9 +532,9 @@ class XlsxWriter {
         $label = (string)$label;
         $label = str_replace(array("\r\n", "\r", "\n"), '_x000a_', $label);
         $label = preg_replace('/[\x00-\x08\x0b\x0c\x0e-\x1f]/', '', $label);
-        $label = trim($label);
+        $label = trim((string)($label));
         if ($label === '') $label = 'Column' . $index;
-        return htmlspecialchars(substr($label, 0, 255), ENT_XML1);
+        return htmlspecialchars((string)(substr($label, 0, 255)), ENT_XML1);
     }
 
     /** The labels the sheet already carries in the table's header row. */
@@ -553,8 +557,8 @@ class XlsxWriter {
 
     /** 'BQ3' → array(column number, row number). */
     private function _splitRef($ref) {
-        if (preg_match('/^([A-Za-z]{1,3})(\d+)$/', trim($ref), $m)) {
-            return array($this->_colNumber(strtoupper($m[1])), (int)$m[2]);
+        if (preg_match('/^([A-Za-z]{1,3})(\d+)$/', trim((string)($ref)), $m)) {
+            return array($this->_colNumber(strtoupper((string)($m[1]))), (int)$m[2]);
         }
         return array(1, 1);
     }
@@ -597,7 +601,7 @@ class XlsxWriter {
     private function _workbook() {
         $sheets = '';
         foreach ($this->sheets as $i=>$s) {
-            $sheets .= '<sheet name="'.htmlspecialchars($s['name']).'" sheetId="'.($i+1).'" r:id="rId'.($i+2).'"/>';
+            $sheets .= '<sheet name="'.htmlspecialchars((string)($s['name'])).'" sheetId="'.($i+1).'" r:id="rId'.($i+2).'"/>';
         }
         // the print area lives in the workbook, as a defined name (W4.1)
         $names = '';
@@ -632,7 +636,7 @@ class XlsxWriter {
               'align'=>'general','valign'=>'bottom',
               'wrapText'=>false,'border'=>null,'numFmt'=>null];
         foreach (explode('|', $key) as $part) {
-            $part = trim($part);
+            $part = trim((string)($part));
             if ($part==='bold')              $p['bold']     = true;
             elseif ($part==='italic')        $p['italic']   = true;
             elseif ($part==='wrap')          $p['wrapText'] = true;
@@ -643,7 +647,7 @@ class XlsxWriter {
                 // OOXML only allows top|center|bottom|justify|distributed.
                 // "middle" (used throughout this codebase) is NOT valid and made
                 // the whole workbook unreadable for strict consumers.
-                $v = strtolower(substr($part,7));
+                $v = strtolower((string)(substr($part,7)));
                 $p['valign'] = ($v === 'middle') ? 'center' : $v;
             }
             elseif (strpos($part,'bg:')===0)        $p['bg']       = substr($part,3);
@@ -732,7 +736,7 @@ class XlsxWriter {
         $count = count($this->sharedStrings);
         $items = '';
         foreach ($this->sharedStrings as $s) {
-            $items .= '<si><t xml:space="preserve">'.htmlspecialchars($s, ENT_XML1).'</t></si>';
+            $items .= '<si><t xml:space="preserve">'.htmlspecialchars((string)($s), ENT_XML1).'</t></si>';
         }
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="'.$count.'" uniqueCount="'.$count.'">'.$items.'</sst>';
@@ -766,7 +770,7 @@ class XlsxWriter {
                     $cells .= '<c r="'.$ref.'" s="'.$sIdx.'"><f>'.$this->_xml($cell['f']).'</f></c>';
                 } elseif ($val===null || $val==='') {
                     $cells .= '<c r="'.$ref.'" s="'.$sIdx.'"/>';
-                } elseif (is_string($val) && strlen($val)>0 && $val[0]==='=') {
+                } elseif (is_string($val) && strlen((string)($val))>0 && $val[0]==='=') {
                     $cells .= '<c r="'.$ref.'" s="'.$sIdx.'"><f>'.$this->_xml(substr($val,1)).'</f></c>';
                 } elseif (is_bool($val)) {
                     $cells .= '<c r="'.$ref.'" t="b" s="'.$sIdx.'"><v>'.($val?'1':'0').'</v></c>';
@@ -813,17 +817,17 @@ class XlsxWriter {
         if (!empty($sheet['validations'])) {
             $rules = '';
             foreach ($sheet['validations'] as $v) {
-                $rules .= '<dataValidation type="'.htmlspecialchars($v['type'], ENT_XML1).'"';
-                if (isset($v['operator']))    $rules .= ' operator="'.htmlspecialchars($v['operator'], ENT_XML1).'"';
+                $rules .= '<dataValidation type="'.htmlspecialchars((string)($v['type']), ENT_XML1).'"';
+                if (isset($v['operator']))    $rules .= ' operator="'.htmlspecialchars((string)($v['operator']), ENT_XML1).'"';
                 if (!empty($v['allowBlank'])) $rules .= ' allowBlank="1"';
                 if (array_key_exists('showDropDown', $v)) $rules .= ' showDropDown="'.($v['showDropDown']?"0":"1").'"';
                 $rules .= ' showInputMessage="1" showErrorMessage="1"';
-                if (isset($v['errorStyle']))  $rules .= ' errorStyle="'.htmlspecialchars($v['errorStyle'], ENT_XML1).'"';
+                if (isset($v['errorStyle']))  $rules .= ' errorStyle="'.htmlspecialchars((string)($v['errorStyle']), ENT_XML1).'"';
                 if (isset($v['errorTitle']))  $rules .= ' errorTitle="'.$this->_xml($v['errorTitle']).'"';
                 if (isset($v['error']))       $rules .= ' error="'.$this->_xml($v['error']).'"';
                 if (isset($v['promptTitle'])) $rules .= ' promptTitle="'.$this->_xml($v['promptTitle']).'"';
                 if (isset($v['prompt']))      $rules .= ' prompt="'.$this->_xml($v['prompt']).'"';
-                $rules .= ' sqref="'.htmlspecialchars($v['sqref'], ENT_XML1).'">';
+                $rules .= ' sqref="'.htmlspecialchars((string)($v['sqref']), ENT_XML1).'">';
                 if (isset($v['formula1'])) $rules .= '<formula1>'.$this->_xml($v['formula1']).'</formula1>';
                 if (isset($v['formula2'])) $rules .= '<formula2>'.$this->_xml($v['formula2']).'</formula2>';
                 $rules .= '</dataValidation>';

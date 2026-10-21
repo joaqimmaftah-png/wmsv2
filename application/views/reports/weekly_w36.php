@@ -236,7 +236,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   <div class="w36-print-head">
     <img src="<?= $esc(isset($logo_url) ? $logo_url : base_url('uploads/logoam.png')) ?>" alt="A&amp;M">
     <div>
-      <h1 class="w36-print-title">WORKSHOP WEEKLY REPORT &mdash; <?= $esc(strtoupper($report_name)) ?> &mdash; <?= $esc($week_label) ?></h1>
+      <h1 class="w36-print-title">WORKSHOP WEEKLY REPORT &mdash; <?= $esc(strtoupper((string)($report_name))) ?> &mdash; <?= $esc($week_label) ?></h1>
       <p class="w36-print-sub">
         <?= $esc(date('d/m/Y', strtotime($week['start']))) ?> &rarr; <?= $esc(date('d/m/Y', strtotime($week['end']))) ?> ·
         ISO week <?= $esc(isset($week['iso_week']) ? $week['iso_week'] : '') ?> ·
@@ -704,8 +704,8 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
                 <td><?= $esc($r['status'] === null || $r['status'] === '' ? '—' : $r['status']) ?></td>
                 <td class="num"><?= $pct($r['availability']) ?></td>
                 <td class="num"><?= $pct($r['target']) ?></td>
-                <td class="wrap"><?= $r['comment'] === null ? '—' : nl2br($esc($r['comment'])) ?></td>
-                <td class="wrap"><?= $r['action_plan'] === null ? '—' : nl2br($esc($r['action_plan'])) ?></td>
+                <td class="wrap"><?= $r['comment'] === null ? '—' : nl2br((string)($esc($r['comment']))) ?></td>
+                <td class="wrap"><?= $r['action_plan'] === null ? '—' : nl2br((string)($esc($r['action_plan']))) ?></td>
                 <td class="num<?= (int)$r['days_down'] > 0 ? ' miss' : '' ?>"><?= (int)$r['days_down'] === 0 ? '—' : (int)$r['days_down'] ?></td>
                 <td><?php if ($r['hold_code'] !== null): ?><span class="w36-hold" title="<?= $esc($r['hold_label']) ?>"><?= $esc($r['hold_code']) ?></span><?php else: ?>—<?php endif; ?></td>
               </tr>
@@ -740,7 +740,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
               <tr class="grp"><td colspan="7"><strong><?= $esc($r['label']) ?></strong> · <?= (int)$r['machines'] ?> machine<?= (int)$r['machines'] === 1 ? '' : 's' ?></td></tr>
             <?php else: ?>
               <?php
-              $insp_cls = strtolower($r['inspection']['status']);
+              $insp_cls = strtolower((string)($r['inspection']['status']));
               $types    = $svc_join($r['pm']['services'], 'type');
               $statuses = $svc_join($r['pm']['services'], 'status');
               $reasons  = $svc_join($r['pm']['services'], 'comment');
@@ -748,7 +748,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
               <tr class="machine">
                 <td><?= $esc($r['group_label'] !== null ? $r['group_label'] : '—') ?></td>
                 <td class="w36-who"><?= $esc($r['machine_id']) ?></td>
-                <td class="wrap"><?= empty($r['inspection']['comments']) ? '—' : nl2br($esc(implode("\n", $r['inspection']['comments']))) ?></td>
+                <td class="wrap"><?= empty($r['inspection']['comments']) ? '—' : nl2br((string)($esc(implode("\n", $r['inspection']['comments'])))) ?></td>
                 <td><span class="w36-insp <?= $esc($insp_cls) ?>"><?= $esc($r['inspection']['status']) ?></span></td>
                 <td><?= empty($types) ? '—' : $esc(implode(', ', $types)) ?></td>
                 <td class="num"><?= empty($statuses) ? '—' : $esc(implode(', ', $statuses)) ?></td>

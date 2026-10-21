@@ -58,10 +58,10 @@ class Users extends MY_Controller {
             if ($this->form_validation->run()) {
                 $data = array(
                     'role_id'     => $this->input->post('role_id', TRUE),
-                    'employee_id' => strtoupper($this->input->post('employee_id', TRUE)),
+                    'employee_id' => strtoupper((string)($this->input->post('employee_id', TRUE))),
                     'first_name'  => $this->input->post('first_name', TRUE),
                     'last_name'   => $this->input->post('last_name', TRUE),
-                    'email'       => strtolower($this->input->post('email', TRUE)),
+                    'email'       => strtolower((string)($this->input->post('email', TRUE))),
                     'password'    => password_hash($this->input->post('password', TRUE), PASSWORD_DEFAULT),
                     'phone'       => $this->input->post('phone', TRUE),
                     'position'    => $this->input->post('position', TRUE),
@@ -107,7 +107,7 @@ class Users extends MY_Controller {
                     'role_id'     => $this->input->post('role_id', TRUE),
                     'first_name'  => $this->input->post('first_name', TRUE),
                     'last_name'   => $this->input->post('last_name', TRUE),
-                    'email'       => strtolower($this->input->post('email', TRUE)),
+                    'email'       => strtolower((string)($this->input->post('email', TRUE))),
                     'phone'       => $this->input->post('phone', TRUE),
                     'position'    => $this->input->post('position', TRUE),
                     'skill_level' => $this->input->post('skill_level', TRUE) ?: 'Junior',
@@ -116,9 +116,9 @@ class Users extends MY_Controller {
 
                 // Optional password change
                 $new_pw = $this->input->post('new_password', TRUE);
-                if ($new_pw && strlen($new_pw) >= 8) {
+                if ($new_pw && strlen((string)($new_pw)) >= 8) {
                     $update['password'] = password_hash($new_pw, PASSWORD_DEFAULT);
-                } elseif ($new_pw && strlen($new_pw) < 8) {
+                } elseif ($new_pw && strlen((string)($new_pw)) < 8) {
                     $this->session->set_flashdata('error', 'New password must be at least 8 characters.');
                     redirect("users/edit/{$id}");
                 }
@@ -183,7 +183,7 @@ class Users extends MY_Controller {
 
         if ($this->input->post()) {
             $pw = $this->input->post('new_password', TRUE);
-            if (strlen($pw) < 8) {
+            if (strlen((string)($pw)) < 8) {
                 $this->session->set_flashdata('error', 'Password must be at least 8 characters.');
                 redirect("users/reset_password/{$id}");
             }
@@ -216,7 +216,7 @@ class Users extends MY_Controller {
                 }
                 $base64 = substr($sig_data, strlen('data:image/png;base64,'));
                 $bytes  = base64_decode($base64);
-                if ($bytes && strlen($bytes) > 100) {
+                if ($bytes && strlen((string)($bytes)) > 100) {
                     $fname  = 'sig_user_' . $this->user_id . '.png';
                     $path   = './uploads/signatures/' . $fname;
                     file_put_contents($path, $bytes);
@@ -272,7 +272,7 @@ class Users extends MY_Controller {
                 $this->session->set_flashdata('error', 'New passwords do not match.');
                 redirect('users/change_password');
             }
-            if (strlen($new) < 8) {
+            if (strlen((string)($new)) < 8) {
                 $this->session->set_flashdata('error', 'New password must be at least 8 characters.');
                 redirect('users/change_password');
             }
@@ -314,7 +314,7 @@ class Users extends MY_Controller {
         $inactive = $this->db->where('status', 'Inactive')->count_all_results('users');
         $by_role  = $this->db->select('r.name, COUNT(u.id) as cnt')
             ->from('users u')->join('roles r', 'r.id = u.role_id')
-            ->group_by('u.role_id')->get()->result();
+            ->group_by('u.role_id, r.name')->get()->result();
 
         /*
          * Accounts still storing an MD5/SHA1 hash (K-02). The sign-in screen

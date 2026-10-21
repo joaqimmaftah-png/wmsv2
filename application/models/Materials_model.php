@@ -129,7 +129,7 @@ class Materials_model extends CI_Model {
 
     public function get_by_code($code) {
         if (!$this->_table_ok()) return NULL;
-        return $this->db->where('item_code', strtoupper($code))->get('materials')->row();
+        return $this->db->where('item_code', strtoupper((string)($code)))->get('materials')->row();
     }
 
     /**
@@ -202,7 +202,7 @@ class Materials_model extends CI_Model {
     public function key($s) {
         $s = preg_replace('/\s+/u', ' ', trim((string)$s));
         if (function_exists('mb_strtolower')) return mb_strtolower($s, 'UTF-8');
-        return strtolower($s);
+        return strtolower((string)($s));
     }
 
     /**

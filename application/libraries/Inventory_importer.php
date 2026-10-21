@@ -28,6 +28,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *   $this->load->library('inventory_importer', array('model' => $this->Materials_model));
  *   $result = $this->inventory_importer->import($sheet, $options);
  */
+#[AllowDynamicProperties]
 class Inventory_importer {
 
     const MAX_ROWS      = 5000;        // rows per import (server protection)
@@ -201,10 +202,10 @@ class Inventory_importer {
     public function normalise_header($h) {
         $h = trim((string)$h);
         $h = preg_replace('/\([^)]*\)|\[[^\]]*\]/', ' ', $h);   // drop units/notes in brackets
-        $h = function_exists('mb_strtolower') ? mb_strtolower($h, 'UTF-8') : strtolower($h);
+        $h = function_exists('mb_strtolower') ? mb_strtolower($h, 'UTF-8') : strtolower((string)($h));
         $h = preg_replace('/[^a-z0-9]+/u', ' ', $h);
         $h = preg_replace('/\s+/', ' ', $h);
-        return trim($h);
+        return trim((string)($h));
     }
 
     /**
@@ -313,7 +314,7 @@ class Inventory_importer {
             $kinds['required']++;
         } else {
             $code = preg_replace('/\s+/u', ' ', $code);
-            $code = function_exists('mb_strtoupper') ? mb_strtoupper($code, 'UTF-8') : strtoupper($code);
+            $code = function_exists('mb_strtoupper') ? mb_strtoupper($code, 'UTF-8') : strtoupper((string)($code));
             if ($this->len($code) > $this->lengths['item_code']) {
                 $errors[] = 'Item Code "'.$this->shorten($code).'" is longer than '.$this->lengths['item_code'].' characters.';
                 $kinds['invalid']++;
@@ -416,7 +417,7 @@ class Inventory_importer {
                 $kinds['invalid']++;
             } elseif ($n > self::MAX_STOCK) {
                 $errors[] = 'Opening Stock "'.$this->shorten($raw).'" is larger than the allowed maximum of '
-                          . number_format(self::MAX_STOCK).'.';
+                          . number_format((float)(self::MAX_STOCK)).'.';
                 $kinds['invalid']++;
             } else {
                 $v['initial_stock'] = (int)round($n);
@@ -636,8 +637,8 @@ class Inventory_importer {
         $rows  = isset($sheet['rows']) ? $sheet['rows'] : array();
         $total = count($rows);
         if ($maxRows > 0 && $total > $maxRows) {
-            $result['errors'][] = 'The file contains '.number_format($total).' data rows; the maximum per import is '
-                                . number_format($maxRows).'. Split the file and import it in parts.';
+            $result['errors'][] = 'The file contains '.number_format((float)($total)).' data rows; the maximum per import is '
+                                . number_format((float)($maxRows)).'. Split the file and import it in parts.';
             return $result;
         }
         if ($total === 0) {
@@ -1042,7 +1043,7 @@ class Inventory_importer {
         $s = str_replace(array("\xC2\xA0", ' '), '', $s);
         // drop a trailing unit word ("1250 pcs", "50 ltr", "12 kg")
         $s = preg_replace('/[A-Za-z.]{1,12}$/', '', $s);
-        $s = trim($s);
+        $s = trim((string)($s));
         if ($s === '') return null;
 
         $hasDot   = strpos($s, '.') !== false;
@@ -1071,7 +1072,7 @@ class Inventory_importer {
     public function key($s) {
         if (method_exists($this->model, 'key')) return $this->model->key($s);
         $s = preg_replace('/\s+/', ' ', trim((string)$s));
-        return function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s);
+        return function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower((string)($s));
     }
 
     /** Signature of the record (delegates to the model when available). */
@@ -1091,7 +1092,7 @@ class Inventory_importer {
     public function isBlank($s) { return trim((string)$s) === ''; }
 
     private function len($s) {
-        return function_exists('mb_strlen') ? mb_strlen($s, 'UTF-8') : strlen($s);
+        return function_exists('mb_strlen') ? mb_strlen($s, 'UTF-8') : strlen((string)($s));
     }
 
     private function shorten($s, $max = 40) {

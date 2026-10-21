@@ -21,6 +21,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *   $data = $this->xlsx_reader->read('/path/file.xlsx', ['Assets']);
  *   // $data['headers'][1] === 'Machine ID';  $data['rows'][0]['cells'][1] === 'EX 001'
  */
+#[AllowDynamicProperties]
 class Xlsx_reader {
 
     /** Zip-bomb guards */
@@ -193,7 +194,7 @@ class Xlsx_reader {
                 if (!preg_match('/Id="([^"]+)"/i', $tag, $id)) continue;
                 if (!preg_match('/Target="([^"]+)"/i', $tag, $t)) continue;
                 $target = str_replace('\\', '/', $t[1]);
-                $target = ltrim($target, '/');
+                $target = ltrim((string)($target), '/');
                 if (strpos($target, 'xl/') !== 0) $target = 'xl/' . $target;
                 $rels[$id[1]] = $target;
             }
@@ -211,7 +212,7 @@ class Xlsx_reader {
                 if (!isset($parts[$path])) {
                     // try to find the part by suffix (some writers use absolute targets)
                     foreach ($parts as $candidate => $unused) {
-                        if (substr($candidate, -strlen(basename($path))) === basename($path)) { $path = $candidate; break; }
+                        if (substr($candidate, -strlen((string)(basename($path)))) === basename($path)) { $path = $candidate; break; }
                     }
                 }
                 $sheets[$name] = $path;
@@ -352,7 +353,7 @@ class Xlsx_reader {
                         $autoCol++;
                         $col = $autoCol;
                         if (preg_match('/\br="([A-Z]+)\d+"/i', $attrs, $cr)) {
-                            $letters = strtoupper($cr[1]);
+                            $letters = strtoupper((string)($cr[1]));
                             if (!isset($colIndex[$letters])) {
                                 $n = 0;
                                 foreach (str_split($letters) as $ch) $n = $n * 26 + (ord($ch) - 64);
@@ -362,7 +363,7 @@ class Xlsx_reader {
                             $autoCol = $col;
                         }
                         $type = '';
-                        if (preg_match('/\bt="(\w+)"/', $attrs, $tr)) $type = strtolower($tr[1]);
+                        if (preg_match('/\bt="(\w+)"/', $attrs, $tr)) $type = strtolower((string)($tr[1]));
                         $styleIdx = 0;
                         if (preg_match('/\bs="(\d+)"/', $attrs, $sr)) $styleIdx = (int)$sr[1];
 
@@ -415,7 +416,7 @@ class Xlsx_reader {
         $normalise = function($s) {
             $s = (string)$s;
             $s = preg_replace('/[^A-Za-z0-9]/', '', $s);
-            return strtolower($s);
+            return strtolower((string)($s));
         };
         $wanted = array();
         foreach ($hints as $h) { $w = $normalise($h); if ($w !== '') $wanted[$w] = true; }
@@ -440,7 +441,7 @@ class Xlsx_reader {
             if (preg_match_all('/<t\b[^>]*>(.*?)<\/t>/s', $body, $t)) {
                 foreach ($t[1] as $piece) $text .= $this->_xmlDecode($piece);
             }
-            return trim($text);
+            return trim((string)($text));
         }
         if (!preg_match('/<v\b[^>]*>(.*?)<\/v>/s', $body, $v)) {
             // formula cell without a cached value — nothing to import
@@ -451,17 +452,17 @@ class Xlsx_reader {
         switch ($type) {
             case 's':
                 $idx = (int)$raw;
-                return isset($sharedStrings[$idx]) ? trim($sharedStrings[$idx]) : '';
+                return isset($sharedStrings[$idx]) ? trim((string)($sharedStrings[$idx])) : '';
             case 'b':
                 return ($raw === '1') ? 'TRUE' : 'FALSE';
             case 'e':
-                return trim($raw);   // #N/A, #DIV/0!, ...
+                return trim((string)($raw));   // #N/A, #DIV/0!, ...
             case 'str':
-                return trim($raw);   // formula string result
+                return trim((string)($raw));   // formula string result
         }
 
         // numeric (default)
-        $raw = trim($raw);
+        $raw = trim((string)($raw));
         if ($raw === '') return '';
         if (isset($dateStyle[$styleIdx]) && $dateStyle[$styleIdx] && is_numeric($raw)) {
             return $this->_serialToDate($raw, $date1904, !empty($timeStyle[$styleIdx]));

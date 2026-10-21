@@ -397,22 +397,37 @@ class Workorders extends MY_Controller {
                 $update['verified_by']          = $this->user_id;
                 $update['verified_at']          = date('Y-m-d H:i:s');
                 $update['verification_notes']   = $this->input->post('verification_notes', TRUE) ?: $notes;
+                if (!$wo->end_datetime) {
+                    $update['end_datetime'] = date('Y-m-d H:i:s');
+                }
+                if (!$wo->completed_by) {
+                    $update['completed_by'] = $this->user_id;
+                }
             }
-            $update['root_cause']    = $this->input->post('root_cause',   TRUE);
-            $update['action_taken']  = $this->input->post('action_taken', TRUE);
+            $posted_rc = $this->input->post('root_cause', TRUE);
+            $posted_at = $this->input->post('action_taken', TRUE);
+            if ($posted_rc !== null && trim((string)$posted_rc) !== '') {
+                $update['root_cause'] = $posted_rc;
+            }
+            if ($posted_at !== null && trim((string)$posted_at) !== '') {
+                $update['action_taken'] = $posted_at;
+            }
 
             // Close any still-open labor session before finalizing the WO
             $this->Workorder_model->close_open_session_for_wo($id);
             $session_total = $this->Workorder_model->get_total_session_hours($id);
 
-            // If sessions were used, actual_hours = sum of sessions (accurate).
-            // Otherwise fall back to whatever was typed in manually (legacy behavior).
-            $update['actual_hours'] = $session_total > 0
-                ? $session_total
-                : ($this->input->post('actual_hours', TRUE) ?: NULL);
+            // Preserve existing actual_hours if verifying/closing without new session/manual hours
+            $manual_actual = $this->input->post('actual_hours', TRUE);
+            if ($session_total > 0) {
+                $update['actual_hours'] = $session_total;
+            } elseif ($manual_actual !== null && $manual_actual !== '' && is_numeric($manual_actual)) {
+                $update['actual_hours'] = (float)$manual_actual;
+            }
 
-            if ($wo->start_datetime) {
-                $update['downtime_hours'] = round((time() - strtotime($wo->start_datetime)) / 3600, 2);
+            $effective_end = isset($update['end_datetime']) ? $update['end_datetime'] : $wo->end_datetime;
+            if ($wo->start_datetime && $effective_end && ($status === 'Completed' || $wo->downtime_hours === null)) {
+                $update['downtime_hours'] = max(0, round((strtotime($effective_end) - strtotime($wo->start_datetime)) / 3600, 2));
             }
             // -> Available (the helper also refuses to revive a Retired machine)
             $this->_sync_equipment_status($wo->equipment_id, $wo->type, $status, $id);
@@ -421,8 +436,8 @@ class Workorders extends MY_Controller {
             // is treated as consumed — book the ISSUE movements automatically.
             $issued_count = $this->Spareparts_model->auto_issue_for_wo($id, $this->user_id);
             if ($issued_count > 0) {
-                $notes = trim(trim((string)$notes).' [Reserved spare parts auto-issued to this WO: '
-                    .$issued_count.' allocation(s).]');
+                $notes = trim((string)(trim((string)$notes).' [Reserved spare parts auto-issued to this WO: '
+                    .$issued_count.' allocation(s).]'));
             }
         }
 
@@ -682,7 +697,7 @@ class Workorders extends MY_Controller {
                 return;
             }
             $switch_note = ' Their open session on WO '.$other_open->other_wo_number.' was closed automatically ('
-                .number_format($closed->hours_worked, 2).'h logged).';
+                .number_format((float)($closed->hours_worked), 2).'h logged).';
         }
 
         $session_id = $this->Workorder_model->start_session($id, $technician_id, $this->user_id, $reason);
@@ -713,8 +728,9 @@ class Workorders extends MY_Controller {
     }
 
     /** Close the currently open session — hours auto-calculated from timestamps */
-    public function close_session($session_id, $wo_id) {
+    public function close_session($session_id, $wo_id = null) {
         if (!$this->require_post()) return;
+        if ($wo_id === null) show_404();
         if (!$this->db->trans_begin()) {
             $this->session->set_flashdata('error', 'The work session could not be closed. No changes were saved.');
             redirect('workorders/view/'.$wo_id);
@@ -879,8 +895,9 @@ class Workorders extends MY_Controller {
         force_download($path, NULL, TRUE);
     }
 
-    public function delete_attachment($attachment_id, $wo_id) {
+    public function delete_attachment($attachment_id, $wo_id = null) {
         if (!$this->require_post()) return;
+        if ($wo_id === null) show_404();
         if (!$this->Workorder_model->get_by_id($wo_id)) show_404();
         if (!$this->Workorder_model->delete_attachment($attachment_id, $wo_id)) show_404();
         $this->session->set_flashdata('success', 'Attachment removed.');
@@ -961,7 +978,7 @@ class Workorders extends MY_Controller {
     /** Save operator drawn signature (base64 PNG) to file, return path */
     private function _save_operator_signature() {
         $data = $this->input->post('operator_signature_data', FALSE);
-        if (!$data || strlen($data) < 30) return NULL;
+        if (!$data || strlen((string)($data)) < 30) return NULL;
 
         // base64 PNG from canvas.toDataURL()
         if (strpos($data, 'data:image/png;base64,') === 0) {
@@ -995,7 +1012,7 @@ class Workorders extends MY_Controller {
                             ->get('work_orders')->row();
         $seq = 1;
         if ($last) {
-            $num = preg_replace('/[^0-9]/', '', substr($last->wo_number, strlen($prefix)));
+            $num = preg_replace('/[^0-9]/', '', substr($last->wo_number, strlen((string)($prefix))));
             $seq = (int)$num + 1;
         }
         return $prefix . str_pad($seq, 3, '0', STR_PAD_LEFT);
@@ -1007,7 +1024,7 @@ class Workorders extends MY_Controller {
 
     /** A posted hold code, or NULL. Only the five approved codes are stored. */
     private function _valid_hold_code($value) {
-        $value = strtoupper(trim((string)$value));
+        $value = strtoupper((string)(trim((string)$value)));
         if ($value === '') return NULL;
         $codes = wo_hold_codes();
         return isset($codes[$value]) ? $value : NULL;

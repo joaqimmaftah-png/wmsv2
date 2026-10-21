@@ -52,16 +52,16 @@ $has_photo= !empty($me->photo);
              style="width:88px;height:88px;border-radius:50%;object-fit:cover;border:3px solid var(--sep);">
         <?php else: ?>
         <div class="profile-avatar">
-          <?= strtoupper(substr($me->first_name,0,1).substr($me->last_name,0,1)) ?>
+          <?= strtoupper((string)(substr($me->first_name,0,1).substr($me->last_name,0,1))) ?>
         </div>
         <?php endif; ?>
         <div style="flex:1;">
           <div style="font-family:inherit;font-size:20px;font-weight:700;color:var(--t1);letter-spacing:-.3px;">
-            <?= htmlspecialchars($me->first_name.' '.$me->last_name) ?>
+            <?= htmlspecialchars((string)($me->first_name.' '.$me->last_name)) ?>
           </div>
           <div style="font-size:12.5px;color:var(--t3);margin-top:3px;">
-            <?= htmlspecialchars($me->position ?? '') ?>
-            &nbsp;·&nbsp; <?= htmlspecialchars($me->email) ?>
+            <?= htmlspecialchars((string)($me->position ?? '')) ?>
+            &nbsp;·&nbsp; <?= htmlspecialchars((string)($me->email)) ?>
           </div>
           <div style="margin-top:10px;">
             <span class="badge b-primary" style="font-size:10px;">
@@ -69,7 +69,7 @@ $has_photo= !empty($me->photo);
               echo isset($roles[$me->role_id])?$roles[$me->role_id]:'User'; ?>
             </span>
             <span class="badge b-secondary" style="font-size:10px;margin-left:6px;">
-              <?= htmlspecialchars($me->employee_id ?? '') ?>
+              <?= htmlspecialchars((string)($me->employee_id ?? '')) ?>
             </span>
           </div>
         </div>
@@ -84,13 +84,13 @@ $has_photo= !empty($me->photo);
         <div>
           <label class="form-label">Phone</label>
           <input type="text" name="phone" class="form-control"
-                 value="<?= htmlspecialchars($me->phone ?? '') ?>"
+                 value="<?= htmlspecialchars((string)($me->phone ?? '')) ?>"
                  placeholder="+213 6xx xxx xxx">
         </div>
         <div>
           <label class="form-label">Position / Role Title</label>
           <input type="text" name="position" class="form-control"
-                 value="<?= htmlspecialchars($me->position ?? '') ?>"
+                 value="<?= htmlspecialchars((string)($me->position ?? '')) ?>"
                  placeholder="e.g. Senior Technician">
         </div>
       </div>
@@ -144,7 +144,7 @@ $has_photo= !empty($me->photo);
           <div style="background:#fff;border-radius:var(--r1);padding:12px 16px;
                       border:1px solid var(--sep);min-height:80px;
                       display:flex;align-items:center;justify-content:center;">
-            <img src="<?= base_url(htmlspecialchars($me->signature)) ?>"
+            <img src="<?= base_url(htmlspecialchars((string)($me->signature))) ?>"
                  style="max-height:80px;max-width:100%;object-fit:contain;"
                  id="existing-sig" alt="Your signature">
           </div>

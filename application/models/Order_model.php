@@ -133,12 +133,24 @@ class Order_model extends CI_Model {
 
     /* ── Create / update ───────────────────────────────── */
     public function generate_order_no() {
-        $year = date('Y');
-        $count = $this->db->like('order_no', "SO-{$year}-")->count_all_results('spare_orders') + 1;
-        return sprintf('SO-%s-%03d', $year, $count);
+        $year   = date('Y');
+        $prefix = "SO-{$year}-";
+        $row    = $this->db->select('order_no')
+            ->like('order_no', $prefix, 'after')
+            ->order_by('id', 'DESC')
+            ->get('spare_orders')->result();
+        $max = 0;
+        foreach ($row as $r) {
+            if (preg_match('/^SO-\d{4}-(\d+)$/', (string)$r->order_no, $m)) {
+                $n = (int)$m[1];
+                if ($n > $max) $max = $n;
+            }
+        }
+        return sprintf('SO-%s-%03d', $year, $max + 1);
     }
 
     public function create($header, $items, $user_id) {
+        $this->db->trans_begin();
         $header['order_no']   = $this->generate_order_no();
         $header['created_at'] = date('Y-m-d H:i:s');
         $header['updated_at'] = date('Y-m-d H:i:s');
@@ -152,6 +164,11 @@ class Order_model extends CI_Model {
         }
 
         $this->log_status($order_id, $header['status'], $user_id, 'Order created');
+        if ($this->db->trans_status() === FALSE) {
+            $this->db->trans_rollback();
+            return FALSE;
+        }
+        $this->db->trans_commit();
         return $order_id;
     }
 
@@ -414,7 +431,7 @@ class Order_model extends CI_Model {
             ->join('suppliers s', 's.id = o.supplier_id');
         if ($from) $this->db->where('o.order_date >=', $from);
         if ($to)   $this->db->where('o.order_date <=', $to);
-        $this->db->group_by('o.supplier_id, o.currency')->order_by('total_spend', 'DESC');
+        $this->db->group_by('o.supplier_id, s.company_name, s.country, o.currency')->order_by('total_spend', 'DESC');
         return $this->db->get()->result();
     }
 

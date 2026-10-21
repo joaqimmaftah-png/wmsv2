@@ -73,7 +73,7 @@ class Kpi_engine_model extends CI_Model {
     /** settings.mtbf_zero_failure_mode — what to show when a machine never failed. */
     public function zero_failure_mode() {
         $mode = $this->Settings_model->get('mtbf_zero_failure_mode', 'dash');
-        return strtolower(trim((string)$mode)) === 'uptime' ? 'uptime' : 'dash';
+        return strtolower((string)(trim((string)$mode))) === 'uptime' ? 'uptime' : 'dash';
     }
 
     /* ── the row assembly the helper needs (loaded once per period) ────── */

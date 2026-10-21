@@ -10,17 +10,17 @@
  * Measured supplier lead times sit beside it, so "will it arrive in time?" is
  * answerable rather than hopeful.
  */
-$num = function ($v) { return rtrim(rtrim(number_format((float)$v, 3, '.', ''), '0'), '.'); };
+$num = function ($v) { return rtrim((string)(rtrim((string)(number_format((float)$v, 3, '.', '')), '0')), '.'); };
 ?>
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
     <div class="page-heading" style="font-size:16px;">PM Spare-Parts Forecast</div>
-    <div class="cs">What the PM plan needs, from <?=htmlspecialchars($iso_label)?> over <?= (int)$horizon ?> weeks</div>
+    <div class="cs">What the PM plan needs, from <?=htmlspecialchars((string)($iso_label))?> over <?= (int)$horizon ?> weeks</div>
   </div>
   <form method="get" class="flex ai-c gap-10">
     <label style="font-size:11px;color:var(--t3);">From week</label>
-    <input type="week" name="week" class="form-control" style="width:170px;" value="<?=htmlspecialchars($iso_label)?>">
+    <input type="week" name="week" class="form-control" style="width:170px;" value="<?=htmlspecialchars((string)($iso_label))?>">
     <select name="weeks" class="form-control" style="width:110px;">
       <?php foreach (array(1,2,4,6,8,13) as $w): ?>
       <option value="<?=$w?>" <?=$w===(int)$horizon?'selected':''?>><?=$w?> wk</option>
@@ -93,8 +93,8 @@ $num = function ($v) { return rtrim(rtrim(number_format((float)$v, 3, '.', ''), 
        title="<?= $g['has_hours']
                   ? 'List the parts this service consumes'
                   : 'This service also has no standard hours, so it is not in the availability forecast either' ?>">
-      <?=htmlspecialchars($g['registration_no'], ENT_QUOTES, 'UTF-8')?>
-      · <?=htmlspecialchars($g['schedule_name'], ENT_QUOTES, 'UTF-8')?>
+      <?=htmlspecialchars((string)($g['registration_no']), ENT_QUOTES, 'UTF-8')?>
+      · <?=htmlspecialchars((string)($g['schedule_name']), ENT_QUOTES, 'UTF-8')?>
       <span class="text-300"><?= date('d M', strtotime($g['next_due_date'])) ?></span>
       <?php if (!$g['has_hours']): ?><span style="color:var(--amber);">· no hours</span><?php endif; ?>
     </a>
@@ -136,7 +136,7 @@ $num = function ($v) { return rtrim(rtrim(number_format((float)$v, 3, '.', ''), 
         <td class="mono" style="text-align:right;color:var(--t2);"><?=$num($r['on_order'])?></td>
         <td class="mono" style="text-align:right;font-weight:800;color:<?= $r['shortage'] > 0 ? 'var(--red)' : 'var(--t3)' ?>;"><?=$num($r['shortage'])?></td>
         <td style="font-size:10px;color:var(--t3);text-align:center;">
-          <?=htmlspecialchars(implode(', ', array_slice($r['needed_by'], 0, 4)))?>
+          <?=htmlspecialchars((string)(implode(', ', array_slice($r['needed_by'], 0, 4))))?>
           <?= count($r['needed_by']) > 4 ? ' +' . (count($r['needed_by']) - 4) . ' more' : '' ?>
           <?php if (!empty($r['earliest'])): ?>
             <br><span style="color:var(--amber);font-weight:600;">first needed <?=date('d M', strtotime($r['earliest']))?></span>

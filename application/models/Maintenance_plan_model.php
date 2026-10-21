@@ -176,7 +176,7 @@ class Maintenance_plan_model extends CI_Model {
 
         $title = isset($in['title']) ? trim((string)$in['title']) : '';
         if ($title === '') $errors[] = 'Describe the job.';
-        if (strlen($title) > 200) $errors[] = 'The description is longer than 200 characters.';
+        if (strlen((string)($title)) > 200) $errors[] = 'The description is longer than 200 characters.';
 
         $hold = isset($in['hold_code']) ? trim((string)$in['hold_code']) : '';
         if ($hold !== '' && !in_array($hold, self::$HOLD_CODES, true)) $errors[] = 'Unknown hold code.';
@@ -350,7 +350,7 @@ class Maintenance_plan_model extends CI_Model {
                 continue;
             }
             $note = 'jobs: ' . implode(' + ', $s['titles']);
-            if (strlen($note) > 255) $note = substr($note, 0, 252) . '...';
+            if (strlen((string)($note)) > 255) $note = substr($note, 0, 252) . '...';
             $fc->set_planned((int)$eid, $d, $cat, $s['hours'], Forecast_model::SRC_FROM_PLAN, $note, $user_id);
             $out['written']++;
         }

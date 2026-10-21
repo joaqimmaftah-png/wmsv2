@@ -259,7 +259,7 @@ if (!function_exists('equip_site_key')) {
      */
     function equip_site_key($value)
     {
-        $value = strtoupper(trim((string)$value));
+        $value = strtoupper((string)(trim((string)$value)));
         return preg_replace('/[\s_]+/', ' ', $value);
     }
 }

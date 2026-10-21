@@ -13,7 +13,7 @@ if (!empty($balances)) {
         if ($b['entitled'] !== null) $tracked[] = $b;
     }
 }
-$fmt_days = function ($n) { return rtrim(rtrim(number_format((float)$n, 1, '.', ''), '0'), '.'); };
+$fmt_days = function ($n) { return rtrim((string)(rtrim((string)(number_format((float)$n, 1, '.', '')), '0')), '.'); };
 ?>
 
 <?php if ($tracked): ?>
@@ -35,7 +35,7 @@ $fmt_days = function ($n) { return rtrim(rtrim(number_format((float)$n, 1, '.', 
       <tbody>
         <?php foreach ($tracked as $b): ?>
         <tr style="border-top:1px solid var(--sep);">
-          <td style="padding:5px 0;"><?= htmlspecialchars($b['type']) ?></td>
+          <td style="padding:5px 0;"><?= htmlspecialchars((string)($b['type'])) ?></td>
           <td class="mono" style="text-align:right;"><?= $fmt_days($b['entitled']) ?></td>
           <td class="mono" style="text-align:right;"><?= $fmt_days($b['approved']) ?></td>
           <td class="mono" style="text-align:right;color:var(--amber);"><?= $fmt_days($b['pending']) ?></td>

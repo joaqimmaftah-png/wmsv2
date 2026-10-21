@@ -23,7 +23,7 @@ if (!function_exists('wms_temp_path')) {
     {
         $base = basename((string)$filename);
         $base = preg_replace('/[^A-Za-z0-9._-]+/', '_', $base);
-        $base = trim($base, '._-');
+        $base = trim((string)($base), '._-');
         if ($base === '') {
             $base = 'export';
         }
@@ -35,7 +35,7 @@ if (!function_exists('wms_temp_path')) {
             ? bin2hex(random_bytes(8))
             : str_replace('.', '', uniqid('', true));
 
-        return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR)
+        return rtrim((string)(sys_get_temp_dir()), DIRECTORY_SEPARATOR)
              . DIRECTORY_SEPARATOR . 'wms_' . $token . '_' . $base;
     }
 }

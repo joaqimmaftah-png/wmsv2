@@ -13,8 +13,8 @@
         <select name="supplier_id" id="supplier_id" class="form-select" required>
           <option value="">— Select Supplier —</option>
           <?php foreach ($suppliers as $s): ?>
-          <option value="<?= $s->id ?>" data-country="<?= htmlspecialchars($s->country) ?>" data-currency="<?= htmlspecialchars($s->currency) ?>">
-            <?= htmlspecialchars($s->company_name) ?> (<?= htmlspecialchars($s->country) ?>)
+          <option value="<?= $s->id ?>" data-country="<?= htmlspecialchars((string)($s->country)) ?>" data-currency="<?= htmlspecialchars((string)($s->currency)) ?>">
+            <?= htmlspecialchars((string)($s->company_name)) ?> (<?= htmlspecialchars((string)($s->country)) ?>)
           </option>
           <?php endforeach; ?>
         </select>
@@ -37,7 +37,7 @@
       <div>
         <label class="form-label">Currency</label>
         <select name="currency" id="currency" class="form-select">
-          <?php $order_currency = isset($order->currency) && $order->currency !== '' ? strtoupper($order->currency) : wms_site_currency(); ?>
+          <?php $order_currency = isset($order->currency) && $order->currency !== '' ? strtoupper((string)($order->currency)) : wms_site_currency(); ?>
           <?php foreach (wms_currencies() as $c): ?><option value="<?= $c ?>" <?= $order_currency === $c ? 'selected' : '' ?>><?= $c ?></option><?php endforeach; ?>
         </select>
       </div>
@@ -54,7 +54,7 @@
         <input type="text" name="item_part_number[]" class="form-control" placeholder="Part number">
         <select name="item_material_id[]" class="form-select">
           <option value="">Not in catalog</option>
-          <?php foreach ($materials as $m): ?><option value="<?= $m->id ?>"><?= htmlspecialchars($m->item_code) ?></option><?php endforeach; ?>
+          <?php foreach ($materials as $m): ?><option value="<?= $m->id ?>"><?= htmlspecialchars((string)($m->item_code)) ?></option><?php endforeach; ?>
         </select>
         <input type="number" step="0.01" name="item_qty[]" class="form-control" placeholder="Qty">
         <input type="number" step="0.01" name="item_price[]" class="form-control" placeholder="Unit Price">

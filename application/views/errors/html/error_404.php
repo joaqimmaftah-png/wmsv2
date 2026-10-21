@@ -30,7 +30,7 @@ body{background:#0a0a14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
    */
   $home = function_exists('base_url') ? base_url('dashboard') : '/';
   ?>
-  <a href="<?= htmlspecialchars($home, ENT_QUOTES, 'UTF-8') ?>" class="err-back">← Back to Dashboard</a>
+  <a href="<?= htmlspecialchars((string)($home), ENT_QUOTES, 'UTF-8') ?>" class="err-back">← Back to Dashboard</a>
 </div>
 </body>
 </html>

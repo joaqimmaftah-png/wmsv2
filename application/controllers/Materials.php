@@ -504,7 +504,7 @@ class Materials extends MY_Controller {
     public function api_lookup() {
         $code = $this->input->get('code', TRUE);
         if (!$code) { $this->json(array('found'=>false)); return; }
-        $item = $this->db->where('item_code', strtoupper($code))->get('materials')->row();
+        $item = $this->db->where('item_code', strtoupper((string)($code)))->get('materials')->row();
         if ($item) {
             $stock = (int)$item->initial_stock + (int)$item->qty_received - (int)$item->qty_sortie;
             $this->json(array(
@@ -716,10 +716,10 @@ class Materials extends MY_Controller {
     /* ── Import helpers ────────────────────────────────── */
 
     private function _clean_upload_error($msg) {
-        $msg = trim(strip_tags((string)$msg));
+        $msg = trim((string)(strip_tags((string)$msg)));
         $msg = str_replace(array('The filetype you are attempting to upload is not allowed.',
                                  'The uploaded file exceeds the maximum allowed size.'), '', $msg);
-        return trim($msg) !== '' ? trim($msg) : 'the file could not be uploaded. Save the workbook as .xlsx and try again.';
+        return trim((string)($msg)) !== '' ? trim((string)($msg)) : 'the file could not be uploaded. Save the workbook as .xlsx and try again.';
     }
 
     private function _tmp_path($fname) {

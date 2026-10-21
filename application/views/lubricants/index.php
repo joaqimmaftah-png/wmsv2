@@ -49,7 +49,7 @@
     <div class="wms-card">
       <div class="card-body py-2">
         <div style="font-size:11px;text-transform:uppercase;color:#94a3b8;letter-spacing:0.5px;"><?= $s->category ?></div>
-        <div style="font-weight:700;font-size:18px;color:#1a3c5e;"><?= number_format($s->total_used, 1) ?> <span style="font-size:12px;font-weight:400;color:#64748b;"><?= $s->unit ?></span></div>
+        <div style="font-weight:700;font-size:18px;color:#1a3c5e;"><?= number_format((float)($s->total_used), 1) ?> <span style="font-size:12px;font-weight:400;color:#64748b;"><?= $s->unit ?></span></div>
         <div style="font-size:12px;color:#64748b;"><?= $s->lube_name ?></div>
         <div style="font-size:11px;color:#94a3b8;"><?= $s->records ?> records</div>
       </div>
@@ -94,10 +94,10 @@
             else                    { $label='On target'; $cls='success'; }
           ?>
           <tr>
-            <td><?= htmlspecialchars($c['lube_name']) ?></td>
+            <td><?= htmlspecialchars((string)($c['lube_name'])) ?></td>
             <td class="text-center"><?= $c['required_services'] ?></td>
-            <td class="text-center"><?= number_format($c['required_qty'],1) ?> <?= htmlspecialchars($c['unit']) ?></td>
-            <td class="text-center"><?= number_format($c['actual_qty'],1) ?> <?= htmlspecialchars($c['unit']) ?></td>
+            <td class="text-center"><?= number_format((float)($c['required_qty']),1) ?> <?= htmlspecialchars((string)($c['unit'])) ?></td>
+            <td class="text-center"><?= number_format((float)($c['actual_qty']),1) ?> <?= htmlspecialchars((string)($c['unit'])) ?></td>
             <td class="text-center"><?= $pct===null?'—':(($pct>0?'+':'').$pct.'%') ?></td>
             <td class="text-center"><span class="badge bg-<?= $cls ?>"><?= $label ?></span></td>
           </tr>
@@ -148,11 +148,11 @@
             <td>
               <span class="badge bg-primary bg-opacity-15 text-primary" style="font-size:11px;"><?= $c->category ?></span>
             </td>
-            <td class="fw-600"><?= number_format($c->quantity_used, 1) ?> <span style="font-size:11px;color:#64748b;"><?= $c->unit ?></span></td>
-            <td style="font-size:12px;color:#64748b;"><?= $c->recommended_qty ? number_format($c->recommended_qty, 1) . ' ' . $c->unit : '—' ?></td>
+            <td class="fw-600"><?= number_format((float)($c->quantity_used), 1) ?> <span style="font-size:11px;color:#64748b;"><?= $c->unit ?></span></td>
+            <td style="font-size:12px;color:#64748b;"><?= $c->recommended_qty ? number_format((float)($c->recommended_qty), 1) . ' ' . $c->unit : '—' ?></td>
             <td class="fw-500 <?= $variance_class ?>" style="font-size:12px;">
               <?php if ($c->variance !== null): ?>
-                <?= ($c->variance > 0 ? '+' : '') . number_format($c->variance, 1) . ' ' . $c->unit ?>
+                <?= ($c->variance > 0 ? '+' : '') . number_format((float)($c->variance), 1) . ' ' . $c->unit ?>
               <?php else: ?>—<?php endif; ?>
             </td>
             <td style="font-size:12px;">
