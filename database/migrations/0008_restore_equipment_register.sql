@@ -3,6 +3,37 @@
 -- =============================================================================
 SET NAMES utf8mb4;
 
+-- Align `C-HV-EX 006` -> `EX 006` safely (handles both normal upgrade and pre-existing `EX 006`)
+UPDATE `equipment` e_old
+LEFT JOIN `equipment` e_new ON e_new.`registration_no` = 'EX 006'
+SET e_old.`registration_no` = 'EX 006'
+WHERE e_old.`registration_no` = 'C-HV-EX 006' AND e_new.`id` IS NULL;
+
+DELETE e_dup FROM `equipment` e_dup
+INNER JOIN `equipment` e_keep ON e_keep.`registration_no` = 'EX 006'
+WHERE e_dup.`registration_no` = 'C-HV-EX 006';
+
+-- Align `C-HE-ADT 007` -> `C-HEADT 007` safely (handles both normal upgrade and pre-existing `C-HEADT 007`)
+UPDATE `equipment` e_old
+LEFT JOIN `equipment` e_new ON e_new.`registration_no` = 'C-HEADT 007'
+SET e_old.`registration_no` = 'C-HEADT 007'
+WHERE e_old.`registration_no` = 'C-HE-ADT 007' AND e_new.`id` IS NULL;
+
+DELETE e_dup FROM `equipment` e_dup
+INNER JOIN `equipment` e_keep ON e_keep.`registration_no` = 'C-HEADT 007'
+WHERE e_dup.`registration_no` = 'C-HE-ADT 007';
+
+-- Align `C-HE-ADT 008` -> `C-HEADT 008` safely (handles both normal upgrade and pre-existing `C-HEADT 008`)
+UPDATE `equipment` e_old
+LEFT JOIN `equipment` e_new ON e_new.`registration_no` = 'C-HEADT 008'
+SET e_old.`registration_no` = 'C-HEADT 008'
+WHERE e_old.`registration_no` = 'C-HE-ADT 008' AND e_new.`id` IS NULL;
+
+DELETE e_dup FROM `equipment` e_dup
+INNER JOIN `equipment` e_keep ON e_keep.`registration_no` = 'C-HEADT 008'
+WHERE e_dup.`registration_no` = 'C-HE-ADT 008';
+
+
 INSERT INTO `equipment_types` (`id`, `name`, `category`, `description`) VALUES
 (1, 'Heavy Truck', 'Transport', 'On-road and off-road heavy transport vehicles'),
 (2, 'Excavator', 'Earth Moving', 'Hydraulic tracked excavators'),
@@ -91,7 +122,7 @@ INSERT INTO `equipment` (`equipment_type_id`, `registration_no`, `legacy_code`, 
 (2, 'C-HV-EX 003', 'EX 003', 'Excavator', 'CATERPILLAR', '390 FL', 2021, 'CAT0390FTGAY20127', 'CAT0390FTGAY20127', 'C18', 'C18', NULL, '3350.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 7', 'Breakdown', 'EXCAVATOR', 10005, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Damaged boom cylinder', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
 (2, 'C-HV-EX 004', 'EX 004', 'Excavator', 'XCMG', 'XE950', 2020, 'XUG09503PSWA03818', 'XUG09503PSWA03818', 'QSK19', 'QSK19', NULL, '4300.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 8', 'Available', 'EXCAVATOR', 10006, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
 (2, 'C-HV-EX 005', 'EX 005', 'Excavator', 'XCMG', 'XE950', 2020, 'XUG09503HSWA03828', 'XUG09503HSWA03828', 'QSK19', 'QSK19', NULL, '5100.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 9', 'Breakdown', 'EXCAVATOR', 10007, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Bucket Worn out', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
-(2, 'C-HV-EX 006', 'EX 006', 'Excavator', 'XCMG', 'XE500', 2021, 'SN-EX-006', NULL, NULL, NULL, NULL, '4900.00', '0.00', 'Hours', 'NDALA', NULL, 'Available', 'EXCAVATOR', 10008, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(2, 'EX 006', 'EX 006', 'Excavator', 'XCMG', 'XE500', 2021, 'SN-EX-006', NULL, NULL, NULL, NULL, '4900.00', '0.00', 'Hours', 'NDALA', NULL, 'Available', 'EXCAVATOR', 10008, 1, NULL, NULL, NULL, NULL, NULL, 'N/A', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
 (12, 'C-HV-DZ 001', 'DZ 001', 'Dozer', 'CATERPILLAR', 'D8R', 2018, 'GN0003844', 'GN0003844', '3406C', '3406C', NULL, '21900.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 11', 'Breakdown', 'DOZER', 20009, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Engine over heat', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
 (12, 'C-HV-DZ 002', 'DZ 002', 'Dozer', 'LIUGONG', 'CLG B230', 2019, 'LGCB230ZHRCO12870', 'LGCB230ZHRCO12870', 'NT855C280S20', 'NT855C280S20', NULL, '19200.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 12', 'Breakdown', 'DOZER', 20010, 1, NULL, NULL, NULL, '2025-11-01', '0.00', 'No', NULL, NULL, 'Steering system', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
 (12, 'C-HV-DZ 003', 'DZ 003', 'Dozer', 'LIUGONG', 'CLG B230', 2020, 'LGCB230ZCRC012829', 'LGCB230ZCRC012829', 'NT855C280S20', 'NT855C280S20', NULL, '16700.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 13', 'Breakdown', 'DOZER', 20011, 1, NULL, NULL, NULL, '2025-11-01', '0.00', 'No', NULL, NULL, 'Transmission problem', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
@@ -105,8 +136,8 @@ INSERT INTO `equipment` (`equipment_type_id`, `registration_no`, `legacy_code`, 
 (11, 'C-HE-ADT 004', 'ADT 004', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2020, 'CAT00745T3F601163', 'CAT00745T3F601163', 'C18', 'C18', NULL, '15100.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 22', 'Breakdown', 'ADT', 30019, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Cabin Pin Worn out', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
 (11, 'C-HE-ADT 005', 'ADT 005', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2020, 'CAT00745P3F601195', 'CAT00745P3F601195', 'C18', 'C18', NULL, '11900.00', '0.00', 'Hours', 'MINING', NULL, 'Available', 'ADT', 30020, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
 (11, 'C-HE-ADT 006', 'ADT 006', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2021, 'CAT00745C3F601193', 'CAT00745C3F601193', 'C18', 'C18', NULL, '10800.00', '0.00', 'Hours', 'MINING', NULL, 'Breakdown', 'ADT', 30021, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Engine no start', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
-(11, 'C-HE-ADT 007', 'ADT 007', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2021, 'CAT00745P3F601164', 'CAT00745P3F601164', 'C18', 'C18', NULL, '13200.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 23', 'Breakdown', 'ADT', 30022, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Differential problem', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
-(11, 'C-HE-ADT 008', 'ADT 008', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2021, 'CAT00745V3F601199', 'CAT00745V3F601199', 'C18', 'C18', NULL, '12100.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 24', 'Available', 'ADT', 30023, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HEADT 007', 'ADT 007', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2021, 'CAT00745P3F601164', 'CAT00745P3F601164', 'C18', 'C18', NULL, '13200.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 23', 'Breakdown', 'ADT', 30022, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Differential problem', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
+(11, 'C-HEADT 008', 'ADT 008', 'Articulated Dump Truck', 'CATERPILLAR', '745', 2021, 'CAT00745V3F601199', 'CAT00745V3F601199', 'C18', 'C18', NULL, '12100.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 24', 'Available', 'ADT', 30023, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
 (11, 'C-HE-ADT 009', 'ADT 009', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2022, 'XUG00456VRWB00458', 'XUG00456VRWB00458', 'Benz OM502', 'Benz OM502', NULL, '9800.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 25', 'Available', 'ADT', 30024, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
 (11, 'C-HE-ADT 010', 'ADT 010', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2022, 'XUG00456KRWB00438', 'XUG00456KRWB00438', 'Benz OM502', 'Benz OM502', NULL, '8900.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 26', 'Available', 'ADT', 30025, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
 (11, 'C-HE-ADT 011', 'ADT 011', 'Articulated Dump Truck', 'XCMG', 'XDA45', 2022, 'XUG00456ARWB00428', 'XUG00456ARWB00428', 'Benz OM502', 'Benz OM502', NULL, '8200.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 27', 'Available', 'ADT', 30026, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, 'Daily service done', '2026-06-16 05:24:34', '2026-10-19 07:22:49'),
@@ -384,7 +415,7 @@ FROM (
   UNION ALL SELECT 'C-HE-GR 003' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Road Construction' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
   UNION ALL SELECT 'C-HE-GR 004' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Road Construction' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
   UNION ALL SELECT 'C-HE-TC 002' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Lifting Equipment' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
-  UNION ALL SELECT 'C-HE-ADT 007' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HEADT 007' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
 ) AS s
 INNER JOIN `equipment` e ON e.`registration_no` = s.`reg`
 WHERE NOT EXISTS (
@@ -394,8 +425,8 @@ WHERE NOT EXISTS (
 INSERT INTO `equipment_specs` (`equipment_id`, `spec_key`, `spec_label`, `spec_value`, `sort_order`, `created_at`, `updated_at`)
 SELECT e.`id`, s.`spec_key`, s.`spec_label`, s.`spec_value`, s.`sort_order`, s.`created_at`, s.`updated_at`
 FROM (
-  SELECT 'C-HE-ADT 008' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
-  UNION ALL SELECT 'C-HE-ADT 008' AS `reg`, 'build' AS `spec_key`, 'Build' AS `spec_label`, '04A' AS `spec_value`, 16 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  SELECT 'C-HEADT 008' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
+  UNION ALL SELECT 'C-HEADT 008' AS `reg`, 'build' AS `spec_key`, 'Build' AS `spec_label`, '04A' AS `spec_value`, 16 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
   UNION ALL SELECT 'C-HV-DB 001' AS `reg`, 'class' AS `spec_key`, 'Class' AS `spec_label`, 'Hauling' AS `spec_value`, 3 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
   UNION ALL SELECT 'C-HV-DB 001' AS `reg`, 'gvm_kg' AS `spec_key`, 'GVM (kg)' AS `spec_label`, '35000 Kg' AS `spec_value`, 21 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
   UNION ALL SELECT 'C-HV-DB 001' AS `reg`, 'engine_power' AS `spec_key`, 'Engine Power' AS `spec_label`, '340 Hp' AS `spec_value`, 39 AS `sort_order`, '2026-10-06 15:26:03' AS `created_at`, '2026-10-06 15:26:03' AS `updated_at`
@@ -653,7 +684,7 @@ FROM (
   UNION ALL SELECT 'C-HV-EX 003' AS `reg`, '2026-10-19' AS `reading_date`, '3350.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
   UNION ALL SELECT 'C-HV-EX 004' AS `reg`, '2026-10-19' AS `reading_date`, '4300.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
   UNION ALL SELECT 'C-HV-EX 005' AS `reg`, '2026-10-19' AS `reading_date`, '5100.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
-  UNION ALL SELECT 'C-HV-EX 006' AS `reg`, '2026-10-19' AS `reading_date`, '4900.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'EX 006' AS `reg`, '2026-10-19' AS `reading_date`, '4900.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
   UNION ALL SELECT 'C-HV-DZ 001' AS `reg`, '2026-10-19' AS `reading_date`, '21900.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
   UNION ALL SELECT 'C-HV-DZ 002' AS `reg`, '2026-10-19' AS `reading_date`, '19200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
   UNION ALL SELECT 'C-HV-DZ 003' AS `reg`, '2026-10-19' AS `reading_date`, '16700.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
@@ -667,8 +698,8 @@ FROM (
   UNION ALL SELECT 'C-HE-ADT 004' AS `reg`, '2026-10-19' AS `reading_date`, '15100.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
   UNION ALL SELECT 'C-HE-ADT 005' AS `reg`, '2026-10-19' AS `reading_date`, '11900.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
   UNION ALL SELECT 'C-HE-ADT 006' AS `reg`, '2026-10-19' AS `reading_date`, '10800.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
-  UNION ALL SELECT 'C-HE-ADT 007' AS `reg`, '2026-10-19' AS `reading_date`, '13200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
-  UNION ALL SELECT 'C-HE-ADT 008' AS `reg`, '2026-10-19' AS `reading_date`, '12100.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HEADT 007' AS `reg`, '2026-10-19' AS `reading_date`, '13200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
+  UNION ALL SELECT 'C-HEADT 008' AS `reg`, '2026-10-19' AS `reading_date`, '12100.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
   UNION ALL SELECT 'C-HE-ADT 009' AS `reg`, '2026-10-19' AS `reading_date`, '9800.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
   UNION ALL SELECT 'C-HE-ADT 010' AS `reg`, '2026-10-19' AS `reading_date`, '8900.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
   UNION ALL SELECT 'C-HE-ADT 011' AS `reg`, '2026-10-19' AS `reading_date`, '8200.0' AS `hours`, NULL AS `km`, 'Import' AS `source`, '2026-10-19 07:22:49' AS `created_at`
