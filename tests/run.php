@@ -278,12 +278,19 @@ check('Schema: seeds all 630 inspection_items', strpos($schemaSql, 'INSERT IGNOR
 
 $migFiles = glob(__DIR__ . '/../database/migrations/[0-9][0-9][0-9][0-9]_*.sql');
 sort($migFiles, SORT_STRING);
-is_same('Migrations: all 7 ordered SQL migrations present (0001..0007)', 7, count($migFiles));
+is_same('Migrations: all 8 ordered SQL migrations present (0001..0008)', 8, count($migFiles));
 foreach ($migFiles as $mf) {
     $bn  = basename($mf);
     $sum = hash_file('sha256', $mf);
     check("Migrations: schema.sql ledger checksum matches {$bn}", strpos($schemaSql, "'{$bn}', '{$sum}'") !== FALSE);
 }
+check('Schema: seeds all 116 fleet rows into equipment', strpos($schemaSql, 'INSERT INTO `equipment`') !== FALSE);
+check('Schema: seeds all 338 manufacturer specs into equipment_specs', strpos($schemaSql, 'INSERT INTO `equipment_specs`') !== FALSE);
+check('Security (K-02): schema.sql never embeds staff accounts or session dumps',
+    strpos($schemaSql, 'INSERT INTO `users`') === FALSE && strpos($schemaSql, 'INSERT INTO `ci_sessions`') === FALSE);
+$mig0008 = file_get_contents(__DIR__ . '/../database/migrations/0008_restore_equipment_register.sql');
+check('Security (K-02): 0008 migration never embeds staff accounts or session dumps',
+    strpos($mig0008, 'INSERT INTO `users`') === FALSE && strpos($mig0008, 'INSERT INTO `ci_sessions`') === FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
    Result
