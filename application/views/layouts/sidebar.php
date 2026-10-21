@@ -353,6 +353,11 @@ $is_ceo        = ($role_id == 5);
       <span class="ni-label">User Management</span>
       <span class="ni-tip">Manage Users</span>
     </a>
+    <a href="<?= base_url('attendance/sites'); ?>" class="ni <?= ni_active('attendance/sites'); ?>" title="Attendance Sites">
+      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
+      <span class="ni-label">Attendance Sites</span>
+      <span class="ni-tip">Geofence, site code and the assignment gate</span>
+    </a>
     <a href="<?= base_url('settings'); ?>" class="ni <?= ni_active('settings'); ?>" title="Settings">
       <div class="ni-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M5.34 18.66l-1.41 1.41M21 12h-2M5 12H3M18.66 5.34l1.41-1.41M4.93 19.07l1.41-1.41"/></svg></div>
       <span class="ni-label">Settings</span>
