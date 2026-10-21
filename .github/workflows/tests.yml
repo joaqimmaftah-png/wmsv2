@@ -72,6 +72,24 @@ jobs:
         run: |
           php scripts/migrate.php --schema --verify
 
+      - name: Verify standalone `migrate.php --verify` applies pending migrations & merges stale duplicates
+        env:
+          WMS_DB_HOST: 127.0.0.1
+          WMS_DB_PORT: 3306
+          WMS_DB_USER: root
+          WMS_DB_PASS: ${{ matrix.root_pass }}
+          WMS_DB_NAME: wms_fresh
+        run: |
+          mysql -h 127.0.0.1 -uroot -p"${{ matrix.root_pass }}" wms_fresh -e "
+            DELETE FROM schema_migrations WHERE version IN ('0012', '0013');
+            UPDATE equipment SET model = 'TOYOTA LC' WHERE registration_no IN ('C-LV 003', 'C-LV 008', 'C-LV 009', 'C-LV 012');
+            INSERT INTO equipment (equipment_type_id, registration_no, legacy_code, brand, model, year, serial_number, frame_no, status)
+            VALUES (2, 'EX 001', 'EX 001', 'CATERPILAR', 'SY500H', 2019, 'SN-EX-001', 'SY048CE0007K8', 'Available');
+          "
+          php scripts/migrate.php --verify
+          COUNT=$(mysql -N -h 127.0.0.1 -uroot -p"${{ matrix.root_pass }}" wms_fresh -e "SELECT COUNT(*) FROM equipment;")
+          [ "$COUNT" -eq 116 ] || { echo "Expected exact 116 rows after duplicate merge, got $COUNT"; exit 1; }
+
       - name: Verify idempotent re-run of all migrations (twice in a row)
         env:
           WMS_DB_HOST: 127.0.0.1
