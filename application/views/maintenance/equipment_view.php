@@ -2,8 +2,12 @@
 
 <div class="row mb-3">
   <div class="col">
-    <h4 class="fw-700"><?= $equipment->registration_no ?> — <?= $equipment->brand . ' ' . $equipment->model ?></h4>
-    <div style="font-size:13px;color:#64748b;"><?= $equipment->type_name ?> | <?= $equipment->year ?> | SN: <?= $equipment->serial_number ?></div>
+    <h4 class="fw-700"><?= htmlspecialchars((string)$equipment->registration_no, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars((string)trim((string)$equipment->brand . ' ' . (string)$equipment->model), ENT_QUOTES, 'UTF-8') ?></h4>
+    <div style="font-size:13px;color:#64748b;">
+      <?= htmlspecialchars((string)($equipment->type_name ?: 'Other'), ENT_QUOTES, 'UTF-8') ?><?= !empty($equipment->category) ? ' (' . htmlspecialchars((string)$equipment->category, ENT_QUOTES, 'UTF-8') . ')' : '' ?>
+      | <?= htmlspecialchars((string)($equipment->year ?: '—'), ENT_QUOTES, 'UTF-8') ?>
+      | SN: <?= htmlspecialchars((string)($equipment->serial_number ?: '—'), ENT_QUOTES, 'UTF-8') ?>
+    </div>
   </div>
   <div class="col-auto d-flex gap-2">
     <?php if ($role_id == 1): ?>
@@ -63,23 +67,27 @@
                         ? htmlspecialchars((string)(equip_site_label($w36_loc, $w36_sites)))
                         : htmlspecialchars((string)($w36_loc)) . ' <span class="badge b-warning">not approved</span>');
           $fields = [
-            'Status' => $equipment->status,
-            'Machine ID (report)' => htmlspecialchars((string)(equip_machine_id($equipment))),
+            'Machine ID' => htmlspecialchars((string)$equipment->registration_no, ENT_QUOTES, 'UTF-8'),
+            'Type' => htmlspecialchars((string)($equipment->type_name ?: '—'), ENT_QUOTES, 'UTF-8'),
+            'Category' => htmlspecialchars((string)($equipment->category ?: '—'), ENT_QUOTES, 'UTF-8'),
+            'Brand' => htmlspecialchars((string)($equipment->brand ?: '—'), ENT_QUOTES, 'UTF-8'),
+            'Model' => htmlspecialchars((string)($equipment->model ?: '—'), ENT_QUOTES, 'UTF-8'),
+            'Year' => htmlspecialchars((string)($equipment->year ?: '—'), ENT_QUOTES, 'UTF-8'),
+            'Serial No.' => htmlspecialchars((string)($equipment->serial_number ?: '—'), ENT_QUOTES, 'UTF-8'),
+            'Engine Model' => htmlspecialchars((string)($equipment->engine_model ?: '—'), ENT_QUOTES, 'UTF-8'),
+            'Current Hours' => number_format((float)$equipment->current_hours, 1),
+            'Current KM' => number_format((float)$equipment->current_km, 1),
             'Location' => $w36_site,
+            'Status' => htmlspecialchars((string)$equipment->status, ENT_QUOTES, 'UTF-8'),
+            'Frame No.' => htmlspecialchars((string)((isset($equipment->frame_no) && $equipment->frame_no) ? $equipment->frame_no : '—'), ENT_QUOTES, 'UTF-8'),
+            'Engine Serial' => htmlspecialchars((string)((isset($equipment->engine_serial) && $equipment->engine_serial) ? $equipment->engine_serial : '—'), ENT_QUOTES, 'UTF-8'),
+            'Weekly Report Code (W36)' => htmlspecialchars((string)(equip_machine_id($equipment)), ENT_QUOTES, 'UTF-8'),
             'Weekly Report' => $w36_in
-                ? ($w36_group ? $w36_group . ($w36_sort ? ' / ' . $w36_sort : '') : 'included — no group yet')
+                ? ($w36_group ? htmlspecialchars((string)$w36_group, ENT_QUOTES, 'UTF-8') . ($w36_sort ? ' / ' . $w36_sort : '') : 'included — no group yet')
                 : 'excluded',
-            'Brand' => $equipment->brand,
-            'Model' => $equipment->model,
-            'Engine Model' => $equipment->engine_model ?: '—',
-            'Year' => $equipment->year,
-            'Serial No.' => $equipment->serial_number ?: '—',
-            'Frame No.' => isset($equipment->frame_no) && $equipment->frame_no ? $equipment->frame_no : '—',
-            'Engine Serial' => isset($equipment->engine_serial) && $equipment->engine_serial ? $equipment->engine_serial : '—',
-            'Machine Type' => isset($equipment->machine_type) && $equipment->machine_type ? $equipment->machine_type : '—',
-            'Old / Legacy Code' => isset($equipment->legacy_code) && $equipment->legacy_code ? $equipment->legacy_code : '—',
             'Purchase Date' => $equipment->purchase_date ? date('d M Y', strtotime($equipment->purchase_date)) : '—',
             'Warranty Expiry' => $equipment->warranty_expiry ? date('d M Y', strtotime($equipment->warranty_expiry)) : '—',
+            'Notes' => htmlspecialchars((string)($equipment->notes ?: '—'), ENT_QUOTES, 'UTF-8'),
           ];
           foreach ($fields as $label => $val): ?>
           <tr>

@@ -56,7 +56,7 @@ INSERT INTO `equipment_types` (`id`, `name`, `category`, `description`) VALUES
 (31, 'Water Pump', 'Utilities', 'Imported from the workshop asset list'),
 (32, 'Tower Light', 'Utilities', 'Imported from the workshop asset list'),
 (33, 'Welding Machine', 'Utilities', 'Imported from the workshop asset list')
-ON DUPLICATE KEY UPDATE `category` = COALESCE(NULLIF(`equipment_types`.`category`, ''), VALUES(`category`)), `description` = COALESCE(NULLIF(`equipment_types`.`description`, ''), VALUES(`description`));
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `category` = VALUES(`category`), `description` = VALUES(`description`);
 
 INSERT INTO `report_groups` (`id`, `code`, `label`, `sort_order`, `active`) VALUES
 (1, 'EXCAVATOR', 'EXCAVATORs', 10, 1),
@@ -113,7 +113,8 @@ INSERT INTO `report_sites` (`id`, `code`, `label`, `sort_order`, `is_active`, `c
 (32, 'SUPER ATTENDANT', 'SUPER ATTENDANT', 320, 1, '2026-10-19 07:22:49'),
 (33, 'SUPPLY CHAIN', 'SUPPLY CHAIN', 330, 1, '2026-10-19 07:22:49'),
 (34, 'WORKSHOP MANAGER', 'WORKSHOP MANAGER', 340, 1, '2026-10-19 07:22:49'),
-(35, 'XCMG TEAM', 'XCMG TEAM', 350, 1, '2026-10-19 07:22:49')
+(35, 'XCMG TEAM', 'XCMG TEAM', 350, 1, '2026-10-19 07:22:49'),
+(36, 'OPERATIONS', 'OPERATIONS', 360, 1, '2026-10-19 07:22:49')
 ON DUPLICATE KEY UPDATE `label` = COALESCE(NULLIF(`report_sites`.`label`, ''), VALUES(`label`)), `sort_order` = VALUES(`sort_order`);
 
 INSERT INTO `equipment` (`equipment_type_id`, `registration_no`, `legacy_code`, `machine_type`, `brand`, `model`, `year`, `serial_number`, `frame_no`, `engine_model`, `engine_description`, `engine_serial`, `current_hours`, `current_km`, `meter_type`, `location`, `masterdata_source`, `status`, `report_group`, `report_sort`, `include_in_weekly_report`, `photo`, `purchase_date`, `manufacture_date`, `commission_date`, `start_meter`, `fatigue_system`, `order_no`, `warranty_expiry`, `notes`, `created_at`, `updated_at`) VALUES
@@ -178,29 +179,34 @@ INSERT INTO `equipment` (`equipment_type_id`, `registration_no`, `legacy_code`, 
 (29, 'C-HV-BS 002', 'BS002', 'Bus', 'TATA', 'TATA', NULL, NULL, NULL, NULL, NULL, NULL, '0.00', '0.00', 'Kilometres', 'KALIMVA', 'W36 sample row 71', 'Available', 'BUS', 120061, 1, NULL, NULL, NULL, NULL, NULL, 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),
 (12, 'C-HV-DZ 008', 'DZ008', 'Dozer', 'LIUGONG', 'CLG B230', NULL, NULL, 'LGCB230ZVRC012833', NULL, NULL, NULL, '0.00', '0.00', 'Hours', 'KALIMVA', 'W36 sample row 17', 'Available', 'DOZER', 20062, 1, NULL, NULL, NULL, '2025-11-12', '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49')
 ON DUPLICATE KEY UPDATE
-  `legacy_code` = COALESCE(NULLIF(`equipment`.`legacy_code`, ''), VALUES(`legacy_code`)),
-  `machine_type` = COALESCE(NULLIF(`equipment`.`machine_type`, ''), VALUES(`machine_type`)),
+  `equipment_type_id` = VALUES(`equipment_type_id`),
+  `legacy_code` = VALUES(`legacy_code`),
+  `machine_type` = VALUES(`machine_type`),
   `brand` = VALUES(`brand`),
-  `model` = COALESCE(NULLIF(`equipment`.`model`, ''), VALUES(`model`)),
-  `year` = COALESCE(`equipment`.`year`, VALUES(`year`)),
+  `model` = VALUES(`model`),
+  `year` = VALUES(`year`),
   `serial_number` = VALUES(`serial_number`),
-  `frame_no` = COALESCE(NULLIF(`equipment`.`frame_no`, ''), VALUES(`frame_no`)),
-  `engine_model` = COALESCE(NULLIF(`equipment`.`engine_model`, ''), VALUES(`engine_model`)),
-  `engine_description` = COALESCE(NULLIF(`equipment`.`engine_description`, ''), VALUES(`engine_description`)),
-  `engine_serial` = COALESCE(NULLIF(`equipment`.`engine_serial`, ''), VALUES(`engine_serial`)),
-  `meter_type` = COALESCE(NULLIF(`equipment`.`meter_type`, ''), VALUES(`meter_type`)),
-  `location` = COALESCE(NULLIF(`equipment`.`location`, ''), VALUES(`location`)),
-  `report_group` = COALESCE(NULLIF(`equipment`.`report_group`, ''), VALUES(`report_group`)),
-  `report_sort` = IF(`equipment`.`report_sort` = 9999, VALUES(`report_sort`), `equipment`.`report_sort`),
+  `frame_no` = VALUES(`frame_no`),
+  `engine_model` = VALUES(`engine_model`),
+  `engine_description` = VALUES(`engine_description`),
+  `engine_serial` = VALUES(`engine_serial`),
+  `current_hours` = VALUES(`current_hours`),
+  `current_km` = VALUES(`current_km`),
+  `meter_type` = VALUES(`meter_type`),
+  `location` = VALUES(`location`),
+  `masterdata_source` = VALUES(`masterdata_source`),
+  `status` = VALUES(`status`),
+  `report_group` = VALUES(`report_group`),
+  `report_sort` = VALUES(`report_sort`),
   `include_in_weekly_report` = VALUES(`include_in_weekly_report`),
-  `purchase_date` = COALESCE(`equipment`.`purchase_date`, VALUES(`purchase_date`)),
-  `manufacture_date` = COALESCE(`equipment`.`manufacture_date`, VALUES(`manufacture_date`)),
-  `commission_date` = COALESCE(`equipment`.`commission_date`, VALUES(`commission_date`)),
-  `start_meter` = COALESCE(`equipment`.`start_meter`, VALUES(`start_meter`)),
-  `fatigue_system` = COALESCE(NULLIF(`equipment`.`fatigue_system`, ''), VALUES(`fatigue_system`)),
-  `order_no` = COALESCE(NULLIF(`equipment`.`order_no`, ''), VALUES(`order_no`)),
-  `warranty_expiry` = COALESCE(`equipment`.`warranty_expiry`, VALUES(`warranty_expiry`)),
-  `notes` = COALESCE(NULLIF(`equipment`.`notes`, ''), VALUES(`notes`));
+  `purchase_date` = VALUES(`purchase_date`),
+  `manufacture_date` = VALUES(`manufacture_date`),
+  `commission_date` = VALUES(`commission_date`),
+  `start_meter` = VALUES(`start_meter`),
+  `fatigue_system` = VALUES(`fatigue_system`),
+  `order_no` = VALUES(`order_no`),
+  `warranty_expiry` = VALUES(`warranty_expiry`),
+  `notes` = VALUES(`notes`);
 
 INSERT INTO `equipment` (`equipment_type_id`, `registration_no`, `legacy_code`, `machine_type`, `brand`, `model`, `year`, `serial_number`, `frame_no`, `engine_model`, `engine_description`, `engine_serial`, `current_hours`, `current_km`, `meter_type`, `location`, `masterdata_source`, `status`, `report_group`, `report_sort`, `include_in_weekly_report`, `photo`, `purchase_date`, `manufacture_date`, `commission_date`, `start_meter`, `fatigue_system`, `order_no`, `warranty_expiry`, `notes`, `created_at`, `updated_at`) VALUES
 (2, 'C-HV-EX 007', 'EX 007', 'Excavator', 'XCMG', 'XE950', NULL, NULL, 'XUG09503VSWA03968', 'QSK19', 'QSK19', NULL, '0.00', '0.00', 'Hours', 'WORKSHOP', 'W36 sample row 10', 'Available', 'EXCAVATOR', 10063, 1, NULL, NULL, NULL, NULL, '0.00', 'No', NULL, NULL, NULL, '2026-10-06 15:26:03', '2026-10-19 07:22:49'),

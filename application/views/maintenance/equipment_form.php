@@ -9,7 +9,7 @@
       <div class="form-grid cols-3" style="margin-bottom:16px;">
         <div>
           <label class="form-label">Registration No. <span class="req">*</span></label>
-          <input type="text" name="registration_no" class="form-control" required style="text-transform:uppercase;" value="<?= isset($equipment)?$equipment->registration_no:'' ?>" placeholder="e.g. EX-001">
+          <input type="text" name="registration_no" class="form-control" required value="<?= htmlspecialchars((string)(isset($equipment) ? $equipment->registration_no : ''), ENT_QUOTES, 'UTF-8') ?>" placeholder="e.g. C-HV-EX 001">
         </div>
         <div>
           <label class="form-label">Equipment Type <span class="req">*</span></label>

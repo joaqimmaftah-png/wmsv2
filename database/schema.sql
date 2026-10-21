@@ -1821,7 +1821,8 @@ INSERT INTO `report_sites` (`id`, `code`, `label`, `sort_order`, `is_active`, `c
 (32, 'SUPER ATTENDANT', 'SUPER ATTENDANT', 320, 1, '2026-10-19 07:22:49'),
 (33, 'SUPPLY CHAIN', 'SUPPLY CHAIN', 330, 1, '2026-10-19 07:22:49'),
 (34, 'WORKSHOP MANAGER', 'WORKSHOP MANAGER', 340, 1, '2026-10-19 07:22:49'),
-(35, 'XCMG TEAM', 'XCMG TEAM', 350, 1, '2026-10-19 07:22:49');
+(35, 'XCMG TEAM', 'XCMG TEAM', 350, 1, '2026-10-19 07:22:49'),
+(36, 'OPERATIONS', 'OPERATIONS', 360, 1, '2026-10-19 07:22:49');
 
 INSERT INTO `roles` (`id`, `name`, `description`) VALUES
 (1, 'Supervisor', 'Full access — all modules, user management, settings'),
@@ -17842,10 +17843,11 @@ INSERT INTO `schema_migrations` (`version`, `filename`, `checksum`, `applied_at`
   ('0005', '0005_unique_constraints_and_indexes.sql', 'e99e3aca0732b08abbbd8d1e794825132c4f9a113e6e2bd6e539461df7821f1b', NOW()),
   ('0006', '0006_foreign_keys_integrity.sql', 'e2fb6e00b0bc193cffd5750de1bd1f5dd5cf98cd775e4e93a84921951637107e', NOW()),
   ('0007', '0007_seed_master_data_and_checklists.sql', 'dc0ab3217d181b6d26fccd8d27f8390dd09c51bee37ac57fafc20b7ebb10324a', NOW()),
-  ('0008', '0008_restore_equipment_register.sql', 'bd0bb3c185784da705e2216e09f6c9359b36c479cbbf46512363551c8b7c873e', NOW()),
+  ('0008', '0008_restore_equipment_register.sql', 'e81969010e3818ac9eb63292413061cc0eb36bc914b94e3f8884307ef315b5eb', NOW()),
   ('0009', '0009_restore_suppliers_and_inventory.sql', '866524379d4b95389d8600c6c7377041aafff12809091eafc3cda1e9ba103882', NOW()),
   ('0010', '0010_attendance_punches.sql', 'a31f2a2911fddf591a6eea7bef488956f1a0eefef3678152c66121c28a7080fb', NOW()),
-  ('0011', '0011_restore_verbatim_asset_machine_ids.sql', '69721ba7a7f9e2a5fc2f3dc10a9bab111ad69bebeabe0e80bbe07bd4675ac953', NOW())
+  ('0011', '0011_restore_verbatim_asset_machine_ids.sql', '69721ba7a7f9e2a5fc2f3dc10a9bab111ad69bebeabe0e80bbe07bd4675ac953', NOW()),
+  ('0012', '0012_sync_equipment_with_asset_register.sql', 'bcf5cb6f2c5a96ce63c9782aafe53df524d89c7ef07316cca78c536e0d25c668', NOW())
 ON DUPLICATE KEY UPDATE `filename` = VALUES(`filename`), `checksum` = VALUES(`checksum`);
 
 COMMIT;
