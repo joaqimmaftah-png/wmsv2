@@ -383,7 +383,7 @@ if (!function_exists('kpi_mtbf')) {
     {
         $breakdowns = (int)$breakdowns;
         if ($breakdowns <= 0) {
-            return strtolower(trim((string)$zero_mode)) === 'uptime' ? round((float)$required_hours, 4) : null;
+            return strtolower((string)(trim((string)$zero_mode))) === 'uptime' ? round((float)$required_hours, 4) : null;
         }
         return round(((float)$required_hours - (float)$downtime_hours) / $breakdowns, 4);
     }

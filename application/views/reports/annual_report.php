@@ -46,8 +46,8 @@ $amberPct  = 70.0;   // "watch" band, not a target
     ['PM Completed',   $t['pm_done'],                'var(--green)', 'Preventive jobs done'],
     ['Avg MTTR',       $t['avg_mttr'].' h',          'var(--amber)', 'Mean time to repair'],
     ['Avg Avail.',     $t['avg_avail'].'%',          $t['avg_avail']>=$targetPct?'var(--green)':'var(--red)', 'Fleet average vs '.$targetPct.'% target'],
-    ['Total Downtime', number_format($t['total_dt'],0).' h','var(--red)',   'Hours lost'],
-    ['Parts Spend',    '$'.number_format($t['parts_spend'],0),'var(--purple)','Spare parts total'],
+    ['Total Downtime', number_format((float)($t['total_dt']),0).' h','var(--red)',   'Hours lost'],
+    ['Parts Spend',    '$'.number_format((float)($t['parts_spend']),0),'var(--purple)','Spare parts total'],
   ];
   foreach ($cards as $i=>$c): ?>
   <div class="kpi" style="animation-delay:<?=$i*.03?>s">
@@ -109,11 +109,11 @@ $amberPct  = 70.0;   // "watch" band, not a target
       <td style="text-align:center;font-weight:700;color:<?=$m['breakdowns']>5?'var(--red)':($m['breakdowns']>2?'var(--amber)':'var(--t2)')?>;"><?=$m['breakdowns']?></td>
       <td style="text-align:center;color:var(--green);"><?=$m['wo_total']-$m['breakdowns']?></td>
       <td style="text-align:center;"><?=$m['completed']?></td>
-      <td class="mono" style="text-align:center;color:<?=$m['downtime']>500?'var(--red)':'var(--t2)'?>;"><?=number_format($m['downtime'],1)?></td>
+      <td class="mono" style="text-align:center;color:<?=$m['downtime']>500?'var(--red)':'var(--t2)'?>;"><?=number_format((float)($m['downtime']),1)?></td>
       <td style="text-align:center;font-weight:700;color:<?=$avC?>;"><?=$av?>%</td>
       <td class="mono" style="text-align:center;"><?=$m['mttr']?></td>
-      <td class="mono" style="text-align:center;"><?=number_format($m['mtbf'],0)?></td>
-      <td class="mono" style="text-align:center;color:var(--t3);"><?=number_format($m['lube_used'],1)?></td>
+      <td class="mono" style="text-align:center;"><?=number_format((float)($m['mtbf']),0)?></td>
+      <td class="mono" style="text-align:center;color:var(--t3);"><?=number_format((float)($m['lube_used']),1)?></td>
     </tr>
     <?php endforeach;?>
     </tbody>
@@ -124,7 +124,7 @@ $amberPct  = 70.0;   // "watch" band, not a target
         <td style="text-align:center;font-weight:700;color:var(--red);"><?=$t['breakdowns']?></td>
         <td style="text-align:center;font-weight:700;color:var(--green);"><?=$t['pm_done']?></td>
         <td style="text-align:center;font-weight:700;"><?=$t['completed']?></td>
-        <td class="mono" style="text-align:center;font-weight:700;"><?=number_format($t['total_dt'],1)?></td>
+        <td class="mono" style="text-align:center;font-weight:700;"><?=number_format((float)($t['total_dt']),1)?></td>
         <td style="text-align:center;font-weight:700;color:<?=$t['avg_avail']>=$targetPct?'var(--green)':'var(--red)'?>;"><?=$t['avg_avail']?>%</td>
         <td class="mono" style="text-align:center;font-weight:700;"><?=$t['avg_mttr']?></td>
         <td colspan="2"></td>
@@ -148,10 +148,10 @@ $amberPct  = 70.0;   // "watch" band, not a target
         $avC=$eq['availability']>=$targetPct?'var(--green)':($eq['availability']>=$amberPct?'var(--amber)':'var(--red)');
       ?>
       <tr>
-        <td><span class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars($eq['machine_id'])?></span><br><span style="font-size:9.5px;color:var(--t3);"><?=htmlspecialchars(trim($eq['model']))?></span></td>
+        <td><span class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars((string)($eq['machine_id']))?></span><br><span style="font-size:9.5px;color:var(--t3);"><?=htmlspecialchars((string)(trim((string)($eq['model']))))?></span></td>
         <td style="text-align:center;font-weight:700;color:<?=$avC?>;"><?=$eq['availability']?>%</td>
         <td style="text-align:center;color:var(--red);font-weight:600;"><?=$eq['breakdowns']?></td>
-        <td class="mono" style="text-align:center;color:var(--t3);"><?=number_format($eq['downtime'],1)?></td>
+        <td class="mono" style="text-align:center;color:var(--t3);"><?=number_format((float)($eq['downtime']),1)?></td>
       </tr>
       <?php endforeach;?>
       </tbody>
@@ -170,7 +170,7 @@ $amberPct  = 70.0;   // "watch" band, not a target
       <tr><td colspan="2" style="text-align:center;color:var(--t3);padding:20px;">No fault data for <?=$selYear?></td></tr>
       <?php else: foreach(array_slice($faults,0,10) as $f):?>
       <tr>
-        <td style="font-size:10.5px;"><?=htmlspecialchars($f->symptoms)?></td>
+        <td style="font-size:10.5px;"><?=htmlspecialchars((string)($f->symptoms))?></td>
         <td style="text-align:center;font-weight:700;color:var(--amber);"><?=$f->cnt?></td>
       </tr>
       <?php endforeach; endif;?>
@@ -191,9 +191,9 @@ $amberPct  = 70.0;   // "watch" band, not a target
     <tbody>
     <?php foreach($lube_annual as $l):?>
     <tr>
-      <td style="font-weight:600;color:var(--t1);"><?=htmlspecialchars($l->category??'Other')?></td>
+      <td style="font-weight:600;color:var(--t1);"><?=htmlspecialchars((string)($l->category??'Other'))?></td>
       <td class="mono" style="text-align:center;font-weight:600;"><?=number_format((float)$l->total,1)?></td>
-      <td style="text-align:center;color:var(--t3);"><?=htmlspecialchars($l->unit??'L')?></td>
+      <td style="text-align:center;color:var(--t3);"><?=htmlspecialchars((string)($l->unit??'L'))?></td>
     </tr>
     <?php endforeach;?>
     </tbody>

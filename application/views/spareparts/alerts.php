@@ -46,17 +46,17 @@ $cur_status = isset($filter['status']) && $filter['status'] !== '' ? $filter['st
           <?= $al->alert_type === 'Partial' ? 'Spare Part Partially Available' : 'Spare Part Available' ?>
           <?php if ($al->status === 'New'): ?><span class="badge b-primary" style="font-size:9px;margin-left:6px;">NEW</span><?php endif; ?>
         </div>
-        <div style="font-size:12px;color:var(--t2);margin-top:2px;"><?= htmlspecialchars($al->message) ?></div>
+        <div style="font-size:12px;color:var(--t2);margin-top:2px;"><?= htmlspecialchars((string)($al->message)) ?></div>
         <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">
           <?= date('d M Y, H:i', strtotime($al->created_at)) ?>
-          · received qty <?= rtrim(rtrim(number_format((float)$al->qty_received, 2, '.', ''), '0'), '.') ?>
-          · stock after <?= rtrim(rtrim(number_format((float)$al->stock_after, 2, '.', ''), '0'), '.') ?>
-          <?php if (!empty($al->received_by_name)): ?> · received by <?= htmlspecialchars($al->received_by_name) ?><?php endif; ?>
+          · received qty <?= rtrim((string)(rtrim((string)(number_format((float)$al->qty_received, 2, '.', '')), '0')), '.') ?>
+          · stock after <?= rtrim((string)(rtrim((string)(number_format((float)$al->stock_after, 2, '.', '')), '0')), '.') ?>
+          <?php if (!empty($al->received_by_name)): ?> · received by <?= htmlspecialchars((string)($al->received_by_name)) ?><?php endif; ?>
           <?php if ($al->status === 'Read' && $al->read_at): ?> · read <?= date('d M, H:i', strtotime($al->read_at)) ?><?php endif; ?>
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-        <a href="<?= base_url('workorders/view/'.$al->work_order_id) ?>" class="btn btn-ghost btn-sm mono"><?= htmlspecialchars($al->wo_number ?: 'WO') ?></a>
+        <a href="<?= base_url('workorders/view/'.$al->work_order_id) ?>" class="btn btn-ghost btn-sm mono"><?= htmlspecialchars((string)($al->wo_number ?: 'WO')) ?></a>
         <?php if ($al->status === 'New'): ?>
         <?= form_open('spareparts/mark_read/'.$al->id, array('style' => 'display:inline;margin:0;')) ?>
           <button type="submit" class="btn btn-primary btn-sm">Mark read</button>

@@ -7,8 +7,8 @@
  * their own week numbers.  Here every cell is read from
  * `equipment_planned_downtime`, so a stale formula reference cannot exist.
  */
-$pct = function ($v, $d = 1) { return $v === null ? '—' : number_format($v * 100, $d) . '%'; };
-$hrs = function ($v) { return $v === null ? '—' : rtrim(rtrim(number_format((float)$v, 2, '.', ''), '0'), '.'); };
+$pct = function ($v, $d = 1) { return $v === null ? '—' : number_format((float)($v * 100), $d) . '%'; };
+$hrs = function ($v) { return $v === null ? '—' : rtrim((string)(rtrim((string)(number_format((float)$v, 2, '.', '')), '0')), '.'); };
 $col = function ($v) {
     if ($v === null) return 'var(--t3)';
     return $v >= 0.90 ? 'var(--green)' : ($v >= 0.70 ? 'var(--amber)' : 'var(--red)');
@@ -18,12 +18,12 @@ $col = function ($v) {
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
     <div class="page-heading" style="font-size:16px;">Rolling Maintenance Plan</div>
-    <div class="cs">Three weeks from <?=htmlspecialchars($base_label)?> — machine, planned hours, availability</div>
+    <div class="cs">Three weeks from <?=htmlspecialchars((string)($base_label))?> — machine, planned hours, availability</div>
   </div>
   <div class="flex ai-c gap-10">
     <form method="get" class="flex ai-c gap-10">
       <label style="font-size:11px;color:var(--t3);">From week</label>
-      <input type="week" name="week" class="form-control" style="width:170px;" value="<?=htmlspecialchars($base_label)?>">
+      <input type="week" name="week" class="form-control" style="width:170px;" value="<?=htmlspecialchars((string)($base_label))?>">
       <button class="btn btn-sm btn-primary" type="submit">Open</button>
     </form>
     <a class="btn btn-sm" href="<?= base_url('forecast/export/rolling?week=' . urlencode($base_label)) ?>">
@@ -38,7 +38,7 @@ $col = function ($v) {
   <div class="kpi"><div class="kpi-glow" style="background:<?=$col($f['availability'])?>"></div>
     <span class="kpi-tag">
       <?=$w['offset'] === 0 ? 'This week' : '+' . $w['offset'] . ' week' . ($w['offset'] > 1 ? 's' : '')?>
-      · <?=htmlspecialchars($w['iso_label'])?>
+      · <?=htmlspecialchars((string)($w['iso_label']))?>
     </span>
     <div class="kpi-num" style="color:<?=$col($f['availability'])?>;"><?=$pct($f['availability'])?></div>
     <div class="cs" style="font-size:10px;margin-top:3px;">
@@ -63,7 +63,7 @@ $col = function ($v) {
         <th>MACHINE</th><th>TYPE</th><th>LOCATION</th>
         <?php foreach ($weeks as $w): ?>
         <th style="text-align:center;border-left:1px solid var(--g2);">
-          <?=htmlspecialchars($w['iso_label'])?><br>
+          <?=htmlspecialchars((string)($w['iso_label']))?><br>
           <span style="font-weight:400;color:var(--t3);font-size:9.5px;"><?=date('d M', strtotime($w['week_start']))?></span>
         </th>
         <th style="text-align:right;">DT h</th>
@@ -74,7 +74,7 @@ $col = function ($v) {
     <tbody>
     <?php foreach ($machines as $m): ?>
       <tr>
-        <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars($m['registration_no'])?></td>
+        <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars((string)($m['registration_no']))?></td>
         <td style="color:var(--t3);font-size:10.5px;"><?=htmlspecialchars((string)$m['type'])?></td>
         <td style="color:var(--t3);font-size:10.5px;"><?=htmlspecialchars((string)$m['location'])?></td>
         <?php foreach ($weeks as $w):

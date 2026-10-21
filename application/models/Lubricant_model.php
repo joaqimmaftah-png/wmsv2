@@ -52,14 +52,14 @@ class Lubricant_model extends CI_Model {
         // Use BETWEEN instead of DATE_FORMAT to avoid CI3 missing-= bug
         $from = $month . '-01';
         $to   = date('Y-m-t', strtotime($from));
-        return $this->db->select('lt.name as lube_name, lt.category, lt.unit,
+        return $this->db->select('lc.lube_type_id, lt.name as lube_name, lt.category, lt.unit,
                                   SUM(lc.quantity_used) as total_used, AVG(lc.quantity_used) as avg_used,
                                   SUM(lc.recommended_qty) as total_rec, COUNT(*) as records')
             ->from('lube_consumption lc')
             ->join('lube_types lt', 'lt.id = lc.lube_type_id')
             ->where('lc.consumption_date >=', $from)
             ->where('lc.consumption_date <=', $to)
-            ->group_by('lc.lube_type_id')
+            ->group_by('lc.lube_type_id, lt.name, lt.category, lt.unit')
             ->order_by('lt.category')->get()->result();
     }
 

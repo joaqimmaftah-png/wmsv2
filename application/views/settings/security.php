@@ -163,8 +163,8 @@ $badge = array(
               <?= $b[0] ?>
             </span>
           </td>
-          <td class="mono" style="font-size:11.5px;"><?= htmlspecialchars($e->subject) ?></td>
-          <td class="mono" style="font-size:11.5px;color:var(--t3);"><?= htmlspecialchars($e->ip_address) ?></td>
+          <td class="mono" style="font-size:11.5px;"><?= htmlspecialchars((string)($e->subject)) ?></td>
+          <td class="mono" style="font-size:11.5px;color:var(--t3);"><?= htmlspecialchars((string)($e->ip_address)) ?></td>
           <td class="mono" style="text-align:center;"><?= (int)$e->attempts ?>
             <?php if ($e->distinct_accounts !== NULL): ?>
             <div style="font-size:9.5px;color:var(--t3);"><?= (int)$e->distinct_accounts ?> accounts</div>
@@ -183,7 +183,7 @@ $badge = array(
             <?php else: ?>
             <span style="font-size:11px;color:var(--green);font-weight:600;">✓ acknowledged</span>
             <div style="font-size:10px;color:var(--t3);"><?= date('d M, H:i', strtotime($e->acknowledged_at)) ?>
-              <?php if (!empty($e->acknowledged_note)): ?> · <?= htmlspecialchars($e->acknowledged_note) ?><?php endif; ?>
+              <?php if (!empty($e->acknowledged_note)): ?> · <?= htmlspecialchars((string)($e->acknowledged_note)) ?><?php endif; ?>
             </div>
             <?php endif; ?>
           </td>

@@ -172,7 +172,7 @@ class Settings_model extends CI_Model {
      * `wms_site_currency()` is the same value for views.
      */
     public function currency() {
-        $code = strtoupper(trim((string)$this->get('currency')));
+        $code = strtoupper((string)(trim((string)$this->get('currency'))));
         return preg_match('/^[A-Z]{3}$/', $code) ? $code : 'USD';
     }
 
@@ -335,7 +335,7 @@ class Settings_model extends CI_Model {
                 // Only a code from the shared vocabulary is written; an
                 // unsupported one keeps the stored value instead of replacing
                 // every total's currency with a typo.
-                $code = strtoupper(trim((string)$value));
+                $code = strtoupper((string)(trim((string)$value)));
                 return in_array($code, wms_currencies(), true) ? $code : $this->currency();
 
             case 'weekly_open_hours':
@@ -349,7 +349,7 @@ class Settings_model extends CI_Model {
                 $v = (float)str_replace(',', '.', (string)$value);
                 if ($v > 1) $v = $v / 100;                    // '88' / '88%' → 0.88
                 $v = max(0.0, min(1.0, $v));
-                return number_format($v, 4, '.', '');
+                return number_format((float)($v), 4, '.', '');
 
             case 'report_week_start_day':
                 $v = (int)$value;
@@ -383,10 +383,10 @@ class Settings_model extends CI_Model {
                 if (!is_array($j)) return '{}';
                 $clean = array();
                 foreach ($j as $type => $hours) {
-                    if (!is_string($type) || trim($type) === '') continue;
+                    if (!is_string($type) || trim((string)($type)) === '') continue;
                     $h = (float)$hours;
                     if ($h <= 0 || $h > 24) continue;
-                    $clean[trim($type)] = $h;
+                    $clean[trim((string)($type))] = $h;
                 }
                 return $clean ? json_encode($clean) : '{}';
 
@@ -397,10 +397,10 @@ class Settings_model extends CI_Model {
                 if (!is_array($j)) return '{}';
                 $clean = array();
                 foreach ($j as $type => $hours) {
-                    if (!is_string($type) || trim($type) === '') continue;
+                    if (!is_string($type) || trim((string)($type)) === '') continue;
                     $h = (float)$hours;
                     if ($h <= 0 || $h > 24) continue;
-                    $clean[trim($type)] = $h;
+                    $clean[trim((string)($type))] = $h;
                 }
                 return $clean ? json_encode($clean) : '{}';
 
@@ -412,11 +412,11 @@ class Settings_model extends CI_Model {
                 if (!is_array($j)) return '{}';
                 $clean = array();
                 foreach ($j as $type => $hours) {
-                    if (!is_string($type) || trim($type) === '') continue;
+                    if (!is_string($type) || trim((string)($type)) === '') continue;
                     $h = (float)$hours;
                     if ($h < 0) $h = 0;
                     if ($h > 24) $h = 24;                       // a day is 24 h
-                    $clean[trim($type)] = $h;
+                    $clean[trim((string)($type))] = $h;
                 }
                 return $clean ? json_encode($clean) : '{}';
 
@@ -448,12 +448,12 @@ class Settings_model extends CI_Model {
                 if (!is_array($j)) return '{}';
                 $clean = array();
                 foreach ($j as $type => $days) {
-                    if (!is_string($type) || trim($type) === '') continue;
+                    if (!is_string($type) || trim((string)($type)) === '') continue;
                     if (!is_numeric($days)) continue;
                     $d = (float)$days;
                     if ($d < 0)   $d = 0;
                     if ($d > 365) $d = 365;
-                    $clean[trim($type)] = round($d, 1);
+                    $clean[trim((string)($type))] = round($d, 1);
                 }
                 return $clean ? json_encode($clean) : '{}';
         }

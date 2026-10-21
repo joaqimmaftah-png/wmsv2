@@ -13,6 +13,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * Everything runs on the project's own XlsxWriter helper — no external
  * libraries, no new server requirements.
  */
+#[AllowDynamicProperties]
 class Asset_excel {
 
     /** Styles reused by every sheet */
@@ -55,7 +56,7 @@ class Asset_excel {
         $lastCol = $this->_colLetter(count($cols));
 
         $x->setRowHeight(1, 28);
-        $titleRow = array(array('v' => $title.' — '.strtoupper(date('d F Y')), 's' => $s['title']));
+        $titleRow = array(array('v' => $title.' — '.strtoupper((string)(date('d F Y'))), 's' => $s['title']));
         for ($i = 1; $i < count($cols); $i++) $titleRow[] = array('v' => '', 's' => $s['title']);
         $x->writeRowStyled($titleRow);
         $x->mergeCells('A1', $lastCol.'1');
@@ -406,7 +407,7 @@ class Asset_excel {
             $cells = array(
                 array('v' => $r['row'],       's' => $s['cellC']),
                 array('v' => $r['machine_id'],'s' => $s['cellC']),
-                array('v' => strtoupper($r['action']), 's' => $st),
+                array('v' => strtoupper((string)($r['action'])), 's' => $st),
                 array('v' => $msg,            's' => $s['cellWrap']),
                 array('v' => implode(' | ', $r['warnings']), 's' => $s['cellWrap']),
                 array('v' => isset($r['values']['type_name']) ? $r['values']['type_name'] : '', 's' => $s['cell']),
@@ -532,7 +533,7 @@ class Asset_excel {
         $clean = array_values(array_unique($clean));
         if (empty($clean)) return null;
         $formula = '"'.implode(',', $clean).'"';
-        return (strlen($formula) <= 255) ? $formula : null;
+        return (strlen((string)($formula)) <= 255) ? $formula : null;
     }
 
     /**

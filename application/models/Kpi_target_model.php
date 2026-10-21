@@ -96,7 +96,7 @@ class Kpi_target_model extends CI_Model {
     /** Formatted for display: 0.8800 → "88.00 %". */
     public function pct_label($value, $decimals = 2) {
         if ($value === null || $value === '') return '—';
-        return number_format(((float)$value) * 100, $decimals, '.', '') . ' %';
+        return number_format((float)(((float)$value) * 100), $decimals, '.', '') . ' %';
     }
 
     /** A DATE column value, or null (= standing default). */
@@ -154,14 +154,14 @@ class Kpi_target_model extends CI_Model {
         }
 
         $note = isset($post['note']) ? trim((string)$post['note']) : '';
-        if (strlen($note) > 255) $note = substr($note, 0, 255);
+        if (strlen((string)($note)) > 255) $note = substr($note, 0, 255);
 
         return array(
             'scope'        => $scope,
             'equipment_id' => $equipment_id,
             'group_code'   => $group_code,
             'target_date'  => $date,
-            'target_pct'   => number_format($pct, 4, '.', ''),
+            'target_pct'   => number_format((float)($pct), 4, '.', ''),
             'note'         => $note === '' ? null : $note,
         );
     }
@@ -276,7 +276,7 @@ class Kpi_target_model extends CI_Model {
                 'equipment_id' => (int)$m->id,
                 'group_code'   => null,
                 'target_date'  => $date,
-                'target_pct'   => number_format($value, 4, '.', ''),
+                'target_pct'   => number_format((float)($value), 4, '.', ''),
                 'note'         => $this->bulk_note($date),
                 'created_by'   => $user_id,
             ));

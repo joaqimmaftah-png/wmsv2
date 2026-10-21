@@ -54,7 +54,7 @@ $order_kpi = $k['order_kpi'];
   <div class="kpi">
     <div class="kpi-glow" style="background:var(--cyan);"></div>
     <span class="kpi-tag">MTTR / MTBF</span>
-    <div class="kpi-num" style="font-size:18px;"><?= number_format($k['mttr'],1) ?>h <span style="color:var(--t3);font-size:13px;">/ <?= round($k['mtbf']) ?>h</span></div>
+    <div class="kpi-num" style="font-size:18px;"><?= number_format((float)($k['mttr']),1) ?>h <span style="color:var(--t3);font-size:13px;">/ <?= round($k['mtbf']) ?>h</span></div>
     <div class="cs" style="margin-top:4px;">Mean Time to Repair / Between Failures</div>
   </div>
 
@@ -123,7 +123,7 @@ $order_kpi = $k['order_kpi'];
         $col = $a >= 90 ? 'var(--green)' : ($a >= 75 ? 'var(--amber)' : 'var(--red)');
       ?>
       <tr>
-        <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars($f['type']) ?></td>
+        <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($f['type'])) ?></td>
         <td class="mono" style="text-align:center;"><?= (int)$f['total'] ?></td>
         <td style="text-align:center;"><span style="padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;color:<?= $col ?>;background:<?= $col ?>22;"><?= $a ?>%</span></td>
       </tr>
@@ -150,7 +150,7 @@ $status_colors = array(
       $c = isset($status_colors[$status]) ? $status_colors[$status] : array('var(--t3)','var(--gray-fill)');
     ?>
     <div>
-      <div style="font-size:11px;color:var(--t3);font-weight:500;"><?= htmlspecialchars($status) ?></div>
+      <div style="font-size:11px;color:var(--t3);font-weight:500;"><?= htmlspecialchars((string)($status)) ?></div>
       <div style="font-size:24px;font-weight:700;color:<?= $c[0] ?>;margin-top:4px;"><?= $cnt ?></div>
     </div>
     <?php endforeach; ?>
@@ -170,10 +170,10 @@ $status_colors = array(
         <tr><td colspan="4" style="text-align:center;padding:30px;color:var(--t3);">No active work orders</td></tr>
         <?php else: foreach ($active_wo as $w): ?>
         <tr>
-          <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars($w->wo_number) ?></td>
-          <td><?= htmlspecialchars($w->registration_no ?: '—') ?></td>
-          <td style="font-size:11px;color:var(--t3);"><?= htmlspecialchars($w->type) ?></td>
-          <td style="text-align:center;font-size:11px;"><?= htmlspecialchars($w->status) ?></td>
+          <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($w->wo_number)) ?></td>
+          <td><?= htmlspecialchars((string)($w->registration_no ?: '—')) ?></td>
+          <td style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)($w->type)) ?></td>
+          <td style="text-align:center;font-size:11px;"><?= htmlspecialchars((string)($w->status)) ?></td>
         </tr>
         <?php endforeach; endif; ?>
         </tbody>
@@ -194,8 +194,8 @@ $status_colors = array(
           $isOverdue = $p->next_due_date < date('Y-m-d');
         ?>
         <tr>
-          <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars($p->registration_no ?: '—') ?></td>
-          <td style="font-size:11px;color:var(--t3);"><?= htmlspecialchars($p->schedule_name ?? '') ?></td>
+          <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($p->registration_no ?: '—')) ?></td>
+          <td style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)($p->schedule_name ?? '')) ?></td>
           <td style="text-align:center;font-size:11px;font-weight:600;color:<?= $isOverdue ? 'var(--red)' : 'var(--amber)' ?>;"><?= date('d M', strtotime($p->next_due_date)) ?><?= $isOverdue ? ' (overdue)' : '' ?></td>
         </tr>
         <?php endforeach; endif; ?>
@@ -233,8 +233,8 @@ $status_colors = array(
         <tr><td colspan="2" style="text-align:center;padding:24px;color:var(--t3);">No low-stock items</td></tr>
         <?php else: foreach ($low_stock as $m): ?>
         <tr>
-          <td><?= htmlspecialchars($m->description) ?> <span style="color:var(--t4);font-size:10px;">(<?= htmlspecialchars($m->item_code) ?>)</span></td>
-          <td style="text-align:center;font-weight:700;color:<?= $m->final_qty<=0?'var(--red)':'var(--amber)' ?>;"><?= (int)$m->final_qty ?> <?= htmlspecialchars($m->unit) ?></td>
+          <td><?= htmlspecialchars((string)($m->description)) ?> <span style="color:var(--t4);font-size:10px;">(<?= htmlspecialchars((string)($m->item_code)) ?>)</span></td>
+          <td style="text-align:center;font-weight:700;color:<?= $m->final_qty<=0?'var(--red)':'var(--amber)' ?>;"><?= (int)$m->final_qty ?> <?= htmlspecialchars((string)($m->unit)) ?></td>
         </tr>
         <?php endforeach; endif; ?>
         </tbody>
@@ -253,10 +253,10 @@ $status_colors = array(
         <tr><td colspan="3" style="text-align:center;padding:24px;color:var(--t3);">No consumption recorded this month</td></tr>
         <?php else: foreach ($lube_rows as $l): ?>
         <tr>
-          <td><?= htmlspecialchars($l['name']) ?></td>
-          <td style="text-align:center;"><?= number_format($l['used'],1) ?> <?= htmlspecialchars($l['unit']) ?></td>
+          <td><?= htmlspecialchars((string)($l['name'])) ?></td>
+          <td style="text-align:center;"><?= number_format((float)($l['used']),1) ?> <?= htmlspecialchars((string)($l['unit'])) ?></td>
           <td style="text-align:center;font-weight:600;color:<?= $l['remaining']===null?'var(--t3)':($l['remaining']<0?'var(--red)':'var(--green)') ?>;">
-            <?= $l['remaining']===null ? 'no budget set' : number_format($l['remaining'],1).' '.htmlspecialchars($l['unit']) ?>
+            <?= $l['remaining']===null ? 'no budget set' : number_format((float)($l['remaining']),1).' '.htmlspecialchars((string)($l['unit'])) ?>
           </td>
         </tr>
         <?php endforeach; endif; ?>
@@ -283,8 +283,8 @@ $status_colors = array(
           $isOverdue = $o->expected_delivery_date < date('Y-m-d');
         ?>
         <tr>
-          <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars($o->order_no) ?></td>
-          <td style="font-size:11px;color:var(--t3);"><?= htmlspecialchars($o->supplier_name) ?></td>
+          <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($o->order_no)) ?></td>
+          <td style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)($o->supplier_name)) ?></td>
           <td style="text-align:center;font-size:11px;font-weight:600;color:<?= $isOverdue?'var(--red)':'var(--amber)' ?>;"><?= date('d M', strtotime($o->expected_delivery_date)) ?><?= $isOverdue?' (overdue)':'' ?></td>
         </tr>
         <?php endforeach; endif; ?>
@@ -304,11 +304,11 @@ $status_colors = array(
         <tr><td colspan="3" style="text-align:center;padding:30px;color:var(--t3);">No incidents recorded</td></tr>
         <?php else: foreach ($recent_incidents as $inc): ?>
         <tr>
-          <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars($inc->wo_number) ?></td>
-          <td><?= htmlspecialchars($inc->registration_no ?: '—') ?></td>
+          <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($inc->wo_number)) ?></td>
+          <td><?= htmlspecialchars((string)($inc->registration_no ?: '—')) ?></td>
           <td style="text-align:center;font-size:10.5px;">
             <?php $st = $inc->activity_status ?: '—'; $col = $st==='Uncontrolled'?'var(--red)':($st==='Monitored'?'var(--amber)':'var(--green)'); ?>
-            <span style="font-weight:700;color:<?= $col ?>;"><?= htmlspecialchars($st) ?></span>
+            <span style="font-weight:700;color:<?= $col ?>;"><?= htmlspecialchars((string)($st)) ?></span>
           </td>
         </tr>
         <?php endforeach; endif; ?>
@@ -331,8 +331,8 @@ $status_colors = array(
       <tbody>
       <?php foreach ($absent_today as $a): ?>
       <tr>
-        <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars($a->first_name.' '.$a->last_name) ?></td>
-        <td style="font-size:11px;color:var(--t3);"><?= htmlspecialchars($a->position ?? '') ?></td>
+        <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($a->first_name.' '.$a->last_name)) ?></td>
+        <td style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)($a->position ?? '')) ?></td>
       </tr>
       <?php endforeach; ?>
       </tbody>

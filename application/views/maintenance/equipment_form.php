@@ -55,15 +55,15 @@
           $current_approved = $cur === '' || (function_exists('equip_is_approved_site') && equip_is_approved_site($cur, $sites));
           ?>
           <input type="text" name="location" class="form-control" list="w36-site-list"
-                 value="<?= htmlspecialchars($cur) ?>" placeholder="e.g. WORKSHOP">
+                 value="<?= htmlspecialchars((string)($cur)) ?>" placeholder="e.g. WORKSHOP">
           <datalist id="w36-site-list">
             <?php foreach ($sites as $label => $code): ?>
-            <option value="<?= htmlspecialchars($label) ?>"></option>
+            <option value="<?= htmlspecialchars((string)($label)) ?>"></option>
             <?php endforeach; ?>
           </datalist>
           <?php if (!$current_approved): ?>
           <div class="cs" style="margin-top:4px;color:#ff9c8f;">
-            "<?= htmlspecialchars($cur) ?>" is not one of the <?= count($sites) ?> approved sites — the weekly report flags it until it is mapped.
+            "<?= htmlspecialchars((string)($cur)) ?>" is not one of the <?= count($sites) ?> approved sites — the weekly report flags it until it is mapped.
           </div>
           <?php elseif ($sites): ?>
           <div class="cs" style="margin-top:4px;"><?= count($sites) ?> approved sites — start typing to pick one.</div>
@@ -108,8 +108,8 @@
           <select name="report_group" class="form-select">
             <option value="">— not classified —</option>
             <?php foreach ($groups as $code => $label): ?>
-            <option value="<?= htmlspecialchars($code) ?>" <?= $cur_grp === $code ? 'selected' : '' ?>>
-              <?= htmlspecialchars($label) ?>
+            <option value="<?= htmlspecialchars((string)($code)) ?>" <?= $cur_grp === $code ? 'selected' : '' ?>>
+              <?= htmlspecialchars((string)($label)) ?>
             </option>
             <?php endforeach; ?>
           </select>
@@ -134,7 +134,7 @@
       </div>
       <div style="margin-bottom:24px;">
         <label class="form-label">Notes</label>
-        <textarea name="notes" class="form-control" rows="2"><?= isset($equipment)?htmlspecialchars((isset($equipment->notes) ? $equipment->notes : '')):'' ?></textarea>
+        <textarea name="notes" class="form-control" rows="2"><?= isset($equipment)?htmlspecialchars((string)((isset($equipment->notes) ? $equipment->notes : ''))):'' ?></textarea>
       </div>
       <div class="flex ai-c gap-10" style="justify-content:flex-end;">
         <a href="<?= base_url('equipment') ?>" class="btn btn-ghost">Cancel</a>

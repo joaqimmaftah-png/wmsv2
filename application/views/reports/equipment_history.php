@@ -6,8 +6,8 @@ $status_color = equip_status_map($eq->status)['badge'];   // W0.2
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:12px;">
   <div>
-    <div class="page-title"><?= htmlspecialchars($eq->registration_no) ?> — Equipment History</div>
-    <div style="font-size:12px;color:var(--t3);margin-top:3px;"><?= htmlspecialchars($eq->brand.' '.$eq->model) ?> · <?= (isset($eq->type_name) ? $eq->type_name : '') ?></div>
+    <div class="page-title"><?= htmlspecialchars((string)($eq->registration_no)) ?> — Equipment History</div>
+    <div style="font-size:12px;color:var(--t3);margin-top:3px;"><?= htmlspecialchars((string)($eq->brand.' '.$eq->model)) ?> · <?= (isset($eq->type_name) ? $eq->type_name : '') ?></div>
   </div>
   <div class="flex ai-c gap-10">
     <a href="<?= base_url('equipment/view/'.$eq->id) ?>" class="btn btn-ghost">← Equipment Profile</a>
@@ -26,19 +26,19 @@ $status_color = equip_status_map($eq->status)['badge'];   // W0.2
     <div class="grid" style="grid-template-columns:repeat(4,1fr);gap:16px;">
       <div>
         <div style="font-size:10px;color:var(--t3);text-transform:none;letter-spacing:0;margin-bottom:4px;">Reg. Number</div>
-        <div style="font-size:15px;font-weight:700;color:var(--blue);"><?= htmlspecialchars($eq->registration_no) ?></div>
+        <div style="font-size:15px;font-weight:700;color:var(--blue);"><?= htmlspecialchars((string)($eq->registration_no)) ?></div>
       </div>
       <div>
         <div style="font-size:10px;color:var(--t3);text-transform:none;letter-spacing:0;margin-bottom:4px;">Brand / Model</div>
-        <div style="font-size:13px;font-weight:600;color:var(--t1);"><?= htmlspecialchars($eq->brand.' '.$eq->model) ?></div>
+        <div style="font-size:13px;font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($eq->brand.' '.$eq->model)) ?></div>
       </div>
       <div>
         <div style="font-size:10px;color:var(--t3);text-transform:none;letter-spacing:0;margin-bottom:4px;">Current Hours</div>
-        <div style="font-size:15px;font-weight:700;color:var(--t1);" class="mono"><?= number_format((isset($eq->current_hours) ? $eq->current_hours : 0), 1) ?> h</div>
+        <div style="font-size:15px;font-weight:700;color:var(--t1);" class="mono"><?= number_format((float)((isset($eq->current_hours) ? $eq->current_hours : 0)), 1) ?> h</div>
       </div>
       <div>
         <div style="font-size:10px;color:var(--t3);text-transform:none;letter-spacing:0;margin-bottom:4px;">Serial Number</div>
-        <div style="font-size:13px;font-weight:600;color:var(--t1);"><?= htmlspecialchars((isset($eq->serial_number) ? $eq->serial_number : '—')) ?></div>
+        <div style="font-size:13px;font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)((isset($eq->serial_number) ? $eq->serial_number : '—'))) ?></div>
       </div>
     </div>
   </div>
@@ -60,12 +60,12 @@ $status_color = equip_status_map($eq->status)['badge'];   // W0.2
   <div class="kpi" style="animation-delay:.12s;">
     <div class="kpi-glow" style="background:var(--amber);"></div>
     <span class="kpi-tag">Total Downtime</span>
-    <div class="kpi-num"><?= number_format((isset($kpi['total_downtime']) ? $kpi['total_downtime'] : 0), 1) ?><span style="font-size:12px;">h</span></div>
+    <div class="kpi-num"><?= number_format((float)((isset($kpi['total_downtime']) ? $kpi['total_downtime'] : 0)), 1) ?><span style="font-size:12px;">h</span></div>
   </div>
   <div class="kpi" style="animation-delay:.16s;">
     <div class="kpi-glow" style="background:var(--blue);"></div>
     <span class="kpi-tag">Avg MTTR</span>
-    <div class="kpi-num"><?= number_format((isset($kpi['avg_mttr']) ? $kpi['avg_mttr'] : 0), 1) ?><span style="font-size:12px;">h</span></div>
+    <div class="kpi-num"><?= number_format((float)((isset($kpi['avg_mttr']) ? $kpi['avg_mttr'] : 0)), 1) ?><span style="font-size:12px;">h</span></div>
   </div>
 </div>
 <?php endif; ?>
@@ -95,10 +95,10 @@ $status_color = equip_status_map($eq->status)['badge'];   // W0.2
       <td><span class="badge <?= $tc ?>"><?= $wo->type ?></span></td>
       <td><span class="badge <?= $pc ?>"><?= $wo->priority ?></span></td>
       <td><span class="badge <?= $sc ?>"><?= $wo->status ?></span></td>
-      <td style="font-size:12px;"><?= htmlspecialchars((isset($wo->assigned_name) ? $wo->assigned_name : '—')) ?></td>
+      <td style="font-size:12px;"><?= htmlspecialchars((string)((isset($wo->assigned_name) ? $wo->assigned_name : '—'))) ?></td>
       <td class="mono" style="font-size:11px;"><?= $wo->start_datetime ? date('d/m/Y', strtotime($wo->start_datetime)) : '—' ?></td>
       <td class="mono" style="font-size:11px;"><?= $wo->end_datetime ? date('d/m/Y', strtotime($wo->end_datetime)) : '—' ?></td>
-      <td class="mono" style="font-size:11px;"><?= $wo->downtime_hours ? number_format($wo->downtime_hours,1).'h' : '—' ?></td>
+      <td class="mono" style="font-size:11px;"><?= $wo->downtime_hours ? number_format((float)($wo->downtime_hours),1).'h' : '—' ?></td>
     </tr>
     <?php endforeach; ?>
     </tbody>
@@ -117,11 +117,11 @@ $status_color = equip_status_map($eq->status)['badge'];   // W0.2
     <tbody>
     <?php foreach ($pm_history as $pm): ?>
     <tr>
-      <td><?= htmlspecialchars((isset($pm->schedule_name) ? $pm->schedule_name : '—')) ?></td>
+      <td><?= htmlspecialchars((string)((isset($pm->schedule_name) ? $pm->schedule_name : '—'))) ?></td>
       <td class="mono"><?= $pm->completed_date ? date('d/m/Y', strtotime($pm->completed_date)) : '—' ?></td>
-      <td class="mono"><?= $pm->completed_hours ? number_format($pm->completed_hours,1).'h' : '—' ?></td>
-      <td style="font-size:12px;"><?= htmlspecialchars((isset($pm->completed_by_name) ? $pm->completed_by_name : '—')) ?></td>
-      <td style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((isset($pm->notes) ? $pm->notes : '')) ?></td>
+      <td class="mono"><?= $pm->completed_hours ? number_format((float)($pm->completed_hours),1).'h' : '—' ?></td>
+      <td style="font-size:12px;"><?= htmlspecialchars((string)((isset($pm->completed_by_name) ? $pm->completed_by_name : '—'))) ?></td>
+      <td style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)((isset($pm->notes) ? $pm->notes : ''))) ?></td>
     </tr>
     <?php endforeach; ?>
     </tbody>

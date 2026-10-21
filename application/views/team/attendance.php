@@ -12,7 +12,7 @@
     <div><div class="ct">Attendance — <?= date('l, d F Y',strtotime($date)) ?></div><div class="cs"><?= isset($workers)?count($workers):0 ?> workers</div></div>
   </div>
   <?= form_open('team/attendance') ?>
-  <input type="hidden" name="date" value="<?= htmlspecialchars($date, ENT_QUOTES, 'UTF-8') ?>">
+  <input type="hidden" name="date" value="<?= htmlspecialchars((string)($date), ENT_QUOTES, 'UTF-8') ?>">
   <div style="overflow-x:auto;">
     <table class="tbl" style="margin-top:12px;">
       <thead>
@@ -36,8 +36,8 @@
               <?php endforeach; ?>
             </select>
           </td>
-          <td><input type="time" name="attendance[<?= (int)$w->id ?>][check_in]" class="form-control" style="width:110px;" value="<?= $att && !empty($att->check_in) ? htmlspecialchars(substr((string)$att->check_in, 0, 5), ENT_QUOTES, 'UTF-8') : '' ?>"></td>
-          <td><input type="time" name="attendance[<?= (int)$w->id ?>][check_out]" class="form-control" style="width:110px;" value="<?= $att && !empty($att->check_out) ? htmlspecialchars(substr((string)$att->check_out, 0, 5), ENT_QUOTES, 'UTF-8') : '' ?>"></td>
+          <td><input type="time" name="attendance[<?= (int)$w->id ?>][check_in]" class="form-control" style="width:110px;" value="<?= $att && !empty($att->check_in) ? htmlspecialchars((string)(substr((string)$att->check_in, 0, 5)), ENT_QUOTES, 'UTF-8') : '' ?>"></td>
+          <td><input type="time" name="attendance[<?= (int)$w->id ?>][check_out]" class="form-control" style="width:110px;" value="<?= $att && !empty($att->check_out) ? htmlspecialchars((string)(substr((string)$att->check_out, 0, 5)), ENT_QUOTES, 'UTF-8') : '' ?>"></td>
         </tr>
         <?php endforeach; else: ?>
         <tr><td colspan="6" style="text-align:center;padding:48px;color:var(--t3);">No workers found</td></tr>

@@ -57,7 +57,7 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
 <div class="insp-wrap">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
     <div>
-      <div class="insp-title"><?= htmlspecialchars($rname); ?>
+      <div class="insp-title"><?= htmlspecialchars((string)($rname)); ?>
         <?php if ($readonly): ?><span class="readonly-badge"><?= $L('Submitted','Soumis'); ?></span><?php endif; ?>
         <?php if ($editing): ?><span class="readonly-badge" style="background:#fdf2d9;color:#8a6100;"><?= $L('Editing','Modification'); ?></span><?php endif; ?>
       </div>
@@ -66,7 +66,7 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
             ? $L('Quarterly Permit Coding', 'Codification trimestrielle des permis')
             : ($lang === 'fr' ? (!empty($template->category_fr) ? $template->category_fr : 'Inspection d’équipement') : (!empty($template->category_en) ? $template->category_en : 'Equipment Inspection'));
       ?>
-      <div class="insp-sub"><?= htmlspecialchars($sub_text); ?></div>
+      <div class="insp-sub"><?= htmlspecialchars((string)($sub_text)); ?></div>
     </div>
     <div class="no-print" style="display:flex;gap:8px;">
       <?php if (!$readonly): ?>
@@ -88,52 +88,52 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
     <input type="hidden" name="template_id" value="<?= $template->id; ?>">
     <input type="hidden" name="language" value="<?= $lang; ?>">
     <input type="hidden" name="record_id" value="<?= $editing && $record ? $record->id : ''; ?>">
-    <input type="hidden" name="equipment_id" id="fld-equipment-id" value="<?= htmlspecialchars($field('equipment_id')); ?>">
+    <input type="hidden" name="equipment_id" id="fld-equipment-id" value="<?= htmlspecialchars((string)($field('equipment_id'))); ?>">
 
     <!-- ══ HEADER FIELDS ══ -->
     <div class="insp-header-grid">
       <div class="fld"><label class="form-label"><?= $L('Date','Date'); ?></label>
         <input type="date" name="inspection_date" class="form-control" <?= $readonly?'disabled':''; ?>
-          value="<?= htmlspecialchars($record ? $record->inspection_date : date('Y-m-d')); ?>"></div>
+          value="<?= htmlspecialchars((string)($record ? $record->inspection_date : date('Y-m-d'))); ?>"></div>
 
       <div class="fld"><label class="form-label"><?= $L('Fleet Number','Numéro de flotte'); ?></label>
         <input type="text" name="fleet_number" class="form-control" <?= $readonly?'disabled':''; ?>
-          value="<?= htmlspecialchars($field('fleet_number')); ?>"></div>
+          value="<?= htmlspecialchars((string)($field('fleet_number'))); ?>"></div>
 
       <div class="fld"><label class="form-label"><?= $L('Mobile Equipment Type','Type d’équipement mobile'); ?></label>
         <?php if (!$readonly && !empty($equipment_list)): ?>
         <select name="equipment_type" class="form-select" id="equip-type-select">
           <option value=""><?= $L('— Select —','— Sélectionner —'); ?></option>
           <?php foreach ($equipment_list as $eq): ?>
-            <option value="<?= htmlspecialchars($eq->registration_no); ?>"
-              data-id="<?= htmlspecialchars($eq->id); ?>"
-              data-smr="<?= htmlspecialchars($eq->current_hours); ?>"
-              data-km="<?= htmlspecialchars(isset($eq->current_km) ? $eq->current_km : ''); ?>"
-              data-sn="<?= htmlspecialchars($eq->serial_number); ?>"
-              data-model="<?= htmlspecialchars($eq->model); ?>"
-              data-fleet="<?= htmlspecialchars($eq->registration_no); ?>"
+            <option value="<?= htmlspecialchars((string)($eq->registration_no)); ?>"
+              data-id="<?= htmlspecialchars((string)($eq->id)); ?>"
+              data-smr="<?= htmlspecialchars((string)($eq->current_hours)); ?>"
+              data-km="<?= htmlspecialchars((string)(isset($eq->current_km) ? $eq->current_km : '')); ?>"
+              data-sn="<?= htmlspecialchars((string)($eq->serial_number)); ?>"
+              data-model="<?= htmlspecialchars((string)($eq->model)); ?>"
+              data-fleet="<?= htmlspecialchars((string)($eq->registration_no)); ?>"
               <?= ($field('equipment_type') === $eq->registration_no) ? 'selected' : ''; ?>>
-              <?= htmlspecialchars($eq->registration_no . ' — ' . $eq->brand . ' ' . $eq->model); ?>
+              <?= htmlspecialchars((string)($eq->registration_no . ' — ' . $eq->brand . ' ' . $eq->model)); ?>
             </option>
           <?php endforeach; ?>
         </select>
         <?php else: ?>
         <input type="text" name="equipment_type" class="form-control" <?= $readonly?'disabled':''; ?>
-          value="<?= htmlspecialchars($field('equipment_type')); ?>">
+          value="<?= htmlspecialchars((string)($field('equipment_type'))); ?>">
         <?php endif; ?>
       </div>
 
-      <div class="fld"><label class="form-label"><?= htmlspecialchars($L($template->meter_label_en, $template->meter_label_fr)); ?></label>
+      <div class="fld"><label class="form-label"><?= htmlspecialchars((string)($L($template->meter_label_en, $template->meter_label_fr))); ?></label>
         <input type="text" name="smr" id="fld-smr" class="form-control" <?= $readonly?'disabled':''; ?>
-          value="<?= htmlspecialchars($field('smr')); ?>"></div>
+          value="<?= htmlspecialchars((string)($field('smr'))); ?>"></div>
 
       <div class="fld"><label class="form-label">S/N</label>
         <input type="text" name="serial_number" id="fld-sn" class="form-control" <?= $readonly?'disabled':''; ?>
-          value="<?= htmlspecialchars($field('serial_number')); ?>"></div>
+          value="<?= htmlspecialchars((string)($field('serial_number'))); ?>"></div>
 
       <div class="fld"><label class="form-label"><?= $L('Model','Modèle'); ?></label>
         <input type="text" name="model" id="fld-model" class="form-control" <?= $readonly?'disabled':''; ?>
-          value="<?= htmlspecialchars($field('model')); ?>"></div>
+          value="<?= htmlspecialchars((string)($field('model'))); ?>"></div>
     </div>
 
     <!-- ══ CHECKLIST ══ -->
@@ -145,7 +145,7 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
           <th style="min-width:220px;text-align:left;"><?= $L('Check Requirement','Exigence de contrôle'); ?></th>
           <?php if ($is_matrix): ?>
             <?php foreach ($cols as $c): ?>
-              <th style="width:56px;"><?= htmlspecialchars($lang==='fr' ? $c['label_fr'] : $c['label_en']); ?></th>
+              <th style="width:56px;"><?= htmlspecialchars((string)($lang==='fr' ? $c['label_fr'] : $c['label_en'])); ?></th>
             <?php endforeach; ?>
             <th style="min-width:130px;"><?= $L('Comment','Commentaire'); ?></th>
           <?php else: ?>
@@ -159,7 +159,7 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
           if ($it->row_type === 'section'): ?>
           <tr class="insp-section-row">
             <td colspan="<?= $is_matrix ? (4 + count($cols)) : 5; ?>">
-              <?= htmlspecialchars($lang==='fr' ? $it->text_fr : $it->text_en); ?>
+              <?= htmlspecialchars((string)($lang==='fr' ? $it->text_fr : $it->text_en)); ?>
             </td>
           </tr>
         <?php else:
@@ -168,8 +168,8 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
         ?>
           <tr>
             <td class="insp-item-no"><?= (int)$it->item_no; ?></td>
-            <td class="insp-cat"><?= htmlspecialchars($lang==='fr' ? $it->category_fr : $it->category_en); ?></td>
-            <td class="insp-req"><?= htmlspecialchars($lang==='fr' ? $it->text_fr : $it->text_en); ?></td>
+            <td class="insp-cat"><?= htmlspecialchars((string)($lang==='fr' ? $it->category_fr : $it->category_en)); ?></td>
+            <td class="insp-req"><?= htmlspecialchars((string)($lang==='fr' ? $it->text_fr : $it->text_en)); ?></td>
 
             <?php if ($is_matrix): ?>
               <?php foreach ($cols as $c):
@@ -194,9 +194,9 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
               <?php endforeach; ?>
               <td class="insp-comment">
                 <?php if ($readonly): ?>
-                  <?= htmlspecialchars($existing['comment']); ?>
+                  <?= htmlspecialchars((string)($existing['comment'])); ?>
                 <?php else: ?>
-                  <input type="text" class="cell-input" name="item_<?= $it->id; ?>_comment" value="<?= htmlspecialchars($existing['comment']); ?>">
+                  <input type="text" class="cell-input" name="item_<?= $it->id; ?>_comment" value="<?= htmlspecialchars((string)($existing['comment'])); ?>">
                 <?php endif; ?>
               </td>
 
@@ -211,7 +211,7 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
                     elseif ($result === 'No') $res_disp = $L('No', 'Non');
                     elseif ($result === 'NA') $res_disp = $L('N/A', 'S/O');
                   ?>
-                  <?= $result ? htmlspecialchars($res_disp) : '—'; ?>
+                  <?= $result ? htmlspecialchars((string)($res_disp)) : '—'; ?>
                 <?php else: ?>
                   <div class="tri">
                     <label class="<?= $result==='Yes'?'sel-ok':''; ?>" onclick="pickTri(this,'Yes')"><?= $L('Yes','Oui'); ?>
@@ -225,9 +225,9 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
               </td>
               <td class="insp-comment">
                 <?php if ($readonly): ?>
-                  <?= htmlspecialchars($existing['comment']); ?>
+                  <?= htmlspecialchars((string)($existing['comment'])); ?>
                 <?php else: ?>
-                  <input type="text" class="cell-input" name="item_<?= $it->id; ?>_comment" value="<?= htmlspecialchars($existing['comment']); ?>">
+                  <input type="text" class="cell-input" name="item_<?= $it->id; ?>_comment" value="<?= htmlspecialchars((string)($existing['comment'])); ?>">
                 <?php endif; ?>
               </td>
             <?php endif; ?>
@@ -241,10 +241,10 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
       <label class="form-label"><?= $L('General Comments (missing items, other issues not listed above)','Commentaires généraux (éléments manquants, autres problèmes non listés ci-dessus)'); ?></label>
       <?php if ($readonly): ?>
         <div style="white-space:pre-wrap;font-size:12.5px;color:var(--t1);background:var(--surface);border:1px solid var(--sep);border-radius:8px;padding:10px;">
-          <?= htmlspecialchars($record->general_comments ?: '—'); ?>
+          <?= htmlspecialchars((string)($record->general_comments ?: '—')); ?>
         </div>
       <?php else: ?>
-        <textarea name="general_comments" class="form-control" placeholder="<?= $L('Any missing items or issues not covered above…','Tout élément manquant ou problème non couvert ci-dessus…'); ?>"><?= htmlspecialchars($field('general_comments')); ?></textarea>
+        <textarea name="general_comments" class="form-control" placeholder="<?= $L('Any missing items or issues not covered above…','Tout élément manquant ou problème non couvert ci-dessus…'); ?>"><?= htmlspecialchars((string)($field('general_comments'))); ?></textarea>
       <?php endif; ?>
     </div>
 
@@ -266,11 +266,11 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
         $sig_val  = $record && isset($record->{$k.'_signature'}) ? $record->{$k.'_signature'} : '';
       ?>
       <div class="sign-block">
-        <h4><?= htmlspecialchars($L($r['label_en'], $r['label_fr'])); ?></h4>
+        <h4><?= htmlspecialchars((string)($L($r['label_en'], $r['label_fr']))); ?></h4>
         <div style="display:grid;grid-template-columns:1fr 120px;gap:10px;margin-bottom:8px;">
           <div>
             <label class="form-label"><?= $is_inspector_name ? $L('Inspector Name', "Nom de l'inspecteur") : $L('Name','Nom'); ?></label>
-            <input type="text" name="<?= $k; ?>_name" class="form-control" <?= $readonly?'disabled':''; ?> <?= $is_inspector_name ? 'readonly title="'.htmlspecialchars($L('Taken from your signed-in account','Nom repris de votre compte connecté'), ENT_QUOTES, 'UTF-8').'"' : ''; ?> value="<?= htmlspecialchars($name_val); ?>">
+            <input type="text" name="<?= $k; ?>_name" class="form-control" <?= $readonly?'disabled':''; ?> <?= $is_inspector_name ? 'readonly title="'.htmlspecialchars((string)($L('Taken from your signed-in account','Nom repris de votre compte connecté')), ENT_QUOTES, 'UTF-8').'"' : ''; ?> value="<?= htmlspecialchars((string)($name_val)); ?>">
             <?php if ($is_inspector_name && !$readonly && !$editing): ?>
               <div style="font-size:10.5px;color:var(--t3);margin-top:3px;">
                 <?= $L('Taken from your signed-in account.', 'Renseigné depuis votre compte connecté.'); ?>
@@ -279,13 +279,13 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
           </div>
           <div>
             <label class="form-label"><?= $L('Date','Date'); ?></label>
-            <input type="date" name="<?= $k; ?>_date" class="form-control" <?= $readonly?'disabled':''; ?> value="<?= htmlspecialchars($date_val); ?>">
+            <input type="date" name="<?= $k; ?>_date" class="form-control" <?= $readonly?'disabled':''; ?> value="<?= htmlspecialchars((string)($date_val)); ?>">
           </div>
         </div>
         <?php if ($readonly): ?>
           <div class="sig-wrap" style="height:100px;">
             <?php if ($sig_val): ?>
-              <img class="sig-existing" src="<?= base_url(htmlspecialchars($sig_val)); ?>">
+              <img class="sig-existing" src="<?= base_url(htmlspecialchars((string)($sig_val))); ?>">
             <?php endif; ?>
           </div>
         <?php else: ?>
@@ -295,7 +295,7 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
               <?= $L('Signature already on file — draw to replace it, or leave blank to keep it.','Signature déjà enregistrée — dessinez pour la remplacer, ou laissez vide pour la conserver.'); ?>
             </div>
             <div class="sig-wrap" style="height:60px;margin-bottom:6px;opacity:0.7;">
-              <img class="sig-existing" src="<?= base_url(htmlspecialchars($sig_val)); ?>">
+              <img class="sig-existing" src="<?= base_url(htmlspecialchars((string)($sig_val))); ?>">
             </div>
           <?php endif; ?>
           <div class="sig-wrap" id="wrap-<?= $k; ?>">

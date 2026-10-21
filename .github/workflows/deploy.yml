@@ -1,0 +1,86 @@
+name: CD — Automated Deployment (XAMPP Self-Hosted, SSH VPS, or cPanel FTPS)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Pre-Deploy Validation Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - run: find application system tests scripts index.php -name '*.php' -print0 | xargs -0 -n1 -P4 php -l >/dev/null
+      - run: php tests/run.php
+
+  # Target 1: Remote Linux VPS / Cloud / cPanel with SSH enabled
+  # Activated when repository variable `DEPLOY_SSH` == 'true' (with SSH_* secrets configured).
+  deploy-ssh:
+    name: Deploy via SSH & Auto-Migrate
+    needs: validate
+    if: ${{ vars.DEPLOY_SSH == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull code, run database migrations & verify health over SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" \
+            "cd '$DEPLOY_PATH' && git fetch origin main && git reset --hard origin/main && php scripts/migrate.php && php scripts/migrate.php --verify && php tests/run.php"
+
+  # Target 2: Shared Hosting / cPanel without SSH (FTPS sync)
+  # Activated when repository variable `DEPLOY_FTP` == 'true' (with FTP_* secrets configured).
+  deploy-ftp:
+    name: Deploy via cPanel FTPS
+    needs: validate
+    if: ${{ vars.DEPLOY_FTP == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ secrets.FTP_SERVER_DIR || './' }}
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.env*
+            uploads/**
+            application/logs/**
+            application/cache/**
+            tests/**
+
+  # Target 3: Local / On-Premises Windows XAMPP Server (GitHub Self-Hosted Runner)
+  # Activated automatically when repository variable `ENABLE_XAMPP_RUNNER` == 'true'.
+  deploy-xampp:
+    name: Deploy to On-Premises XAMPP Server
+    needs: validate
+    if: ${{ vars.ENABLE_XAMPP_RUNNER == 'true' }}
+    runs-on: self-hosted
+    steps:
+      - name: Sync repository & run migrations in XAMPP htdocs
+        shell: powershell
+        env:
+          XAMPP_APP_DIR: ${{ vars.XAMPP_APP_DIR || 'C:\xampp\htdocs\wmsv2' }}
+          XAMPP_DIR: ${{ vars.XAMPP_DIR || 'C:\xampp' }}
+        run: |
+          & "$env:XAMPP_APP_DIR\scripts\deploy-xampp.ps1" -Branch main -XamppDir "$env:XAMPP_DIR"

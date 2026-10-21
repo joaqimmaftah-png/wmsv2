@@ -224,8 +224,8 @@ class Team_model extends CI_Model {
 
         $out = array();
         foreach ($map as $type => $days) {
-            if (!is_string($type) || trim($type) === '') continue;
-            $out[trim($type)] = max(0, (float)$days);
+            if (!is_string($type) || trim((string)($type)) === '') continue;
+            $out[trim((string)($type))] = max(0, (float)$days);
         }
         return $out;
     }

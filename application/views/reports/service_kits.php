@@ -1,6 +1,6 @@
 <?php
 $types = array_keys($grouped);
-$activeType = isset($_GET['type']) ? strtoupper($_GET['type']) : ($types[0] ?? '');
+$activeType = isset($_GET['type']) ? strtoupper((string)($_GET['type'])) : ($types[0] ?? '');
 if (!in_array($activeType, $types) && !empty($types)) $activeType = $types[0];
 ?>
 
@@ -60,7 +60,7 @@ if (!in_array($activeType, $types) && !empty($types)) $activeType = $types[0];
             <?= $type===$activeType
               ? 'background:var(--blue);color:#fff;'
               : 'background:var(--g2);color:var(--t2);border:1px solid var(--g3);' ?>">
-    <?= htmlspecialchars($type) ?>s
+    <?= htmlspecialchars((string)($type)) ?>s
     <span style="margin-left:5px;font-size:10px;opacity:.75;"><?= count($typeKits) ?></span>
   </a>
   <?php endforeach; ?>
@@ -78,19 +78,19 @@ if (!in_array($activeType, $types) && !empty($types)) $activeType = $types[0];
         <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--blue);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8l4 1 3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
       </div>
       <div>
-        <div style="font-size:15px;font-weight:800;color:var(--blue);"><?= htmlspecialchars($kit['machine_id']) ?></div>
-        <div style="font-size:11.5px;color:var(--t2);"><?= htmlspecialchars($kit['model']) ?> · <?= htmlspecialchars($kit['location']) ?></div>
+        <div style="font-size:15px;font-weight:800;color:var(--blue);"><?= htmlspecialchars((string)($kit['machine_id'])) ?></div>
+        <div style="font-size:11.5px;color:var(--t2);"><?= htmlspecialchars((string)($kit['model'])) ?> · <?= htmlspecialchars((string)($kit['location'])) ?></div>
       </div>
     </div>
     <div class="flex ai-c gap-16" style="flex-wrap:wrap;">
       <div style="text-align:center;">
         <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;">Hours</div>
-        <div class="mono" style="font-size:16px;font-weight:700;"><?= number_format($kit['hours'],0) ?></div>
+        <div class="mono" style="font-size:16px;font-weight:700;"><?= number_format((float)($kit['hours']),0) ?></div>
       </div>
       <?php if($kit['next_pm']): ?>
       <div style="text-align:center;">
         <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;">Next PM</div>
-        <div style="font-size:12px;font-weight:600;color:var(--blue);"><?= htmlspecialchars($kit['next_pm']) ?></div>
+        <div style="font-size:12px;font-weight:600;color:var(--blue);"><?= htmlspecialchars((string)($kit['next_pm'])) ?></div>
         <?php if($kit['next_pm_date']): ?>
         <?php
           $du = $kit['days_until'];
@@ -110,7 +110,7 @@ if (!in_array($activeType, $types) && !empty($types)) $activeType = $types[0];
         <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">PM Schedules</div>
         <?php foreach($kit['schedules'] as $s): ?>
         <span style="display:inline-block;margin:1px 2px;padding:2px 7px;border-radius:4px;font-size:9.5px;background:var(--blue-d);color:var(--blue);font-weight:600;">
-          <?= htmlspecialchars($s->schedule_name) ?> (<?= $s->interval_value ?><?= $s->interval_type[0] ?>)
+          <?= htmlspecialchars((string)($s->schedule_name)) ?> (<?= $s->interval_value ?><?= $s->interval_type[0] ?>)
         </span>
         <?php endforeach; ?>
       </div>
@@ -148,13 +148,13 @@ if (!in_array($activeType, $types) && !empty($types)) $activeType = $types[0];
         ?>
         <tr style="<?= $hot?'background:rgba(180,83,9,0.04)':'' ?>">
           <td style="font-weight:<?= $hot?'600':'400' ?>;">
-            <?= htmlspecialchars($p->part_name) ?>
+            <?= htmlspecialchars((string)($p->part_name)) ?>
             <?php if($hot): ?><span style="font-size:9px;color:var(--amber);margin-left:4px;">★ frequent</span><?php endif; ?>
           </td>
-          <td class="mono" style="text-align:center;color:var(--t3);font-size:9.5px;"><?= htmlspecialchars($p->part_number??'—') ?></td>
+          <td class="mono" style="text-align:center;color:var(--t3);font-size:9.5px;"><?= htmlspecialchars((string)($p->part_number??'—')) ?></td>
           <td style="text-align:center;font-weight:600;color:<?= $p->times_used>=3?'var(--amber)':'var(--t2)' ?>;"><?= (int)$p->times_used ?>×</td>
           <td class="mono" style="text-align:center;"><?= number_format((float)$p->total_qty,1) ?></td>
-          <td style="text-align:center;color:var(--t3);"><?= htmlspecialchars($p->unit) ?></td>
+          <td style="text-align:center;color:var(--t3);"><?= htmlspecialchars((string)($p->unit)) ?></td>
           <td class="mono" style="text-align:center;color:var(--t3);">
             <?= $p->avg_cost > 0 ? '$'.number_format((float)$p->avg_cost,2) : '—' ?>
           </td>
@@ -194,12 +194,12 @@ if (!in_array($activeType, $types) && !empty($types)) $activeType = $types[0];
         <tbody>
         <?php foreach($kit['lubes'] as $l): ?>
         <tr>
-          <td style="font-weight:500;"><?= htmlspecialchars($l->name) ?></td>
-          <td style="font-size:9.5px;color:var(--t3);"><?= htmlspecialchars($l->category) ?></td>
-          <td class="mono" style="text-align:center;color:var(--t3);"><?= htmlspecialchars($l->grade??'—') ?></td>
+          <td style="font-weight:500;"><?= htmlspecialchars((string)($l->name)) ?></td>
+          <td style="font-size:9.5px;color:var(--t3);"><?= htmlspecialchars((string)($l->category)) ?></td>
+          <td class="mono" style="text-align:center;color:var(--t3);"><?= htmlspecialchars((string)($l->grade??'—')) ?></td>
           <td style="text-align:center;color:var(--blue);font-weight:600;"><?= (int)$l->times ?>×</td>
           <td class="mono" style="text-align:center;"><?= number_format((float)$l->total_used,1) ?></td>
-          <td style="text-align:center;color:var(--t3);"><?= htmlspecialchars($l->unit) ?></td>
+          <td style="text-align:center;color:var(--t3);"><?= htmlspecialchars((string)($l->unit)) ?></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
@@ -221,9 +221,9 @@ if (!in_array($activeType, $types) && !empty($types)) $activeType = $types[0];
         <tbody>
         <?php foreach($kit['oils'] as $o): ?>
         <tr>
-          <td style="color:var(--t2);"><?= htmlspecialchars($o->system_location??'—') ?></td>
-          <td style="font-weight:500;"><?= htmlspecialchars($o->oil_type??'—') ?></td>
-          <td class="mono" style="text-align:center;color:var(--t3);"><?= htmlspecialchars($o->grade??'—') ?></td>
+          <td style="color:var(--t2);"><?= htmlspecialchars((string)($o->system_location??'—')) ?></td>
+          <td style="font-weight:500;"><?= htmlspecialchars((string)($o->oil_type??'—')) ?></td>
+          <td class="mono" style="text-align:center;color:var(--t3);"><?= htmlspecialchars((string)($o->grade??'—')) ?></td>
           <td style="text-align:center;color:var(--blue);font-weight:600;"><?= (int)$o->times ?>×</td>
           <td class="mono" style="text-align:center;"><?= number_format((float)($o->total_qty??0),1) ?></td>
         </tr>

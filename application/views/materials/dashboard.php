@@ -73,12 +73,12 @@ $kpi = array(
   <div class="kpi" style="animation-delay:.20s">
     <div class="kpi-glow" style="background:var(--cyan)"></div>
     <span class="kpi-tag">Total Received</span>
-    <div class="kpi-num"><?= number_format($kpi['total_received']) ?></div>
+    <div class="kpi-num"><?= number_format((float)($kpi['total_received'])) ?></div>
   </div>
   <div class="kpi" style="animation-delay:.24s">
     <div class="kpi-glow" style="background:var(--purple)"></div>
     <span class="kpi-tag">Total Issued</span>
-    <div class="kpi-num"><?= number_format($kpi['total_issued']) ?></div>
+    <div class="kpi-num"><?= number_format((float)($kpi['total_issued'])) ?></div>
   </div>
   <div class="kpi" style="animation-delay:.28s" style="grid-column:span 2;">
     <div class="kpi-glow" style="background:var(--green)"></div>
@@ -99,8 +99,8 @@ $kpi = array(
       ?>
       <div class="row-list-item">
         <div style="flex:1;">
-          <div style="font-size:12.5px;font-weight:600;color:var(--t1);"><?= htmlspecialchars($cat) ?></div>
-          <div style="font-size:10.5px;color:var(--t3);margin-top:2px;"><?= $d['count'] ?> items · <?= number_format($d['stock']) ?> in stock · <?= number_format($d['issued']) ?> issued</div>
+          <div style="font-size:12.5px;font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($cat)) ?></div>
+          <div style="font-size:10.5px;color:var(--t3);margin-top:2px;"><?= $d['count'] ?> items · <?= number_format((float)($d['stock'])) ?> in stock · <?= number_format((float)($d['issued'])) ?> issued</div>
           <div class="pbar" style="margin-top:5px;"><div class="pbar-fill" style="width:<?= $pct ?>%;background:var(--blue);"></div></div>
         </div>
         <div style="font-size:11px;color:var(--blue);font-weight:600;min-width:30px;text-align:right;"><?= $pct ?>%</div>
@@ -128,10 +128,10 @@ $kpi = array(
       <div class="row-list-item">
         <div class="led <?= $final <= 0 ? 'led-crit' : 'led-warn' ?>"></div>
         <div style="flex:1;">
-          <div style="font-size:12px;font-weight:600;color:var(--t1);"><?= htmlspecialchars($m->item_code) ?></div>
-          <div style="font-size:11px;color:var(--t3);"><?= htmlspecialchars($m->description) ?></div>
+          <div style="font-size:12px;font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($m->item_code)) ?></div>
+          <div style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)($m->description)) ?></div>
         </div>
-        <div style="font-size:13px;font-weight:700;color:<?= $color ?>;"><?= $final ?> <span style="font-size:9px;color:var(--t4);"><?= htmlspecialchars($m->unit) ?></span></div>
+        <div style="font-size:13px;font-weight:700;color:<?= $color ?>;"><?= $final ?> <span style="font-size:9px;color:var(--t4);"><?= htmlspecialchars((string)($m->unit)) ?></span></div>
         <?php if ($role_id <= 2): ?>
         <a href="<?= base_url('materials/receive/'.$m->id) ?>" class="btn btn-success btn-xs">Receive</a>
         <?php endif; ?>
@@ -157,12 +157,12 @@ $kpi = array(
         <?php foreach ($recent as $t): ?>
         <tr>
           <td class="mono" style="font-size:11px;color:var(--t3);"><?= date('d M Y H:i', strtotime($t->created_at)) ?></td>
-          <td style="font-weight:600;color:var(--blue);"><?= htmlspecialchars($t->item_code??'') ?></td>
-          <td style="font-size:12px;"><?= htmlspecialchars($t->description??'') ?></td>
+          <td style="font-weight:600;color:var(--blue);"><?= htmlspecialchars((string)($t->item_code??'')) ?></td>
+          <td style="font-size:12px;"><?= htmlspecialchars((string)($t->description??'')) ?></td>
           <td><span class="badge <?= $t->type==='RECEIVE'?'b-success':'b-warning' ?>"><?= $t->type ?></span></td>
-          <td class="mono" style="font-weight:600;"><?= ($t->type==='RECEIVE'?'+':'-').abs($t->qty) ?> <span style="color:var(--t4);font-size:9px;"><?= htmlspecialchars($t->unit??'') ?></span></td>
+          <td class="mono" style="font-weight:600;"><?= ($t->type==='RECEIVE'?'+':'-').abs($t->qty) ?> <span style="color:var(--t4);font-size:9px;"><?= htmlspecialchars((string)($t->unit??'')) ?></span></td>
           <td class="mono" style="font-size:12px;"><?= $t->stock_after ?? '' ?></td>
-          <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars($t->user_name??'') ?></td>
+          <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars((string)($t->user_name??'')) ?></td>
         </tr>
         <?php endforeach; ?>
       </tbody>

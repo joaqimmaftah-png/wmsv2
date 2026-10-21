@@ -8,11 +8,11 @@
       <option value="ISSUE"   <?= (!empty($f['type'])&&$f['type']==='ISSUE')  ?'selected':'' ?>>Issue (−)</option>
     </select>
     <input type="text" name="item_code" class="form-control" style="width:140px;"
-      placeholder="Item Code…" value="<?= htmlspecialchars($f['item_code']??'') ?>">
+      placeholder="Item Code…" value="<?= htmlspecialchars((string)($f['item_code']??'')) ?>">
     <input type="date" name="date_from" class="form-control" style="width:150px;"
-      value="<?= htmlspecialchars($f['date_from']??'') ?>">
+      value="<?= htmlspecialchars((string)($f['date_from']??'')) ?>">
     <input type="date" name="date_to" class="form-control" style="width:150px;"
-      value="<?= htmlspecialchars($f['date_to']??'') ?>">
+      value="<?= htmlspecialchars((string)($f['date_to']??'')) ?>">
     <button type="submit" class="btn btn-primary btn-sm btn-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Filter
     </button>
@@ -63,15 +63,15 @@
             </span>
           </td>
           <td style="font-weight:600;color:var(--blue);font-family:inherit,monospace;font-size:12px;">
-            <?= htmlspecialchars($t->item_code??'') ?>
+            <?= htmlspecialchars((string)($t->item_code??'')) ?>
           </td>
           <td style="font-size:12.5px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            <?= htmlspecialchars($t->description??'') ?>
+            <?= htmlspecialchars((string)($t->description??'')) ?>
           </td>
-          <td><span class="badge b-primary" style="font-size:9.5px;"><?= htmlspecialchars($t->category??'') ?></span></td>
+          <td><span class="badge b-primary" style="font-size:9.5px;"><?= htmlspecialchars((string)($t->category??'')) ?></span></td>
           <td style="text-align:right;font-family:inherit,monospace;font-weight:700;color:<?= $t->type==='RECEIVE'?'var(--green)':'var(--amber)' ?>;">
             <?= $t->type==='RECEIVE'?'+':'-' ?><?= abs($t->qty) ?>
-            <span style="font-size:9px;color:var(--t4);"><?= htmlspecialchars($t->unit??'') ?></span>
+            <span style="font-size:9px;color:var(--t4);"><?= htmlspecialchars((string)($t->unit??'')) ?></span>
           </td>
           <td style="text-align:right;font-family:inherit,monospace;font-size:12px;color:var(--t3);">
             <?= isset($t->stock_before) ? $t->stock_before : '—' ?>
@@ -80,9 +80,9 @@
             <?= isset($t->stock_after) ? $t->stock_after : '—' ?>
           </td>
           <td style="font-size:11.5px;color:var(--t3);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            <?= htmlspecialchars($t->notes??'') ?>
+            <?= htmlspecialchars((string)($t->notes??'')) ?>
           </td>
-          <td style="font-size:11.5px;color:var(--t3);"><?= htmlspecialchars($t->user_name??'') ?></td>
+          <td style="font-size:11.5px;color:var(--t3);"><?= htmlspecialchars((string)($t->user_name??'')) ?></td>
         </tr>
         <?php endforeach; ?>
       </tbody>

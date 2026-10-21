@@ -11,6 +11,7 @@
  * rather than posting into a column
  * that does not exist.
  */
+$pm      = isset($pm) ? $pm : null;
 $editing = !empty($pm);
 
 /**
@@ -52,7 +53,7 @@ $pm_num = function ($field) use ($pm_val) {
               <option value="">Select Equipment...</option>
               <?php foreach ($equipment as $eq): ?>
               <option value="<?= (int)$eq->id ?>"<?= ($editing && (int)$pm->equipment_id === (int)$eq->id) ? ' selected' : '' ?>>
-                <?= htmlspecialchars($eq->registration_no, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($eq->brand . ' ' . $eq->model, ENT_QUOTES, 'UTF-8') ?>
+                <?= htmlspecialchars((string)($eq->registration_no), ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars((string)($eq->brand . ' ' . $eq->model), ENT_QUOTES, 'UTF-8') ?>
               </option>
               <?php endforeach; ?>
             </select>

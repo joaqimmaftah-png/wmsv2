@@ -48,7 +48,7 @@ class Inspection_model extends CI_Model {
 
     public function get_template($id_or_code) {
         if (is_string($id_or_code)) {
-            $normalized = strtolower(trim($id_or_code));
+            $normalized = strtolower((string)(trim((string)($id_or_code))));
             if (isset(self::CODE_ALIASES[$normalized])) {
                 $id_or_code = self::CODE_ALIASES[$normalized];
             }
@@ -75,7 +75,7 @@ class Inspection_model extends CI_Model {
         }
 
         if (empty($t->category_en)) {
-            $code = strtolower($t->code);
+            $code = strtolower((string)($t->code));
             if (isset(self::CATEGORY_MAP[$code])) {
                 $t->category_en = self::CATEGORY_MAP[$code][0];
                 $t->category_fr = self::CATEGORY_MAP[$code][1];
@@ -247,7 +247,7 @@ class Inspection_model extends CI_Model {
             // code is stored; an empty value means "derive it from the
             // category", which is how every row behaved before the column.
             if ($this->_items_have_priority()) {
-                $priority = isset($row['priority']) ? strtoupper(trim((string)$row['priority'])) : '';
+                $priority = isset($row['priority']) ? strtoupper((string)(trim((string)$row['priority']))) : '';
                 $data['priority'] = in_array($priority, array('P1', 'P2', 'P3'), true) ? $priority : NULL;
                 if ($row_type === 'section') $data['priority'] = NULL;
             }
@@ -523,7 +523,7 @@ class Inspection_model extends CI_Model {
         // fixed code picked in the template editor, so renaming the category
         // (or writing it in another language) no longer changes what a
         // failure is escalated to.
-        $explicit = isset($item->priority) ? strtoupper(trim((string)$item->priority)) : '';
+        $explicit = isset($item->priority) ? strtoupper((string)(trim((string)$item->priority))) : '';
         if ($explicit === 'P1') {
             return array('failed' => $failed, 'priority' => 'P1', 'label' => 'No-Go', 'machine_status' => 'BREAKDOWN');
         }
@@ -538,7 +538,7 @@ class Inspection_model extends CI_Model {
         // fall back to the category wording, exactly as before. The substring
         // aliases below are what the seeded checklists use ("No-Go",
         // "Go & Fix", "Arrêt", "Non conforme"…).
-        $category = strtolower(trim((string)(isset($item->category_en) ? $item->category_en : $item->category_fr)));
+        $category = strtolower((string)(trim((string)(isset($item->category_en) ? $item->category_en : $item->category_fr))));
         $no_go    = (strpos($category, 'no-go') !== false || strpos($category, 'arrêt') !== false
                      || strpos($category, 'interdit') !== false || strpos($category, 'non conforme') !== false);
         $go_fix   = (strpos($category, 'go & fix') !== false || strpos($category, 'corriger') !== false

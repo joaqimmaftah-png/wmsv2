@@ -64,7 +64,7 @@ foreach($forecast as $f) { $byType[$f['type']][] = $f; }
       $col   = $opPct>=90?'var(--green)':($opPct>=70?'var(--amber)':'var(--red)');
     ?>
     <div style="flex:1;min-width:120px;padding:12px 16px;border-right:1px solid var(--g2);<?=$i===count($type_summary)-1?'border-right:none':''?>">
-      <div style="font-size:11px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--t3);margin-bottom:4px;"><?=htmlspecialchars($ts['type'])?>s</div>
+      <div style="font-size:11px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--t3);margin-bottom:4px;"><?=htmlspecialchars((string)($ts['type']))?>s</div>
       <div style="font-size:22px;font-weight:800;color:<?=$col?>;line-height:1;margin-bottom:4px;"><?=$opPct?>%</div>
       <div style="height:4px;background:var(--g2);border-radius:3px;margin-bottom:6px;overflow:hidden;">
         <div style="height:100%;width:<?=$opPct?>%;background:<?=$col?>;border-radius:3px;"></div>
@@ -89,7 +89,7 @@ foreach($forecast as $f) { $byType[$f['type']][] = $f; }
 <?php foreach($byType as $type => $items): ?>
 <div class="card mb-3" style="overflow-x:auto;">
   <div class="ch" style="padding:12px 18px 10px;">
-    <div class="ct" style="font-size:12px;"><?=htmlspecialchars($type)?>s — Upcoming PM</div>
+    <div class="ct" style="font-size:12px;"><?=htmlspecialchars((string)($type))?>s — Upcoming PM</div>
     <div class="cs"><?=count($items)?> schedule<?=count($items)>1?'s':''?></div>
   </div>
   <table class="tbl">
@@ -115,8 +115,8 @@ foreach($forecast as $f) { $byType[$f['type']][] = $f; }
       $rowBg       = $overd ? 'background:rgba(192,57,43,0.04);' : ($urgent ? 'background:rgba(180,83,9,0.04);' : '');
     ?>
     <tr style="<?=$rowBg?>">
-      <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars($f['machine_id'])?></td>
-      <td style="color:var(--t2);"><?=htmlspecialchars($f['schedule_name'])?></td>
+      <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars((string)($f['machine_id']))?></td>
+      <td style="color:var(--t2);"><?=htmlspecialchars((string)($f['schedule_name']))?></td>
       <td style="color:var(--t3);font-size:10.5px;">Every <?=$f['interval_value']?> <?=$f['interval_type']?></td>
       <td style="text-align:center;color:var(--t3);font-size:10.5px;">
         <?=$f['last_done'] ? date('d/m/Y',strtotime($f['last_done'])) : '—'?>
@@ -128,10 +128,10 @@ foreach($forecast as $f) { $byType[$f['type']][] = $f; }
         <?=$overd ? abs($du).' d overdue' : $du.' days'?>
       </td>
       <td class="mono" style="text-align:center;color:var(--t3);">
-        <?=$f['next_due_hours'] ? number_format($f['next_due_hours'],0).' h' : '—'?>
+        <?=$f['next_due_hours'] ? number_format((float)($f['next_due_hours']),0).' h' : '—'?>
       </td>
       <td style="text-align:center;font-weight:600;color:<?=$f['hrs_remaining']!==null&&$f['hrs_remaining']<100?'var(--red)':'var(--t2)'?>;">
-        <?=$f['hrs_remaining']!==null ? number_format($f['hrs_remaining'],0).' h' : '—'?>
+        <?=$f['hrs_remaining']!==null ? number_format((float)($f['hrs_remaining']),0).' h' : '—'?>
       </td>
       <td style="text-align:center;">
         <span style="padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;color:<?=$statusColor?>;background:<?=$statusBg?>;"><?=$statusLabel?></span>

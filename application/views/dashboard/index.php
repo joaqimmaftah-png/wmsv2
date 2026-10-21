@@ -5,7 +5,7 @@ $manpower_data = isset($kpi['manpower']) ? $kpi['manpower'] : ['present'=>0,'tot
 $manpower      = is_array($manpower_data) ? $manpower_data['present'] : (int)$manpower_data;
 $total_workers = is_array($manpower_data) ? $manpower_data['total']   : (isset($kpi['total_workers']) ? $kpi['total_workers'] : 0);
 $overdue_pm    = isset($kpi['overdue_pm'])    ? $kpi['overdue_pm']    : 0;
-$mttr          = isset($kpi['mttr'])          ? number_format($kpi['mttr'],1) : '0.0';
+$mttr          = isset($kpi['mttr'])          ? number_format((float)($kpi['mttr']),1) : '0.0';
 $mtbf          = isset($kpi['mtbf'])          ? round($kpi['mtbf'])   : 0;
 $lube_month    = isset($kpi['lube_month'])    ? round($kpi['lube_month']) : 0;
 $breakdowns    = isset($kpi['breakdowns'])    ? $kpi['breakdowns']    : 0;
@@ -117,9 +117,9 @@ if (isset($equipment)) {
         <div style="width:32px;height:32px;border-radius:9px;background:<?= $ibg ?>;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">⚙️</div>
         <div style="flex:1;min-width:0;">
           <div class="fw-600" style="font-size:12.5px;"><?= $eq->registration_no ?></div>
-          <div style="font-size:10.5px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars($eq->brand . ' ' . $eq->model) ?></div>
+          <div style="font-size:10.5px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars((string)($eq->brand . ' ' . $eq->model)) ?></div>
         </div>
-        <div class="mono text-muted" style="font-size:10px;margin-right:8px;"><?= number_format($eq->current_hours,0) ?> h</div>
+        <div class="mono text-muted" style="font-size:10px;margin-right:8px;"><?= number_format((float)($eq->current_hours),0) ?> h</div>
         <div class="led <?= $led ?>"></div>
       </div>
       <?php endforeach; else: ?>
@@ -162,7 +162,7 @@ if (isset($equipment)) {
       $bdrc  = $kpi >= 90 ? 'rgba(28,140,60,0.18)' : ($kpi >= 70 ? 'rgba(180,83,9,0.18)' : 'rgba(192,57,43,0.18)');
     ?>
     <div style="flex:1;min-width:140px;padding:14px 18px;border-right:1px solid rgba(0,0,0,0.05);border-bottom:1px solid rgba(0,0,0,0.05);<?= $i===count($fleet_kpi_by_type)-1?'border-right:none':'' ?>">
-      <div style="font-size:10px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--t3);margin-bottom:6px;"><?= htmlspecialchars($ft['type']) ?>s</div>
+      <div style="font-size:10px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--t3);margin-bottom:6px;"><?= htmlspecialchars((string)($ft['type'])) ?>s</div>
       <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:8px;">
         <div style="font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;color:<?= $color ?>;line-height:1;"><?= $kpi ?>%</div>
         <div style="font-size:11px;color:var(--t3);">ready</div>
@@ -193,7 +193,7 @@ if (isset($equipment)) {
       <div style="text-align:center;flex:1;min-width:60px;">
         <div style="font-size:9px;font-weight:700;color:<?= $color ?>;margin-bottom:3px;"><?= $kpi ?>%</div>
         <div style="height:<?= $h ?>px;background:<?= $color ?>;border-radius:3px 3px 0 0;opacity:.85;transition:height .6s;"></div>
-        <div style="font-size:9px;color:var(--t3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars($ft['type']) ?>s</div>
+        <div style="font-size:9px;color:var(--t3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars((string)($ft['type'])) ?>s</div>
       </div>
       <?php endforeach; ?>
     </div>
@@ -227,7 +227,7 @@ if (isset($equipment)) {
   <div style="margin:12px 22px 0;padding:9px 14px;background:var(--green-fill);border:1px solid rgba(28,140,60,0.18);border-radius:10px;font-size:12px;color:var(--green);">
     <strong>✓ <?= count($spares_ready) ?> job(s) can proceed now — all required parts are in stock:</strong>
     <?php foreach (array_slice($spares_ready, 0, 5) as $rw): ?>
-      <a href="<?= base_url('workorders/view/'.$rw['work_order_id']) ?>" style="color:var(--green);font-weight:600;"><?= htmlspecialchars($rw['wo_number']) ?></a><?= $rw !== end($spares_ready) ? ',' : '' ?>
+      <a href="<?= base_url('workorders/view/'.$rw['work_order_id']) ?>" style="color:var(--green);font-weight:600;"><?= htmlspecialchars((string)($rw['wo_number'])) ?></a><?= $rw !== end($spares_ready) ? ',' : '' ?>
     <?php endforeach; ?>
     <?php if (count($spares_ready) > 5): ?> …<?php endif; ?>
   </div>
@@ -238,13 +238,13 @@ if (isset($equipment)) {
     <tbody>
       <?php foreach ($spares_lines as $l):
         $d = isset($sp_dot[$l->avail_status]) ? $sp_dot[$l->avail_status] : array('⚪','var(--t3)');
-        $fmt = function ($n) { return rtrim(rtrim(number_format((float)$n, 2, '.', ''), '0'), '.'); };
+        $fmt = function ($n) { return rtrim((string)(rtrim((string)(number_format((float)$n, 2, '.', '')), '0')), '.'); };
       ?>
       <tr>
-        <td style="white-space:nowrap;font-size:11.5px;font-weight:600;color:<?= $d[1] ?>;"><?= $d[0] ?> <?= htmlspecialchars($l->avail_status) ?></td>
-        <td><a href="<?= base_url('workorders/view/'.$l->work_order_id) ?>" class="mono" style="color:var(--blue);font-weight:600;text-decoration:none;"><?= htmlspecialchars($l->wo_number) ?></a></td>
-        <td style="font-weight:500;"><?= htmlspecialchars($l->registration_no ?: '—') ?></td>
-        <td><?= htmlspecialchars($l->part_name) ?> <span class="mono" style="font-size:10px;color:var(--t3);"><?= htmlspecialchars(!empty($l->material) ? $l->material->item_code : (!empty($l->item_code) ? $l->item_code : '')) ?></span></td>
+        <td style="white-space:nowrap;font-size:11.5px;font-weight:600;color:<?= $d[1] ?>;"><?= $d[0] ?> <?= htmlspecialchars((string)($l->avail_status)) ?></td>
+        <td><a href="<?= base_url('workorders/view/'.$l->work_order_id) ?>" class="mono" style="color:var(--blue);font-weight:600;text-decoration:none;"><?= htmlspecialchars((string)($l->wo_number)) ?></a></td>
+        <td style="font-weight:500;"><?= htmlspecialchars((string)($l->registration_no ?: '—')) ?></td>
+        <td><?= htmlspecialchars((string)($l->part_name)) ?> <span class="mono" style="font-size:10px;color:var(--t3);"><?= htmlspecialchars((string)(!empty($l->material) ? $l->material->item_code : (!empty($l->item_code) ? $l->item_code : ''))) ?></span></td>
         <td class="mono fw-600"><?= $fmt($l->qty_required) ?></td>
         <td class="mono fw-600" style="color:<?= $l->qty_required > 0 && $l->qty_available >= $l->qty_required ? 'var(--green)' : ($l->qty_available > 0 ? 'var(--amber)' : 'var(--red)') ?>;"><?= $fmt($l->qty_available) ?></td>
       </tr>
@@ -368,7 +368,7 @@ if (isset($equipment)) {
         <div style="width:38px;height:38px;border-radius:11px;background:<?= $ibg ?>;display:flex;align-items:center;justify-content:center;font-size:16px;"><?= $em ?></div>
         <div style="min-width:0;">
           <div class="mono" style="font-size:11px;color:var(--blue);font-weight:500;"><?= $wo->wo_number ?></div>
-          <div style="font-size:13px;font-weight:500;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars($wo->title) ?></div>
+          <div style="font-size:13px;font-weight:500;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars((string)($wo->title)) ?></div>
           <div style="font-size:11px;color:var(--t3);"><?= (isset($wo->registration_no) ? $wo->registration_no : '') ?></div>
         </div>
         <div><span class="<?= $pc ?>"><?= $wo->priority ?></span></div>

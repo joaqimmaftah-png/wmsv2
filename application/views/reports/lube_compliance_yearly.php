@@ -34,11 +34,11 @@ foreach ($monthAgg as $a) { $maxVal = max($maxVal, $a['required'], $a['actual'])
 <div class="grid g-4 mb-4">
   <div class="kpi"><div class="kpi-glow" style="background:var(--blue)"></div>
     <span class="kpi-tag">PM-Required Qty (YTD/Year)</span>
-    <div class="kpi-num"><?=number_format($totalReq,1)?></div>
+    <div class="kpi-num"><?=number_format((float)($totalReq),1)?></div>
   </div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--green)"></div>
     <span class="kpi-tag">Actual Used</span>
-    <div class="kpi-num"><?=number_format($totalAct,1)?></div>
+    <div class="kpi-num"><?=number_format((float)($totalAct),1)?></div>
   </div>
   <div class="kpi"><div class="kpi-glow" style="background:<?=$overallVariancePct===null?'var(--t3)':($overallVariancePct>10?'var(--red)':($overallVariancePct<-10?'var(--amber)':'var(--green)'))?>"></div>
     <span class="kpi-tag">Overall Variance</span>
@@ -64,8 +64,8 @@ foreach ($monthAgg as $a) { $maxVal = max($maxVal, $a['required'], $a['actual'])
     ?>
     <div style="flex:1;min-width:46px;text-align:center;">
       <div style="display:flex;align-items:flex-end;justify-content:center;gap:3px;height:96px;">
-        <div title="Required: <?=number_format($a['required'],1)?>" style="width:9px;background:var(--blue);border-radius:2px 2px 0 0;height:<?=max(2,$reqH)?>px;"></div>
-        <div title="Actual: <?=number_format($a['actual'],1)?>" style="width:9px;background:var(--green);border-radius:2px 2px 0 0;height:<?=max(2,$actH)?>px;"></div>
+        <div title="Required: <?=number_format((float)($a['required']),1)?>" style="width:9px;background:var(--blue);border-radius:2px 2px 0 0;height:<?=max(2,$reqH)?>px;"></div>
+        <div title="Actual: <?=number_format((float)($a['actual']),1)?>" style="width:9px;background:var(--green);border-radius:2px 2px 0 0;height:<?=max(2,$actH)?>px;"></div>
       </div>
       <div style="font-size:9.5px;color:var(--t3);margin-top:6px;font-weight:600;"><?=$label?></div>
     </div>
@@ -107,11 +107,11 @@ foreach ($monthAgg as $a) { $maxVal = max($maxVal, $a['required'], $a['actual'])
       else                     { $label='ON TARGET'; $col='var(--green)'; $bg='var(--green-d)'; }
     ?>
     <tr>
-      <td style="color:var(--t1);font-weight:600;"><?=htmlspecialchars($r['lube_name'])?></td>
-      <td style="color:var(--t3);font-size:10.5px;"><?=htmlspecialchars($r['category'])?></td>
+      <td style="color:var(--t1);font-weight:600;"><?=htmlspecialchars((string)($r['lube_name']))?></td>
+      <td style="color:var(--t3);font-size:10.5px;"><?=htmlspecialchars((string)($r['category']))?></td>
       <td class="mono" style="text-align:center;"><?=$r['required_services']?></td>
-      <td class="mono" style="text-align:center;font-weight:600;"><?=number_format($r['required_qty'],1)?> <?=htmlspecialchars($r['unit'])?></td>
-      <td class="mono" style="text-align:center;font-weight:600;"><?=number_format($r['actual_qty'],1)?> <?=htmlspecialchars($r['unit'])?></td>
+      <td class="mono" style="text-align:center;font-weight:600;"><?=number_format((float)($r['required_qty']),1)?> <?=htmlspecialchars((string)($r['unit']))?></td>
+      <td class="mono" style="text-align:center;font-weight:600;"><?=number_format((float)($r['actual_qty']),1)?> <?=htmlspecialchars((string)($r['unit']))?></td>
       <td class="mono" style="text-align:center;color:var(--t3);"><?=$r['actual_records']?></td>
       <td class="mono" style="text-align:center;font-weight:700;color:<?=$col?>;">
         <?=$pct===null?'—':(($pct>0?'+':'').$pct.'%')?>

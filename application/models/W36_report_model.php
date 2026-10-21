@@ -676,7 +676,7 @@ class W36_report_model extends CI_Model {
 
             // which meter judges this schedule — hours by default, kilometres for
             // the km-based intervals of light vehicles and bowsers (G4)
-            $is_km = isset($s->interval_type) && strtoupper(trim((string)$s->interval_type)) === 'KM';
+            $is_km = isset($s->interval_type) && strtoupper((string)(trim((string)$s->interval_type))) === 'KM';
             $meter = $is_km ? 'km' : 'hours';
             $current = $is_km
                 ? (isset($ids[$equipment_id]['current_km']) ? $ids[$equipment_id]['current_km'] : null)
@@ -816,7 +816,7 @@ class W36_report_model extends CI_Model {
             elseif (isset($inspected[(int)$id])) $status = 'DONE';
             else                       $status = 'UNDONE';
 
-            $out[strtolower($status)]++;
+            $out[strtolower((string)($status))]++;
             $out['rows'][] = array(
                 'equipment_id' => (int)$id,
                 'machine_id'   => $r['machine_id'],
@@ -897,7 +897,7 @@ class W36_report_model extends CI_Model {
                 $wo     = $this->breakdown_work_order($id);              // what is being done
                 $anchor = $this->breakdown_work_order($id, 'anchor');    // what failed
 
-                $hold = ($wo && isset($wo->hold_code)) ? strtoupper(trim((string)$wo->hold_code)) : '';
+                $hold = ($wo && isset($wo->hold_code)) ? strtoupper((string)(trim((string)$wo->hold_code))) : '';
                 // the comment describes the failure: the anchor work order's text,
                 // falling back to the current one when the anchor has none
                 $comment = $anchor ? $this->wo_text($anchor, array('description', 'title', 'symptoms')) : null;

@@ -103,7 +103,7 @@ $overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
       $color = $kpi >= 90 ? 'var(--green)' : ($kpi >= 70 ? 'var(--amber)' : 'var(--red)');
     ?>
     <div style="flex:1;min-width:130px;padding:14px 16px;border-right:1px solid var(--g2);<?= $i===count($chartData)-1?'border-right:none':'' ?>">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--t3);margin-bottom:4px;"><?= htmlspecialchars($ct['type']) ?>s</div>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--t3);margin-bottom:4px;"><?= htmlspecialchars((string)($ct['type'])) ?>s</div>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
         <div style="font-size:22px;font-weight:800;color:<?= $color ?>;line-height:1;"><?= $kpi ?>%</div>
         <div style="font-size:10px;color:var(--t3);line-height:1.4;">
@@ -154,17 +154,17 @@ $overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
       <?php foreach ($g['machines'] as $m): ?>
       <tr>
         <td style="font-weight:700;font-size:11px;background:var(--blue-d);color:var(--blue);text-align:center;vertical-align:middle;">
-          <?= $first ? htmlspecialchars($g['type']) : '' ?>
+          <?= $first ? htmlspecialchars((string)($g['type'])) : '' ?>
         </td>
         <td style="text-align:center;font-weight:700;background:var(--g2);"><?= $first ? $g['total'] : '' ?></td>
         <td style="text-align:center;color:var(--green);font-weight:600;background:var(--g2);"><?= $first ? $g['available'] : '' ?></td>
         <td style="text-align:center;color:<?= $g['down']>0?'var(--red)':'var(--t3)' ?>;font-weight:600;background:var(--g2);"><?= $first ? $g['down'] : '' ?></td>
-        <td class="mono" style="font-weight:600;color:var(--blue);font-size:11px;"><?= htmlspecialchars($m['machine_id']) ?></td>
-        <td style="color:var(--t2);"><?= htmlspecialchars($m['model']) ?></td>
-        <td style="color:var(--t3);font-size:11px;"><?= htmlspecialchars($m['location']) ?></td>
-        <td style="max-width:200px;white-space:pre-wrap;word-break:break-word;color:var(--t2);"><?= htmlspecialchars($m['observation']) ?></td>
-        <td style="max-width:130px;white-space:pre-wrap;word-break:break-word;color:var(--t2);font-size:11px;"><?= htmlspecialchars($m['action_taken']) ?></td>
-        <td style="text-align:center;font-size:11px;color:var(--t3);"><?= htmlspecialchars($m['est_time']) ?></td>
+        <td class="mono" style="font-weight:600;color:var(--blue);font-size:11px;"><?= htmlspecialchars((string)($m['machine_id'])) ?></td>
+        <td style="color:var(--t2);"><?= htmlspecialchars((string)($m['model'])) ?></td>
+        <td style="color:var(--t3);font-size:11px;"><?= htmlspecialchars((string)($m['location'])) ?></td>
+        <td style="max-width:200px;white-space:pre-wrap;word-break:break-word;color:var(--t2);"><?= htmlspecialchars((string)($m['observation'])) ?></td>
+        <td style="max-width:130px;white-space:pre-wrap;word-break:break-word;color:var(--t2);font-size:11px;"><?= htmlspecialchars((string)($m['action_taken'])) ?></td>
+        <td style="text-align:center;font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)($m['est_time'])) ?></td>
         <td style="text-align:center;">
           <?php if ($m['status']==='Down'): ?>
           <span class="badge b-danger">Down</span>
@@ -172,10 +172,10 @@ $overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
           <span class="badge b-success">Available</span>
           <?php endif; ?>
         </td>
-        <td class="mono" style="text-align:center;font-size:11px;color:var(--t3);"><?= htmlspecialchars($m['down_time']) ?></td>
-        <td class="mono" style="text-align:center;font-size:11px;color:var(--t3);"><?= htmlspecialchars($m['up_time']) ?></td>
+        <td class="mono" style="text-align:center;font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)($m['down_time'])) ?></td>
+        <td class="mono" style="text-align:center;font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)($m['up_time'])) ?></td>
         <td class="mono" style="text-align:center;font-weight:600;<?= $m['total_dt']>0?'color:var(--amber)':'' ?>">
-          <?= $m['total_dt'] > 0 ? number_format($m['total_dt'],1) : '' ?>
+          <?= $m['total_dt'] > 0 ? number_format((float)($m['total_dt']),1) : '' ?>
         </td>
         <td class="mono" style="text-align:center;font-size:11px;color:var(--t3);"><?= $m['start_date'] ? date('d/m/Y',strtotime($m['start_date'])) : '' ?></td>
         <td style="text-align:center;font-weight:600;<?= $m['days_down']>7?'color:var(--red)':($m['days_down']>0?'color:var(--amber)':'') ?>">
@@ -202,7 +202,7 @@ $overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
   <div class="card" style="padding:0;">
     <div class="ch" style="padding:12px 16px 8px;">
       <div>
-        <div class="ct" style="font-size:12px;">Daily <?= htmlspecialchars($ct['type']) ?>s KPI</div>
+        <div class="ct" style="font-size:12px;">Daily <?= htmlspecialchars((string)($ct['type'])) ?>s KPI</div>
         <div class="cs">Availability %</div>
       </div>
       <div style="font-size:18px;font-weight:800;color:<?= $ct['kpi']>=90?'var(--green)':($ct['kpi']>=70?'var(--amber)':'var(--red)') ?>;"><?= $ct['kpi'] ?>%</div>

@@ -8,7 +8,7 @@ $action_url = $issue_mode ? 'materials/issue/'.$item->id : 'materials/receive/'.
   <div class="ch">
     <div>
       <div class="ct"><?= $issue_mode ? '— Issue Stock' : '+ Receive Stock' ?></div>
-      <div class="cs"><?= htmlspecialchars($item->item_code.' — '.$item->description) ?></div>
+      <div class="cs"><?= htmlspecialchars((string)($item->item_code.' — '.$item->description)) ?></div>
     </div>
     <a href="<?= base_url('materials/inventory') ?>" class="ca">&larr; Back</a>
   </div>
@@ -18,17 +18,17 @@ $action_url = $issue_mode ? 'materials/issue/'.$item->id : 'materials/receive/'.
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px;">
       <div style="background:var(--g1);border:1px solid var(--sep);border-radius:var(--r2);padding:12px 14px;text-align:center;">
         <div style="font-size:9px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--t3);margin-bottom:5px;">Category</div>
-        <span class="badge b-primary" style="font-size:11px;"><?= htmlspecialchars($item->category) ?></span>
+        <span class="badge b-primary" style="font-size:11px;"><?= htmlspecialchars((string)($item->category)) ?></span>
       </div>
       <div style="background:var(--g1);border:1px solid var(--sep);border-radius:var(--r2);padding:12px 14px;text-align:center;">
         <div style="font-size:9px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--t3);margin-bottom:5px;">Current Stock</div>
         <div style="font-family:inherit,monospace;font-size:20px;font-weight:700;color:<?= $final_qty<=0?'var(--red)':($final_qty<=5?'var(--amber)':'var(--green)') ?>;">
-          <?= $final_qty ?> <span style="font-size:11px;color:var(--t3);"><?= htmlspecialchars($item->unit) ?></span>
+          <?= $final_qty ?> <span style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)($item->unit)) ?></span>
         </div>
       </div>
       <div style="background:var(--g1);border:1px solid var(--sep);border-radius:var(--r2);padding:12px 14px;text-align:center;">
         <div style="font-size:9px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--t3);margin-bottom:5px;">Location</div>
-        <div style="font-size:12.5px;font-weight:600;color:var(--t1);"><?= htmlspecialchars($item->location??'—') ?></div>
+        <div style="font-size:12.5px;font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($item->location??'—')) ?></div>
       </div>
     </div>
 
@@ -44,11 +44,11 @@ $action_url = $issue_mode ? 'materials/issue/'.$item->id : 'materials/receive/'.
           min="1" step="1" required autofocus placeholder="0"
           style="font-size:18px;font-weight:700;text-align:center;max-width:180px;"
           <?= $issue_mode ? 'max="'.$final_qty.'"' : '' ?>>
-        <span style="font-size:14px;color:var(--t2);font-weight:600;"><?= htmlspecialchars($item->unit) ?></span>
+        <span style="font-size:14px;color:var(--t2);font-weight:600;"><?= htmlspecialchars((string)($item->unit)) ?></span>
       </div>
       <?php if ($issue_mode): ?>
       <div id="qty-warn" style="display:none;font-size:11.5px;color:var(--red);margin-top:6px;font-weight:600;">
-        ⚠ Quantity exceeds available stock (<?= $final_qty ?> <?= htmlspecialchars($item->unit) ?>)
+        ⚠ Quantity exceeds available stock (<?= $final_qty ?> <?= htmlspecialchars((string)($item->unit)) ?>)
       </div>
       <?php endif; ?>
     </div>
@@ -73,7 +73,7 @@ $action_url = $issue_mode ? 'materials/issue/'.$item->id : 'materials/receive/'.
         <select name="equipment_id" class="form-select">
           <option value="">— not a machine —</option>
           <?php foreach ((isset($equipment) ? $equipment : array()) as $eq): ?>
-          <option value="<?= (int)$eq->id ?>"><?= htmlspecialchars($eq->registration_no) ?></option>
+          <option value="<?= (int)$eq->id ?>"><?= htmlspecialchars((string)($eq->registration_no)) ?></option>
           <?php endforeach; ?>
         </select>
       </div>
@@ -93,7 +93,7 @@ $action_url = $issue_mode ? 'materials/issue/'.$item->id : 'materials/receive/'.
                list="supplier-list" placeholder="Who delivered it">
         <datalist id="supplier-list">
           <?php foreach ((isset($suppliers) ? $suppliers : array()) as $sp): ?>
-          <option value="<?= htmlspecialchars($sp->company_name) ?>"></option>
+          <option value="<?= htmlspecialchars((string)($sp->company_name)) ?>"></option>
           <?php endforeach; ?>
         </datalist>
       </div>
@@ -130,12 +130,12 @@ $action_url = $issue_mode ? 'materials/issue/'.$item->id : 'materials/receive/'.
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
         <span style="color:var(--t2);">Current:</span>
         <span style="font-family:inherit,monospace;font-weight:700;"><?= $final_qty ?></span>
-        <span style="color:var(--t3);"><?= htmlspecialchars($item->unit) ?></span>
+        <span style="color:var(--t3);"><?= htmlspecialchars((string)($item->unit)) ?></span>
         <span style="color:var(--t3);margin:0 4px;"><?= $issue_mode ? '−' : '+' ?></span>
         <span id="preview-qty" style="font-family:inherit,monospace;font-weight:700;color:<?= $issue_mode?'var(--amber)':'var(--green)' ?>;">?</span>
         <span style="color:var(--t3);">=</span>
         <span id="preview-after" style="font-family:inherit,monospace;font-weight:700;font-size:15px;">?</span>
-        <span style="color:var(--t3);"><?= htmlspecialchars($item->unit) ?></span>
+        <span style="color:var(--t3);"><?= htmlspecialchars((string)($item->unit)) ?></span>
       </div>
     </div>
 

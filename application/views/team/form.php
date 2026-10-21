@@ -40,7 +40,7 @@ if ($role_value === '' && !empty($roles)) {
       <div class="form-page-title"><?= $is_edit ? 'Edit Worker' : 'Add New Worker' ?></div>
       <div class="form-page-sub">
         <?= $is_edit
-            ? 'Changes apply to the account immediately — ' . htmlspecialchars($val('employee_id')) . '.'
+            ? 'Changes apply to the account immediately — ' . htmlspecialchars((string)($val('employee_id'))) . '.'
             : 'Creates a sign-in account for a workshop staff member.' ?>
       </div>
     </div>
@@ -51,7 +51,7 @@ if ($role_value === '' && !empty($roles)) {
   <div class="form-errors">
     <div class="form-errors-title">Nothing was saved:</div>
     <ul>
-      <?php foreach ($errors as $e): ?><li><?= htmlspecialchars($e) ?></li><?php endforeach; ?>
+      <?php foreach ($errors as $e): ?><li><?= htmlspecialchars((string)($e)) ?></li><?php endforeach; ?>
     </ul>
   </div>
   <?php endif; ?>
@@ -64,21 +64,21 @@ if ($role_value === '' && !empty($roles)) {
       <div>
         <label class="form-label">First Name <span class="req">*</span></label>
         <input type="text" name="first_name" class="form-control" required maxlength="100"
-               value="<?= htmlspecialchars($val('first_name')) ?>">
+               value="<?= htmlspecialchars((string)($val('first_name'))) ?>">
       </div>
       <div>
         <label class="form-label">Last Name <span class="req">*</span></label>
         <input type="text" name="last_name" class="form-control" required maxlength="100"
-               value="<?= htmlspecialchars($val('last_name')) ?>">
+               value="<?= htmlspecialchars((string)($val('last_name'))) ?>">
       </div>
       <div>
         <label class="form-label">Employee ID <?= $is_edit ? '' : '<span class="req">*</span>' ?></label>
         <?php if ($is_edit): ?>
-          <input type="text" class="form-control" value="<?= htmlspecialchars($val('employee_id')) ?>" disabled>
+          <input type="text" class="form-control" value="<?= htmlspecialchars((string)($val('employee_id'))) ?>" disabled>
           <div class="form-hint">The employee ID is printed on attendance and certificate reports and must stay unique, so it is fixed once the account exists.</div>
         <?php else: ?>
           <input type="text" name="employee_id" class="form-control" required maxlength="20"
-                 placeholder="e.g. EMP007" value="<?= htmlspecialchars($val('employee_id')) ?>">
+                 placeholder="e.g. EMP007" value="<?= htmlspecialchars((string)($val('employee_id'))) ?>">
         <?php endif; ?>
       </div>
       <div>
@@ -94,13 +94,13 @@ if ($role_value === '' && !empty($roles)) {
       <div>
         <label class="form-label">Email <span class="req">*</span></label>
         <input type="email" name="email" class="form-control" required maxlength="150"
-               value="<?= htmlspecialchars($val('email')) ?>">
+               value="<?= htmlspecialchars((string)($val('email'))) ?>">
         <div class="form-hint">Used to sign in; must be unique.</div>
       </div>
       <div>
         <label class="form-label">Phone</label>
         <input type="text" name="phone" class="form-control" maxlength="30"
-               value="<?= htmlspecialchars($val('phone')) ?>">
+               value="<?= htmlspecialchars((string)($val('phone'))) ?>">
       </div>
       <div>
         <label class="form-label">Password <?= $is_edit ? '' : '<span class="req">*</span>' ?></label>
@@ -110,7 +110,7 @@ if ($role_value === '' && !empty($roles)) {
       </div>
       <div>
         <label class="form-label">Join Date</label>
-        <input type="date" name="join_date" class="form-control" value="<?= htmlspecialchars($val('join_date')) ?>">
+        <input type="date" name="join_date" class="form-control" value="<?= htmlspecialchars((string)($val('join_date'))) ?>">
       </div>
     </div>
   </div>
@@ -122,7 +122,7 @@ if ($role_value === '' && !empty($roles)) {
         <label class="form-label">Position / Job Title</label>
         <input type="text" name="position" class="form-control" maxlength="100"
                placeholder="e.g. Senior Technician, Diesel Mechanic"
-               value="<?= htmlspecialchars($val('position')) ?>">
+               value="<?= htmlspecialchars((string)($val('position'))) ?>">
       </div>
       <div>
         <label class="form-label">Skill Level</label>

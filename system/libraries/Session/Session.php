@@ -47,6 +47,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * @author		Andrey Andreev
  * @link		https://codeigniter.com/userguide3/libraries/sessions.html
  */
+#[AllowDynamicProperties]
 class CI_Session {
 
 	/**
@@ -97,30 +98,42 @@ class CI_Session {
 			$this->_driver = 'database';
 		}
 
-		$class = $this->_ci_load_classes($this->_driver);
-
-		// Configuration ...
-		$this->_configure($params);
-		$this->_config['_sid_regexp'] = $this->_sid_regexp;
-
-		$class   = new $class($this->_config);
-		$wrapper = new CI_SessionWrapper($class);
-		if (is_php('5.4'))
+		if ($this->_driver === 'native')
 		{
-			session_set_save_handler($wrapper, TRUE);
+			$this->_configure($params);
+			ini_set('session.save_handler', 'files');
+			if ( ! empty($this->_config['save_path']) && is_dir($this->_config['save_path']))
+			{
+				session_save_path($this->_config['save_path']);
+			}
 		}
 		else
 		{
-			session_set_save_handler(
-				array($wrapper, 'open'),
-				array($wrapper, 'close'),
-				array($wrapper, 'read'),
-				array($wrapper, 'write'),
-				array($wrapper, 'destroy'),
-				array($wrapper, 'gc')
-			);
+			$class = $this->_ci_load_classes($this->_driver);
 
-			register_shutdown_function('session_write_close');
+			// Configuration ...
+			$this->_configure($params);
+			$this->_config['_sid_regexp'] = $this->_sid_regexp;
+
+			$class   = new $class($this->_config);
+			$wrapper = new CI_SessionWrapper($class);
+			if (is_php('5.4'))
+			{
+				session_set_save_handler($wrapper, TRUE);
+			}
+			else
+			{
+				session_set_save_handler(
+					array($wrapper, 'open'),
+					array($wrapper, 'close'),
+					array($wrapper, 'read'),
+					array($wrapper, 'write'),
+					array($wrapper, 'destroy'),
+					array($wrapper, 'gc')
+				);
+
+				register_shutdown_function('session_write_close');
+			}
 		}
 
 		// Sanitize the cookie, because apparently PHP doesn't do that for userspace handlers
@@ -414,6 +427,11 @@ class CI_Session {
 
 			$bits_per_character = (int) ini_get('session.hash_bits_per_character');
 			$sid_length         = (int) ceil($bits / $bits_per_character);
+		}
+		elseif (PHP_VERSION_ID >= 80400)
+		{
+			$bits_per_character = 4;
+			$sid_length         = 32;
 		}
 		else
 		{

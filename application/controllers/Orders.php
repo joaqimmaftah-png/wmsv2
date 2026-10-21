@@ -50,6 +50,18 @@ class Orders extends MY_Controller {
             $expected = $this->input->post('expected_delivery_date', TRUE)
                 ?: date('Y-m-d', strtotime($order_date.' +'.$lead['days'].' days'));
 
+            $raw_wo_id = (int) $this->input->post('linked_wo_id', TRUE);
+            $linked_wo_id = NULL;
+            if ($raw_wo_id > 0) {
+                $this->load->model('Workorder_model');
+                if (!$this->Workorder_model->get_by_id($raw_wo_id)) {
+                    $this->session->set_flashdata('error', 'The selected work order was not found. The order was not created.');
+                    redirect('orders/create');
+                    return;
+                }
+                $linked_wo_id = $raw_wo_id;
+            }
+
             $header = array(
                 'supplier_id'             => $supplier->id,
                 'country'                 => $supplier->country,
@@ -62,7 +74,7 @@ class Orders extends MY_Controller {
                     !empty($supplier->currency) ? $supplier->currency : wms_site_currency()
                 ),
                 'total_cost'              => $this->input->post('total_cost', TRUE) ?: 0,
-                'linked_wo_id'            => $this->input->post('linked_wo_id', TRUE) ?: NULL,
+                'linked_wo_id'            => $linked_wo_id,
                 'requested_by'            => $this->user_id,
                 'notes'                   => $this->input->post('notes', TRUE),
             );
@@ -77,18 +89,33 @@ class Orders extends MY_Controller {
                 $prices       = $this->input->post('item_price');
                 foreach ($descriptions as $i => $desc) {
                     if (empty($desc)) continue;
+                    $mid = !empty($material_ids[$i]) ? (int) $material_ids[$i] : 0;
+                    if ($mid > 0 && !$this->Materials_model->get_by_id($mid)) {
+                        $mid = 0;
+                    }
                     $items[] = array(
-                        'material_id' => $material_ids[$i] ?: NULL,
+                        'material_id' => $mid > 0 ? $mid : NULL,
                         'description' => $desc,
-                        'part_number' => $part_numbers[$i],
-                        'unit'        => $units[$i] ?: 'pcs',
-                        'qty_ordered' => $qtys[$i] ?: 0,
-                        'unit_price'  => $prices[$i] ?: NULL,
+                        'part_number' => isset($part_numbers[$i]) ? $part_numbers[$i] : '',
+                        'unit'        => !empty($units[$i]) ? $units[$i] : 'pcs',
+                        'qty_ordered' => !empty($qtys[$i]) ? $qtys[$i] : 0,
+                        'unit_price'  => !empty($prices[$i]) ? $prices[$i] : NULL,
                     );
                 }
             }
 
+            if (empty($items)) {
+                $this->session->set_flashdata('error', 'Please add at least one line item before submitting the order.');
+                redirect('orders/create');
+                return;
+            }
+
             $order_id = $this->Order_model->create($header, $items, $this->user_id);
+            if (!$order_id) {
+                $this->session->set_flashdata('error', 'The order could not be saved. Please check your entries and try again.');
+                redirect('orders/create');
+                return;
+            }
             $this->session->set_flashdata('success', 'Order created — lead time estimated from '.$lead['source'].' ('.$lead['days'].' days).');
             redirect('orders/view/'.$order_id);
         }
@@ -296,8 +323,8 @@ class Orders extends MY_Controller {
                     break;
                 }
                 if ($qty > (float)$it->qty_outstanding + 0.0001) {
-                    $problem = 'Line "'.mb_substr($it->description, 0, 60).'": '.number_format($qty, 2)
-                        .' is more than the '.number_format($it->qty_outstanding, 2).' still outstanding.';
+                    $problem = 'Line "'.mb_substr($it->description, 0, 60).'": '.number_format((float)($qty), 2)
+                        .' is more than the '.number_format((float)($it->qty_outstanding), 2).' still outstanding.';
                     break;
                 }
                 if ($qty == 0) continue;
@@ -305,7 +332,7 @@ class Orders extends MY_Controller {
                 // Stock is counted in whole units: refuse rather than round.
                 if ($it->material_id && abs($qty - round($qty)) > 0.0001) {
                     $problem = 'Line "'.mb_substr($it->description, 0, 60).'": stock is counted in whole units, so '
-                        .number_format($qty, 2).' cannot be posted to '.$it->unit.'. Split the delivery or correct the unit.';
+                        .number_format((float)($qty), 2).' cannot be posted to '.$it->unit.'. Split the delivery or correct the unit.';
                     break;
                 }
 
@@ -408,7 +435,7 @@ class Orders extends MY_Controller {
                 if ((float)$after->qty_outstanding > 0) { $complete = false; break; }
             }
             $summary = $receipt['grn_no'].': '.count($lines).' line(s), '
-                .number_format(array_sum(array_column($lines, 'qty_delivered')), 2).' unit(s)'
+                .number_format((float)(array_sum(array_column($lines, 'qty_delivered'))), 2).' unit(s)'
                 .($flag !== 'None' ? ' — discrepancy: '.$flag : '');
 
             if ($complete && $order->status !== 'Received at Store') {

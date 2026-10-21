@@ -26,7 +26,7 @@
               <td class="fw-600"><?= date('M Y', strtotime($month . '-01')) ?></td>
               <?php foreach ($lube_map as $lid => $lt): ?>
               <td style="font-size:13px;">
-                <?= isset($lubes[$lid]) && $lubes[$lid] > 0 ? '<strong>' . number_format($lubes[$lid], 1) . '</strong> ' . $lt->unit : '<span class="text-muted">—</span>' ?>
+                <?= isset($lubes[$lid]) && $lubes[$lid] > 0 ? '<strong>' . number_format((float)($lubes[$lid]), 1) . '</strong> ' . $lt->unit : '<span class="text-muted">—</span>' ?>
               </td>
               <?php endforeach; ?>
             </tr>

@@ -135,7 +135,7 @@ function wo_hold_codes()
  */
 function wo_hold_label($code)
 {
-    $code = strtoupper(trim((string)$code));
+    $code = strtoupper((string)(trim((string)$code)));
     if ($code === '') return null;
     $codes = wo_hold_codes();
     return isset($codes[$code]) ? $codes[$code] : $code;

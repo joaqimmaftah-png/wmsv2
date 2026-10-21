@@ -65,7 +65,7 @@ class Equipment_model extends CI_Model {
      */
     public function sanitize_location($value) {
         $value = trim((string)$value);
-        if (strlen($value) > 200) $value = substr($value, 0, 200);   // column is VARCHAR(200)
+        if (strlen((string)($value)) > 200) $value = substr($value, 0, 200);   // column is VARCHAR(200)
 
         $sites = $this->report_sites();
         $approved = !empty($sites) && function_exists('equip_is_approved_site')
@@ -343,17 +343,17 @@ class Equipment_model extends CI_Model {
         if (!$override) {
             if ($value < $previous) {
                 return array('ok' => false, 'unit' => $unit, 'value' => $value, 'previous' => $previous,
-                    'message' => 'Refused: '.number_format($value, 1).' '.$unit_word.' is lower than the last recorded reading of '
-                        .number_format($previous, 1).'. A meter does not run backwards — if this is a correction, tick "This is a correction" and try again.');
+                    'message' => 'Refused: '.number_format((float)($value), 1).' '.$unit_word.' is lower than the last recorded reading of '
+                        .number_format((float)($previous), 1).'. A meter does not run backwards — if this is a correction, tick "This is a correction" and try again.');
             }
             if ($previous_row) {
                 $days = max(1, (int)floor((strtotime($date) - strtotime($previous_row->reading_date)) / 86400));
                 $max  = self::METER_MAX_PER_DAY[$unit] * $days;
                 if (($value - (float)$previous_row->{$column}) > $max) {
                     return array('ok' => false, 'unit' => $unit, 'value' => $value, 'previous' => $previous,
-                        'message' => 'Refused: '.number_format($value, 1).' '.$unit_word.' is '.number_format($value - (float)$previous_row->{$column}, 1)
+                        'message' => 'Refused: '.number_format((float)($value), 1).' '.$unit_word.' is '.number_format((float)($value - (float)$previous_row->{$column}), 1)
                             .' more than the reading of '.date('d M Y', strtotime($previous_row->reading_date)).' — more than '
-                            .number_format($max, 0).' '.$unit_word.' in '.$days.' day(s) is not possible. Check the figure, or tick "This is a correction".');
+                            .number_format((float)($max), 0).' '.$unit_word.' in '.$days.' day(s) is not possible. Check the figure, or tick "This is a correction".');
                 }
             }
         }
@@ -362,7 +362,7 @@ class Equipment_model extends CI_Model {
             // Same day, same value: nothing to record.
             if (!$override && abs($value - (float)$same->{$column}) < 0.0001) {
                 return array('ok' => true, 'unit' => $unit, 'value' => $value, 'previous' => $previous,
-                    'message' => 'Reading for '.date('d M Y', strtotime($date)).' is already '.number_format($value, 1).' '.$unit_word.' — nothing to change.');
+                    'message' => 'Reading for '.date('d M Y', strtotime($date)).' is already '.number_format((float)($value), 1).' '.$unit_word.' — nothing to change.');
             }
             $this->db->where('id', $same->id)->update('equipment_meter_readings', array(
                 $column        => $value,
@@ -399,7 +399,7 @@ class Equipment_model extends CI_Model {
 
         return array('ok' => true, 'unit' => $unit, 'value' => $value, 'previous' => $previous,
             'changed_current' => $changed,
-            'message' => 'Recorded '.number_format($value, 1).' '.$unit_word.' for '.date('d M Y', strtotime($date))
-                .($changed ? ' — the machine now reads '.number_format($value, 1).' '.$unit_word.'.' : ' (a later reading already exists, so the machine\'s current value was left alone).'));
+            'message' => 'Recorded '.number_format((float)($value), 1).' '.$unit_word.' for '.date('d M Y', strtotime($date))
+                .($changed ? ' — the machine now reads '.number_format((float)($value), 1).' '.$unit_word.'.' : ' (a later reading already exists, so the machine\'s current value was left alone).'));
     }
 }

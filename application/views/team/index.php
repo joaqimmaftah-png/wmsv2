@@ -46,10 +46,10 @@
         <?php foreach ($pending_leave as $lr): ?>
         <tr>
           <td class="fw-600" style="font-size:12.5px;">
-            <?= htmlspecialchars($lr->worker_name) ?>
+            <?= htmlspecialchars((string)($lr->worker_name)) ?>
             <div style="font-size:10.5px;color:var(--t3);font-weight:400;"><?= htmlspecialchars((string)$lr->employee_id) ?></div>
           </td>
-          <td><span class="badge b-primary" style="font-size:10px;"><?= htmlspecialchars($lr->leave_type) ?></span></td>
+          <td><span class="badge b-primary" style="font-size:10px;"><?= htmlspecialchars((string)($lr->leave_type)) ?></span></td>
           <td class="mono" style="font-size:11.5px;"><?= date('d M Y', strtotime($lr->start_date)) ?></td>
           <td class="mono" style="font-size:11.5px;"><?= date('d M Y', strtotime($lr->end_date)) ?></td>
           <td class="mono fw-600"><?= (int)$lr->days_count ?></td>
@@ -81,7 +81,7 @@
   if (isset($workers) && count($workers) > 0): foreach ($workers as $w):
     $sc = (isset($skill_colors[$w->skill_level]) ? $skill_colors[$w->skill_level] : 'b-secondary');
     $st = (isset($status_colors[$w->status]) ? $status_colors[$w->status] : 'b-secondary');
-    $init = strtoupper(substr($w->first_name,0,1).substr($w->last_name,0,1));
+    $init = strtoupper((string)(substr($w->first_name,0,1).substr($w->last_name,0,1)));
     $grad_colors = ['#1a6fff,#0a50cc','#5e5ce6,#3634a3','var(--purple),#9b59b6','var(--green),#20a044','var(--amber),#e08800'];
     $grad = $grad_colors[abs(crc32($w->id)) % count($grad_colors)];
   ?>

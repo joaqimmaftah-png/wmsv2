@@ -31,9 +31,9 @@ foreach ($certs as $c) {
         <?php foreach ($certs as $c): ?>
         <?php $days_left = $c->expiry_date ? (int)floor((strtotime($c->expiry_date) - strtotime(date('Y-m-d'))) / 86400) : null; ?>
         <tr>
-          <td class="fw-500"><a href="<?= base_url('team/view/'.$c->user_id) ?>" style="color:inherit;text-decoration:none;"><?= htmlspecialchars($c->worker_name) ?></a></td>
+          <td class="fw-500"><a href="<?= base_url('team/view/'.$c->user_id) ?>" style="color:inherit;text-decoration:none;"><?= htmlspecialchars((string)($c->worker_name)) ?></a></td>
           <td style="font-size:12px;"><?= htmlspecialchars((string)$c->employee_id) ?></td>
-          <td><?= htmlspecialchars($c->cert_name) ?></td>
+          <td><?= htmlspecialchars((string)($c->cert_name)) ?></td>
           <td><?= $c->expiry_date ? date('d M Y', strtotime($c->expiry_date)) : '—' ?></td>
           <td>
             <?php if ($days_left === null): ?>
@@ -47,7 +47,7 @@ foreach ($certs as $c) {
           <td><span class="badge <?= $c->status=='Valid'?'bg-success':($c->status=='Expiring Soon'?'bg-warning text-dark':'bg-danger') ?>"><?= htmlspecialchars((string)$c->status) ?></span></td>
           <td style="font-size:11.5px;">
             <?php if (!empty($c->document)): ?>
-              <a href="<?= base_url(htmlspecialchars($c->document, ENT_QUOTES, 'UTF-8')) ?>" target="_blank" rel="noopener">Open</a>
+              <a href="<?= base_url(htmlspecialchars((string)($c->document), ENT_QUOTES, 'UTF-8')) ?>" target="_blank" rel="noopener">Open</a>
             <?php else: ?>
               <span style="color:#94a3b8;">—</span>
             <?php endif; ?>
@@ -68,7 +68,7 @@ foreach ($certs as $c) {
       <div class="card-body py-3">
         <div class="d-flex align-items-center gap-2 mb-2">
           <div style="width:36px;height:36px;border-radius:50%;background:#1a3c5e;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">
-            <?= strtoupper(substr($w->first_name,0,1)) ?>
+            <?= strtoupper((string)(substr($w->first_name,0,1))) ?>
           </div>
           <div>
             <div class="fw-600" style="font-size:13px;"><?= $w->first_name . ' ' . $w->last_name ?></div>

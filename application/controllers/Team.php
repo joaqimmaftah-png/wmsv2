@@ -38,10 +38,10 @@ class Team extends MY_Controller {
                 };
                 $data = array(
                     'role_id'     => (int)$field('role_id'),
-                    'employee_id' => strtoupper($field('employee_id')),
+                    'employee_id' => strtoupper((string)($field('employee_id'))),
                     'first_name'  => $field('first_name'),
                     'last_name'   => $field('last_name'),
-                    'email'       => strtolower($field('email')),
+                    'email'       => strtolower((string)($field('email'))),
                     'password'    => password_hash($field('password'), PASSWORD_DEFAULT),
                     'phone'       => $field('phone') !== '' ? $field('phone') : NULL,
                     'position'    => $field('position') !== '' ? $field('position') : NULL,
@@ -110,7 +110,7 @@ class Team extends MY_Controller {
     }
 
     public function attendance() {
-        if (strtolower($this->input->method()) === 'post') {
+        if (strtolower((string)($this->input->method())) === 'post') {
             $posted_date = $this->input->post('date', TRUE);
             $date = is_string($posted_date) && $posted_date !== '' ? $posted_date : date('Y-m-d');
             if (!preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/D', $date)
@@ -298,7 +298,7 @@ class Team extends MY_Controller {
                     'role_id'     => (int)$field('role_id'),
                     'first_name'  => $field('first_name'),
                     'last_name'   => $field('last_name'),
-                    'email'       => strtolower($field('email')),
+                    'email'       => strtolower((string)($field('email'))),
                     'phone'       => $field('phone') !== '' ? $field('phone') : NULL,
                     'position'    => $field('position') !== '' ? $field('position') : NULL,
                     'skill_level' => in_array($field('skill_level'), array('Junior','Senior','Expert','Specialist'), TRUE)
@@ -376,13 +376,13 @@ class Team extends MY_Controller {
     private function _worker_errors($post, $user_id = NULL) {
         $errors = array();
 
-        $first = trim(isset($post['first_name']) ? (string)$post['first_name'] : '');
-        $last  = trim(isset($post['last_name'])  ? (string)$post['last_name']  : '');
+        $first = trim((string)(isset($post['first_name']) ? (string)$post['first_name'] : ''));
+        $last  = trim((string)(isset($post['last_name'])  ? (string)$post['last_name']  : ''));
         if ($first === '' || $last === '') {
             $errors[] = 'First name and last name are required.';
         }
 
-        $email = strtolower(trim(isset($post['email']) ? (string)$post['email'] : ''));
+        $email = strtolower((string)(trim((string)(isset($post['email']) ? (string)$post['email'] : ''))));
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors[] = 'A valid email address is required.';
         } else {
@@ -405,17 +405,17 @@ class Team extends MY_Controller {
         $pw = isset($post['password']) ? (string)$post['password'] : '';
 
         if (!$user_id) {
-            $emp = strtoupper(trim(isset($post['employee_id']) ? (string)$post['employee_id'] : ''));
+            $emp = strtoupper((string)(trim((string)(isset($post['employee_id']) ? (string)$post['employee_id'] : ''))));
             if ($emp === '') {
                 $errors[] = 'An employee ID is required.';
             } elseif ($this->db->where('employee_id', $emp)->count_all_results('users') > 0) {
                 $errors[] = 'Employee ID ' . $emp . ' is already in use.';
             }
-            if (strlen($pw) < 8) {
+            if (strlen((string)($pw)) < 8) {
                 $errors[] = 'The password must be at least 8 characters.';
             }
         } else {
-            if ($pw !== '' && strlen($pw) < 8) {
+            if ($pw !== '' && strlen((string)($pw)) < 8) {
                 $errors[] = 'A new password must be at least 8 characters, or left blank to keep the current one.';
             }
             if (isset($post['status']) && !in_array($post['status'], array('Active', 'Inactive', 'On Leave'), TRUE)) {
@@ -635,7 +635,7 @@ class Team extends MY_Controller {
                 // The certificate document was already written to uploads/;
                 // drop it rather than leaving an orphan behind a failed insert.
                 if ($document) {
-                    $path = FCPATH . ltrim($document, '/');
+                    $path = FCPATH . ltrim((string)($document), '/');
                     if (is_file($path)) @unlink($path);
                 }
                 $this->session->set_flashdata('error',
@@ -688,7 +688,7 @@ class Team extends MY_Controller {
         // The stored document lives under uploads/; remove it with the record
         // rather than leaving an orphan file behind.
         if (!empty($cert->document)) {
-            $path = FCPATH . ltrim($cert->document, '/');
+            $path = FCPATH . ltrim((string)($cert->document), '/');
             if (is_file($path)) @unlink($path);
         }
 
@@ -855,7 +855,7 @@ class Team extends MY_Controller {
      * Always normalised to the ISO Monday the assignments are keyed by.
      */
     private function _roster_week($value) {
-        $value = is_string($value) ? trim($value) : '';
+        $value = is_string($value) ? trim((string)($value)) : '';
         if ($value !== '' && preg_match('/^([0-9]{4})-?[Ww]([0-9]{1,2})$/D', $value, $m)) {
             $week = (int)$m[2];
             if ($week >= 1 && $week <= 53) {
@@ -896,8 +896,8 @@ class Team extends MY_Controller {
                     'Note: this request (%d day(s)) exceeds the remaining %s balance (%s day(s) of %s). '
                     . 'The supervisor can still approve it.',
                     $days, $leave_type,
-                    rtrim(rtrim(number_format((float)$row['remaining'], 2, '.', ''), '0'), '.'),
-                    rtrim(rtrim(number_format((float)$row['entitled'], 2, '.', ''), '0'), '.')
+                    rtrim((string)(rtrim((string)(number_format((float)$row['remaining'], 2, '.', '')), '0')), '.'),
+                    rtrim((string)(rtrim((string)(number_format((float)$row['entitled'], 2, '.', '')), '0')), '.')
                 );
             }
             return '';

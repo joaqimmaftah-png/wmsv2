@@ -199,7 +199,7 @@ class Backlog_model extends CI_Model {
     /** 'C-HE-ADT 015' / 'adt015' / 'ADT 15' → 'ADT15'. */
     public static function fleet_key($s) {
         if ($s === null || $s === '') return NULL;
-        $s = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string)$s));
+        $s = strtoupper((string)(preg_replace('/[^A-Za-z0-9]/', '', (string)$s)));
         $s = preg_replace('/^(CHE|CHV|CAML|CCOMP|AML|C)(?=[A-Z])/', '', $s);
         if (!preg_match('/^([A-Z]+)0*([0-9]+)$/', $s, $m)) return NULL;
         return $m[1] . (int)$m[2];

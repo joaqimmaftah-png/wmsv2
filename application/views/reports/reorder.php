@@ -34,11 +34,11 @@ foreach ($rows as $m) { if ((int)$m->final_qty <= 0) $out++; $toOrder += (int)$m
 
 <div class="grid g-4 mb-4">
   <div class="kpi"><div class="kpi-glow" style="background:var(--red)"></div>
-    <span class="kpi-tag">Out of Stock</span><div class="kpi-num"><?= number_format($out) ?></div></div>
+    <span class="kpi-tag">Out of Stock</span><div class="kpi-num"><?= number_format((float)($out)) ?></div></div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--amber)"></div>
-    <span class="kpi-tag">Items to Re-order</span><div class="kpi-num"><?= number_format(count($rows)) ?></div></div>
+    <span class="kpi-tag">Items to Re-order</span><div class="kpi-num"><?= number_format((float)(count($rows))) ?></div></div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--blue)"></div>
-    <span class="kpi-tag">Total Qty to Order</span><div class="kpi-num"><?= number_format($toOrder) ?></div></div>
+    <span class="kpi-tag">Total Qty to Order</span><div class="kpi-num"><?= number_format((float)($toOrder)) ?></div></div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--green)"></div>
     <span class="kpi-tag">Rule</span><div class="kpi-num" style="font-size:14px;">stock &le; min &rarr; order up to max</div></div>
 </div>
@@ -47,23 +47,23 @@ foreach ($rows as $m) { if ((int)$m->final_qty <= 0) $out++; $toOrder += (int)$m
   <select name="category" class="form-select" style="width:170px;">
     <option value="">All categories</option>
     <?php foreach ($categories as $c): ?>
-    <option value="<?= htmlspecialchars($c->category) ?>" <?= $g('category') === $c->category ? 'selected' : '' ?>><?= htmlspecialchars($c->category) ?></option>
+    <option value="<?= htmlspecialchars((string)($c->category)) ?>" <?= $g('category') === $c->category ? 'selected' : '' ?>><?= htmlspecialchars((string)($c->category)) ?></option>
     <?php endforeach; ?>
   </select>
   <select name="location" class="form-select" style="width:150px;">
     <option value="">All locations</option>
     <?php foreach ($locations as $l): ?>
-    <option value="<?= htmlspecialchars($l->location) ?>" <?= $g('location') === $l->location ? 'selected' : '' ?>><?= htmlspecialchars($l->location) ?></option>
+    <option value="<?= htmlspecialchars((string)($l->location)) ?>" <?= $g('location') === $l->location ? 'selected' : '' ?>><?= htmlspecialchars((string)($l->location)) ?></option>
     <?php endforeach; ?>
   </select>
-  <input type="text" name="search" class="form-control" style="width:220px;" placeholder="Item code / description…" value="<?= htmlspecialchars($g('search')) ?>">
+  <input type="text" name="search" class="form-control" style="width:220px;" placeholder="Item code / description…" value="<?= htmlspecialchars((string)($g('search'))) ?>">
   <button type="submit" class="btn btn-primary btn-sm">Filter</button>
   <a href="<?= base_url('reports/reorder') ?>" class="btn btn-ghost btn-sm">Reset</a>
 </form>
 
 <div class="card">
   <div class="ch"><div><div class="ct">Items to Order</div>
-    <div class="cs"><?= number_format(count($rows)) ?> item(s)</div></div></div>
+    <div class="cs"><?= number_format((float)(count($rows))) ?> item(s)</div></div></div>
   <div style="overflow-x:auto;margin-top:4px;">
     <table class="tbl">
       <thead>
@@ -81,9 +81,9 @@ foreach ($rows as $m) { if ((int)$m->final_qty <= 0) $out++; $toOrder += (int)$m
         $isOut = (int)$m->final_qty <= 0;
       ?>
         <tr>
-          <td class="mono" style="font-size:11.5px;color:var(--blue);font-weight:500;"><?= htmlspecialchars($m->item_code) ?></td>
-          <td style="font-size:11px;"><span class="badge b-primary" style="font-size:10px;"><?= htmlspecialchars($m->category) ?></span></td>
-          <td style="font-size:12px;font-weight:500;"><?= htmlspecialchars($m->description) ?></td>
+          <td class="mono" style="font-size:11.5px;color:var(--blue);font-weight:500;"><?= htmlspecialchars((string)($m->item_code)) ?></td>
+          <td style="font-size:11px;"><span class="badge b-primary" style="font-size:10px;"><?= htmlspecialchars((string)($m->category)) ?></span></td>
+          <td style="font-size:12px;font-weight:500;"><?= htmlspecialchars((string)($m->description)) ?></td>
           <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars((string)$m->part_number_size) ?></td>
           <td class="text-center" style="font-size:12px;color:var(--t3);"><?= htmlspecialchars((string)$m->unit) ?></td>
           <td class="mono text-right" style="<?= $isOut ? 'color:var(--red);font-weight:700;' : 'color:var(--amber);font-weight:600;' ?>"><?= number_format((int)$m->final_qty) ?></td>
@@ -101,7 +101,7 @@ foreach ($rows as $m) { if ((int)$m->final_qty <= 0) $out++; $toOrder += (int)$m
       <tfoot>
         <tr style="background:var(--g2);border-top:1px solid var(--sep);">
           <td colspan="8" style="font-weight:700;font-size:12px;padding:10px 18px;text-align:right;">TOTAL QTY TO ORDER</td>
-          <td class="mono text-right" style="font-weight:700;"><?= number_format($toOrder) ?></td>
+          <td class="mono text-right" style="font-weight:700;"><?= number_format((float)($toOrder)) ?></td>
           <td colspan="4"></td>
         </tr>
       </tfoot>

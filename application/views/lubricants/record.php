@@ -50,7 +50,7 @@
               <option value="">— not linked to a work order —</option>
               <?php if (isset($open_wos)): foreach ($open_wos as $w): ?>
               <option value="<?= (int)$w->id ?>" data-equipment="<?= (int)$w->equipment_id ?>">
-                <?= htmlspecialchars($w->wo_number) ?> — <?= htmlspecialchars((string)$w->registration_no) ?> — <?= htmlspecialchars($w->title) ?>
+                <?= htmlspecialchars((string)($w->wo_number)) ?> — <?= htmlspecialchars((string)$w->registration_no) ?> — <?= htmlspecialchars((string)($w->title)) ?>
               </option>
               <?php endforeach; endif; ?>
             </select>

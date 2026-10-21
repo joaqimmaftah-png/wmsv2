@@ -84,6 +84,7 @@ class Pm extends MY_Controller {
             redirect('pm');
         }
 
+        $data['pm']         = null;
         $data['equipment']  = $this->Equipment_model->get_all_active();
         // the field is only offered when the standard_hours column exists
         $data['has_standard_hours'] = $this->db->field_exists('standard_hours', 'pm_schedules');

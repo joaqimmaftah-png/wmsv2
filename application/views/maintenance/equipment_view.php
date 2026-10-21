@@ -60,11 +60,11 @@
           $w36_loc   = trim((string)$equipment->location);
           $w36_site  = $w36_loc === '' ? '<span style="color:var(--amber);">no site</span>'
                      : (!empty($w36_sites) && equip_is_approved_site($w36_loc, $w36_sites)
-                        ? htmlspecialchars(equip_site_label($w36_loc, $w36_sites))
-                        : htmlspecialchars($w36_loc) . ' <span class="badge b-warning">not approved</span>');
+                        ? htmlspecialchars((string)(equip_site_label($w36_loc, $w36_sites)))
+                        : htmlspecialchars((string)($w36_loc)) . ' <span class="badge b-warning">not approved</span>');
           $fields = [
             'Status' => $equipment->status,
-            'Machine ID (report)' => htmlspecialchars(equip_machine_id($equipment)),
+            'Machine ID (report)' => htmlspecialchars((string)(equip_machine_id($equipment))),
             'Location' => $w36_site,
             'Weekly Report' => $w36_in
                 ? ($w36_group ? $w36_group . ($w36_sort ? ' / ' . $w36_sort : '') : 'included — no group yet')
@@ -92,12 +92,12 @@
         <div class="row text-center">
           <div class="col-6">
             <div style="font-size:10px;text-transform:uppercase;color:#94a3b8;">Hours Meter</div>
-            <div style="font-weight:700;font-size:20px;color:#1a3c5e;"><?= number_format($equipment->current_hours, 0) ?></div>
+            <div style="font-weight:700;font-size:20px;color:#1a3c5e;"><?= number_format((float)($equipment->current_hours), 0) ?></div>
             <div style="font-size:11px;color:#94a3b8;">hours</div>
           </div>
           <div class="col-6">
             <div style="font-size:10px;text-transform:uppercase;color:#94a3b8;">Odometer</div>
-            <div style="font-weight:700;font-size:20px;color:#1a3c5e;"><?= number_format($equipment->current_km, 0) ?></div>
+            <div style="font-weight:700;font-size:20px;color:#1a3c5e;"><?= number_format((float)($equipment->current_km), 0) ?></div>
             <div style="font-size:11px;color:#94a3b8;">km</div>
           </div>
         </div>
@@ -134,8 +134,8 @@
         <table style="width:100%;font-size:12.5px;">
           <?php foreach ($specs as $sp): ?>
           <tr>
-            <td class="text-muted py-1 px-3" style="width:48%"><?= htmlspecialchars($sp->spec_label !== '' ? $sp->spec_label : $sp->spec_key) ?></td>
-            <td class="fw-500 py-1 px-3"><?= htmlspecialchars($sp->spec_value) ?></td>
+            <td class="text-muted py-1 px-3" style="width:48%"><?= htmlspecialchars((string)($sp->spec_label !== '' ? $sp->spec_label : $sp->spec_key)) ?></td>
+            <td class="fw-500 py-1 px-3"><?= htmlspecialchars((string)($sp->spec_value)) ?></td>
           </tr>
           <?php endforeach; ?>
         </table>
@@ -187,9 +187,9 @@
                 <td><a href="<?= base_url('workorders/view/' . $wo->id) ?>" style="font-weight:600;color:#1a3c5e;"><?= $wo->wo_number ?></a></td>
                 <td><span class="badge bg-primary" style="font-size:11px;"><?= $wo->type ?></span></td>
                 <td><span class="status-badge badge-<?= str_replace(' ', '.', $wo->status) ?>"><?= $wo->status ?></span></td>
-                <td style="font-size:12px;"><?= htmlspecialchars((string)(strlen($wo->title)>40 ? substr($wo->title,0,37).'...' : $wo->title), ENT_QUOTES, 'UTF-8') ?></td>
+                <td style="font-size:12px;"><?= htmlspecialchars((string)(strlen((string)($wo->title))>40 ? substr($wo->title,0,37).'...' : $wo->title), ENT_QUOTES, 'UTF-8') ?></td>
                 <td style="font-size:12px;white-space:nowrap;"><?= date('d M Y', strtotime($wo->created_at)) ?></td>
-                <td style="font-size:12px;"><?= $wo->downtime_hours ? number_format($wo->downtime_hours,1).' hrs' : '—' ?></td>
+                <td style="font-size:12px;"><?= $wo->downtime_hours ? number_format((float)($wo->downtime_hours),1).' hrs' : '—' ?></td>
               </tr>
               <?php endforeach; ?>
               <?php if (empty($wo_history)): ?>

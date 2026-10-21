@@ -142,7 +142,7 @@ foreach ($report as $type => $g) {
         $diff  = $kpi - $tgt;
       ?>
       <div style="flex:1;min-width:110px;padding:12px 14px;border-right:1px solid var(--g2);<?= $i===count($chartData)-1?'border-right:none':'' ?>">
-        <div style="font-size:11px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--t3);margin-bottom:4px;"><?= htmlspecialchars($ct['type']) ?>s</div>
+        <div style="font-size:11px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--t3);margin-bottom:4px;"><?= htmlspecialchars((string)($ct['type'])) ?>s</div>
         <div style="font-size:22px;font-weight:800;color:<?= $color ?>;line-height:1;margin-bottom:4px;"><?= $kpi ?>%</div>
         <div style="height:4px;background:var(--g2);border-radius:3px;overflow:hidden;margin-bottom:5px;">
           <div style="height:100%;width:<?= $kpi ?>%;background:<?= $color ?>;border-radius:3px;"></div>
@@ -207,14 +207,14 @@ foreach ($report as $type => $g) {
       ?>
       <tr style="vertical-align:top;">
         <td style="font-weight:700;font-size:10px;background:var(--blue-d);color:var(--blue);text-align:center;vertical-align:middle;">
-          <?= $first ? htmlspecialchars($g['type']) : '' ?>
+          <?= $first ? htmlspecialchars((string)($g['type'])) : '' ?>
         </td>
         <td style="text-align:center;font-weight:700;background:var(--g2);vertical-align:middle;"><?= $first ? $g['total'] : '' ?></td>
         <td style="text-align:center;color:var(--green);font-weight:600;background:var(--g2);vertical-align:middle;"><?= $first ? $g['available'] : '' ?></td>
         <td style="text-align:center;color:<?= $g['down']>0?'var(--red)':'var(--t3)' ?>;font-weight:600;background:var(--g2);vertical-align:middle;"><?= $first ? $g['down'] : '' ?></td>
-        <td class="mono" style="font-weight:600;color:var(--blue);font-size:10.5px;vertical-align:middle;"><?= htmlspecialchars($m['machine_id']) ?></td>
-        <td style="color:var(--t2);vertical-align:middle;"><?= htmlspecialchars($m['model']) ?></td>
-        <td style="color:var(--t3);font-size:10.5px;vertical-align:middle;text-align:center;"><?= htmlspecialchars($m['location']) ?></td>
+        <td class="mono" style="font-weight:600;color:var(--blue);font-size:10.5px;vertical-align:middle;"><?= htmlspecialchars((string)($m['machine_id'])) ?></td>
+        <td style="color:var(--t2);vertical-align:middle;"><?= htmlspecialchars((string)($m['model'])) ?></td>
+        <td style="color:var(--t3);font-size:10.5px;vertical-align:middle;text-align:center;"><?= htmlspecialchars((string)($m['location'])) ?></td>
         <td class="mono" style="text-align:center;font-size:10.5px;color:var(--t3);vertical-align:middle;"><?= $m['start_date'] ?></td>
         <td style="text-align:center;font-weight:600;vertical-align:middle;<?= $m['days_down']>14?'color:var(--red)':($m['days_down']>7?'color:var(--amber)':'') ?>">
           <?= $m['days_down']>0 ? $m['days_down'] : '' ?>
@@ -233,7 +233,7 @@ foreach ($report as $type => $g) {
           <span style="color:var(--t4);font-style:italic;">Operational</span>
           <?php else: ?>
           <?php foreach ($m['observations'] as $obs): ?>
-          <div style="margin-bottom:2px;">• <?= htmlspecialchars($obs) ?></div>
+          <div style="margin-bottom:2px;">• <?= htmlspecialchars((string)($obs)) ?></div>
           <?php endforeach; ?>
           <?php endif; ?>
         </td>
@@ -244,7 +244,7 @@ foreach ($report as $type => $g) {
           <?php else: ?>
           <?php foreach ($m['actions'] as $ai => $act): ?>
           <div style="margin-bottom:3px;">
-            • <?= htmlspecialchars($act) ?>
+            • <?= htmlspecialchars((string)($act)) ?>
             <?php if (!empty($m['wo_dates'][$ai]) && $m['wo_dates'][$ai] !== 'N/A'): ?>
             <span style="color:var(--t4);font-size:9.5px;margin-left:4px;"><?= $m['wo_dates'][$ai] ?></span>
             <?php endif; ?>
@@ -276,7 +276,7 @@ foreach ($report as $type => $g) {
   <div class="card" style="padding:0;">
     <div class="ch" style="padding:12px 16px 8px;">
       <div>
-        <div class="ct" style="font-size:12px;">Weekly <?= htmlspecialchars($ct['type']) ?>s KPI</div>
+        <div class="ct" style="font-size:12px;">Weekly <?= htmlspecialchars((string)($ct['type'])) ?>s KPI</div>
         <div class="cs">Target <?= $tgt ?>%</div>
       </div>
       <div style="text-align:right;">

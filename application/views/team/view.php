@@ -24,7 +24,7 @@ foreach ($attendance as $a) {
           <?php if ($worker->photo): ?>
             <img src="<?= base_url('uploads/photos/' . $worker->photo) ?>" style="width:80px;height:80px;border-radius:50%;object-fit:cover;">
           <?php else: ?>
-            <?= strtoupper(substr($worker->first_name,0,1) . substr($worker->last_name,0,1)) ?>
+            <?= strtoupper((string)(substr($worker->first_name,0,1) . substr($worker->last_name,0,1))) ?>
           <?php endif; ?>
         </div>
         <h5 class="fw-700 mb-1"><?= $worker->first_name . ' ' . $worker->last_name ?></h5>
@@ -85,12 +85,12 @@ foreach ($attendance as $a) {
             <?php foreach ($leave_balance as $lb): ?>
             <?php if ($lb['entitled'] === null && $lb['approved'] <= 0 && $lb['pending'] <= 0) continue; ?>
             <tr>
-              <td><?= htmlspecialchars($lb['type']) ?></td>
-              <td class="mono" style="text-align:right;"><?= $lb['entitled'] === null ? '—' : rtrim(rtrim(number_format($lb['entitled'], 1), '0'), '.') ?></td>
-              <td class="mono" style="text-align:right;"><?= rtrim(rtrim(number_format($lb['approved'], 1), '0'), '.') ?></td>
-              <td class="mono" style="text-align:right;color:#b45309;"><?= rtrim(rtrim(number_format($lb['pending'], 1), '0'), '.') ?></td>
+              <td><?= htmlspecialchars((string)($lb['type'])) ?></td>
+              <td class="mono" style="text-align:right;"><?= $lb['entitled'] === null ? '—' : rtrim(rtrim((string)(number_format((float)($lb['entitled']), 1)), '0'), '.') ?></td>
+              <td class="mono" style="text-align:right;"><?= rtrim(rtrim((string)(number_format((float)($lb['approved']), 1)), '0'), '.') ?></td>
+              <td class="mono" style="text-align:right;color:#b45309;"><?= rtrim(rtrim((string)(number_format((float)($lb['pending']), 1)), '0'), '.') ?></td>
               <td class="mono fw-600" style="text-align:right;color:<?= ($lb['remaining'] !== null && $lb['remaining'] < 0) ? '#dc2626' : '#16a34a' ?>;">
-                <?= $lb['remaining'] === null ? '—' : rtrim(rtrim(number_format($lb['remaining'], 1), '0'), '.') ?>
+                <?= $lb['remaining'] === null ? '—' : rtrim(rtrim((string)(number_format((float)($lb['remaining']), 1)), '0'), '.') ?>
               </td>
             </tr>
             <?php endforeach; ?>
@@ -156,7 +156,7 @@ foreach ($attendance as $a) {
             $alert_days = isset($cert_alert_days) ? (int)$cert_alert_days : 30;
             ?>
             <tr>
-              <td class="fw-500"><?= htmlspecialchars($c->cert_name) ?></td>
+              <td class="fw-500"><?= htmlspecialchars((string)($c->cert_name)) ?></td>
               <td style="font-size:12px;"><?= htmlspecialchars((string)($c->cert_number ?: '—')) ?></td>
               <td style="font-size:12px;color:#64748b;"><?= htmlspecialchars((string)($c->issuing_body ?: '—')) ?></td>
               <td style="font-size:12px;">
@@ -170,7 +170,7 @@ foreach ($attendance as $a) {
               <td><span class="badge <?= $cert_status_badge ?>"><?= htmlspecialchars((string)$c->status) ?></span></td>
               <td style="font-size:11.5px;">
                 <?php if (!empty($c->document)): ?>
-                  <a href="<?= base_url(htmlspecialchars($c->document, ENT_QUOTES, 'UTF-8')) ?>" target="_blank" rel="noopener">Open</a>
+                  <a href="<?= base_url(htmlspecialchars((string)($c->document), ENT_QUOTES, 'UTF-8')) ?>" target="_blank" rel="noopener">Open</a>
                 <?php else: ?>
                   <span style="color:#94a3b8;">—</span>
                 <?php endif; ?>

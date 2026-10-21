@@ -17,7 +17,7 @@ if (!function_exists('sp_status_badge')) {
   }
 }
 if (!function_exists('sp_qty')) {
-  function sp_qty($n) { return rtrim(rtrim(number_format((float)$n, 2, '.', ''), '0'), '.'); }
+  function sp_qty($n) { return rtrim((string)(rtrim((string)(number_format((float)$n, 2, '.', '')), '0')), '.'); }
 }
 
 $cur_status = isset($filter['status']) && $filter['status'] ? $filter['status'] : 'all';
@@ -44,12 +44,12 @@ $has_rows = !empty($groups) || !empty($unlinked);
       <div style="flex:1;min-width:0;">
         <div style="font-size:12.5px;font-weight:600;color:var(--t1);">
           <?= $al->alert_type === 'Partial' ? '🟡' : '🟢' ?>
-          <?= htmlspecialchars($al->message) ?>
+          <?= htmlspecialchars((string)($al->message)) ?>
         </div>
         <div style="font-size:10.5px;color:var(--t3);margin-top:2px;">
           <?= date('d M Y, H:i', strtotime($al->created_at)) ?>
-          <?php if (!empty($al->received_by_name)): ?> · received by <?= htmlspecialchars($al->received_by_name) ?><?php endif; ?>
-          · <a href="<?= base_url('workorders/view/'.$al->work_order_id) ?>" style="color:var(--blue);font-weight:600;"><?= htmlspecialchars($al->wo_number) ?></a>
+          <?php if (!empty($al->received_by_name)): ?> · received by <?= htmlspecialchars((string)($al->received_by_name)) ?><?php endif; ?>
+          · <a href="<?= base_url('workorders/view/'.$al->work_order_id) ?>" style="color:var(--blue);font-weight:600;"><?= htmlspecialchars((string)($al->wo_number)) ?></a>
         </div>
       </div>
       <?php if ($al->status === 'New'): ?>
@@ -98,7 +98,7 @@ $has_rows = !empty($groups) || !empty($unlinked);
     <div style="font-size:13px;font-weight:700;color:var(--green);white-space:nowrap;">✓ Ready to proceed:</div>
     <?php foreach ($ready_wos as $rw): ?>
     <a href="<?= base_url('workorders/view/'.$rw['work_order_id']) ?>" class="badge b-success" style="font-size:11px;text-decoration:none;">
-      <?= htmlspecialchars($rw['wo_number']) ?> · <?= htmlspecialchars($rw['registration_no']) ?> · <?= (int)$rw['parts'] ?> part(s)
+      <?= htmlspecialchars((string)($rw['wo_number'])) ?> · <?= htmlspecialchars((string)($rw['registration_no'])) ?> · <?= (int)$rw['parts'] ?> part(s)
     </a>
     <?php endforeach; ?>
   </div>
@@ -116,7 +116,7 @@ $has_rows = !empty($groups) || !empty($unlinked);
         <?php endforeach; ?>
       </select>
       <input type="text" name="search" class="form-control" style="max-width:280px;"
-             value="<?= htmlspecialchars($cur_search) ?>" placeholder="Search WO, part, item code, equipment…">
+             value="<?= htmlspecialchars((string)($cur_search)) ?>" placeholder="Search WO, part, item code, equipment…">
       <button type="submit" class="btn btn-primary btn-sm">Filter</button>
       <a href="<?= base_url('spareparts') ?>" class="btn btn-ghost btn-sm">Reset</a>
     </form>
@@ -144,12 +144,12 @@ $has_rows = !empty($groups) || !empty($unlinked);
   <div class="ch">
     <div>
       <div class="ct" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <span class="mono" style="color:var(--blue);"><?= htmlspecialchars($m->item_code) ?></span>
-        <?= htmlspecialchars($m->description) ?>
-        <?php if (!empty($m->part_number_size)): ?><span class="mono" style="font-size:10.5px;color:var(--t3);font-weight:400;">P/N <?= htmlspecialchars($m->part_number_size) ?></span><?php endif; ?>
+        <span class="mono" style="color:var(--blue);"><?= htmlspecialchars((string)($m->item_code)) ?></span>
+        <?= htmlspecialchars((string)($m->description)) ?>
+        <?php if (!empty($m->part_number_size)): ?><span class="mono" style="font-size:10.5px;color:var(--t3);font-weight:400;">P/N <?= htmlspecialchars((string)($m->part_number_size)) ?></span><?php endif; ?>
       </div>
       <div class="cs">
-        Stock: <strong style="color:<?= $stock_color ?>;"><?= sp_qty($g['stock']) ?> <?= htmlspecialchars($m->unit) ?></strong>
+        Stock: <strong style="color:<?= $stock_color ?>;"><?= sp_qty($g['stock']) ?> <?= htmlspecialchars((string)($m->unit)) ?></strong>
         · Free (unreserved): <strong><?= sp_qty($g['free']) ?></strong>
         · Pending demand: <strong><?= sp_qty($g['demand']) ?></strong>
         <?php if ($on_order_qty > 0): ?> · On order: <strong style="color:var(--blue);"><?= sp_qty($on_order_qty) ?></strong><?php endif; ?>
@@ -167,12 +167,12 @@ $has_rows = !empty($groups) || !empty($unlinked);
       ?>
       <tr>
         <td>
-          <a href="<?= base_url('workorders/view/'.$l->work_order_id) ?>" style="color:var(--blue);font-weight:600;text-decoration:none;" class="mono"><?= htmlspecialchars($l->wo_number) ?></a>
-          <div style="font-size:10px;color:var(--t3);"><?= htmlspecialchars($l->wo_status) ?> · <?= htmlspecialchars($l->priority) ?></div>
+          <a href="<?= base_url('workorders/view/'.$l->work_order_id) ?>" style="color:var(--blue);font-weight:600;text-decoration:none;" class="mono"><?= htmlspecialchars((string)($l->wo_number)) ?></a>
+          <div style="font-size:10px;color:var(--t3);"><?= htmlspecialchars((string)($l->wo_status)) ?> · <?= htmlspecialchars((string)($l->priority)) ?></div>
         </td>
-        <td style="font-weight:500;"><?= htmlspecialchars($l->registration_no ?: '—') ?><div style="font-size:10px;color:var(--t3);"><?= htmlspecialchars(trim($l->brand.' '.$l->model)) ?></div></td>
-        <td><?= htmlspecialchars($l->part_name) ?><?php if (!empty($l->part_number)): ?> <span class="mono" style="font-size:10px;color:var(--t3);">P/N <?= htmlspecialchars($l->part_number) ?></span><?php endif; ?></td>
-        <td class="mono fw-600"><?= sp_qty($l->qty_required) ?> <span style="color:var(--t4);font-size:10px;"><?= htmlspecialchars($l->item_unit) ?></span></td>
+        <td style="font-weight:500;"><?= htmlspecialchars((string)($l->registration_no ?: '—')) ?><div style="font-size:10px;color:var(--t3);"><?= htmlspecialchars((string)(trim((string)($l->brand.' '.$l->model)))) ?></div></td>
+        <td><?= htmlspecialchars((string)($l->part_name)) ?><?php if (!empty($l->part_number)): ?> <span class="mono" style="font-size:10px;color:var(--t3);">P/N <?= htmlspecialchars((string)($l->part_number)) ?></span><?php endif; ?></td>
+        <td class="mono fw-600"><?= sp_qty($l->qty_required) ?> <span style="color:var(--t4);font-size:10px;"><?= htmlspecialchars((string)($l->item_unit)) ?></span></td>
         <td class="mono fw-600" style="color:<?= $l->qty_available >= $l->qty_required && $l->qty_required > 0 ? 'var(--green)' : ($l->qty_available > 0 ? 'var(--amber)' : 'var(--red)') ?>;">
           <?= sp_qty($l->qty_available) ?>
         </td>
@@ -219,9 +219,9 @@ foreach ($groups as $g) foreach ($g['lines'] as $l) {
       $alloc_rows = isset($line_allocs[(int)$l->id]) ? $line_allocs[(int)$l->id] : array();
       foreach ($alloc_rows as $a): if ($a->status !== 'Allocated') continue; ?>
       <tr>
-        <td class="mono"><?= htmlspecialchars($l->material->item_code) ?> — <?= htmlspecialchars($l->part_name) ?></td>
-        <td><a href="<?= base_url('workorders/view/'.$l->work_order_id) ?>" style="color:var(--blue);font-weight:600;" class="mono"><?= htmlspecialchars($l->wo_number) ?></a></td>
-        <td class="mono fw-600"><?= sp_qty($a->qty_allocated) ?> <?= htmlspecialchars($l->item_unit) ?></td>
+        <td class="mono"><?= htmlspecialchars((string)($l->material->item_code)) ?> — <?= htmlspecialchars((string)($l->part_name)) ?></td>
+        <td><a href="<?= base_url('workorders/view/'.$l->work_order_id) ?>" style="color:var(--blue);font-weight:600;" class="mono"><?= htmlspecialchars((string)($l->wo_number)) ?></a></td>
+        <td class="mono fw-600"><?= sp_qty($a->qty_allocated) ?> <?= htmlspecialchars((string)($l->item_unit)) ?></td>
         <td style="font-size:11px;color:var(--t3);"><?= $a->allocated_at ? date('d M Y, H:i', strtotime($a->allocated_at)) : '—' ?></td>
         <td style="text-align:right;white-space:nowrap;">
           <?php if ($can_write): ?>
@@ -251,10 +251,10 @@ foreach ($groups as $g) foreach ($g['lines'] as $l) {
     <tbody>
       <?php foreach ($unlinked as $l): ?>
       <tr>
-        <td><a href="<?= base_url('workorders/view/'.$l->work_order_id) ?>" style="color:var(--blue);font-weight:600;" class="mono"><?= htmlspecialchars($l->wo_number) ?></a></td>
-        <td><?= htmlspecialchars($l->registration_no ?: '—') ?></td>
-        <td><?= htmlspecialchars($l->part_name) ?></td>
-        <td class="mono" style="font-size:11px;color:var(--t3);"><?= htmlspecialchars($l->item_code ?: '—') ?><?php if (!empty($l->part_number)): ?> / <?= htmlspecialchars($l->part_number) ?><?php endif; ?></td>
+        <td><a href="<?= base_url('workorders/view/'.$l->work_order_id) ?>" style="color:var(--blue);font-weight:600;" class="mono"><?= htmlspecialchars((string)($l->wo_number)) ?></a></td>
+        <td><?= htmlspecialchars((string)($l->registration_no ?: '—')) ?></td>
+        <td><?= htmlspecialchars((string)($l->part_name)) ?></td>
+        <td class="mono" style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)($l->item_code ?: '—')) ?><?php if (!empty($l->part_number)): ?> / <?= htmlspecialchars((string)($l->part_number)) ?><?php endif; ?></td>
         <td class="mono fw-600"><?= sp_qty($l->qty_required) ?></td>
         <td><?= sp_status_badge('Unlinked') ?></td>
       </tr>

@@ -1,32 +1,123 @@
-name: tests
+name: CI — Lint, Unit Tests, Migrations & Live Smoke Tests
 
 on:
   push:
   pull_request:
 
 jobs:
-  unit:
-    name: Unit tests
+  php-lint-and-unit:
+    name: PHP ${{ matrix.php }} Lint & Unit Suite
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4']
     steps:
       - uses: actions/checkout@v4
-      - name: PHP version
-        run: php -v
-      - name: Run tests/run.php
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Syntax lint all PHP files
+        run: find application system tests scripts index.php -name '*.php' -print0 | xargs -0 -n1 -P4 php -l >/dev/null
+
+      - name: Run unit & regression test suite
         run: php tests/run.php
 
-  syntax:
-    name: PHP and shell syntax
+  database-and-e2e:
+    name: DB Schema, Migrations & HTTP E2E (${{ matrix.db_label }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - db_label: MySQL 8.0 (Strict Production)
+            image: mysql:8.0
+            root_pass: rootpass
+          - db_label: MariaDB 10.4 (XAMPP Compatible)
+            image: mariadb:10.4
+            root_pass: rootpass
+    services:
+      mysql:
+        image: ${{ matrix.image }}
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ matrix.root_pass }}
+          MYSQL_DATABASE: wms_fresh
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -prootpass"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
     steps:
       - uses: actions/checkout@v4
-      - name: php -l on every PHP file
-        shell: bash
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mysqli, zip, gd, mbstring
+          coverage: none
+
+      - name: Verify fresh install from database/schema.sql
+        env:
+          WMS_DB_HOST: 127.0.0.1
+          WMS_DB_PORT: 3306
+          WMS_DB_USER: root
+          WMS_DB_PASS: ${{ matrix.root_pass }}
+          WMS_DB_NAME: wms_fresh
         run: |
-          fail=0
-          while IFS= read -r -d '' file; do
-            php -l "$file" > /dev/null || { echo "::error file=$file::PHP syntax error"; fail=1; }
-          done < <(find . -name '*.php' -not -path './.git/*' -print0)
-          exit $fail
-      - name: bash -n on the scripts
-        run: bash -n scripts/migrate.sh scripts/purge-secrets.sh
+          php scripts/migrate.php --schema --verify
+
+      - name: Verify idempotent re-run of all migrations (twice in a row)
+        env:
+          WMS_DB_HOST: 127.0.0.1
+          WMS_DB_PORT: 3306
+          WMS_DB_USER: root
+          WMS_DB_PASS: ${{ matrix.root_pass }}
+          WMS_DB_NAME: wms_fresh
+        run: |
+          php scripts/migrate.php --force --verify
+          php scripts/migrate.php --force --verify
+          php scripts/migrate.php --status
+
+      - name: Seed test accounts & run live authenticated HTTP + XLSX smoke test
+        env:
+          CI_ENV: development
+          WMS_DB_HOST: 127.0.0.1
+          WMS_DB_PORT: 3306
+          WMS_DB_USER: root
+          WMS_DB_PASS: ${{ matrix.root_pass }}
+          WMS_DB_NAME: wms_fresh
+          WMS_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+        run: |
+          php scripts/create-admin.php admin@ci.local "AdminPass123!" "CI" "Supervisor" 1
+          php scripts/create-admin.php ceo@ci.local "AdminPass123!" "CI" "Executive" 5
+          php -S 127.0.0.1:8000 index.php >/tmp/php-server.log 2>&1 &
+          SERVER_PID=$!
+          trap "kill $SERVER_PID 2>/dev/null || true" EXIT
+          sleep 2
+
+          # Authenticate via CSRF-protected POST /login (omit -X POST so -L follows 302 as GET!)
+          COOKIES=/tmp/cookies.txt
+          LOGIN_HTML=$(curl -fsSL -c "$COOKIES" http://127.0.0.1:8000/login)
+          CSRF=$(python3 -c 'import re,sys; m=re.search(r"name=[\x27\"]csrf_token_wms[\x27\"]\s+value=[\x27\"]([^\x27\"]+)", sys.stdin.read()); assert m; print(m.group(1))' <<<"$LOGIN_HTML")
+          curl -fsSL -b "$COOKIES" -c "$COOKIES" http://127.0.0.1:8000/login \
+            --data-urlencode "csrf_token_wms=$CSRF" \
+            --data-urlencode "email=admin@ci.local" \
+            --data-urlencode "password=AdminPass123!" >/dev/null
+
+          for ROUTE in dashboard equipment workorders pm inspections materials spareparts suppliers orders lubricants team backlog reports forecast users settings; do
+            BODY=$(curl -fsSL -b "$COOKIES" -c "$COOKIES" "http://127.0.0.1:8000/$ROUTE")
+            if echo "$BODY" | grep -Eq "Severity: (Warning|Notice|Deprecated|Error)|Fatal error|Uncaught|Database Error"; then
+              echo "PHP error output found on /$ROUTE!"
+              exit 1
+            fi
+          done
+
+          # Verify XLSX binary export starts with valid ZIP magic PK\x03\x04
+          curl -fsSL -b "$COOKIES" -c "$COOKIES" "http://127.0.0.1:8000/reports/export_annual_report_xlsx" -o /tmp/annual.xlsx
+          python3 -c 'data=open("/tmp/annual.xlsx","rb").read(); assert data[:4]==b"PK\x03\x04", f"Corrupt XLSX header: {data[:80]!r}"; print("Valid XLSX bytes:", len(data))'

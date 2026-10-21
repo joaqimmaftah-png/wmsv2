@@ -78,7 +78,7 @@ class Asset_model extends CI_Model {
             $assets[] = array(
                 'id'              => (int)$eq->id,
                 'equipment_type_id'=> (int)$eq->equipment_type_id,
-                'type'            => strtoupper($eq->equip_type ? $eq->equip_type : 'OTHER'),
+                'type'            => strtoupper((string)($eq->equip_type ? $eq->equip_type : 'OTHER')),
                 'type_name'       => $eq->equip_type,
                 'category'        => $eq->equip_category,
                 'registration_no' => $eq->registration_no,
@@ -218,7 +218,7 @@ class Asset_model extends CI_Model {
     private function _key($s) {
         $s = preg_replace('/\s+/', ' ', trim((string)$s));
         if (function_exists('mb_strtolower')) return mb_strtolower($s, 'UTF-8');
-        return strtolower($s);
+        return strtolower((string)($s));
     }
 
     /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -249,7 +249,7 @@ class Asset_model extends CI_Model {
     }
 
     public function create_type($name) {
-        $this->db->insert('equipment_types', array('name' => trim($name), 'category' => null, 'description' => null));
+        $this->db->insert('equipment_types', array('name' => trim((string)($name)), 'category' => null, 'description' => null));
         return $this->db->insert_id();
     }
 

@@ -182,7 +182,7 @@ class Workorder_model extends CI_Model {
 
         $norm = function ($s) {
             $s = preg_replace('/\s+/u', ' ', trim((string)$s));
-            return function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s);
+            return function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower((string)($s));
         };
 
         if (empty($rows) || empty($rows['part_name'])) {
@@ -192,18 +192,18 @@ class Workorder_model extends CI_Model {
 
         $count = count($rows['part_name']);
         for ($i = 0; $i < $count; $i++) {
-            $name = trim(isset($rows['part_name'][$i]) ? $rows['part_name'][$i] : '');
+            $name = trim((string)(isset($rows['part_name'][$i]) ? $rows['part_name'][$i] : ''));
             if (!$name) continue;
 
             $data = array(
                 'work_order_id'  => $wo_id,
-                'item_code'      => isset($rows['item_code'][$i])      ? trim($rows['item_code'][$i])      : NULL,
+                'item_code'      => isset($rows['item_code'][$i])      ? trim((string)($rows['item_code'][$i]))      : NULL,
                 'part_name'      => $name,
-                'part_number'    => isset($rows['part_number'][$i])    ? trim($rows['part_number'][$i])    : NULL,
+                'part_number'    => isset($rows['part_number'][$i])    ? trim((string)($rows['part_number'][$i]))    : NULL,
                 'spare_type'     => isset($rows['spare_type'][$i])     ? $rows['spare_type'][$i]           : 'New',
-                'source_machine' => isset($rows['source_machine'][$i]) ? trim($rows['source_machine'][$i]) : NULL,
+                'source_machine' => isset($rows['source_machine'][$i]) ? trim((string)($rows['source_machine'][$i])) : NULL,
                 'quantity'       => isset($rows['quantity'][$i])       ? (float)$rows['quantity'][$i]      : NULL,
-                'unit'           => isset($rows['unit'][$i])           ? trim($rows['unit'][$i]) ?: 'pcs'  : 'pcs',
+                'unit'           => isset($rows['unit'][$i])           ? trim((string)($rows['unit'][$i])) ?: 'pcs'  : 'pcs',
             );
             if (empty($data['item_code']))     $data['item_code'] = NULL;
             if (empty($data['part_number']))   $data['part_number'] = NULL;
@@ -249,16 +249,16 @@ class Workorder_model extends CI_Model {
 
         $count = count($rows['oil_type']);
         for ($i = 0; $i < $count; $i++) {
-            $type = trim(isset($rows['oil_type'][$i])   ? $rows['oil_type'][$i]   : '');
-            $sys  = trim(isset($rows['system'][$i])     ? $rows['system'][$i]     : '');
-            $code = trim(isset($rows['item_code'][$i])  ? $rows['item_code'][$i]  : '');
+            $type = trim((string)(isset($rows['oil_type'][$i])   ? $rows['oil_type'][$i]   : ''));
+            $sys  = trim((string)(isset($rows['system'][$i])     ? $rows['system'][$i]     : ''));
+            $code = trim((string)(isset($rows['item_code'][$i])  ? $rows['item_code'][$i]  : ''));
             if (!$type && !$sys && !$code) continue;
 
             $this->db->insert('wo_oil_records', array(
                 'work_order_id'   => $wo_id,
                 'system_location' => $sys  ?: NULL,
                 'oil_type'        => $type ?: NULL,
-                'grade'           => isset($rows['grade'][$i]) ? trim($rows['grade'][$i]) : NULL,
+                'grade'           => isset($rows['grade'][$i]) ? trim((string)($rows['grade'][$i])) : NULL,
                 'quantity'        => isset($rows['quantity'][$i]) ? (float)$rows['quantity'][$i] : NULL,
             ));
         }
@@ -380,13 +380,13 @@ class Workorder_model extends CI_Model {
      * Oil"). A grade match is used when the names do not overlap.
      */
     private function _resolve_lube_type($types, $oil_type, $grade) {
-        $name    = strtolower(trim((string)$oil_type));
-        $grade_v = strtolower(trim((string)$grade));
+        $name    = strtolower((string)(trim((string)$oil_type)));
+        $grade_v = strtolower((string)(trim((string)$grade)));
         if ($name === '' && $grade_v === '') return NULL;
 
         // 1. Exact name (case-insensitive) — the only unambiguous match.
         foreach ($types as $t) {
-            if ($name !== '' && strtolower(trim($t->name)) === $name) return $t;
+            if ($name !== '' && strtolower((string)(trim((string)($t->name)))) === $name) return $t;
         }
 
         // 2. Whole-word containment, longest lube name first, so "Engine Oil"
@@ -395,12 +395,12 @@ class Workorder_model extends CI_Model {
         $best = NULL;
         $best_len = 0;
         foreach ($types as $t) {
-            $tn = strtolower(trim($t->name));
-            if ($tn === '' || strlen($tn) < 4 || $name === '') continue;
-            if (strlen($tn) <= $best_len) continue;
+            $tn = strtolower((string)(trim((string)($t->name))));
+            if ($tn === '' || strlen((string)($tn)) < 4 || $name === '') continue;
+            if (strlen((string)($tn)) <= $best_len) continue;
             if (preg_match('/(^|[^a-z0-9])' . preg_quote($tn, '/') . '([^a-z0-9]|$)/', $name)) {
                 $best = $t;
-                $best_len = strlen($tn);
+                $best_len = strlen((string)($tn));
             }
         }
         if ($best) return $best;
@@ -408,8 +408,8 @@ class Workorder_model extends CI_Model {
         // 3. The grade as a tie-breaker ("15W-40"); same whole-token rule.
         if ($grade_v !== '') {
             foreach ($types as $t) {
-                $tg = strtolower(trim(isset($t->grade) ? $t->grade : ''));
-                if ($tg === '' || strlen($tg) < 2) continue;
+                $tg = strtolower((string)(trim((string)(isset($t->grade) ? $t->grade : ''))));
+                if ($tg === '' || strlen((string)($tg)) < 2) continue;
                 if (preg_match('/(^|[^a-z0-9])' . preg_quote($tg, '/') . '([^a-z0-9]|$)/', $grade_v)) {
                     return $t;
                 }

@@ -280,7 +280,7 @@ class Dashboard_model extends CI_Model {
 
         $groups = [];
         foreach ($equipment as $eq) {
-            $type = strtoupper($eq->equip_type ?: 'OTHER');
+            $type = strtoupper((string)($eq->equip_type ?: 'OTHER'));
             if (!isset($groups[$type])) {
                 $groups[$type] = ['type'=>$type,'total'=>0,'available'=>0,'down'=>0];
             }
@@ -350,7 +350,7 @@ class Dashboard_model extends CI_Model {
             $per_eq[] = [
                 'id'          => $eq->id,
                 'machine_id'  => $eq->registration_no,
-                'type'        => strtoupper($eq->equip_type ?: 'OTHER'),
+                'type'        => strtoupper((string)($eq->equip_type ?: 'OTHER')),
                 'model'       => ($eq->brand ? $eq->brand.' ' : '').$eq->model,
                 'location'    => $eq->location,
                 'hours'       => (float)$eq->current_hours,          // the meter, not an operating-time basis
@@ -440,7 +440,7 @@ class Dashboard_model extends CI_Model {
 
             $forecast[] = [
                 'machine_id'    => $pm->registration_no,
-                'type'          => strtoupper($pm->equip_type ?: 'OTHER'),
+                'type'          => strtoupper((string)($pm->equip_type ?: 'OTHER')),
                 'schedule_name' => $pm->schedule_name,
                 'interval_type' => $pm->interval_type,
                 'interval_value'=> $pm->interval_value,
@@ -461,7 +461,7 @@ class Dashboard_model extends CI_Model {
         // Fleet status summary per type for the forecast period
         $type_summary = [];
         foreach ($equipment as $eq) {
-            $type = strtoupper($eq->equip_type ?: 'OTHER');
+            $type = strtoupper((string)($eq->equip_type ?: 'OTHER'));
             if (!isset($type_summary[$type])) {
                 $type_summary[$type] = ['type'=>$type,'total'=>0,'operational'=>0,'breakdown'=>0,'pm_due'=>0];
             }
@@ -652,7 +652,7 @@ class Dashboard_model extends CI_Model {
             if ($k === null) continue;
             $eq_reliability[] = [
                 'machine_id'  => $eq->registration_no,
-                'type'        => strtoupper($eq->equip_type ?: 'OTHER'),
+                'type'        => strtoupper((string)($eq->equip_type ?: 'OTHER')),
                 'model'       => ($eq->brand?' '.$eq->brand:'').' '.$eq->model,
                 'location'    => $eq->location,
                 'breakdowns'  => (int)$k['breakdowns'],
@@ -690,7 +690,7 @@ class Dashboard_model extends CI_Model {
             ->join('lube_types lt','lt.id=lc.lube_type_id','left')
             ->where('lc.consumption_date >=', $from)
             ->where('lc.consumption_date <=', $year.'-12-31')
-            ->group_by('lt.category')
+            ->group_by('lt.category, lt.unit')
             ->order_by('total DESC')
             ->get()->result();
 
@@ -760,7 +760,7 @@ class Dashboard_model extends CI_Model {
             // Group by type
             $byType = [];
             foreach ($pm as $p) {
-                $t = strtoupper($p->equip_type ?: 'OTHER');
+                $t = strtoupper((string)($p->equip_type ?: 'OTHER'));
                 $byType[$t][] = $p;
             }
 
@@ -837,7 +837,7 @@ class Dashboard_model extends CI_Model {
                 ->from('lube_consumption lc')
                 ->join('lube_types lt','lt.id=lc.lube_type_id','left')
                 ->where('lc.equipment_id', $eq->id)
-                ->group_by('lt.id')
+                ->group_by('lt.id, lt.name, lt.category, lt.grade, lt.unit')
                 ->order_by('total_used DESC')
                 ->get()->result();
 
@@ -864,7 +864,7 @@ class Dashboard_model extends CI_Model {
 
             $kits[] = [
                 'machine_id'  => $eq->registration_no,
-                'type'        => strtoupper($eq->equip_type ?: 'OTHER'),
+                'type'        => strtoupper((string)($eq->equip_type ?: 'OTHER')),
                 'model'       => ($eq->brand?$eq->brand.' ':'').$eq->model,
                 'location'    => $eq->location,
                 'hours'       => (float)$eq->current_hours,

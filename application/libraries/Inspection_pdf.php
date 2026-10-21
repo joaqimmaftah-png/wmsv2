@@ -14,6 +14,7 @@ require_once dirname(__FILE__) . '/Pdf_writer.php';
  *                                             // controller already builds
  *   $bytes = $builder->render();
  */
+#[AllowDynamicProperties]
 class Inspection_pdf {
 
     const MM = 2.83464567;

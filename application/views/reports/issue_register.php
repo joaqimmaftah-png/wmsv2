@@ -32,35 +32,35 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
 
 <div class="grid g-4 mb-4">
   <div class="kpi"><div class="kpi-glow" style="background:var(--blue)"></div>
-    <span class="kpi-tag">Issue Lines</span><div class="kpi-num"><?= number_format($t['lines']) ?></div></div>
+    <span class="kpi-tag">Issue Lines</span><div class="kpi-num"><?= number_format((float)($t['lines'])) ?></div></div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--amber)"></div>
-    <span class="kpi-tag">Total Qty Issued</span><div class="kpi-num"><?= number_format($t['qty']) ?></div></div>
+    <span class="kpi-tag">Total Qty Issued</span><div class="kpi-num"><?= number_format((float)($t['qty'])) ?></div></div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--green)"></div>
-    <span class="kpi-tag">Distinct Items</span><div class="kpi-num"><?= number_format($t['items']) ?></div></div>
+    <span class="kpi-tag">Distinct Items</span><div class="kpi-num"><?= number_format((float)($t['items'])) ?></div></div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--t3)"></div>
     <span class="kpi-tag">Period Covered</span>
-    <div class="kpi-num" style="font-size:16px;"><?= $t['first'] ? htmlspecialchars($t['first'].' → '.$t['last']) : '—' ?></div></div>
+    <div class="kpi-num" style="font-size:16px;"><?= $t['first'] ? htmlspecialchars((string)($t['first'].' → '.$t['last'])) : '—' ?></div></div>
 </div>
 
 <form method="get" class="flex ai-c gap-10 mb-4" style="flex-wrap:wrap;">
-  <input type="date" name="date_from" class="form-control" style="width:150px;" value="<?= htmlspecialchars($g('date_from')) ?>" title="From">
-  <input type="date" name="date_to" class="form-control" style="width:150px;" value="<?= htmlspecialchars($g('date_to')) ?>" title="To">
+  <input type="date" name="date_from" class="form-control" style="width:150px;" value="<?= htmlspecialchars((string)($g('date_from'))) ?>" title="From">
+  <input type="date" name="date_to" class="form-control" style="width:150px;" value="<?= htmlspecialchars((string)($g('date_to'))) ?>" title="To">
   <select name="category" class="form-select" style="width:160px;">
     <option value="">All categories</option>
     <?php foreach ($categories as $c): ?>
-    <option value="<?= htmlspecialchars($c->category) ?>" <?= $g('category') === $c->category ? 'selected' : '' ?>><?= htmlspecialchars($c->category) ?></option>
+    <option value="<?= htmlspecialchars((string)($c->category)) ?>" <?= $g('category') === $c->category ? 'selected' : '' ?>><?= htmlspecialchars((string)($c->category)) ?></option>
     <?php endforeach; ?>
   </select>
   <select name="equipment_id" class="form-select" style="width:150px;">
     <option value="">All machines</option>
     <?php foreach ($equipment as $e): ?>
-    <option value="<?= (int)$e->id ?>" <?= (string)$g('equipment_id') === (string)$e->id ? 'selected' : '' ?>><?= htmlspecialchars($e->registration_no) ?></option>
+    <option value="<?= (int)$e->id ?>" <?= (string)$g('equipment_id') === (string)$e->id ? 'selected' : '' ?>><?= htmlspecialchars((string)($e->registration_no)) ?></option>
     <?php endforeach; ?>
   </select>
-  <input type="text" name="allocation" class="form-control" style="width:160px;" placeholder="Allocation (e.g. HSE)" value="<?= htmlspecialchars($g('allocation')) ?>">
-  <input type="text" name="person" class="form-control" style="width:140px;" placeholder="Receiver" value="<?= htmlspecialchars($g('person')) ?>">
-  <input type="text" name="reference" class="form-control" style="width:130px;" placeholder="Requisition no" value="<?= htmlspecialchars($g('reference')) ?>">
-  <input type="text" name="search" class="form-control" style="width:190px;" placeholder="Item / part no…" value="<?= htmlspecialchars($g('search')) ?>">
+  <input type="text" name="allocation" class="form-control" style="width:160px;" placeholder="Allocation (e.g. HSE)" value="<?= htmlspecialchars((string)($g('allocation'))) ?>">
+  <input type="text" name="person" class="form-control" style="width:140px;" placeholder="Receiver" value="<?= htmlspecialchars((string)($g('person'))) ?>">
+  <input type="text" name="reference" class="form-control" style="width:130px;" placeholder="Requisition no" value="<?= htmlspecialchars((string)($g('reference'))) ?>">
+  <input type="text" name="search" class="form-control" style="width:190px;" placeholder="Item / part no…" value="<?= htmlspecialchars((string)($g('search'))) ?>">
   <button type="submit" class="btn btn-primary btn-sm">Filter</button>
   <a href="<?= base_url('reports/issue_register') ?>" class="btn btn-ghost btn-sm">Reset</a>
 </form>
@@ -75,10 +75,10 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
       <tbody>
       <?php foreach ($by_alloc as $a): ?>
         <tr>
-          <td class="mono" style="font-weight:600;"><?= htmlspecialchars($a->allocation) ?></td>
-          <td style="font-size:11px;"><span class="badge <?= $a->allocation_type === 'Equipment' ? 'b-primary' : 'b-secondary' ?>" style="font-size:10px;"><?= htmlspecialchars($a->allocation_type) ?></span></td>
-          <td class="mono text-right"><?= number_format($a->lines) ?></td>
-          <td class="mono text-right"><?= number_format($a->qty) ?></td>
+          <td class="mono" style="font-weight:600;"><?= htmlspecialchars((string)($a->allocation)) ?></td>
+          <td style="font-size:11px;"><span class="badge <?= $a->allocation_type === 'Equipment' ? 'b-primary' : 'b-secondary' ?>" style="font-size:10px;"><?= htmlspecialchars((string)($a->allocation_type)) ?></span></td>
+          <td class="mono text-right"><?= number_format((float)($a->lines)) ?></td>
+          <td class="mono text-right"><?= number_format((float)($a->qty)) ?></td>
         </tr>
       <?php endforeach; ?>
       </tbody>
@@ -90,7 +90,7 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
 <div class="card">
   <div class="ch">
     <div><div class="ct">Issues</div>
-      <div class="cs"><?= number_format(count($rows)) ?> line(s) shown<?= count($rows) >= 5000 ? ' — narrow the filter to see more' : '' ?></div></div>
+      <div class="cs"><?= number_format((float)(count($rows))) ?> line(s) shown<?= count($rows) >= 5000 ? ' — narrow the filter to see more' : '' ?></div></div>
   </div>
   <div style="overflow-x:auto;margin-top:4px;">
     <table class="tbl">

@@ -422,8 +422,8 @@ foreach ($templates as $t) {
         <?= $L('All Forms', 'Tous les formulaires'); ?> (<?= count($templates); ?>)
       </button>
       <?php foreach ($categories as $cat_name => $cat_templates): ?>
-        <button type="button" class="insp-pill" data-filter="<?= htmlspecialchars(strtolower(preg_replace('/[^a-zA-Z0-9]/', '-', $cat_name))); ?>">
-          <?= htmlspecialchars($cat_name); ?> (<?= count($cat_templates); ?>)
+        <button type="button" class="insp-pill" data-filter="<?= htmlspecialchars((string)(strtolower((string)(preg_replace('/[^a-zA-Z0-9]/', '-', $cat_name))))); ?>">
+          <?= htmlspecialchars((string)($cat_name)); ?> (<?= count($cat_templates); ?>)
         </button>
       <?php endforeach; ?>
     </div>
@@ -437,11 +437,11 @@ foreach ($templates as $t) {
   <!-- Forms Organized by Category -->
   <div id="forms-container">
     <?php foreach ($categories as $cat_name => $cat_templates):
-      $cat_slug = strtolower(preg_replace('/[^a-zA-Z0-9]/', '-', $cat_name));
+      $cat_slug = strtolower((string)(preg_replace('/[^a-zA-Z0-9]/', '-', $cat_name)));
     ?>
-      <div class="insp-section-block" data-category="<?= htmlspecialchars($cat_slug); ?>">
+      <div class="insp-section-block" data-category="<?= htmlspecialchars((string)($cat_slug)); ?>">
         <div class="insp-section-header">
-          <div class="insp-section-title"><?= htmlspecialchars($cat_name); ?></div>
+          <div class="insp-section-title"><?= htmlspecialchars((string)($cat_name)); ?></div>
           <span class="insp-section-badge"><?= count($cat_templates); ?></span>
         </div>
 
@@ -452,17 +452,17 @@ foreach ($templates as $t) {
             $sub_title  = ($lang === 'fr') ? $t->name_en : $t->name_fr;
           ?>
             <div class="insp-card"
-                 data-name="<?= htmlspecialchars(strtolower($t->name_en . ' ' . $t->name_fr . ' ' . $t->code)); ?>"
-                 data-category="<?= htmlspecialchars($cat_slug); ?>">
+                 data-name="<?= htmlspecialchars((string)(strtolower((string)($t->name_en . ' ' . $t->name_fr . ' ' . $t->code)))); ?>"
+                 data-category="<?= htmlspecialchars((string)($cat_slug)); ?>">
               <div>
                 <div class="insp-card-top">
-                  <span class="insp-card-tag"><?= strtoupper(htmlspecialchars($t->code)); ?></span>
+                  <span class="insp-card-tag"><?= strtoupper((string)(htmlspecialchars((string)($t->code)))); ?></span>
                   <span class="insp-card-count">
                     <?= $rec_count; ?> <?= $L($rec_count === 1 ? 'record' : 'records', $rec_count === 1 ? 'enregistrement' : 'enregistrements'); ?>
                   </span>
                 </div>
-                <div class="insp-card-name"><?= htmlspecialchars($main_title); ?></div>
-                <div class="insp-card-sub"><?= htmlspecialchars($sub_title); ?></div>
+                <div class="insp-card-name"><?= htmlspecialchars((string)($main_title)); ?></div>
+                <div class="insp-card-sub"><?= htmlspecialchars((string)($sub_title)); ?></div>
               </div>
 
               <div class="insp-card-actions">

@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title><?= (isset($page_title) ? htmlspecialchars($page_title).' — ' : ''); echo (isset($site_settings['company_name']) ? htmlspecialchars($site_settings['company_name']) : 'Workshop WMS'); ?></title>
+<title><?= (isset($page_title) ? htmlspecialchars((string)($page_title)).' — ' : ''); echo (isset($site_settings['company_name']) ? htmlspecialchars((string)($site_settings['company_name'])) : 'Workshop WMS'); ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>

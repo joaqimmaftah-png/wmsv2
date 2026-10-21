@@ -53,7 +53,7 @@ function wms_site_currency($refresh = false) {
     }
     $stored = isset($ci->Settings_model) ? $ci->Settings_model->get('currency', 'USD') : 'USD';
 
-    $code = strtoupper(trim((string) $stored));
+    $code = strtoupper((string)(trim((string) $stored)));
     if (!preg_match('/^[A-Z]{3}$/', $code)) {
         $code = 'USD';   // a corrupt setting must not leak into every total
     }
@@ -70,11 +70,11 @@ function wms_site_currency($refresh = false) {
  * @return string
  */
 function wms_currency_code($value, $fallback = null) {
-    $code = strtoupper(trim((string) $value));
+    $code = strtoupper((string)(trim((string) $value)));
     if (preg_match('/^[A-Z]{3}$/', $code)) return $code;
 
     if ($fallback !== null) {
-        $fallback = strtoupper(trim((string) $fallback));
+        $fallback = strtoupper((string)(trim((string) $fallback)));
         if (preg_match('/^[A-Z]{3}$/', $fallback)) return $fallback;
     }
     return wms_site_currency();

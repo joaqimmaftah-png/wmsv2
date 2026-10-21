@@ -11,14 +11,14 @@
   <!-- User identity -->
   <div style="display:flex;align-items:center;gap:14px;padding:16px;background:var(--g1);border:1px solid var(--sep);border-radius:14px;margin-bottom:24px;">
     <?php
-    $initials = strtoupper(substr($target_user->first_name,0,1).substr($target_user->last_name,0,1));
+    $initials = strtoupper((string)(substr($target_user->first_name,0,1).substr($target_user->last_name,0,1)));
     $colors = array('#1a6fff,#0a50cc','#5e5ce6,#3634a3','var(--purple),#9b59b6','var(--green),#20a044');
     $grad = $colors[abs(crc32($target_user->id)) % count($colors)];
     ?>
     <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(145deg,<?= $grad ?>);display:flex;align-items:center;justify-content:center;font-family:inherit;font-weight:700;color:#fff;font-size:14px;"><?= $initials ?></div>
     <div>
-      <div style="font-size:14px;font-weight:600;color:var(--t1);"><?= htmlspecialchars($target_user->first_name.' '.$target_user->last_name) ?></div>
-      <div style="font-size:11px;color:var(--t3);margin-top:2px;"><?= htmlspecialchars($target_user->email) ?> · <?= htmlspecialchars($target_user->employee_id) ?></div>
+      <div style="font-size:14px;font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($target_user->first_name.' '.$target_user->last_name)) ?></div>
+      <div style="font-size:11px;color:var(--t3);margin-top:2px;"><?= htmlspecialchars((string)($target_user->email)) ?> · <?= htmlspecialchars((string)($target_user->employee_id)) ?></div>
     </div>
   </div>
 

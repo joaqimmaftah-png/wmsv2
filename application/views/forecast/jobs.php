@@ -9,7 +9,7 @@
  * so.  Nothing here computes a KPI.
  */
 $hrs = function ($v) {
-    return $v === null ? '—' : rtrim(rtrim(number_format((float)$v, 2, '.', ''), '0'), '.');
+    return $v === null ? '—' : rtrim((string)(rtrim((string)(number_format((float)$v, 2, '.', '')), '0')), '.');
 };
 $h = function ($s) { return htmlspecialchars((string)$s); };
 

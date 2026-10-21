@@ -31,33 +31,33 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
 
 <div class="grid g-4 mb-4">
   <div class="kpi"><div class="kpi-glow" style="background:var(--blue)"></div>
-    <span class="kpi-tag">Receipt Lines</span><div class="kpi-num"><?= number_format($t['lines']) ?></div></div>
+    <span class="kpi-tag">Receipt Lines</span><div class="kpi-num"><?= number_format((float)($t['lines'])) ?></div></div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--green)"></div>
-    <span class="kpi-tag">Total Qty Received</span><div class="kpi-num"><?= number_format($t['qty']) ?></div></div>
+    <span class="kpi-tag">Total Qty Received</span><div class="kpi-num"><?= number_format((float)($t['qty'])) ?></div></div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--amber)"></div>
-    <span class="kpi-tag">Value (where priced)</span><div class="kpi-num" style="font-size:18px;"><?= number_format($t['value']) ?></div></div>
+    <span class="kpi-tag">Value (where priced)</span><div class="kpi-num" style="font-size:18px;"><?= number_format((float)($t['value'])) ?></div></div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--t3)"></div>
     <span class="kpi-tag">Period Covered</span>
-    <div class="kpi-num" style="font-size:16px;"><?= $t['first'] ? htmlspecialchars($t['first'].' → '.$t['last']) : '—' ?></div></div>
+    <div class="kpi-num" style="font-size:16px;"><?= $t['first'] ? htmlspecialchars((string)($t['first'].' → '.$t['last'])) : '—' ?></div></div>
 </div>
 
 <form method="get" class="flex ai-c gap-10 mb-4" style="flex-wrap:wrap;">
-  <input type="date" name="date_from" class="form-control" style="width:150px;" value="<?= htmlspecialchars($g('date_from')) ?>" title="From">
-  <input type="date" name="date_to" class="form-control" style="width:150px;" value="<?= htmlspecialchars($g('date_to')) ?>" title="To">
+  <input type="date" name="date_from" class="form-control" style="width:150px;" value="<?= htmlspecialchars((string)($g('date_from'))) ?>" title="From">
+  <input type="date" name="date_to" class="form-control" style="width:150px;" value="<?= htmlspecialchars((string)($g('date_to'))) ?>" title="To">
   <select name="category" class="form-select" style="width:160px;">
     <option value="">All categories</option>
     <?php foreach ($categories as $c): ?>
-    <option value="<?= htmlspecialchars($c->category) ?>" <?= $g('category') === $c->category ? 'selected' : '' ?>><?= htmlspecialchars($c->category) ?></option>
+    <option value="<?= htmlspecialchars((string)($c->category)) ?>" <?= $g('category') === $c->category ? 'selected' : '' ?>><?= htmlspecialchars((string)($c->category)) ?></option>
     <?php endforeach; ?>
   </select>
   <select name="supplier" class="form-select" style="width:230px;">
     <option value="">All suppliers</option>
     <?php foreach ($suppliers as $s): ?>
-    <option value="<?= htmlspecialchars($s->supplier_name) ?>" <?= $g('supplier') === $s->supplier_name ? 'selected' : '' ?>><?= htmlspecialchars($s->supplier_name) ?></option>
+    <option value="<?= htmlspecialchars((string)($s->supplier_name)) ?>" <?= $g('supplier') === $s->supplier_name ? 'selected' : '' ?>><?= htmlspecialchars((string)($s->supplier_name)) ?></option>
     <?php endforeach; ?>
   </select>
-  <input type="text" name="reference" class="form-control" style="width:140px;" placeholder="MRN / reference" value="<?= htmlspecialchars($g('reference')) ?>">
-  <input type="text" name="search" class="form-control" style="width:190px;" placeholder="Item / part no…" value="<?= htmlspecialchars($g('search')) ?>">
+  <input type="text" name="reference" class="form-control" style="width:140px;" placeholder="MRN / reference" value="<?= htmlspecialchars((string)($g('reference'))) ?>">
+  <input type="text" name="search" class="form-control" style="width:190px;" placeholder="Item / part no…" value="<?= htmlspecialchars((string)($g('search'))) ?>">
   <button type="submit" class="btn btn-primary btn-sm">Filter</button>
   <a href="<?= base_url('reports/receipt_register') ?>" class="btn btn-ghost btn-sm">Reset</a>
 </form>
@@ -65,7 +65,7 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
 <div class="card">
   <div class="ch">
     <div><div class="ct">Receipts</div>
-      <div class="cs"><?= number_format(count($rows)) ?> line(s) shown</div></div>
+      <div class="cs"><?= number_format((float)(count($rows))) ?> line(s) shown</div></div>
   </div>
   <div style="overflow-x:auto;margin-top:4px;">
     <table class="tbl">

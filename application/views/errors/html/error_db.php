@@ -26,7 +26,7 @@ body{background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
   <div class="err-icon">🗄️</div>
   <div class="err-title">Database Connection Failed</div>
   <div class="err-msg">Unable to connect to the database. This is the #1 cause of HTTP 500 on cPanel.</div>
-  <div class="err-detail"><?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8'); ?></div>
+  <div class="err-detail"><?= htmlspecialchars((string)($message), ENT_QUOTES, 'UTF-8'); ?></div>
 
   <div class="err-steps">
     <h4>🔧 How to fix on cPanel (2 min):</h4>

@@ -58,7 +58,7 @@ $prio_bg    = ['Critical'=>'var(--red-d)','High'=>'var(--amber-d)','Medium'=>'va
   <?php foreach($weeks as $wk): if(empty($wk['pm'])) continue; ?>
   <div style="border-top:1px solid var(--g2);">
     <div style="padding:10px 18px 8px;background:var(--blue-d);font-size:11px;font-weight:700;color:var(--blue);letter-spacing:.4px;">
-      📅 <?=htmlspecialchars($wk['label'])?>
+      📅 <?=htmlspecialchars((string)($wk['label']))?>
     </div>
     <table class="tbl" style="margin:0;border-top:none;">
       <thead>
@@ -69,15 +69,15 @@ $prio_bg    = ['Critical'=>'var(--red-d)','High'=>'var(--amber-d)','Medium'=>'va
       <tbody>
       <?php foreach($wk['pm'] as $pm): ?>
       <tr style="background:rgba(28,140,60,0.03);">
-        <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars($pm->registration_no)?></td>
-        <td style="color:var(--t2);font-size:10.5px;"><?=htmlspecialchars(($pm->brand??'').' '.($pm->model??''))?></td>
-        <td style="color:var(--t3);font-size:10.5px;text-align:center;"><?=htmlspecialchars($pm->location??'')?></td>
-        <td style="color:var(--t1);"><?=htmlspecialchars($pm->schedule_name)?></td>
+        <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars((string)($pm->registration_no))?></td>
+        <td style="color:var(--t2);font-size:10.5px;"><?=htmlspecialchars((string)(($pm->brand??'').' '.($pm->model??'')))?></td>
+        <td style="color:var(--t3);font-size:10.5px;text-align:center;"><?=htmlspecialchars((string)($pm->location??''))?></td>
+        <td style="color:var(--t1);"><?=htmlspecialchars((string)($pm->schedule_name))?></td>
         <td class="mono" style="text-align:center;font-weight:600;color:var(--green);">
           <?=$pm->next_due_date ? date('d/m/Y',strtotime($pm->next_due_date)) : '—'?>
         </td>
         <td class="mono" style="text-align:center;color:var(--t3);">
-          <?=$pm->next_due_hours ? number_format($pm->next_due_hours,0).' h' : '—'?>
+          <?=$pm->next_due_hours ? number_format((float)($pm->next_due_hours),0).' h' : '—'?>
         </td>
         <td class="mono" style="text-align:center;color:var(--t3);font-size:10.5px;">
           <?=$pm->last_done_date ? date('d/m/Y',strtotime($pm->last_done_date)) : '—'?>
@@ -116,11 +116,11 @@ $prio_bg    = ['Critical'=>'var(--red-d)','High'=>'var(--amber-d)','Medium'=>'va
       <td style="text-align:center;">
         <span style="padding:2px 8px;border-radius:4px;font-size:10.5px;font-weight:700;color:<?=$pc?>;background:<?=$pb?>;"><?=$wo->priority?></span>
       </td>
-      <td class="mono" style="font-size:10.5px;color:var(--t3);"><?=htmlspecialchars($wo->wo_number)?></td>
-      <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars($wo->registration_no)?></td>
-      <td style="color:var(--t2);font-size:10.5px;"><?=htmlspecialchars(($wo->brand??'').' '.($wo->model??''))?></td>
-      <td style="color:var(--t3);font-size:10.5px;"><?=htmlspecialchars($wo->location??'')?></td>
-      <td style="max-width:260px;white-space:pre-wrap;"><?=htmlspecialchars($wo->title)?></td>
+      <td class="mono" style="font-size:10.5px;color:var(--t3);"><?=htmlspecialchars((string)($wo->wo_number))?></td>
+      <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars((string)($wo->registration_no))?></td>
+      <td style="color:var(--t2);font-size:10.5px;"><?=htmlspecialchars((string)(($wo->brand??'').' '.($wo->model??'')))?></td>
+      <td style="color:var(--t3);font-size:10.5px;"><?=htmlspecialchars((string)($wo->location??''))?></td>
+      <td style="max-width:260px;white-space:pre-wrap;"><?=htmlspecialchars((string)($wo->title))?></td>
       <td style="text-align:center;">
         <?php $sc=['Open'=>'var(--red)','In Progress'=>'var(--amber)','Waiting Parts'=>'var(--t3)','Waiting Tools'=>'var(--t3)'];
         $sb=['Open'=>'var(--red-d)','In Progress'=>'var(--amber-d)','Waiting Parts'=>'var(--g2)','Waiting Tools'=>'var(--g2)'];?>

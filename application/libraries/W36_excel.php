@@ -32,6 +32,7 @@
  */
 defined('BASEPATH') OR exit('No direct script access allowed');
 
+#[AllowDynamicProperties]
 class W36_excel {
 
     /** Excel serial date 0 — 1899-12-30, the epoch every reader expects. */
@@ -799,7 +800,7 @@ class W36_excel {
 
     public function col_index($letters) {
         $n = 0;
-        foreach (str_split(strtoupper($letters)) as $ch) $n = $n * 26 + (ord($ch) - 64);
+        foreach (str_split(strtoupper((string)($letters))) as $ch) $n = $n * 26 + (ord($ch) - 64);
         return $n;
     }
 

@@ -6,10 +6,10 @@ $bg    = $supplier->status==='Active' ? 'var(--green-d)' : ($supplier->status===
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
     <div class="flex ai-c gap-10">
-      <div class="page-heading" style="font-size:16px;"><?= htmlspecialchars($supplier->company_name) ?></div>
+      <div class="page-heading" style="font-size:16px;"><?= htmlspecialchars((string)($supplier->company_name)) ?></div>
       <span style="padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;color:<?= $badge ?>;background:<?= $bg ?>;"><?= $supplier->status ?></span>
     </div>
-    <div class="cs"><?= htmlspecialchars($supplier->country) ?><?= $supplier->city ? ', '.htmlspecialchars($supplier->city) : '' ?> &middot; <?= htmlspecialchars($supplier->currency) ?> &middot; <?= htmlspecialchars($supplier->payment_terms ?: 'No payment terms set') ?></div>
+    <div class="cs"><?= htmlspecialchars((string)($supplier->country)) ?><?= $supplier->city ? ', '.htmlspecialchars((string)($supplier->city)) : '' ?> &middot; <?= htmlspecialchars((string)($supplier->currency)) ?> &middot; <?= htmlspecialchars((string)($supplier->payment_terms ?: 'No payment terms set')) ?></div>
   </div>
   <div class="flex ai-c gap-10">
     <a href="<?= base_url('orders/create') ?>" class="btn btn-primary btn-sm">+ New Order</a>
@@ -49,8 +49,8 @@ $bg    = $supplier->status==='Active' ? 'var(--green-d)' : ($supplier->status===
       <?php else: foreach ($contacts as $c): ?>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--g2);">
         <div>
-          <div style="font-weight:600;color:var(--t1);font-size:12.5px;"><?= htmlspecialchars($c->name) ?> <span style="color:var(--t3);font-weight:400;">— <?= htmlspecialchars($c->role ?: 'Contact') ?></span></div>
-          <div style="font-size:11px;color:var(--t3);"><?= htmlspecialchars($c->phone ?: '') ?> <?= $c->phone && $c->email ? '·' : '' ?> <?= htmlspecialchars($c->email ?: '') ?></div>
+          <div style="font-weight:600;color:var(--t1);font-size:12.5px;"><?= htmlspecialchars((string)($c->name)) ?> <span style="color:var(--t3);font-weight:400;">— <?= htmlspecialchars((string)($c->role ?: 'Contact')) ?></span></div>
+          <div style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)($c->phone ?: '')) ?> <?= $c->phone && $c->email ? '·' : '' ?> <?= htmlspecialchars((string)($c->email ?: '')) ?></div>
         </div>
         <?= form_open('suppliers/delete_contact/'.$c->id.'/'.$supplier->id, array('style' => 'display:inline;margin:0;', 'onsubmit' => "return confirm('Remove this contact?')")) ?>
           <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--red);">Remove</button>
@@ -81,10 +81,10 @@ $bg    = $supplier->status==='Active' ? 'var(--green-d)' : ($supplier->status===
         <tr><td colspan="4" style="text-align:center;padding:30px;color:var(--t3);">No orders yet</td></tr>
         <?php else: foreach (array_slice($recent_orders,0,8) as $o): ?>
         <tr>
-          <td><a href="<?= base_url('orders/view/'.$o->id) ?>" style="color:var(--blue);font-weight:600;"><?= htmlspecialchars($o->order_no) ?></a></td>
+          <td><a href="<?= base_url('orders/view/'.$o->id) ?>" style="color:var(--blue);font-weight:600;"><?= htmlspecialchars((string)($o->order_no)) ?></a></td>
           <td class="mono"><?= date('d M Y', strtotime($o->order_date)) ?></td>
-          <td style="font-size:11px;"><?= htmlspecialchars($o->status) ?></td>
-          <td class="mono" style="text-align:right;"><?= number_format($o->total_cost,2) ?> <?= htmlspecialchars($o->currency) ?></td>
+          <td style="font-size:11px;"><?= htmlspecialchars((string)($o->status)) ?></td>
+          <td class="mono" style="text-align:right;"><?= number_format((float)($o->total_cost),2) ?> <?= htmlspecialchars((string)($o->currency)) ?></td>
         </tr>
         <?php endforeach; endif; ?>
         </tbody>
@@ -107,9 +107,9 @@ $bg    = $supplier->status==='Active' ? 'var(--green-d)' : ($supplier->status===
       <tr><td colspan="7" style="text-align:center;padding:30px;color:var(--t3);">No catalog items mapped yet</td></tr>
       <?php else: foreach ($catalog as $c): ?>
       <tr>
-        <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars($c->description) ?><?= $c->item_code ? ' <span style="color:var(--t3);font-weight:400;">('.htmlspecialchars($c->item_code).')</span>' : '' ?></td>
-        <td class="mono"><?= htmlspecialchars($c->part_number ?: '—') ?></td>
-        <td class="mono" style="text-align:right;"><?= $c->unit_price ? number_format($c->unit_price,2).' '.htmlspecialchars($c->currency) : '—' ?></td>
+        <td style="font-weight:600;color:var(--t1);"><?= htmlspecialchars((string)($c->description)) ?><?= $c->item_code ? ' <span style="color:var(--t3);font-weight:400;">('.htmlspecialchars((string)($c->item_code)).')</span>' : '' ?></td>
+        <td class="mono"><?= htmlspecialchars((string)($c->part_number ?: '—')) ?></td>
+        <td class="mono" style="text-align:right;"><?= $c->unit_price ? number_format((float)($c->unit_price),2).' '.htmlspecialchars((string)($c->currency)) : '—' ?></td>
         <td class="mono" style="text-align:center;"><?= $c->moq ?: '—' ?></td>
         <td class="mono" style="text-align:center;"><?= $c->lead_time_days ? $c->lead_time_days.'d' : '—' ?></td>
         <td style="text-align:center;"><?= $c->is_preferred ? '★' : '' ?></td>
@@ -129,7 +129,7 @@ $bg    = $supplier->status==='Active' ? 'var(--green-d)' : ($supplier->status===
       <select name="material_id" class="form-select">
         <option value="">— Not yet in inventory catalog —</option>
         <?php foreach ($materials as $m): ?>
-        <option value="<?= $m->id ?>"><?= htmlspecialchars($m->item_code.' — '.$m->description) ?></option>
+        <option value="<?= $m->id ?>"><?= htmlspecialchars((string)($m->item_code.' — '.$m->description)) ?></option>
         <?php endforeach; ?>
       </select>
       <input type="text" name="description" class="form-control" placeholder="Description (required)" required>

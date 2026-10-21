@@ -21,12 +21,12 @@ $labels = array('matrix' => 'Matrix (one column per equipment type)', 'complianc
 
   <?php if ($this->session->flashdata('success')): ?>
   <div style="padding:10px 14px;border-radius:8px;background:var(--blue-fill);color:var(--blue);margin-bottom:16px;font-size:13px;">
-    <?= htmlspecialchars($this->session->flashdata('success')) ?>
+    <?= htmlspecialchars((string)($this->session->flashdata('success'))) ?>
   </div>
   <?php endif; ?>
   <?php if ($this->session->flashdata('error')): ?>
   <div style="padding:10px 14px;border-radius:8px;background:var(--red-fill);color:var(--red);margin-bottom:16px;font-size:13px;">
-    <?= htmlspecialchars($this->session->flashdata('error')) ?>
+    <?= htmlspecialchars((string)($this->session->flashdata('error'))) ?>
   </div>
   <?php endif; ?>
 
@@ -43,13 +43,13 @@ $labels = array('matrix' => 'Matrix (one column per equipment type)', 'complianc
         <?php else: foreach ($templates as $t): ?>
         <?php $records = isset($counts[$t->id]) ? (int)$counts[$t->id] : 0; ?>
         <tr>
-          <td class="mono" style="font-size:11.5px;color:var(--blue);"><?= htmlspecialchars($t->code) ?></td>
+          <td class="mono" style="font-size:11.5px;color:var(--blue);"><?= htmlspecialchars((string)($t->code)) ?></td>
           <td>
-            <div class="fw-600" style="font-size:12.5px;"><?= htmlspecialchars($t->name_en) ?></div>
-            <div style="font-size:11px;color:var(--t3);"><?= htmlspecialchars($t->name_fr) ?></div>
+            <div class="fw-600" style="font-size:12.5px;"><?= htmlspecialchars((string)($t->name_en)) ?></div>
+            <div style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)($t->name_fr)) ?></div>
           </td>
           <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars((string)$t->category_en) ?></td>
-          <td style="font-size:11.5px;color:var(--t3);"><?= isset($labels[$t->layout_type]) ? $labels[$t->layout_type] : htmlspecialchars($t->layout_type) ?></td>
+          <td style="font-size:11.5px;color:var(--t3);"><?= isset($labels[$t->layout_type]) ? $labels[$t->layout_type] : htmlspecialchars((string)($t->layout_type)) ?></td>
           <td class="mono" style="font-size:12px;"><?= $records ?></td>
           <td>
             <?php if ((int)$t->active === 1): ?>

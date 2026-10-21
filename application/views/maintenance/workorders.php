@@ -22,7 +22,7 @@
         <option value="<?= $p; ?>" <?= (isset($filter['priority']) && $filter['priority']==$p)?'selected':''; ?>><?= $p; ?></option>
         <?php endforeach; ?>
       </select>
-      <input type="text" name="search" class="form-control" style="width:200px;" placeholder="Search..." value="<?= isset($filter['search'])?htmlspecialchars($filter['search']):''; ?>">
+      <input type="text" name="search" class="form-control" style="width:200px;" placeholder="Search..." value="<?= isset($filter['search'])?htmlspecialchars((string)($filter['search'])):''; ?>">
       <button type="submit" class="btn btn-primary btn-sm btn-icon">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         Filter
@@ -67,21 +67,21 @@
           elseif ($wo->status==='Closed')     $sc='badge b-closed';
         ?>
         <tr>
-          <td class="mono text-blue" style="font-size:11.5px;font-weight:500;"><?= htmlspecialchars($wo->wo_number); ?></td>
-          <td class="fw-600" style="font-size:12.5px;"><?= htmlspecialchars(isset($wo->registration_no) ? $wo->registration_no : '—'); ?></td>
-          <td><span class="badge b-primary" style="font-size:10px;"><?= htmlspecialchars($wo->type); ?></span></td>
-          <td><span class="<?= $pc; ?>"><?= htmlspecialchars($wo->priority); ?></span></td>
-          <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars($wo->title); ?></td>
+          <td class="mono text-blue" style="font-size:11.5px;font-weight:500;"><?= htmlspecialchars((string)($wo->wo_number)); ?></td>
+          <td class="fw-600" style="font-size:12.5px;"><?= htmlspecialchars((string)(isset($wo->registration_no) ? $wo->registration_no : '—')); ?></td>
+          <td><span class="badge b-primary" style="font-size:10px;"><?= htmlspecialchars((string)($wo->type)); ?></span></td>
+          <td><span class="<?= $pc; ?>"><?= htmlspecialchars((string)($wo->priority)); ?></span></td>
+          <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars((string)($wo->title)); ?></td>
           <td>
-            <span class="<?= $sc; ?>"><?= htmlspecialchars($wo->status); ?></span>
+            <span class="<?= $sc; ?>"><?= htmlspecialchars((string)($wo->status)); ?></span>
             <?php if (!empty($wo->hold_code)): ?>
             <div style="font-size:10px;color:var(--amber);margin-top:3px;white-space:nowrap;"
                  title="<?= htmlspecialchars((string)wo_hold_label($wo->hold_code)) ?>">
-              ⏸ <?= htmlspecialchars($wo->hold_code); ?>
+              ⏸ <?= htmlspecialchars((string)($wo->hold_code)); ?>
             </div>
             <?php endif; ?>
           </td>
-          <td style="color:var(--t3);font-size:12px;"><?= htmlspecialchars(isset($wo->assigned_name) ? $wo->assigned_name : '—'); ?></td>
+          <td style="color:var(--t3);font-size:12px;"><?= htmlspecialchars((string)(isset($wo->assigned_name) ? $wo->assigned_name : '—')); ?></td>
           <td class="mono" style="font-size:11px;color:var(--t3);"><?= $wo->created_at ? date('d M Y',strtotime($wo->created_at)) : '—'; ?></td>
           <td>
             <a href="<?= base_url('workorders/view/'.$wo->id); ?>" class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 12px;">View</a>

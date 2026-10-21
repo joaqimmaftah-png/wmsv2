@@ -44,7 +44,7 @@ if (!function_exists('wms_session_user')) {
             }
         }
 
-        $user->full_name = trim(trim((string) $user->first_name) . ' ' . trim((string) $user->last_name));
+        $user->full_name = trim((string)(trim((string) $user->first_name) . ' ' . trim((string) $user->last_name)));
 
         return $user;
     }
@@ -66,7 +66,7 @@ if (!function_exists('wms_user_full_name')) {
             }
             $first = isset($user->first_name) ? (string) $user->first_name : '';
             $last  = isset($user->last_name)  ? (string) $user->last_name  : '';
-            return trim($first . ' ' . $last);
+            return trim((string)($first . ' ' . $last));
         }
 
         if (is_array($user)) {
@@ -75,7 +75,7 @@ if (!function_exists('wms_user_full_name')) {
             }
             $first = isset($user['first_name']) ? (string) $user['first_name'] : '';
             $last  = isset($user['last_name'])  ? (string) $user['last_name']  : '';
-            return trim($first . ' ' . $last);
+            return trim((string)($first . ' ' . $last));
         }
 
         return '';

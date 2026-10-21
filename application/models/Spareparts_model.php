@@ -76,7 +76,7 @@ class Spareparts_model extends CI_Model {
     public function _key($s) {
         $s = preg_replace('/\s+/u', ' ', trim((string)$s));
         if (function_exists('mb_strtolower')) return mb_strtolower($s, 'UTF-8');
-        return strtolower($s);
+        return strtolower((string)($s));
     }
 
     private function _materials_model() {
@@ -413,11 +413,11 @@ class Spareparts_model extends CI_Model {
                 $covered = min($free_after, $needed);
                 $message = sprintf('Partial stock received for %s %s — %s of %s needed for Work Order %s – %s is now coverable; %s still pending.',
                     $l->part_name, $material->item_code,
-                    rtrim(rtrim(number_format($covered, 2, '.', ''), '0'), '.'),
-                    rtrim(rtrim(number_format($needed, 2, '.', ''), '0'), '.'),
+                    rtrim(rtrim((string)(number_format((float)($covered), 2, '.', '')), '0'), '.'),
+                    rtrim(rtrim((string)(number_format((float)($needed), 2, '.', '')), '0'), '.'),
                     $l->wo_number,
                     isset($l->registration_no) && $l->registration_no !== '' ? $l->registration_no : 'equipment',
-                    rtrim(rtrim(number_format($needed - $covered, 2, '.', ''), '0'), '.'));
+                    rtrim(rtrim((string)(number_format((float)($needed - $covered), 2, '.', '')), '0'), '.'));
             } else {
                 continue;                                  // receipt did not improve this line
             }
@@ -481,7 +481,7 @@ class Spareparts_model extends CI_Model {
         foreach ($rows as $r) {
             $first = isset($r->rb_first) ? trim((string)$r->rb_first) : '';
             $last  = isset($r->rb_last)  ? trim((string)$r->rb_last)  : '';
-            $r->received_by_name = trim($first.' '.$last);
+            $r->received_by_name = trim((string)($first.' '.$last));
         }
         return $rows;
     }
@@ -614,11 +614,11 @@ class Spareparts_model extends CI_Model {
         $needed = $line->qty_required - $line->qty_allocated - $line->qty_issued;
         if ($qty > $needed + 0.0000001) {
             $this->db->trans_rollback();
-            return array('ok' => false, 'error' => 'Only '.rtrim(rtrim(number_format($needed, 2, '.', ''), '0'), '.').' more are required for this work order.');
+            return array('ok' => false, 'error' => 'Only '.rtrim(rtrim((string)(number_format((float)($needed), 2, '.', '')), '0'), '.').' more are required for this work order.');
         }
         if ($qty > $line->free_qty + 0.0000001) {
             $this->db->trans_rollback();
-            return array('ok' => false, 'error' => 'Only '.rtrim(rtrim(number_format($line->free_qty, 2, '.', ''), '0'), '.').' '.$line->item_unit.' of '.$line->material->item_code.' are free in stock (rest is reserved for other work orders).');
+            return array('ok' => false, 'error' => 'Only '.rtrim(rtrim((string)(number_format((float)($line->free_qty), 2, '.', '')), '0'), '.').' '.$line->item_unit.' of '.$line->material->item_code.' are free in stock (rest is reserved for other work orders).');
         }
 
         $inserted = $this->db->insert('wo_spare_allocations', array(

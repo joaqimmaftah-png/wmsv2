@@ -1,34 +1,41 @@
-# Alternative .htaccess for stubborn cPanel hosts that use FastCGI
-# If main .htaccess gives 404 on all pages except homepage, use this one
-# Rename this file to .htaccess (backup old one first)
+# Alternative .htaccess for cPanel / FastCGI hosts that require query-string routing (?/$1)
+# Works both at domain root and in subfolders (e.g. /wmsv2/).
+# Rename this file to .htaccess (backup existing .htaccess first).
 
 <IfModule mod_autoindex.c>
     Options -Indexes
 </IfModule>
 
-<Files .htaccess>
-    Order Allow,Deny
-    Deny from all
-</Files>
+<FilesMatch "^(\.htaccess|\.env.*|composer\.(json|lock)|phpunit\.xml)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order Allow,Deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /
 
-    # Block hidden files
-    RewriteCond %{REQUEST_URI} !^/\.well-known/
-    RewriteRule ^(.*/)?\.(.+)$ - [F,L]
+    # Block hidden files while allowing .well-known for SSL
+    RewriteCond %{REQUEST_URI} !/(.*)?\.well-known/ [NC]
+    RewriteRule (^|/)\.(?!well-known/) - [F,L]
 
-    # Some cPanel FastCGI setups need ?/$1 format
+    # Prevent direct web access to internal directories
+    RewriteRule ^(application|system|database|scripts|tests)(/|$) - [F,L]
+
+    # Prevent PHP execution in uploads
+    RewriteRule ^uploads/.*\.(php\d?|phtml|phar)$ - [F,L,NC]
+
+    # FastCGI query-string routing using relative index.php (no hardcoded RewriteBase /)
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^(.*)$ index.php?/$1 [L,QSA]
 </IfModule>
 
-<IfModule !mod_rewrite.c>
-    ErrorDocument 404 /index.php
-</IfModule>
-
 <IfModule mod_headers.c>
     Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
 </IfModule>
