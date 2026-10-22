@@ -345,6 +345,198 @@ class Inspection_model extends CI_Model {
         return $this->db->get('inspection_record_items')->result();
     }
 
+    /** Public wrapper for checklist item verdict classification (`P1`/`P2`/`P3` + `failed`). */
+    public function evaluate_item_verdict($item) {
+        return $this->_inspection_item_verdict($item);
+    }
+
+    /** Fetch defects in `backlogs` raised directly by a submitted inspection record. */
+    public function get_record_backlogs($record_id) {
+        $record_id = (int)$record_id;
+        if ($record_id <= 0 || !$this->db->table_exists('backlogs')) {
+            return array();
+        }
+        return $this->db
+            ->select('id, priority, status, machine_status, description, start_date, end_date')
+            ->from('backlogs')
+            ->like('source_ref', 'insp_' . $record_id . '_item_', 'after')
+            ->order_by('id', 'ASC')
+            ->get()->result();
+    }
+
+    /**
+     * Hydrate the entire Fleet Inspection Register + Bilingual Form Library in
+     * constant O(1) SQL queries (`<= 4` queries regardless of record count):
+     *   1. `inspection_templates` (active + inactive)
+     *   2. `inspection_items` grouped counts per template
+     *   3. `inspection_records LEFT JOIN equipment` (verbatim Asset Register `registration_no`)
+     *   4. `inspection_record_items JOIN inspection_items` batch verdict roll-up
+     *
+     * @param string|null $today Optional YYYY-MM-DD anchor for deterministic unit tests.
+     * @return array{rows:object[],templates:object[],active_templates:object[],record_counts:array,total_items:int,today:string}
+     */
+    public function get_register_overview($today = NULL) {
+        $todayStr = ($today && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$today))
+            ? (string)$today
+            : date('Y-m-d');
+
+        // Query 1: All templates (active + inactive so historical records always resolve)
+        $allTemplates = $this->db->order_by('id', 'ASC')->get('inspection_templates')->result();
+        $tplById      = array();
+        $activeTpls   = array();
+        foreach ($allTemplates as $t) {
+            $this->_enrich_template($t);
+            $t->item_count    = 0;
+            $t->section_count = 0;
+            $tplById[(int)$t->id] = $t;
+            if ((int)$t->active === 1) {
+                $activeTpls[] = $t;
+            }
+        }
+
+        // Query 2: Checklist item counts grouped by template_id (strict ONLY_FULL_GROUP_BY safe)
+        $totalItems = 0;
+        $itemCounts = $this->db
+            ->select("template_id, SUM(CASE WHEN row_type = 'item' THEN 1 ELSE 0 END) AS item_cnt, SUM(CASE WHEN row_type = 'section' THEN 1 ELSE 0 END) AS section_cnt", FALSE)
+            ->from('inspection_items')
+            ->group_by('template_id')
+            ->get()->result();
+        foreach ($itemCounts as $ic) {
+            $tid = (int)$ic->template_id;
+            $cnt = (int)$ic->item_cnt;
+            if (isset($tplById[$tid])) {
+                $tplById[$tid]->item_count    = $cnt;
+                $tplById[$tid]->section_count = (int)$ic->section_cnt;
+                if ((int)$tplById[$tid]->active === 1) {
+                    $totalItems += $cnt;
+                }
+            }
+        }
+
+        // Query 3: All inspection records joined cleanly to Asset Register `equipment`
+        $records = $this->db
+            ->select('ir.*, e.registration_no AS equip_reg_no, e.location AS equip_location, e.brand AS equip_brand, e.model AS equip_model')
+            ->from('inspection_records ir')
+            ->join('equipment e', 'e.id = ir.equipment_id', 'left')
+            ->order_by('ir.inspection_date', 'DESC')
+            ->order_by('ir.id', 'DESC')
+            ->get()->result();
+
+        // Query 4: Batch per-item verdict hydration across all records in ONE query
+        $aggByRecord = array();
+        if (!empty($records)) {
+            $riRows = $this->db
+                ->select('iri.record_id, iri.item_id, iri.value_json, iri.comment, ii.*')
+                ->from('inspection_record_items iri')
+                ->join('inspection_items ii', 'ii.id = iri.item_id')
+                ->where('ii.row_type', 'item')
+                ->get()->result();
+
+            foreach ($riRows as $ri) {
+                $rid = (int)$ri->record_id;
+                if (!isset($aggByRecord[$rid])) {
+                    $aggByRecord[$rid] = array(
+                        'checked' => 0,
+                        'failed'  => 0,
+                        'p1'      => 0,
+                        'p2'      => 0,
+                        'p3'      => 0,
+                        'notes'   => 0,
+                    );
+                }
+                if (!empty($ri->value_json) && $ri->value_json !== '[]' && $ri->value_json !== '{}') {
+                    $aggByRecord[$rid]['checked']++;
+                }
+                if (trim((string)$ri->comment) !== '') {
+                    $aggByRecord[$rid]['notes']++;
+                }
+                $verdict = $this->_inspection_item_verdict($ri);
+                if (!empty($verdict['failed'])) {
+                    $aggByRecord[$rid]['failed']++;
+                    if ($verdict['priority'] === 'P1') {
+                        $aggByRecord[$rid]['p1']++;
+                    } elseif ($verdict['priority'] === 'P2') {
+                        $aggByRecord[$rid]['p2']++;
+                    } else {
+                        $aggByRecord[$rid]['p3']++;
+                    }
+                }
+            }
+        }
+
+        $recordCounts = array();
+        foreach ($records as $r) {
+            $rid = (int)$r->id;
+            $tid = (int)$r->template_id;
+            $recordCounts[$tid] = isset($recordCounts[$tid]) ? ($recordCounts[$tid] + 1) : 1;
+
+            $tpl = isset($tplById[$tid]) ? $tplById[$tid] : NULL;
+            $r->template_code     = $tpl ? (string)$tpl->code : 'general';
+            $r->template_name_en  = $tpl ? (string)$tpl->name_en : ('Template #' . $tid);
+            $r->template_name_fr  = $tpl ? (string)$tpl->name_fr : ('Modèle #' . $tid);
+            $r->category_en       = $tpl ? (string)$tpl->category_en : 'General';
+            $r->category_fr       = $tpl ? (string)$tpl->category_fr : 'Général';
+            $r->layout_type       = $tpl ? (string)$tpl->layout_type : 'compliance';
+            $r->meter_label_en    = $tpl ? (string)$tpl->meter_label_en : 'SMR';
+            $r->meter_label_fr    = $tpl ? (string)$tpl->meter_label_fr : 'SMR';
+            $r->total_items       = $tpl ? (int)$tpl->item_count : 0;
+
+            // Preserve exact verbatim Asset Register registration_no when linked
+            $regNo = trim((string)(isset($r->equip_reg_no) ? $r->equip_reg_no : ''));
+            $fleet = trim((string)(isset($r->fleet_number) ? $r->fleet_number : ''));
+            $r->machine_label = $regNo !== '' ? $regNo : ($fleet !== '' ? $fleet : '—');
+            $r->inspector_label = trim((string)$r->mechanic_name) !== ''
+                ? trim((string)$r->mechanic_name)
+                : (trim((string)$r->operator_name) !== '' ? trim((string)$r->operator_name) : '—');
+
+            $agg = isset($aggByRecord[$rid]) ? $aggByRecord[$rid] : array(
+                'checked' => 0, 'failed' => 0, 'p1' => 0, 'p2' => 0, 'p3' => 0, 'notes' => 0,
+            );
+            $r->checked_count = (int)$agg['checked'];
+            $r->fail_count    = (int)$agg['failed'];
+            $r->p1_count      = (int)$agg['p1'];
+            $r->p2_count      = (int)$agg['p2'];
+            $r->p3_count      = (int)$agg['p3'];
+            $r->comment_count = (int)$agg['notes'];
+
+            $hasSupSign = !empty($r->supervisor_signature) || trim((string)$r->supervisor_name) !== '';
+            $sigCount = 0;
+            foreach (array('mechanic', 'supervisor', 'operator', 'prod_supervisor') as $sRole) {
+                $sigCol  = $sRole . '_signature';
+                $nameCol = $sRole . '_name';
+                if (!empty($r->{$sigCol}) || trim((string)$r->{$nameCol}) !== '') {
+                    $sigCount++;
+                }
+            }
+            $r->sig_count   = $sigCount;
+            $r->is_signed   = $hasSupSign;
+            $r->is_unsigned = ($r->status === 'submitted' && !$hasSupSign);
+
+            if ($r->status === 'draft') {
+                $r->verdict_state = 'draft';
+                $r->severity_rank = 4;
+            } elseif ($r->p1_count > 0) {
+                $r->verdict_state = 'p1_nogo';
+                $r->severity_rank = 1;
+            } elseif ($r->fail_count > 0) {
+                $r->verdict_state = 'failed';
+                $r->severity_rank = 2;
+            } else {
+                $r->verdict_state = 'passed';
+                $r->severity_rank = 3;
+            }
+        }
+
+        return array(
+            'rows'             => $records,
+            'templates'        => $allTemplates,
+            'active_templates' => $activeTpls,
+            'record_counts'    => $recordCounts,
+            'total_items'      => $totalItems,
+            'today'            => $todayStr,
+        );
+    }
+
     /**
      * Turn a submitted inspection into defects — and, just as important, close
      * the ones the inspection has just cleared (Wave 3, Q2).

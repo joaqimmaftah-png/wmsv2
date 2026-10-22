@@ -1707,6 +1707,181 @@ check('PM-06 Accessible Slide-Over PM Inspector Drawer rendered cleanly',
     && strpos($pmSupHtml, 'pm/summary_json/') !== FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
+   16. Fleet Inspections Register DataTable, O(1) Telemetry, RBAC & XSS Audit
+   ───────────────────────────────────────────────────────────────────────── */
+
+if (!class_exists('Inspection_model', FALSE)) {
+    require_once APPPATH . 'models/Inspection_model.php';
+}
+
+$inDb = new PmPlannerFakeDB();
+$inModel = new Inspection_model();
+$inModel->db = $inDb;
+
+$inTplSeed = array(
+    (object)array(
+        'id' => 1, 'code' => 'excavator', 'name_en' => 'Excavator Pre-Shift Checklist',
+        'name_fr' => 'Liste d’inspection excavatrice', 'category_en' => 'Heavy Equipment',
+        'category_fr' => 'Engins lourds', 'layout_type' => 'compliance', 'columns_json' => NULL,
+        'meter_label_en' => 'SMR', 'meter_label_fr' => 'SMR', 'active' => 1,
+    ),
+    (object)array(
+        'id' => 2, 'code' => 'adt', 'name_en' => 'Articulated Dump Truck Checklist',
+        'name_fr' => 'Camion articulé ADT', 'category_en' => 'Heavy Equipment',
+        'category_fr' => 'Engins lourds', 'layout_type' => 'compliance', 'columns_json' => NULL,
+        'meter_label_en' => 'SMR', 'meter_label_fr' => 'SMR', 'active' => 1,
+    ),
+);
+
+$inRecordSeed = array(
+    // 1. P1 No-Go failure on EX 006 + unsigned by supervisor + XSS probe
+    (object)array(
+        'id' => 91, 'template_id' => 1, 'language' => 'en', 'inspection_date' => '2026-10-22',
+        'fleet_number' => 'EX 006', 'equipment_type' => 'Excavator', 'smr' => '1420',
+        'serial_number' => 'CAT0336D', 'model' => '336D2L', 'equipment_id' => 1,
+        'general_comments' => 'Brake pressure fault<script>alert(9)</script>',
+        'mechanic_name' => 'John Moshi<script>alert(9)</script>', 'mechanic_signature' => 'uploads/sig1.png', 'mechanic_date' => '2026-10-22',
+        'supervisor_name' => '', 'supervisor_signature' => NULL, 'supervisor_date' => NULL,
+        'operator_name' => 'Asha Nyerere', 'operator_signature' => NULL, 'operator_date' => '2026-10-22',
+        'prod_supervisor_name' => '', 'prod_supervisor_signature' => NULL, 'prod_supervisor_date' => NULL,
+        'status' => 'submitted', 'equip_reg_no' => 'EX 006', 'equip_category' => 'Mobile Equipment',
+        'equip_location' => 'MET PLANT', 'equip_brand' => 'CATERPILLAR', 'equip_model' => '336D2L',
+    ),
+    // 2. Clean Pass + signed by supervisor on C-HEADT 007
+    (object)array(
+        'id' => 92, 'template_id' => 2, 'language' => 'fr', 'inspection_date' => '2026-10-21',
+        'fleet_number' => 'C-HEADT 007', 'equipment_type' => 'Horse Truck', 'smr' => '98200',
+        'serial_number' => 'SHAC982', 'model' => 'F3000', 'equipment_id' => 2,
+        'general_comments' => 'RAS',
+        'mechanic_name' => 'Paul Kileo', 'mechanic_signature' => NULL, 'mechanic_date' => '2026-10-21',
+        'supervisor_name' => 'Chief Sup', 'supervisor_signature' => 'uploads/sup.png', 'supervisor_date' => '2026-10-21',
+        'operator_name' => '', 'operator_signature' => NULL, 'operator_date' => NULL,
+        'prod_supervisor_name' => '', 'prod_supervisor_signature' => NULL, 'prod_supervisor_date' => NULL,
+        'status' => 'submitted', 'equip_reg_no' => 'C-HEADT 007', 'equip_category' => 'Heavy Truck',
+        'equip_location' => 'WORKSHOP', 'equip_brand' => 'SHACMAN', 'equip_model' => 'F3000',
+    ),
+);
+
+$inDb->queue = array(
+    new EquipFleetFakeResult($inTplSeed),
+    new EquipFleetFakeResult(array(
+        (object)array('template_id' => 1, 'item_cnt' => 45, 'section_cnt' => 5),
+        (object)array('template_id' => 2, 'item_cnt' => 40, 'section_cnt' => 4),
+    )),
+    new EquipFleetFakeResult($inRecordSeed),
+    new EquipFleetFakeResult(array(
+        (object)array(
+            'record_id' => 91, 'item_id' => 501, 'value_json' => '{"result":"No"}',
+            'comment' => 'Service brake pressure below min', 'row_type' => 'item',
+            'priority' => 'P1', 'category_en' => 'No-Go', 'category_fr' => 'Arrêt',
+        ),
+        (object)array(
+            'record_id' => 92, 'item_id' => 502, 'value_json' => '{"result":"Yes"}',
+            'comment' => '', 'row_type' => 'item',
+            'priority' => 'P1', 'category_en' => 'No-Go', 'category_fr' => 'Arrêt',
+        ),
+    )),
+);
+
+$qStartIn = count($inDb->queries);
+$inOverview = $inModel->get_register_overview('2026-10-22');
+$qTotalIn = count($inDb->queries) - $qStartIn;
+
+check('INSP-05 O(1) Telemetry Scaling: get_register_overview() hydrates templates, item counts, machines & verdicts in <= 4 SQL queries',
+    $qTotalIn <= 4 && count($inOverview['rows']) === 2 && $inOverview['total_items'] === 85,
+    "Executed {$qTotalIn} queries");
+check('INSP-01 & INSP-03 P1 No-Go, Clean Pass, Unsigned Sign-Off & Verbatim Asset Register ID Resolution',
+    $inOverview['rows'][0]->verdict_state === 'p1_nogo'
+    && $inOverview['rows'][0]->p1_count === 1
+    && $inOverview['rows'][0]->is_unsigned === TRUE
+    && $inOverview['rows'][0]->machine_label === 'EX 006'
+    && $inOverview['rows'][1]->verdict_state === 'passed'
+    && $inOverview['rows'][1]->is_signed === TRUE
+    && $inOverview['rows'][1]->machine_label === 'C-HEADT 007');
+
+$inCtrlSrc = file_get_contents(APPPATH . 'controllers/Inspections.php');
+$myCtrlSrcIn = file_get_contents(APPPATH . 'core/MY_Controller.php');
+check('INSP-04 Manager RBAC & POST Guard: MY_Controller whitelists GET inspections/records while Inspections::save() enforces require_post()',
+    strpos($myCtrlSrcIn, 'const MANAGER_READ_WHITELIST') !== FALSE
+    && strpos($myCtrlSrcIn, "'inspections/records'") !== FALSE
+    && strpos($inCtrlSrc, '$this->require_post()') !== FALSE);
+if (isset($mutRegex)) {
+    foreach (array('index', 'export_csv', 'summary_json') as $inAct) {
+        check("INSP-04 Manager RBAC: Inspections::{$inAct}() is permitted under read-only MUTATION_PATTERN",
+            preg_match($mutRegex, $inAct) === 0);
+    }
+}
+
+$inVars = array(
+    'records'          => $inOverview['rows'],
+    'templates'        => $inOverview['active_templates'],
+    'all_templates'    => $inOverview['templates'],
+    'record_counts'    => $inOverview['record_counts'],
+    'equipment_list'   => array((object)array('id' => 1, 'registration_no' => 'EX 006'), (object)array('id' => 2, 'registration_no' => 'C-HEADT 007')),
+    'focused_template' => NULL,
+    'forced_code'      => NULL,
+    'kpi'              => array(
+        'total_records' => 2, 'today_records' => 1, 'p1_nogo' => 1, 'failed_records' => 1,
+        'total_failed_items' => 1, 'clean_pass' => 1, 'pass_rate' => 50, 'unsigned' => 1,
+        'drafts' => 0, 'active_templates' => 2, 'total_items' => 85,
+    ),
+    'tab_counts'       => array('all' => 2, 'p1_nogo' => 1, 'failed' => 1, 'passed' => 1, 'unsigned' => 1, 'draft' => 0, 'forms' => 2),
+    'tab'              => 'all',
+    'q'                => '',
+    'f_template'       => '',
+    'f_equip'          => 0,
+    'f_rec_lang'       => '',
+    'f_from'           => '',
+    'f_to'             => '',
+    'sort'             => 'inspection_date',
+    'dir'              => 'desc',
+    'view_mode'        => 'table',
+    'per_page'         => 25,
+    'allowed_pp'       => array(10, 25, 50, 100, 150),
+    'current_page'     => 1,
+    'total_pages'      => 1,
+    'total_filtered'   => 2,
+    'offset'           => 0,
+    'lang'             => 'en',
+    'can_manage'       => TRUE,
+    'can_submit'       => TRUE,
+);
+
+$inWarnings = array();
+set_error_handler(function ($severity, $message, $file, $line) use (&$inWarnings) {
+    $inWarnings[] = "{$message} ({$file}:{$line})";
+    return TRUE;
+});
+ob_start();
+(function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/inspections/index.php'; })($inVars);
+$inSupHtml = ob_get_clean();
+
+$inVarsMgr = array_merge($inVars, array('can_manage' => FALSE, 'can_submit' => FALSE));
+ob_start();
+(function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/inspections/index.php'; })($inVarsMgr);
+$inMgrHtml = ob_get_clean();
+restore_error_handler();
+
+check('INSP-01 View Render: application/views/inspections/index.php renders Enterprise DataTable & Dual Cards with ZERO PHP warnings',
+    empty($inWarnings)
+    && strpos($inSupHtml, '<table class="in-table"') !== FALSE
+    && strpos($inSupHtml, 'class="in-cards-grid"') !== FALSE,
+    implode('; ', $inWarnings));
+check('INSP-04 XSS Neutralization in inspections/index.php: hostile <script> tag escaped cleanly',
+    strpos($inSupHtml, '<script>alert(9)</script>') === FALSE
+    && strpos($inSupHtml, 'John Moshi&lt;script&gt;alert(9)&lt;/script&gt;') !== FALSE);
+check('INSP-04 Manager UI RBAC: hides New Inspection, Manage Templates & Edit links while preserving Export CSV, Inspect, View & PDF',
+    strpos($inSupHtml, 'id="inOpenLauncherBtn"') !== FALSE
+    && strpos($inSupHtml, 'inspections/templates') !== FALSE
+    && strpos($inMgrHtml, 'id="inOpenLauncherBtn"') === FALSE
+    && strpos($inMgrHtml, 'inspections/templates') === FALSE
+    && strpos($inMgrHtml, 'href="' . base_url('inspections/edit/')) === FALSE
+    && strpos($inMgrHtml, 'inspections/export_csv') !== FALSE);
+check('INSP-06 Accessible Slide-Over Inspection Drawer rendered cleanly',
+    strpos($inSupHtml, 'id="inDrawer" role="dialog" aria-modal="true"') !== FALSE
+    && strpos($inSupHtml, 'inspections/summary_json/') !== FALSE);
+
+/* ─────────────────────────────────────────────────────────────────────────
    Result
    ───────────────────────────────────────────────────────────────────────── */
 

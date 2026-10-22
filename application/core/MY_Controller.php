@@ -200,6 +200,12 @@ class MY_Controller extends CI_Controller {
         'reports/weekly_report_name',
     );
 
+    /* Read-only GET actions whose method name starts with a MUTATION_PATTERN
+       word prefix (e.g. `records` matching `record`). Never permits POST. */
+    const MANAGER_READ_WHITELIST = array(
+        'inspections/records',
+    );
+
     /* Mutating action-name prefixes used by the Manager view-only guard.
        State-changing actions must also enforce POST at their handler; this
        guard is defense in depth and does not replace per-action checks. */
@@ -233,7 +239,10 @@ class MY_Controller extends CI_Controller {
             // not a mutation of workshop data.
             $allowed_write = $is_post && (in_array($key, self::MANAGER_WRITE_WHITELIST, true)
                                           || in_array($key, self::SELF_SERVICE_ACTIONS, true));
-            if (in_array($key, self::SELF_SERVICE_ACTIONS, true)) $name_match = FALSE;
+            if (in_array($key, self::SELF_SERVICE_ACTIONS, true)
+                || (!$is_post && in_array($key, self::MANAGER_READ_WHITELIST, true))) {
+                $name_match = FALSE;
+            }
 
             // Whitelisted writes are POST-only too. A GET must never become a
             // state-changing shortcut around CSRF or the intended form flow.
