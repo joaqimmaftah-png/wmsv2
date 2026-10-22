@@ -22,20 +22,20 @@ foreach ($attendance as $a) {
       <div class="card-body text-center py-4">
         <div style="width:80px;height:80px;border-radius:50%;background:#1a3c5e;color:#fff;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;margin:0 auto 16px;">
           <?php if ($worker->photo): ?>
-            <img src="<?= base_url('uploads/photos/' . $worker->photo) ?>" style="width:80px;height:80px;border-radius:50%;object-fit:cover;">
+            <img src="<?= base_url('uploads/photos/' . rawurlencode(basename((string)$worker->photo))) ?>" alt="<?= htmlspecialchars($worker->first_name . ' ' . $worker->last_name, ENT_QUOTES, 'UTF-8') ?>" style="width:80px;height:80px;border-radius:50%;object-fit:cover;">
           <?php else: ?>
-            <?= strtoupper((string)(substr($worker->first_name,0,1) . substr($worker->last_name,0,1))) ?>
+            <?= htmlspecialchars(strtoupper((string)(substr($worker->first_name,0,1) . substr($worker->last_name,0,1))), ENT_QUOTES, 'UTF-8') ?>
           <?php endif; ?>
         </div>
-        <h5 class="fw-700 mb-1"><?= $worker->first_name . ' ' . $worker->last_name ?></h5>
+        <h5 class="fw-700 mb-1"><?= htmlspecialchars($worker->first_name . ' ' . $worker->last_name, ENT_QUOTES, 'UTF-8') ?></h5>
         <div class="text-muted mb-2" style="font-size:13px;"><?= htmlspecialchars((string)$worker->position, ENT_QUOTES, 'UTF-8') ?></div>
         <div class="d-flex justify-content-center gap-2 mb-3">
-          <span class="badge bg-<?= (isset($status_colors[$worker->status]) ? $status_colors[$worker->status] : 'secondary') ?>"><?= $worker->status ?></span>
-          <span class="badge bg-<?= (isset($skill_colors[$worker->skill_level]) ? $skill_colors[$worker->skill_level] : 'secondary') ?>"><?= $worker->skill_level ?></span>
-          <span class="badge b-secondary"><?= htmlspecialchars((string)$worker->role_name) ?></span>
+          <span class="badge bg-<?= (isset($status_colors[$worker->status]) ? $status_colors[$worker->status] : 'secondary') ?>"><?= htmlspecialchars((string)$worker->status, ENT_QUOTES, 'UTF-8') ?></span>
+          <span class="badge bg-<?= (isset($skill_colors[$worker->skill_level]) ? $skill_colors[$worker->skill_level] : 'secondary') ?>"><?= htmlspecialchars((string)$worker->skill_level, ENT_QUOTES, 'UTF-8') ?></span>
+          <span class="badge b-secondary"><?= htmlspecialchars((string)$worker->role_name, ENT_QUOTES, 'UTF-8') ?></span>
         </div>
         <div style="font-size:12px;color:#64748b;text-align:left;">
-          <div class="mb-1"><i class="bi bi-person-badge me-2"></i><?= $worker->employee_id ?></div>
+          <div class="mb-1"><i class="bi bi-person-badge me-2"></i><?= htmlspecialchars((string)$worker->employee_id, ENT_QUOTES, 'UTF-8') ?></div>
           <div class="mb-1"><i class="bi bi-envelope me-2"></i><?= htmlspecialchars((string)$worker->email, ENT_QUOTES, 'UTF-8') ?></div>
           <?php if (!empty($worker_site)): ?><div class="mb-1"><i class="bi bi-geo-alt me-2"></i>Site: <strong><?= htmlspecialchars((string)$worker_site, ENT_QUOTES, 'UTF-8') ?></strong></div><?php endif; ?>
           <?php if ($worker->phone): ?><div class="mb-1"><i class="bi bi-phone me-2"></i><?= htmlspecialchars((string)$worker->phone, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
@@ -97,12 +97,17 @@ foreach ($attendance as $a) {
         // Rate over the days that were judged, not every row: counting Rest and
         // Holiday days as absences capped the figure below 100% for no reason.
         $total_days = $present_count + $absent_count + $leave_count;
-        $att_pct = $total_days > 0 ? round($present_count / $total_days * 100) : 0;
+        $att_pct = $total_days > 0 ? (int)round($present_count / $total_days * 100) : NULL;
         ?>
         <div class="mt-3">
-          <div class="d-flex justify-content-between mb-1" style="font-size:12px;"><span>Attendance Rate</span><span class="fw-600"><?= $att_pct ?>%</span></div>
+          <div class="d-flex justify-content-between mb-1" style="font-size:12px;">
+            <span>Attendance Rate</span>
+            <span class="fw-600"><?= $att_pct === NULL ? 'No records' : ($att_pct . '%') ?></span>
+          </div>
           <div class="progress" style="height:8px;">
-            <div class="progress-bar bg-<?= $att_pct >= 90 ? 'success' : ($att_pct >= 75 ? 'warning' : 'danger') ?>" style="width:<?= $att_pct ?>%"></div>
+            <?php if ($att_pct !== NULL): ?>
+              <div class="progress-bar bg-<?= $att_pct >= 90 ? 'success' : ($att_pct >= 75 ? 'warning' : 'danger') ?>" style="width:<?= $att_pct ?>%"></div>
+            <?php endif; ?>
           </div>
         </div>
       </div>
@@ -152,8 +157,8 @@ foreach ($attendance as $a) {
           <?php foreach ($leave_history as $lr): ?>
           <div class="px-3 py-2 border-bottom">
             <div class="d-flex justify-content-between">
-              <span class="badge bg-primary bg-opacity-15 text-primary"><?= $lr->leave_type ?></span>
-              <span class="badge <?= $lr->status=='Approved'?'bg-success':($lr->status=='Rejected'?'bg-danger':'bg-warning text-dark') ?>"><?= $lr->status ?></span>
+              <span class="badge bg-primary bg-opacity-15 text-primary"><?= htmlspecialchars((string)$lr->leave_type, ENT_QUOTES, 'UTF-8') ?></span>
+              <span class="badge <?= $lr->status=='Approved'?'bg-success':($lr->status=='Rejected'?'bg-danger':'bg-warning text-dark') ?>"><?= htmlspecialchars((string)$lr->status, ENT_QUOTES, 'UTF-8') ?></span>
             </div>
             <div style="font-size:12px;color:#64748b;margin-top:3px;">
               <?= date('d M Y', strtotime($lr->start_date)) ?> — <?= date('d M Y', strtotime($lr->end_date)) ?>

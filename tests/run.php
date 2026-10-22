@@ -876,6 +876,254 @@ check('TS-10 Print Stylesheet: header.php hides .no-print inside @media print',
     preg_match('/@media\s+print\s*\{[^}]*\.no-print/s', $headerCss) === 1);
 
 /* ─────────────────────────────────────────────────────────────────────────
+   Team Workforce Directory Audit & Redesign Suite (TM-01 .. TM-10)
+   ───────────────────────────────────────────────────────────────────────── */
+
+if (!function_exists('base_url')) {
+    function base_url($uri = '') { return 'http://wms.test/' . ltrim((string)$uri, '/'); }
+}
+if (!function_exists('form_open')) {
+    function form_open($action = '', $attributes = array()) {
+        $attrStr = '';
+        if (is_array($attributes)) {
+            foreach ($attributes as $ak => $av) {
+                $attrStr .= ' ' . htmlspecialchars((string)$ak, ENT_QUOTES, 'UTF-8')
+                         . '="' . htmlspecialchars((string)$av, ENT_QUOTES, 'UTF-8') . '"';
+            }
+        }
+        return '<form method="post" action="' . htmlspecialchars(site_url($action), ENT_QUOTES, 'UTF-8') . '"' . $attrStr . '>';
+    }
+}
+if (!function_exists('form_close')) {
+    function form_close() { return '</form>'; }
+}
+
+if (!class_exists('Team_model', FALSE)) {
+    require_once APPPATH . 'models/Team_model.php';
+}
+
+class TeamRosterFakeResult {
+    private $rows;
+    public function __construct(array $rows) { $this->rows = array_values($rows); }
+    public function result() { return $this->rows; }
+    public function row() { return isset($this->rows[0]) ? $this->rows[0] : NULL; }
+}
+
+class TeamRosterFakeDB {
+    public $queries = 0;
+    private $users = array();
+    private $fromTable = '';
+
+    public function __construct(array $users) { $this->users = $users; }
+    public function dbprefix($t = '') { return (string)$t; }
+    public function affected_rows() { return 0; }
+    public function table_exists($t) {
+        return in_array($t, array('users', 'roles', 'certifications', 'work_orders', 'leave_requests', 'shift_assignments', 'shifts'), TRUE);
+    }
+    public function query($sql, $binds = array()) {
+        $this->queries++;
+        return new TeamRosterFakeResult(array());
+    }
+    public function select($s, $escape = NULL) { return $this; }
+    public function from($t) { $this->fromTable = (string)$t; return $this; }
+    public function join($t, $c, $type = '') { return $this; }
+    public function where($k, $v = NULL) { return $this; }
+    public function where_in($k, $vals) { return $this; }
+    public function group_by($g) { return $this; }
+    public function order_by($c, $d = '') { return $this; }
+    public function get($table = NULL) {
+        $this->queries++;
+        $src = $table !== NULL ? (string)$table : $this->fromTable;
+        if (strpos($src, 'users') === 0) {
+            return new TeamRosterFakeResult($this->users);
+        }
+        if ($src === 'certifications') {
+            return new TeamRosterFakeResult(array(
+                (object)array('user_id' => 1, 'status' => 'Valid', 'cnt' => 2),
+                (object)array('user_id' => 2, 'status' => 'Expired', 'cnt' => 1),
+                (object)array('user_id' => 2, 'status' => 'Expiring Soon', 'cnt' => 1),
+                (object)array('user_id' => 3, 'status' => 'Expiring Soon', 'cnt' => 2),
+            ));
+        }
+        if (strpos($src, 'work_orders') === 0) {
+            return new TeamRosterFakeResult(array(
+                (object)array('id' => 101, 'wo_number' => 'WO-101', 'title' => 'Hydraulic pump rebuild', 'priority' => 'Critical', 'status' => 'In Progress', 'assigned_to' => '1, 2', 'registration_no' => 'EX 006'),
+                (object)array('id' => 102, 'wo_number' => 'WO-102', 'title' => 'Brake inspection', 'priority' => 'Medium', 'status' => 'Open', 'assigned_to' => '2', 'registration_no' => 'C-HEADT 007'),
+            ));
+        }
+        if ($src === 'leave_requests') {
+            return new TeamRosterFakeResult(array(
+                (object)array('user_id' => 3, 'leave_type' => 'Annual Leave'),
+            ));
+        }
+        if (strpos($src, 'shift_assignments') === 0) {
+            return new TeamRosterFakeResult(array(
+                (object)array('user_id' => 1, 'name' => 'Day Shift', 'start_time' => '07:00:00', 'end_time' => '16:00:00'),
+            ));
+        }
+        return new TeamRosterFakeResult(array());
+    }
+}
+
+$fakeUsers = array();
+for ($ui = 1; $ui <= 20; $ui++) {
+    $fakeUsers[] = (object)array(
+        'id'          => $ui,
+        'role_id'     => ($ui === 1) ? 1 : 2,
+        'role_name'   => ($ui === 1) ? 'supervisor' : 'technician',
+        'employee_id' => sprintf('EMP%03d', $ui),
+        'first_name'  => ($ui === 2) ? 'Evil<script>alert(1)</script>' : ('Staff' . $ui),
+        'last_name'   => 'Member' . $ui,
+        'email'       => "staff{$ui}@wms.test",
+        'phone'       => '+2557000000' . sprintf('%02d', $ui),
+        'position'    => 'Technician',
+        'site'        => ($ui % 2 === 0) ? 'KALIMVA' : 'WORKSHOP',
+        'skill_level' => ($ui <= 5) ? 'Expert' : 'Senior',
+        'photo'       => ($ui === 2) ? '../../evil"onload="alert(2).png' : '',
+        'join_date'   => '2025-03-15',
+        'last_login'  => '2026-10-22 08:00:00',
+        'status'      => ($ui === 20) ? 'Inactive' : 'Active',
+    );
+}
+
+$rosterDb  = new TeamRosterFakeDB($fakeUsers);
+$teamModel = new Team_model();
+$teamModel->db = $rosterDb;
+
+$rosterRows = $teamModel->get_roster_overview('2026-10-22');
+check('TM-04 O(1) Bulk Roster Query Scaling: 20 workers hydrated in <= 8 SQL queries (zero N+1)',
+    count($rosterRows) === 20 && $rosterDb->queries <= 8,
+    'queries=' . $rosterDb->queries);
+
+check('TM-02 Enriched Operational Columns: active_wo_count, critical_wo_count, cert alerts, shift & active leave hydrated accurately',
+    $rosterRows[0]->active_wo_count === 1
+    && $rosterRows[0]->critical_wo_count === 1
+    && $rosterRows[0]->cert_valid === 2
+    && strpos($rosterRows[0]->current_shift, 'Day Shift') !== FALSE
+    && $rosterRows[1]->active_wo_count === 2
+    && $rosterRows[1]->cert_expired === 1
+    && $rosterRows[1]->has_cert_alert === TRUE
+    && $rosterRows[2]->effective_status === 'On Leave');
+
+$openWosU2 = $teamModel->get_worker_open_workorders(2);
+check('TM-02 Open Work Orders Inspector: get_worker_open_workorders(2) resolves exact assigned WOs & Asset Register machine IDs',
+    count($openWosU2) === 2
+    && $openWosU2[0]['machine'] === 'EX 006'
+    && $openWosU2[1]['machine'] === 'C-HEADT 007');
+
+// TM-01 RBAC & Security static + pattern verification
+$teamCtrlSrc = file_get_contents(APPPATH . 'controllers/Team.php');
+$teamViewSrc = file_get_contents(APPPATH . 'views/team/view.php');
+if (isset($mutRegex)) {
+    foreach (array('index', 'roster_csv', 'member_json', 'view') as $actName) {
+        check("TM-01 Manager RBAC: Team::{$actName}() is permitted under read-only MUTATION_PATTERN",
+            preg_match($mutRegex, $actName) === 0);
+    }
+}
+check('TM-01 Horizontal RBAC Guard: Team::index(), roster_csv(), member_json() & view() restrict peer PII from self-service roles',
+    substr_count($teamCtrlSrc, '!$this->is_supervisor() && !$this->is_manager()') >= 3);
+check('TM-01 Stored XSS Hardening in team/view.php: worker photo, name, employee_id & leave_type escaped',
+    strpos($teamViewSrc, 'rawurlencode(basename((string)$worker->photo))') !== FALSE
+    && strpos($teamViewSrc, '<?= $worker->first_name') === FALSE
+    && strpos($teamViewSrc, '<?= $worker->employee_id ?>') === FALSE
+    && strpos($teamViewSrc, '<?= $lr->leave_type ?>') === FALSE);
+
+// TM-03 .. TM-10 Full PHP Render & XSS/Contrast/RBAC Audit of application/views/team/index.php
+$rosterById = array();
+foreach ($rosterRows as $rw) { $rosterById[(int)$rw->id] = $rw; }
+
+$tmVars = array(
+    'workers'        => array_slice($rosterRows, 0, 5),
+    'roster_by_id'   => $rosterById,
+    'pending_leave'  => array(
+        (object)array(
+            'id'          => 77,
+            'user_id'     => 2,
+            'worker_name' => 'Evil<script>alert(9)</script>',
+            'employee_id' => 'EMP002',
+            'leave_type'  => 'Annual<b>XSS</b>',
+            'start_date'  => '2026-10-25',
+            'end_date'    => '2026-10-28',
+            'days_count'  => 4,
+            'reason'      => 'Family travel',
+        ),
+    ),
+    'total_filtered' => 20,
+    'total_scope'    => 20,
+    'tab_counts'     => array('all' => 20, 'active' => 18, 'on_site' => 4, 'on_leave' => 1, 'cert_alert' => 2, 'inactive' => 1),
+    'summary'        => array(
+        'total_staff'    => 20,
+        'active_staff'   => 18,
+        'inactive_staff' => 1,
+        'on_site_today'  => 4,
+        'on_leave_today' => 1,
+        'open_wos'       => 3,
+        'critical_wos'   => 1,
+        'cert_expired'   => 1,
+        'cert_expiring'  => 3,
+        'pending_leave'  => 1,
+    ),
+    'site_filter'    => 'WORKSHOP',
+    'role_filter'    => 2,
+    'skill_filter'   => 'Expert',
+    'search_query'   => 'Staff',
+    'active_tab'     => 'all',
+    'sort_by'        => 'active_wos',
+    'sort_dir'       => 'desc',
+    'per_page'       => 10,
+    'page'           => 1,
+    'total_pages'    => 2,
+    'showing_from'   => 1,
+    'showing_to'     => 5,
+    'view_mode'      => 'table',
+    'sites'          => array('WORKSHOP', 'KALIMVA'),
+    'roles_list'     => array(
+        (object)array('id' => 1, 'name' => 'supervisor'),
+        (object)array('id' => 2, 'name' => 'technician'),
+    ),
+    'skills_list'    => array('Junior', 'Senior', 'Expert', 'Specialist'),
+    'is_supervisor'  => TRUE,
+    'is_manager'     => FALSE,
+    'page_title'     => 'Team Management',
+);
+
+$tmWarnings = array();
+set_error_handler(function ($severity, $message, $file, $line) use (&$tmWarnings) {
+    $tmWarnings[] = "{$message} ({$file}:{$line})";
+    return TRUE;
+});
+ob_start();
+(function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/team/index.php'; })($tmVars);
+$tmSupHtml = ob_get_clean();
+
+$tmVarsMgr = array_merge($tmVars, array('is_supervisor' => FALSE, 'is_manager' => TRUE, 'pending_leave' => array()));
+ob_start();
+(function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/team/index.php'; })($tmVarsMgr);
+$tmMgrHtml = ob_get_clean();
+restore_error_handler();
+
+check('TM-05 View Render: application/views/team/index.php renders cleanly for Supervisor & Manager with ZERO warnings',
+    empty($tmWarnings), implode('; ', $tmWarnings));
+check('TM-01 XSS Neutralization in team/index.php: hostile <script> tags and path traversal photo filenames fully neutralized',
+    strpos($tmSupHtml, '<script>alert(') === FALSE
+    && strpos($tmSupHtml, '../../evil') === FALSE
+    && strpos($tmSupHtml, 'Evil&lt;script&gt;alert(1)&lt;/script&gt;') !== FALSE);
+check('TM-03 WCAG Contrast Fix: zero dark text color:var(--t1) on dark avatar backgrounds',
+    strpos($tmSupHtml, 'color:var(--t1);flex-shrink:0') === FALSE);
+check('TM-06 Status Tabs & Workload Pending Leave Context: renders 6 status tabs + "2 Open WOs" warning inside Pending Leave table',
+    strpos($tmSupHtml, 'On Site Today') !== FALSE
+    && strpos($tmSupHtml, 'Cert Alerts') !== FALSE
+    && strpos($tmSupHtml, '2 Open WOs') !== FALSE);
+check('TM-07 Manager UI RBAC: hides Add Worker & Edit Worker Profile mutations for Manager while keeping Inspect, Profile & Export CSV',
+    strpos($tmMgrHtml, 'Add Worker') === FALSE
+    && strpos($tmMgrHtml, 'Edit Worker Profile') === FALSE
+    && strpos($tmMgrHtml, 'Export CSV') !== FALSE);
+check('TM-08 & TM-09 Dual View Mode + Accessible Staff Inspector Drawer rendered cleanly',
+    strpos($tmSupHtml, 'data-set-view="cards"') !== FALSE
+    && strpos($tmSupHtml, 'class="tm-cards-grid"') !== FALSE
+    && strpos($tmSupHtml, 'id="tmDrawer" role="dialog" aria-modal="true"') !== FALSE);
+
+/* ─────────────────────────────────────────────────────────────────────────
    Result
    ───────────────────────────────────────────────────────────────────────── */
 

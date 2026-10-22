@@ -19,6 +19,222 @@ class Team_model extends CI_Model {
             ->join('roles r', 'r.id = u.role_id')->order_by('u.first_name')->get()->result();
     }
 
+    /**
+     * Build enriched workforce roster rows in O(1) constant SQL queries
+     * (zero N+1 loops regardless of headcount) combining:
+     *   - Profile, role & skill metadata (`users` + `roles`)
+     *   - Bulk site resolution (`users.site` / QR check-in history)
+     *   - Today's live geofenced QR check-in status (`attendance_punches`)
+     *   - Refreshed certification compliance counts (`Valid` / `Expiring Soon` / `Expired`)
+     *   - Active open work order workload (`work_orders.assigned_to`)
+     *   - Current week shift assignment (`shift_assignments` + `shifts`)
+     *   - Active approved leave covering today (`leave_requests`)
+     *
+     * @param  string|null $today optional YYYY-MM-DD override for deterministic testing
+     * @return object[]
+     */
+    public function get_roster_overview($today = NULL) {
+        $today = ($today && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$today))
+            ? (string)$today
+            : date('Y-m-d');
+
+        // 1. Refresh stored certification statuses once across all staff (1 SQL query)
+        $this->refresh_cert_status();
+
+        // 2. Load all users + role names (1 SQL query)
+        $workers = $this->get_all();
+        if (empty($workers)) return array();
+
+        $ci = get_instance();
+
+        // 3. Bulk site resolution across all workers (<= 2 SQL queries)
+        $month_start = substr($today, 0, 7) . '-01';
+        $month_end   = date('Y-m-t', strtotime($month_start));
+        $sites_map   = array();
+        if (isset($ci->load)) {
+            $ci->load->model('Timesheet_model');
+            if (isset($ci->Timesheet_model)) {
+                $sites_map = $ci->Timesheet_model->resolve_sites_for_workers($workers, $month_start, $month_end, NULL);
+            }
+        }
+
+        // 4. Today's live QR on-site status map (<= 1 SQL query)
+        $on_site_map = array();
+        if (isset($ci->load)) {
+            $ci->load->model('Attendance_model');
+            if (isset($ci->Attendance_model) && $ci->Attendance_model->ready()) {
+                $on_site_map = $ci->Attendance_model->on_site_map($today);
+            }
+        }
+
+        // 5. Grouped certification counts per worker (1 SQL query)
+        $cert_stats = array();
+        if ($this->db->table_exists('certifications')) {
+            $c_rows = $this->db->select('user_id, status, COUNT(*) AS cnt')
+                ->from('certifications')
+                ->group_by(array('user_id', 'status'))
+                ->get()->result();
+            foreach ($c_rows as $cr) {
+                $uid = (int)$cr->user_id;
+                if (!isset($cert_stats[$uid])) {
+                    $cert_stats[$uid] = array('Valid' => 0, 'Expiring Soon' => 0, 'Expired' => 0);
+                }
+                if (isset($cert_stats[$uid][$cr->status])) {
+                    $cert_stats[$uid][$cr->status] += (int)$cr->cnt;
+                }
+            }
+        }
+
+        // 6. Active Work Order workload parsed across comma-separated `assigned_to` (1 SQL query)
+        $wo_counts = array();
+        $wo_crit   = array();
+        if ($this->db->table_exists('work_orders')) {
+            $wo_rows = $this->db->select('id, priority, assigned_to')
+                ->from('work_orders')
+                ->where_in('status', array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools'))
+                ->get()->result();
+            foreach ($wo_rows as $wo) {
+                $raw_assigned = isset($wo->assigned_to) ? trim((string)$wo->assigned_to) : '';
+                if ($raw_assigned === '') continue;
+                $seen_u = array();
+                foreach (explode(',', $raw_assigned) as $tok) {
+                    $uid = (int)trim($tok);
+                    if ($uid <= 0 || isset($seen_u[$uid])) continue;
+                    $seen_u[$uid] = TRUE;
+                    $wo_counts[$uid] = isset($wo_counts[$uid]) ? ($wo_counts[$uid] + 1) : 1;
+                    if (isset($wo->priority) && $wo->priority === 'Critical') {
+                        $wo_crit[$uid] = isset($wo_crit[$uid]) ? ($wo_crit[$uid] + 1) : 1;
+                    }
+                }
+            }
+        }
+
+        // 7. Approved leave active today + current ISO-week shift names (<= 2 SQL queries)
+        $leave_today = array();
+        if ($this->db->table_exists('leave_requests')) {
+            $lr_rows = $this->db->select('user_id, leave_type')
+                ->from('leave_requests')
+                ->where('status', 'Approved')
+                ->where('start_date <=', $today)
+                ->where('end_date >=', $today)
+                ->get()->result();
+            foreach ($lr_rows as $lr) {
+                $leave_today[(int)$lr->user_id] = (string)$lr->leave_type;
+            }
+        }
+
+        $shift_names = array();
+        if ($this->db->table_exists('shift_assignments') && $this->db->table_exists('shifts')) {
+            $wk_monday = $this->week_start_date($today);
+            $sh_rows = $this->db->select('sa.user_id, s.name, s.start_time, s.end_time')
+                ->from('shift_assignments sa')
+                ->join('shifts s', 's.id = sa.shift_id', 'inner')
+                ->where('sa.week_start', $wk_monday)
+                ->get()->result();
+            foreach ($sh_rows as $sr) {
+                $shift_names[(int)$sr->user_id] = trim((string)$sr->name)
+                    . (!empty($sr->start_time) && !empty($sr->end_time)
+                        ? ' (' . substr((string)$sr->start_time, 0, 5) . '–' . substr((string)$sr->end_time, 0, 5) . ')'
+                        : '');
+            }
+        }
+
+        $skill_rank = array('Junior' => 1, 'Senior' => 2, 'Expert' => 3, 'Specialist' => 4);
+        $out = array();
+
+        foreach ($workers as $w) {
+            $uid    = (int)$w->id;
+            $s_info = isset($sites_map[$uid])
+                ? $sites_map[$uid]
+                : array('site' => isset($w->site) ? trim((string)$w->site) : '', 'source' => (isset($w->site) && trim((string)$w->site) !== '') ? 'profile' : '');
+
+            $cs = isset($cert_stats[$uid])
+                ? $cert_stats[$uid]
+                : array('Valid' => 0, 'Expiring Soon' => 0, 'Expired' => 0);
+
+            $raw_status = isset($w->status) && $w->status !== '' ? (string)$w->status : 'Active';
+            $eff_status = $raw_status;
+            if ($raw_status === 'Active' && isset($leave_today[$uid])) {
+                $eff_status = 'On Leave';
+            }
+
+            $skill = isset($w->skill_level) && $w->skill_level !== '' ? (string)$w->skill_level : 'Junior';
+
+            $out[] = (object)array(
+                'id'                => $uid,
+                'employee_id'       => (string)$w->employee_id,
+                'first_name'        => (string)$w->first_name,
+                'last_name'         => (string)$w->last_name,
+                'full_name'         => trim((string)$w->first_name . ' ' . (string)$w->last_name),
+                'email'             => isset($w->email) ? (string)$w->email : '',
+                'phone'             => isset($w->phone) ? (string)$w->phone : '',
+                'role_id'           => (int)$w->role_id,
+                'role_name'         => isset($w->role_name) ? (string)$w->role_name : '',
+                'position'          => isset($w->position) ? (string)$w->position : '',
+                'skill_level'       => $skill,
+                'skill_rank'        => isset($skill_rank[$skill]) ? $skill_rank[$skill] : 0,
+                'site'              => $s_info['site'],
+                'site_source'       => $s_info['source'],
+                'photo'             => isset($w->photo) ? (string)$w->photo : '',
+                'join_date'         => isset($w->join_date) ? (string)$w->join_date : '',
+                'last_login'        => isset($w->last_login) ? (string)$w->last_login : '',
+                'status'            => $raw_status,
+                'effective_status'  => $eff_status,
+                'active_leave_type' => isset($leave_today[$uid]) ? $leave_today[$uid] : '',
+                'on_site_today'     => isset($on_site_map[$uid]),
+                'current_shift'     => isset($shift_names[$uid]) ? $shift_names[$uid] : '',
+                'active_wo_count'   => isset($wo_counts[$uid]) ? (int)$wo_counts[$uid] : 0,
+                'critical_wo_count' => isset($wo_crit[$uid]) ? (int)$wo_crit[$uid] : 0,
+                'cert_valid'        => (int)$cs['Valid'],
+                'cert_expiring'     => (int)$cs['Expiring Soon'],
+                'cert_expired'      => (int)$cs['Expired'],
+                'cert_total'        => (int)($cs['Valid'] + $cs['Expiring Soon'] + $cs['Expired']),
+                'has_cert_alert'    => ((int)$cs['Expired'] > 0 || (int)$cs['Expiring Soon'] > 0),
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * Open / active work orders currently assigned to `$user_id` (matching the
+     * comma-separated `work_orders.assigned_to` list cleanly).
+     *
+     * @param  int $user_id
+     * @return array<int,array{id:int,wo_number:string,title:string,priority:string,status:string,machine:string}>
+     */
+    public function get_worker_open_workorders($user_id) {
+        $uid = (int)$user_id;
+        if ($uid <= 0 || !$this->db->table_exists('work_orders')) return array();
+
+        $rows = $this->db->select('wo.id, wo.wo_number, wo.title, wo.priority, wo.status, wo.assigned_to, eq.registration_no')
+            ->from('work_orders wo')
+            ->join('equipment eq', 'eq.id = wo.equipment_id', 'left')
+            ->where_in('wo.status', array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools'))
+            ->order_by('wo.id', 'DESC')
+            ->get()->result();
+
+        $out = array();
+        foreach ($rows as $r) {
+            $raw = isset($r->assigned_to) ? trim((string)$r->assigned_to) : '';
+            if ($raw === '') continue;
+            foreach (explode(',', $raw) as $tok) {
+                if ((int)trim($tok) === $uid) {
+                    $out[] = array(
+                        'id'        => (int)$r->id,
+                        'wo_number' => (string)$r->wo_number,
+                        'title'     => (string)$r->title,
+                        'priority'  => (string)$r->priority,
+                        'status'    => (string)$r->status,
+                        'machine'   => isset($r->registration_no) ? (string)$r->registration_no : '',
+                    );
+                    break;
+                }
+            }
+        }
+        return $out;
+    }
+
     public function get_all_active() {
         return $this->db->select('u.*, r.name as role_name')->from('users u')
             ->join('roles r', 'r.id = u.role_id')->where('u.status', 'Active')
