@@ -388,6 +388,21 @@ try:
     st_m_ixls, _, m_ixls_b = get_bytes('/materials/export_xlsx?stock=out', mgr_op)
     assert st_m_ixls == 200 and m_ixls_b[:4] == b'PK\x03\x04'
 
+    # Stock Transactions Ledger TXN-01..TXN-05 Live RBAC & Binary CSV/XLSX Verification
+    st_m_txn, _, m_txn_b = get_bytes('/materials/transactions?tab=equipment', mgr_op)
+    m_txn_html = m_txn_b.decode('utf-8', 'replace')
+    assert (
+        st_m_txn == 200
+        and 'Stock Transaction Ledger' in m_txn_html
+        and 'Export CSV' in m_txn_html
+        and 'Export Excel' in m_txn_html
+        and '06 Oct 2026' not in m_txn_html
+    ), 'Transactions ledger failed or leaked migration timestamp 06 Oct 2026!'
+    st_m_tcsv, _, m_tcsv_b = get_bytes('/materials/transactions_csv?tab=equipment&date_from=2026-09-01', mgr_op)
+    assert st_m_tcsv == 200 and m_tcsv_b.startswith(b'\xef\xbb\xbf') and b'Reference / MRN / R.non' in m_tcsv_b
+    st_m_txls, _, m_txls_b = get_bytes('/materials/transactions_xlsx?tab=valued&date_from=2026-09-01', mgr_op)
+    assert st_m_txls == 200 and m_txls_b[:4] == b'PK\x03\x04'
+
     print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS, INSPECTIONS, BACKLOG & INVENTORY E2E CHECKS PASSED!')
 except BaseException:
     tb = traceback.format_exc().replace('\n', '%0A')

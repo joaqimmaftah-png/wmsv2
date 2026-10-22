@@ -865,6 +865,117 @@ for (const rawLine of cookieLines) {
     assert(invMobile.docOverflow <= 0, '/materials/inventory Mobile 390px overflowed: ' + invMobile.docOverflow);
     assert(invMobile.tableDisplay === 'none' && invMobile.cardsDisplay === 'block', '/materials/inventory Mobile Card View failed: ' + JSON.stringify(invMobile));
 
+    // =========================================================================
+    // 11. STOCK TRANSACTIONS LEDGER (/materials/transactions) — 1440x900 & 390x844
+    // =========================================================================
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/materials/transactions' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("txnShell"))')) break;
+      await sleep(200);
+    }
+    const txnPage1 = await evalJs(`(() => ({
+      docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      tblOverflow: document.querySelector('.txn-table-wrap').scrollWidth - document.querySelector('.txn-table-wrap').clientWidth,
+      rowCount: document.querySelectorAll('.txn-table tbody tr[data-txn-id]').length
+    }))()`);
+    assert(txnPage1.docOverflow <= 0, '/materials/transactions Page 1 Desktop overflowed: ' + JSON.stringify(txnPage1));
+    assert(txnPage1.tblOverflow <= 0, '/materials/transactions Page 1 Table overflowed: ' + JSON.stringify(txnPage1));
+    assert(txnPage1.rowCount === 25, '/materials/transactions Page 1 did not paginate to 25 rows: ' + JSON.stringify(txnPage1));
+
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/materials/transactions?q=CI-' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.querySelector(\'[data-txn-open="29902"]\'))')) break;
+      await sleep(200);
+    }
+    const txnDesktop = await evalJs(`(async () => {
+      const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+      const wrap = document.querySelector('.txn-table-wrap');
+      const tblOverflow = wrap.scrollWidth - wrap.clientWidth;
+
+      // '/' keyboard shortcut focuses search input
+      document.body.focus();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+      const slashFocused = (document.activeElement === document.getElementById('txnSearchInput'));
+      document.activeElement.blur();
+
+      // Select first row checkbox -> opens sticky batch bar with ?ids=
+      const firstCb = document.querySelector('.txn-row-check');
+      firstCb.checked = true;
+      firstCb.dispatchEvent(new Event('change', { bubbles: true }));
+      const batchVisible = document.getElementById('txnBatchBar').classList.contains('is-open');
+      const batchCsvHref = document.getElementById('txnBatchExportBtn').getAttribute('href') || '';
+      const batchXlsHref = document.getElementById('txnBatchXlsxBtn').getAttribute('href') || '';
+
+      // Open Slide-Over Voucher Drawer (TXN-29902 -> REQ-9902 + 295-5609)
+      const trigger = document.querySelector('[data-txn-open="29902"]');
+      trigger.focus();
+      trigger.click();
+      for (let w = 0; w < 25; w++) {
+        if (document.getElementById('txnDrawerBody').textContent.includes('REQ-9902')) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const drawerOpen = document.getElementById('txnDrawer').classList.contains('is-open');
+      const drawerText = document.getElementById('txnDrawerBody').textContent;
+      const hasVoucher = drawerText.includes('REQ-9902') && drawerText.includes('295-5609');
+      const firstHeader = document.getElementById('txnDrawerTitle').textContent;
+
+      // ArrowRight steps drawer to next voucher (TXN-29901 -> MRN-9901)
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      const secondHeader = document.getElementById('txnDrawerTitle').textContent;
+
+      // Escape closes drawer and restores focus to trigger button
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const drawerClosed = !document.getElementById('txnDrawer').classList.contains('is-open');
+      const focusRestored = (document.activeElement === trigger);
+
+      // Toggle Cards <-> Table view smoothly
+      document.querySelector('[data-txn-view="cards"]').click();
+      const cardsShown = getComputedStyle(document.querySelector('.txn-cards-container')).display !== 'none'
+        && getComputedStyle(document.querySelector('.txn-table-wrap')).display === 'none';
+      document.querySelector('[data-txn-view="table"]').click();
+
+      // Verify live UTF-8 BOM CSV export endpoint returns 200 + Ledger columns
+      const csvRes = await fetch('/materials/transactions_csv?q=CI-', { credentials: 'same-origin' });
+      const csvText = await csvRes.text();
+      const csvOk = csvRes.status === 200
+        && csvText.includes('Reference / MRN / R.non')
+        && csvText.includes('MRN-9901')
+        && csvText.includes('REQ-9902');
+
+      return {
+        docOverflow, tblOverflow, slashFocused,
+        batchVisible, batchCsvHref, batchXlsHref, drawerOpen, hasVoucher,
+        stepped: firstHeader !== secondHeader, drawerClosed, focusRestored,
+        cardsShown, csvOk
+      };
+    })()`);
+
+    assert(txnDesktop.docOverflow <= 0, '/materials/transactions Desktop overflowed: ' + JSON.stringify(txnDesktop));
+    assert(txnDesktop.tblOverflow <= 0, '/materials/transactions Table overflowed: ' + JSON.stringify(txnDesktop));
+    assert(txnDesktop.slashFocused === true, '/materials/transactions Slash shortcut failed: ' + JSON.stringify(txnDesktop));
+    assert(txnDesktop.batchVisible && txnDesktop.batchCsvHref.includes('ids=') && txnDesktop.batchXlsHref.includes('ids='), '/materials/transactions Batch bar failed: ' + JSON.stringify(txnDesktop));
+    assert(txnDesktop.drawerOpen && txnDesktop.hasVoucher, '/materials/transactions Drawer missed voucher: ' + JSON.stringify(txnDesktop));
+    assert(txnDesktop.stepped === true, '/materials/transactions ArrowRight navigation failed: ' + JSON.stringify(txnDesktop));
+    assert(txnDesktop.drawerClosed && txnDesktop.focusRestored, '/materials/transactions Escape close/focus failed');
+    assert(txnDesktop.cardsShown === true, '/materials/transactions Cards switcher failed');
+    assert(txnDesktop.csvOk === true, '/materials/transactions CSV export failed');
+
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/materials/transactions' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("txnShell"))')) break;
+      await sleep(200);
+    }
+    const txnMobile = await evalJs(`(() => ({
+      docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      tableDisplay: getComputedStyle(document.querySelector('.txn-table-wrap')).display,
+      cardsDisplay: getComputedStyle(document.querySelector('.txn-cards-container')).display
+    }))()`);
+    assert(txnMobile.docOverflow <= 0, '/materials/transactions Mobile 390px overflowed: ' + txnMobile.docOverflow);
+    assert(txnMobile.tableDisplay === 'none' && txnMobile.cardsDisplay === 'block', '/materials/transactions Mobile Card View failed: ' + JSON.stringify(txnMobile));
+
     ws.close();
     console.log('ALL HEADLESS CHROME DESKTOP (1440x900) & MOBILE (390x844) UI E2E ASSERTIONS PASSED!');
   } catch (err) {

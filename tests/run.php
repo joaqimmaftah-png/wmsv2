@@ -1560,11 +1560,13 @@ class PmPlannerFakeDB {
         ), TRUE);
     }
     public function field_exists($f, $t = '') { return TRUE; }
+    public function escape_like_str($s) { return addslashes((string)$s); }
     public function select($s, $escape = NULL) { return $this; }
     public function from($t) { return $this; }
     public function join($t, $c, $type = '') { return $this; }
-    public function where($k, $v = NULL) { return $this; }
+    public function where($k, $v = NULL, $escape = NULL) { return $this; }
     public function where_in($k, $vals) { return $this; }
+    public function like($f, $v = '', $side = 'both') { return $this; }
     public function group_by($g) { return $this; }
     public function order_by($c, $d = '', $escape = NULL) { return $this; }
     public function limit($n, $off = 0) { return $this; }
@@ -2168,6 +2170,118 @@ check('INV-01 Store Role Fix & Manager Read-Only RBAC: Store (role 3) sees +In/-
 check('INV-05 Accessible Slide-Over SKU & Ledger Drawer rendered cleanly',
     strpos($invSupHtml, 'id="invDrawer" role="dialog" aria-modal="true"') !== FALSE
     && strpos($invSupHtml, 'materials/summary_json/') !== FALSE);
+
+/* ─────────────────────────────────────────────────────────────────────────
+   19. Warehouse Stock Transactions Ledger Overhaul (/materials/transactions — TXN-01..TXN-06)
+   ───────────────────────────────────────────────────────────────────────── */
+
+$txnDb = new PmPlannerFakeDB();
+$txnModel = new Materials_model();
+$txnModel->db = $txnDb;
+
+$txnSampleRows = array(
+    (object)array(
+        'id' => 29901, 'material_id' => 9901, 'type' => 'ISSUE',
+        'txn_date' => '2026-02-03', 'movement_date' => '2026-02-03',
+        'created_at' => '2026-10-06 15:26:03',
+        'reference_no' => 'REQ-4692', 'qty' => 2.0,
+        'allocation_type' => 'Equipment', 'equipment_id' => 1, 'equipment_code' => 'EX 006',
+        'allocation_label' => 'EX 006', 'person' => 'John Moshi<script>alert(9)</script>',
+        'supplier_id' => NULL, 'supplier_name' => NULL, 'linked_supplier_name' => NULL,
+        'qty_approved' => NULL, 'unit_price' => NULL, 'currency' => NULL,
+        'source' => 'Excel Import', 'affects_balance' => 0,
+        'stock_before' => NULL, 'stock_after' => NULL, 'notes' => 'Hydraulic service issue',
+        'item_code' => 'FLT-9901', 'description' => 'Primary Fuel Filter',
+        'part_number_size' => '1R-0750', 'unit' => 'pcs', 'category' => 'SPARE PART',
+        'location' => 'BIN A-12', 'user_name' => '',
+    ),
+    (object)array(
+        'id' => 29902, 'material_id' => 9901, 'type' => 'RECEIVE',
+        'txn_date' => '2026-10-20', 'movement_date' => '2026-10-20',
+        'created_at' => '2026-10-20 09:15:00',
+        'reference_no' => 'MRN-9901', 'qty' => 6.0,
+        'allocation_type' => 'Other', 'equipment_id' => NULL, 'equipment_code' => NULL,
+        'allocation_label' => NULL, 'person' => 'Amina Store',
+        'supplier_id' => 1, 'supplier_name' => NULL, 'linked_supplier_name' => 'Mantrac CAT',
+        'qty_approved' => 6.0, 'unit_price' => 34.50, 'currency' => 'USD',
+        'source' => 'Order GRN', 'affects_balance' => 1,
+        'stock_before' => 2, 'stock_after' => 8, 'notes' => 'PO delivery',
+        'item_code' => 'FLT-9901', 'description' => 'Primary Fuel Filter',
+        'part_number_size' => '1R-0750', 'unit' => 'pcs', 'category' => 'SPARE PART',
+        'location' => 'BIN A-12', 'user_name' => 'Amina Store',
+    ),
+);
+$txnDb->queue = array(
+    new EquipFleetFakeResult(array((object)array(
+        'total_all' => 10164, 'receive_count' => 1850, 'issue_count' => 8314,
+        'equip_issues' => 7420, 'valued_receipts' => 1120, 'live_entries' => 42,
+        'total_received_qty' => 28400.0, 'total_issued_qty' => 19150.0,
+    ))),
+    new EquipFleetFakeResult(array((object)array('cnt' => 2, 'in_qty' => 6.0, 'out_qty' => 2.0))),
+    new EquipFleetFakeResult($txnSampleRows),
+);
+$txnLedger = $txnModel->get_transactions_ledger(array('q' => 'FLT-9901'), 'txn_date', 'desc', 25, 0);
+check('TXN-02 O(1) Query Scaling: 10,164-row warehouse ledger queried in exact <= 3 SQL SELECT queries',
+    count($txnDb->queries) === 3 && $txnLedger['kpi']['total_all'] === 10164 && count($txnLedger['rows']) === 2,
+    'Executed ' . count($txnDb->queries) . ' queries');
+
+foreach (array('transactions', 'transaction_json', 'transactions_csv', 'transactions_xlsx') as $txRo) {
+    check('TXN-05 Manager MUTATION_PATTERN compatibility: GET allowed on Materials::' . $txRo,
+        !preg_match($mutPattern, $txRo));
+}
+
+$txnWarnings = array();
+$renderTxnView = function ($canWrite) use ($txnLedger, &$txnWarnings) {
+    $transactions    = $txnLedger['rows'];
+    $kpi             = $txnLedger['kpi'];
+    $tab_counts      = array('all' => 10164, 'receive' => 1850, 'issue' => 8314, 'equipment' => 7420, 'valued' => 1120, 'live' => 42);
+    $tab             = 'all';
+    $q               = '';
+    $filter          = array('type' => '', 'source' => '', 'category' => '', 'allocation_type' => '', 'item_code' => '', 'date_from' => '', 'date_to' => '');
+    $categories      = array((object)array('category' => 'SPARE PART'));
+    $sort            = 'txn_date';
+    $dir             = 'desc';
+    $view_mode       = 'table';
+    $per_page        = 25;
+    $allowed_pp      = array(10, 25, 50, 100, 150);
+    $current_page    = 1;
+    $total_pages     = 407;
+    $total_filtered  = 10164;
+    $offset          = 0;
+    $filtered_totals = $txnLedger['filtered_totals'];
+    $can_write       = $canWrite;
+
+    set_error_handler(function ($severity, $message, $file, $line) use (&$txnWarnings) {
+        $txnWarnings[] = "$message ($file:$line)";
+        return TRUE;
+    });
+    ob_start();
+    include APPPATH . 'views/materials/transactions.php';
+    $out = ob_get_clean();
+    restore_error_handler();
+    return $out;
+};
+
+$txnSupHtml = $renderTxnView(TRUE);
+$txnMgrHtml = $renderTxnView(FALSE);
+
+check('TXN-06 Clean View Render: materials/transactions.php renders Table + Dual Cards with ZERO PHP warnings',
+    empty($txnWarnings)
+    && strpos($txnSupHtml, '<table class="txn-table"') !== FALSE
+    && strpos($txnSupHtml, 'class="txn-cards-grid"') !== FALSE,
+    implode('; ', $txnWarnings));
+check('TXN-01 Business Date Truthfulness: renders true txn_date 03 Feb 2026 instead of migration timestamp 06 Oct 2026',
+    strpos($txnSupHtml, '03 Feb 2026') !== FALSE
+    && strpos($txnSupHtml, '06 Oct 2026') === FALSE);
+check('TXN-03 Verbatim Asset Link, Reference No & XSS Neutralization in materials/transactions.php',
+    strpos($txnSupHtml, 'EX 006') !== FALSE
+    && strpos($txnSupHtml, 'REQ-4692') !== FALSE
+    && strpos($txnSupHtml, 'MRN-9901') !== FALSE
+    && strpos($txnSupHtml, 'Mantrac CAT') !== FALSE
+    && strpos($txnSupHtml, '<script>alert(9)</script>') === FALSE
+    && strpos($txnMgrHtml, 'materials/transactions_csv') !== FALSE
+    && strpos($txnMgrHtml, 'materials/transactions_xlsx') !== FALSE
+    && strpos($txnSupHtml, 'id="txnDrawer" role="dialog" aria-modal="true"') !== FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
    Result
