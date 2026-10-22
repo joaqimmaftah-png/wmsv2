@@ -674,7 +674,136 @@ try:
     st_m_spxls, _, m_spxls_b = get_bytes('/spareparts/export_xlsx', mgr_op)
     assert st_m_spxls == 200 and m_spxls_b[:4] == b'PK\x03\x04'
 
-    print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS, INSPECTIONS, BACKLOG, INVENTORY, SPARE ORDERS & PENDING SPARES E2E CHECKS PASSED!')
+    # Suppliers Directory SUP-01..SUP-06 Live Contacts, Catalog, FK Delete Guard, RBAC & Formula-Safe CSV/XLSX Verification
+    import io
+    import zipfile
+
+    # Technician (role_id = 2) is barred from /suppliers per ACCESS_MATRIX['suppliers'] = [1, 3, 4]
+    t_sup_resp = tech_op.open(BASE + '/suppliers')
+    t_sup_url = t_sup_resp.geturl()
+    t_sup_resp.read()
+    assert '/dashboard' in t_sup_url, f'Expected Technician redirect to /dashboard on /suppliers, got {t_sup_url}'
+
+    # Storekeeper adds formula-prefixed contact + catalog quote to Mantrac CAT Intl (sup_id_new, linked to EX 006 PO)
+    _, _, st_sv_b = get_bytes(f'/suppliers/view/{sup_id_new}', store_op)
+    st_c_res, _, _ = post_op(store_op, f'/suppliers/add_contact/{sup_id_new}', {
+        'csrf_token_wms': csrf_from(st_sv_b.decode('utf-8', 'replace')),
+        'name': '=SUM(7,8) Hans Weber',
+        'role': 'Export Director',
+        'phone': '+49-30-5550199',
+        'email': 'hans@mantrac-cat.example',
+    })
+    assert st_c_res == 200
+
+    _, _, st_sv2_b = get_bytes(f'/suppliers/view/{sup_id_new}', store_op)
+    st_cat_res, _, _ = post_op(store_op, f'/suppliers/add_catalog_item/{sup_id_new}', {
+        'csrf_token_wms': csrf_from(st_sv2_b.decode('utf-8', 'replace')),
+        'part_number': '295-5609',
+        'description': '=SUM(9,1) Boom Seal Kit',
+        'unit_price': '362.50',
+        'currency': 'USD',
+        'moq': '2',
+        'lead_time_days': '14',
+        'is_preferred': '1',
+    })
+    assert st_cat_res == 200
+
+    # SUP-04: Attempting hard delete on supplier with linked PO must NOT throw MySQL 1451 HTTP 500
+    _, _, st_sv3_b = get_bytes(f'/suppliers/view/{sup_id_new}', store_op)
+    st_del_blk, del_blk_url, del_blk_body = post_op(store_op, f'/suppliers/delete/{sup_id_new}', {
+        'csrf_token_wms': csrf_from(st_sv3_b.decode('utf-8', 'replace')),
+    })
+    assert (
+        st_del_blk == 200
+        and f'/suppliers/view/{sup_id_new}' in del_blk_url
+        and 'linked purchase order' in del_blk_body
+    ), f'Expected graceful FK guard on /suppliers/delete/{sup_id_new}, got {st_del_blk} {del_blk_url}'
+
+    # Create & cleanly delete an unlinked disposable supplier to prove unlinked deletion still works
+    _, _, tmp_new_b = get_bytes('/suppliers/create', store_op)
+    st_tmp_c, tmp_sup_url, tmp_sup_body = post_op(store_op, '/suppliers/create', {
+        'csrf_token_wms': csrf_from(tmp_new_b.decode('utf-8', 'replace')),
+        'company_name': 'Disposable Vendor Co',
+        'country': 'Tanzania',
+        'currency': 'TZS',
+        'status': '<script>alert(1)</script>',
+    })
+    assert st_tmp_c == 200 and '/suppliers/view/' in tmp_sup_url and '<script>alert(1)</script>' not in tmp_sup_body
+    tmp_sup_id = int(tmp_sup_url.rstrip('/').split('/')[-1])
+    st_tmp_d, tmp_del_url, _ = post_op(store_op, f'/suppliers/delete/{tmp_sup_id}', {
+        'csrf_token_wms': csrf_from(tmp_sup_body),
+    })
+    assert st_tmp_d == 200 and tmp_del_url.rstrip('/').endswith('/suppliers')
+
+    # Manager (role_id = 4) view-only RBAC on /suppliers, /suppliers/view/{id}, /suppliers/find_part, summary_json & exports
+    st_m_sup, _, m_sup_b = get_bytes('/suppliers', mgr_op)
+    m_sup_html = m_sup_b.decode('utf-8', 'replace')
+    assert (
+        st_m_sup == 200
+        and 'ALPROM TRADERS LTD' in m_sup_html
+        and 'Mantrac CAT Intl' in m_sup_html
+        and 'EX 006' in m_sup_html
+        and 'id="supAddBtn"' not in m_sup_html
+        and 'Edit Vendor' not in m_sup_html
+        and '+ New Order' not in m_sup_html
+    )
+
+    st_m_sv, _, m_sv_b = get_bytes(f'/suppliers/view/{sup_id_new}', mgr_op)
+    m_sv_html = m_sv_b.decode('utf-8', 'replace')
+    assert (
+        st_m_sv == 200
+        and 'EX 006' in m_sv_html
+        and 'Export Director' in m_sv_html
+        and '295-5609' in m_sv_html
+        and '+ Add Contact' not in m_sv_html
+        and '+ Add Catalog Item' not in m_sv_html
+        and '+ New Order' not in m_sv_html
+    )
+
+    st_m_fp, _, m_fp_b = get_bytes('/suppliers/find_part?q=295-5609', mgr_op)
+    m_fp_html = m_fp_b.decode('utf-8', 'replace')
+    assert st_m_fp == 200 and 'Mantrac CAT Intl' in m_fp_html and '>Order<' not in m_fp_html
+
+    # Manager mutation attempt on /suppliers/create must redirect to /dashboard
+    _, _, mgr_prof_b = get_bytes('/users/profile', mgr_op)
+    _, m_mut_url, _ = post_op(mgr_op, '/suppliers/create', {
+        'csrf_token_wms': csrf_from(mgr_prof_b.decode('utf-8', 'replace')),
+        'company_name': 'Blocked Manager Vendor',
+        'country': 'Uganda',
+    })
+    assert '/dashboard' in m_mut_url
+
+    st_m_sj, _, m_sj_b = get_bytes(f'/suppliers/summary_json/{sup_id_new}', mgr_op)
+    m_sj = json.loads(m_sj_b.decode('utf-8'))
+    assert (
+        st_m_sj == 200
+        and m_sj.get('ok') is True
+        and m_sj['supplier']['can_write'] is False
+        and len(m_sj['contacts']) == 1
+        and len(m_sj['catalog']) == 1
+        and any(o.get('registration_no') == 'EX 006' for o in m_sj['orders'])
+    )
+
+    st_m_scsv, _, m_scsv_b = get_bytes('/suppliers/export_csv', mgr_op)
+    m_scsv_txt = m_scsv_b.decode('utf-8-sig')
+    assert (
+        st_m_scsv == 200
+        and m_scsv_b.startswith(b'\xef\xbb\xbf')
+        and "'=SUM(7,8) Hans Weber" in m_scsv_txt
+        and 'ALPROM TRADERS LTD' in m_scsv_txt
+        and 'Mantrac CAT Intl' in m_scsv_txt
+        and 'EX 006' in m_scsv_txt
+    )
+
+    st_m_sxls, _, m_sxls_b = get_bytes('/suppliers/export_xlsx', mgr_op)
+    assert st_m_sxls == 200 and m_sxls_b[:4] == b'PK\x03\x04'
+    with zipfile.ZipFile(io.BytesIO(m_sxls_b), 'r') as zf:
+        sheet_xml = zf.read('xl/worksheets/sheet1.xml').decode('utf-8')
+        shared_xml = zf.read('xl/sharedStrings.xml').decode('utf-8')
+        assert '<f>' not in sheet_xml, f'Formula injection <f> leaked into Suppliers XLSX: {sheet_xml[:400]}'
+        assert "'=SUM(7,8) Hans Weber" in shared_xml and 'EX 006' in shared_xml
+
+    print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS, INSPECTIONS, BACKLOG, INVENTORY, SPARE ORDERS, PENDING SPARES & SUPPLIERS E2E CHECKS PASSED!')
 except BaseException:
     tb = traceback.format_exc().replace('\n', '%0A')
     print(f'::error title=PythonE2E::{tb}', flush=True)

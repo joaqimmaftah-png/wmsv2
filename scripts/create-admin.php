@@ -77,8 +77,19 @@ if ($mysqli->connect_errno) {
 }
 $mysqli->set_charset('utf8mb4');
 
-$hash  = password_hash($password, PASSWORD_DEFAULT);
-$empId = $customEmpId !== null ? $customEmpId : sprintf('EMP%03d', random_int(100, 999));
+$hash = password_hash($password, PASSWORD_DEFAULT);
+if ($customEmpId !== null) {
+    $empId = $customEmpId;
+} else {
+    $chk = $mysqli->prepare("SELECT 1 FROM `users` WHERE `employee_id` = ? LIMIT 1");
+    do {
+        $empId = sprintf('EMP%04d', random_int(100, 9999));
+        $chk->bind_param('s', $empId);
+        $chk->execute();
+        $taken = $chk->get_result()->fetch_assoc();
+    } while ($taken);
+    $chk->close();
+}
 
 $posMap = array(
     1 => 'Workshop Supervisor',
