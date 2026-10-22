@@ -324,7 +324,7 @@ try:
 
     # GET /inspections/save must reject non-POST requests with HTTP 405 Method Not Allowed
     try:
-        sup_op.open(f'{BASE}/inspections/save')
+        tech_op.open(f'{BASE}/inspections/save')
         raise AssertionError('Expected HTTP 405 on GET /inspections/save')
     except urllib.error.HTTPError as e405:
         assert e405.code == 405, f'Expected 405 on GET /inspections/save, got {e405.code}'
