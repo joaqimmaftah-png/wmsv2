@@ -136,16 +136,157 @@ class Backlog_model extends CI_Model {
     public function by_equipment($limit = 20) {
         if (!$this->available()) return array();
         $days = $this->_days_expr();
-        $r = $this->db->select('COALESCE(e.registration_no, b.asset_label) AS asset,
+        $expr = 'COALESCE(e.registration_no, b.asset_label)';
+        $r = $this->db->select($expr . ' AS asset,
+                                MAX(b.equipment_id) AS equipment_id,
                                 COUNT(*) AS items,
                                 SUM(CASE WHEN b.priority = "P1" THEN 1 ELSE 0 END) AS p1,
                                 MAX('.$days.') AS oldest_days', FALSE)
                       ->from('backlogs b')
                       ->join('equipment e', 'e.id = b.equipment_id', 'left')
                       ->where_in('b.status', array('Open', 'In Progress'))
-                      ->group_by('asset')
+                      ->group_by($expr, FALSE)
                       ->order_by('items', 'DESC')->limit((int)$limit)->get()->result();
         return $r ? $r : array();
+    }
+
+    /**
+     * Hydrate the complete Backlog Defect Register in constant O(1) SQL queries
+     * (`<= 3` queries regardless of defect count):
+     *   1. `backlogs` LEFT JOIN `equipment`, `work_orders`, and `users` (`verified_by`)
+     *   2. `equipment` active asset list (`id, registration_no, location`)
+     *
+     * Strictly compliant with MySQL 8.0 `ONLY_FULL_GROUP_BY` (zero ambiguous grouping).
+     *
+     * @param string|null $today Optional YYYY-MM-DD anchor for deterministic unit tests.
+     * @return array{available:bool,rows:object[],equipment:object[],by_asset:object[],today:string}
+     */
+    public function get_register_overview($today = NULL) {
+        $todayStr = ($today && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$today))
+            ? (string)$today
+            : date('Y-m-d');
+
+        if (!$this->available()) {
+            return array(
+                'available' => FALSE,
+                'rows'      => array(),
+                'equipment' => array(),
+                'by_asset'  => array(),
+                'today'     => $todayStr,
+            );
+        }
+
+        $hasWo    = $this->db->table_exists('work_orders');
+        $hasUsers = $this->db->table_exists('users');
+
+        $sel = 'b.*, e.registration_no AS equipment_code, e.machine_type, e.location AS equip_location';
+        if ($hasWo) {
+            $sel .= ', wo.wo_number, wo.status AS wo_status';
+        }
+        if ($hasUsers) {
+            $sel .= ', uv.first_name AS verifier_first, uv.last_name AS verifier_last';
+        }
+
+        $qb = $this->db->select($sel)->from('backlogs b')
+            ->join('equipment e', 'e.id = b.equipment_id', 'left');
+        if ($hasWo) {
+            $qb->join('work_orders wo', 'wo.id = b.work_order_id', 'left');
+        }
+        if ($hasUsers) {
+            $qb->join('users uv', 'uv.id = b.verified_by', 'left');
+        }
+        $rows = $qb->order_by('b.id', 'DESC')->get()->result();
+        if (!$rows) $rows = array();
+
+        $todayTs   = strtotime($todayStr . ' 00:00:00');
+        $assetRoll = array();
+
+        foreach ($rows as $b) {
+            $code = trim((string)(isset($b->equipment_code) ? $b->equipment_code : ''));
+            $lbl  = trim((string)(isset($b->asset_label) ? $b->asset_label : ''));
+            $b->machine_display = $code !== '' ? $code : ($lbl !== '' ? $lbl : '—');
+
+            $isOpen = in_array((string)$b->status, array('Open', 'In Progress'), TRUE);
+            $b->is_open = $isOpen;
+
+            // Exact calendar day age anchored at local midnight
+            $endAnchor = (!$isOpen && !empty($b->end_date)) ? (string)$b->end_date : $todayStr;
+            if (!empty($b->start_date) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$b->start_date)) {
+                $dStart = strtotime((string)$b->start_date . ' 00:00:00');
+                $dEnd   = strtotime($endAnchor . ' 00:00:00');
+                $b->days_down = max(0, (int)round(($dEnd - $dStart) / 86400));
+            } else {
+                $b->days_down = 0;
+            }
+
+            $b->is_overdue = ($isOpen && !empty($b->deadline) && (string)$b->deadline < $todayStr);
+            $b->deadline_delta = NULL;
+            if (!empty($b->deadline) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$b->deadline)) {
+                $b->deadline_delta = (int)round((strtotime((string)$b->deadline . ' 00:00:00') - $todayTs) / 86400);
+            }
+
+            // Parse originating inspection ID when source_ref matches `insp_{recordId}_item_{itemId}`
+            $b->inspection_record_id = 0;
+            if (!empty($b->source_ref) && preg_match('/^insp_(\d+)_item_/', (string)$b->source_ref, $mInsp)) {
+                $b->inspection_record_id = (int)$mInsp[1];
+            }
+
+            $vfFirst = trim((string)(isset($b->verifier_first) ? $b->verifier_first : ''));
+            $vfLast  = trim((string)(isset($b->verifier_last) ? $b->verifier_last : ''));
+            $vfFull  = trim($vfFirst . ' ' . $vfLast);
+            $b->verifier_name = $vfFull !== '' ? $vfFull : (trim((string)$b->supervisor) ?: '');
+
+            $owner = trim((string)$b->in_charge);
+            if ($owner === '') $owner = trim((string)$b->mechanic);
+            if ($owner === '') $owner = trim((string)$b->reported_by);
+            $b->owner_display = $owner !== '' ? $owner : '—';
+
+            $statusOrder = array('Open' => 1, 'In Progress' => 2, 'Closed' => 3, 'Cancelled' => 4);
+            $prioOrder   = array('P1' => 1, 'P2' => 2, 'P3' => 3);
+            $b->status_rank   = isset($statusOrder[$b->status]) ? $statusOrder[$b->status] : 5;
+            $b->priority_rank = isset($prioOrder[$b->priority]) ? $prioOrder[$b->priority] : 4;
+
+            if ($isOpen) {
+                $key = $b->machine_display;
+                if (!isset($assetRoll[$key])) {
+                    $assetRoll[$key] = (object)array(
+                        'asset'        => $key,
+                        'equipment_id' => !empty($b->equipment_id) ? (int)$b->equipment_id : 0,
+                        'items'        => 0,
+                        'p1'           => 0,
+                        'oldest_days'  => 0,
+                    );
+                }
+                $assetRoll[$key]->items++;
+                if ($b->priority === 'P1') $assetRoll[$key]->p1++;
+                if ($b->days_down > $assetRoll[$key]->oldest_days) {
+                    $assetRoll[$key]->oldest_days = $b->days_down;
+                }
+            }
+        }
+
+        $byAsset = array_values($assetRoll);
+        usort($byAsset, function ($a, $b) {
+            if ($b->items !== $a->items) return $b->items <=> $a->items;
+            return $b->p1 <=> $a->p1;
+        });
+        $byAsset = array_slice($byAsset, 0, 10);
+
+        $equipList = array();
+        if ($this->db->table_exists('equipment')) {
+            $equipList = $this->db->select('id, registration_no, location')
+                ->from('equipment')
+                ->order_by('registration_no', 'ASC')
+                ->get()->result();
+        }
+
+        return array(
+            'available' => TRUE,
+            'rows'      => $rows,
+            'equipment' => $equipList ? $equipList : array(),
+            'by_asset'  => $byAsset,
+            'today'     => $todayStr,
+        );
     }
 
     // ── WRITE ───────────────────────────────────────────────

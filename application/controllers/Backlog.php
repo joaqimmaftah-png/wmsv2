@@ -16,24 +16,402 @@ class Backlog extends MY_Controller {
         $this->load->model('Equipment_model');
     }
 
+    /* ── SHARED ENTERPRISE DATASET ──────────────────────── */
+    private function _csv_guard($val) {
+        $s = (string)$val;
+        if ($s !== '' && in_array($s[0], array('=', '+', '-', '@', "\t", "\r"), TRUE)) {
+            return "'" . $s;
+        }
+        return $s;
+    }
+
+    private function _build_register_dataset($paginate = TRUE) {
+        $overview = $this->Backlog_model->get_register_overview();
+        $allRows  = $overview['rows'];
+
+        $tab = strtolower((string)trim((string)$this->input->get('tab', TRUE)));
+        $validTabs = array('all', 'active', 'p1', 'breakdown', 'overdue', 'scheduled', 'closed');
+        if (!in_array($tab, $validTabs, TRUE)) {
+            $tab = 'all';
+        }
+
+        $q = trim((string)$this->input->get('q', TRUE));
+        if ($q === '') {
+            $q = trim((string)$this->input->get('search', TRUE));
+        }
+
+        $fStatus   = trim((string)$this->input->get('status', TRUE));
+        $fPriority = trim((string)$this->input->get('priority', TRUE));
+        $fSource   = trim((string)$this->input->get('source', TRUE));
+        $fMachSt   = trim((string)$this->input->get('machine_status', TRUE));
+        $fEquip    = (int)$this->input->get('equipment_id', TRUE);
+        $fFrom     = trim((string)$this->input->get('date_from', TRUE));
+        $fTo       = trim((string)$this->input->get('date_to', TRUE));
+        $fOverdue  = (string)$this->input->get('overdue', TRUE) === '1';
+
+        $sort = strtolower((string)trim((string)$this->input->get('sort', TRUE)));
+        $allowedSort = array('default', 'start_date', 'asset', 'source', 'priority', 'days_down', 'deadline', 'in_charge', 'status');
+        if (!in_array($sort, $allowedSort, TRUE)) {
+            $sort = 'default';
+        }
+        $dir = strtolower((string)trim((string)$this->input->get('dir', TRUE)));
+        if (!in_array($dir, array('asc', 'desc'), TRUE)) {
+            $dir = ($sort === 'days_down' || $sort === 'start_date') ? 'desc' : 'asc';
+        }
+
+        $viewMode = strtolower((string)trim((string)$this->input->get('view', TRUE)));
+        if (!in_array($viewMode, array('table', 'cards'), TRUE)) {
+            $viewMode = 'table';
+        }
+
+        // Global KPI telemetry computed across entire register before slicing tabs
+        $openAges = array();
+        $kpi = array(
+            'total'     => count($allRows),
+            'open'      => 0,
+            'closed'    => 0,
+            'p1'        => 0,
+            'overdue'   => 0,
+            'breakdown' => 0,
+            'scheduled' => 0,
+            'avg_days'  => 0.0,
+            'oldest'    => 0,
+        );
+        foreach ($allRows as $b) {
+            if (!empty($b->is_open)) {
+                $kpi['open']++;
+                $openAges[] = (int)$b->days_down;
+                if ((int)$b->days_down > $kpi['oldest']) $kpi['oldest'] = (int)$b->days_down;
+                if ($b->priority === 'P1') $kpi['p1']++;
+                if (!empty($b->is_overdue)) $kpi['overdue']++;
+                if ($b->machine_status === 'BREAKDOWN') $kpi['breakdown']++;
+                if (!empty($b->planned_date)) $kpi['scheduled']++;
+            } elseif ($b->status === 'Closed') {
+                $kpi['closed']++;
+            }
+        }
+        if (!empty($openAges)) {
+            $kpi['avg_days'] = round(array_sum($openAges) / count($openAges), 1);
+        }
+
+        // Stage 1: Apply facet filters
+        $faceted = array();
+        $qLower  = strtolower($q);
+        foreach ($allRows as $b) {
+            if ($fStatus !== '') {
+                if ($fStatus === 'OPEN') {
+                    if (empty($b->is_open)) continue;
+                } elseif ((string)$b->status !== $fStatus) {
+                    continue;
+                }
+            }
+            if ($fPriority !== '' && (string)$b->priority !== $fPriority) continue;
+            if ($fSource !== '' && (string)$b->source !== $fSource) continue;
+            if ($fMachSt !== '' && (string)$b->machine_status !== $fMachSt) continue;
+            if ($fEquip > 0 && (int)$b->equipment_id !== $fEquip) continue;
+            if ($fFrom !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fFrom) && (string)$b->start_date < $fFrom) continue;
+            if ($fTo !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fTo) && (string)$b->start_date > $fTo) continue;
+            if ($fOverdue && empty($b->is_overdue)) continue;
+
+            if ($qLower !== '') {
+                $hay = strtolower(implode(' ', array(
+                    'bl-' . (int)$b->id,
+                    '#' . (int)$b->id,
+                    (string)$b->machine_display,
+                    (string)$b->asset_label,
+                    (string)$b->model,
+                    (string)$b->serial_no,
+                    (string)$b->description,
+                    (string)$b->observation,
+                    (string)$b->closing_remarks,
+                    (string)$b->reported_by,
+                    (string)$b->in_charge,
+                    (string)$b->mechanic,
+                    (string)(isset($b->wo_number) ? $b->wo_number : ''),
+                )));
+                if (strpos($hay, $qLower) === FALSE) continue;
+            }
+            $faceted[] = $b;
+        }
+
+        // Stage 2: Tab badge counters
+        $tabCounts = array(
+            'all'       => count($faceted),
+            'active'    => 0,
+            'p1'        => 0,
+            'breakdown' => 0,
+            'overdue'   => 0,
+            'scheduled' => 0,
+            'closed'    => 0,
+        );
+        foreach ($faceted as $b) {
+            if (!empty($b->is_open)) {
+                $tabCounts['active']++;
+                if ($b->priority === 'P1') $tabCounts['p1']++;
+                if ($b->machine_status === 'BREAKDOWN') $tabCounts['breakdown']++;
+                if (!empty($b->is_overdue)) $tabCounts['overdue']++;
+                if (!empty($b->planned_date)) $tabCounts['scheduled']++;
+            } else {
+                $tabCounts['closed']++;
+            }
+        }
+
+        // Stage 3: Slice active tab
+        $filtered = array();
+        foreach ($faceted as $b) {
+            if ($tab === 'active' && empty($b->is_open)) continue;
+            if ($tab === 'p1' && (empty($b->is_open) || $b->priority !== 'P1')) continue;
+            if ($tab === 'breakdown' && (empty($b->is_open) || $b->machine_status !== 'BREAKDOWN')) continue;
+            if ($tab === 'overdue' && empty($b->is_overdue)) continue;
+            if ($tab === 'scheduled' && (empty($b->is_open) || empty($b->planned_date))) continue;
+            if ($tab === 'closed' && !empty($b->is_open)) continue;
+            $filtered[] = $b;
+        }
+
+        // Stage 4: Optional ?ids=1,2,3 subset for multi-select batch CSV export
+        $idsRaw = trim((string)$this->input->get('ids', TRUE));
+        if (!$paginate && $idsRaw !== '') {
+            $idMap = array();
+            foreach (explode(',', $idsRaw) as $tok) {
+                $v = (int)trim($tok);
+                if ($v > 0) $idMap[$v] = TRUE;
+            }
+            if (!empty($idMap)) {
+                $sub = array();
+                foreach ($filtered as $b) {
+                    if (isset($idMap[(int)$b->id])) $sub[] = $b;
+                }
+                $filtered = $sub;
+            }
+        }
+
+        // Stage 5: Deterministic multi-column sorting
+        $mult = ($dir === 'asc') ? 1 : -1;
+        usort($filtered, function ($a, $b) use ($sort, $mult) {
+            if ($sort === 'start_date') {
+                $c = strcmp((string)$a->start_date, (string)$b->start_date);
+                return $c !== 0 ? ($c * $mult) : (((int)$b->id) <=> ((int)$a->id));
+            }
+            if ($sort === 'asset') {
+                $c = strcasecmp((string)$a->machine_display, (string)$b->machine_display);
+                return $c !== 0 ? ($c * $mult) : (((int)$b->id) <=> ((int)$a->id));
+            }
+            if ($sort === 'source') {
+                $c = strcasecmp((string)$a->source, (string)$b->source);
+                return $c !== 0 ? ($c * $mult) : (((int)$b->id) <=> ((int)$a->id));
+            }
+            if ($sort === 'priority') {
+                $c = ((int)$a->priority_rank) <=> ((int)$b->priority_rank);
+                return $c !== 0 ? ($c * $mult) : (((int)$b->days_down) <=> ((int)$a->days_down));
+            }
+            if ($sort === 'days_down') {
+                $c = ((int)$a->days_down) <=> ((int)$b->days_down);
+                return $c !== 0 ? ($c * $mult) : (((int)$b->id) <=> ((int)$a->id));
+            }
+            if ($sort === 'deadline') {
+                $da = !empty($a->deadline) ? (string)$a->deadline : '9999-12-31';
+                $db = !empty($b->deadline) ? (string)$b->deadline : '9999-12-31';
+                $c  = strcmp($da, $db);
+                return $c !== 0 ? ($c * $mult) : (((int)$b->id) <=> ((int)$a->id));
+            }
+            if ($sort === 'in_charge') {
+                $c = strcasecmp((string)$a->owner_display, (string)$b->owner_display);
+                return $c !== 0 ? ($c * $mult) : (((int)$b->id) <=> ((int)$a->id));
+            }
+            if ($sort === 'status') {
+                $c = ((int)$a->status_rank) <=> ((int)$b->status_rank);
+                return $c !== 0 ? ($c * $mult) : (((int)$a->priority_rank) <=> ((int)$b->priority_rank));
+            }
+            // Default triage order: Open -> In Progress -> Closed -> Cancelled, then P1 -> P2 -> P3, then oldest
+            if ($a->status_rank !== $b->status_rank) return $a->status_rank <=> $b->status_rank;
+            if ($a->priority_rank !== $b->priority_rank) return $a->priority_rank <=> $b->priority_rank;
+            $c = strcmp((string)$a->start_date, (string)$b->start_date);
+            return $c !== 0 ? $c : (((int)$b->id) <=> ((int)$a->id));
+        });
+
+        // Stage 6: Server-side pagination
+        $allowedPp     = array(10, 25, 50, 100, 150);
+        $perPage       = (int)$this->input->get('per_page', TRUE);
+        if (!in_array($perPage, $allowedPp, TRUE)) $perPage = 25;
+        $totalFiltered = count($filtered);
+        $totalPages    = max(1, (int)ceil($totalFiltered / $perPage));
+        $currentPage   = max(1, min($totalPages, (int)$this->input->get('page', TRUE) ?: 1));
+        $offset        = ($currentPage - 1) * $perPage;
+        $pagedRows     = $paginate ? array_slice($filtered, $offset, $perPage) : $filtered;
+
+        return array(
+            'items'          => $pagedRows,
+            'kpi'            => $kpi,
+            'by_asset'       => $overview['by_asset'],
+            'equipment'      => $overview['equipment'],
+            'available'      => $overview['available'],
+            'tab_counts'     => $tabCounts,
+            'tab'            => $tab,
+            'q'              => $q,
+            'filter'         => array(
+                'status'         => $fStatus,
+                'priority'       => $fPriority,
+                'source'         => $fSource,
+                'machine_status' => $fMachSt,
+                'equipment_id'   => $fEquip ?: '',
+                'date_from'      => $fFrom,
+                'date_to'        => $fTo,
+                'overdue'        => $fOverdue ? '1' : '',
+                'search'         => $q,
+            ),
+            'sort'           => $sort,
+            'dir'            => $dir,
+            'view_mode'      => $viewMode,
+            'per_page'       => $perPage,
+            'allowed_pp'     => $allowedPp,
+            'current_page'   => $currentPage,
+            'total_pages'    => $totalPages,
+            'total_filtered' => $totalFiltered,
+            'offset'         => $offset,
+            'can_write'      => $this->can_write(),
+            'is_supervisor'  => $this->is_supervisor(),
+        );
+    }
+
     /* ── LIST ──────────────────────────────────────────── */
     public function index() {
-        $filter = $this->_filter();
-        $data = array(
-            'items'      => $this->Backlog_model->get_all($filter),
-            'kpi'        => $this->Backlog_model->kpi(),
-            'by_asset'   => $this->Backlog_model->by_equipment(10),
-            'equipment'  => $this->_equipment_list(),
-            'filter'     => $filter,
-            'available'  => $this->Backlog_model->available(),
-            'can_write'  => $this->can_write(),
-            // The view only offers "Close (verify)" to a supervisor. This was
-            // assigned AFTER render(), so it never reached the view and the
-            // button never appeared (K-06).
-            'is_supervisor' => $this->is_supervisor(),
-            'page_title' => 'Backlog Register',
-        );
+        $data = $this->_build_register_dataset(TRUE);
+        $data['page_title'] = 'Backlog Register';
         $this->render('backlog/index', $data);
+    }
+
+    /* ── UTF-8 BOM CSV EXPORT ──────────────────────────── */
+    public function export_csv() {
+        $data = $this->_build_register_dataset(FALSE);
+        $rows = $data['items'];
+
+        $filename = 'backlog-register-' . date('Y-m-d') . '.csv';
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
+
+        fputcsv($out, array(
+            'Backlog ID',
+            'Machine / Asset ID',
+            'Model',
+            'Serial No',
+            'Start Odometer',
+            'Start Date',
+            'Days Open',
+            'Deadline',
+            'Priority',
+            'Machine Condition',
+            'Status',
+            'Source',
+            'Description',
+            'Observation / Action',
+            'Reported By',
+            'In Charge',
+            'Linked WO',
+            'Planned Date',
+            'Est. Duration (min)',
+            'End Date',
+            'End Odometer',
+            'Verified / Closed By',
+            'Closing Remarks',
+        ));
+
+        foreach ($rows as $r) {
+            fputcsv($out, array(
+                'BL-' . (int)$r->id,
+                $this->_csv_guard($r->machine_display),
+                $this->_csv_guard($r->model),
+                $this->_csv_guard($r->serial_no),
+                $this->_csv_guard($r->start_odometer),
+                $this->_csv_guard($r->start_date),
+                (int)$r->days_down,
+                $this->_csv_guard($r->deadline),
+                $this->_csv_guard($r->priority),
+                $this->_csv_guard($r->machine_status),
+                $this->_csv_guard($r->status),
+                $this->_csv_guard($r->source),
+                $this->_csv_guard($r->description),
+                $this->_csv_guard($r->observation),
+                $this->_csv_guard($r->reported_by),
+                $this->_csv_guard($r->in_charge),
+                $this->_csv_guard(isset($r->wo_number) ? $r->wo_number : ''),
+                $this->_csv_guard($r->planned_date),
+                $r->estimated_duration !== NULL ? (int)$r->estimated_duration : '',
+                $this->_csv_guard($r->end_date),
+                $this->_csv_guard($r->end_odometer),
+                $this->_csv_guard($r->verifier_name),
+                $this->_csv_guard($r->closing_remarks),
+            ));
+        }
+
+        fclose($out);
+        exit;
+    }
+
+    /* ── JSON SUMMARY FOR SLIDE-OVER DEFECT INSPECTOR ──── */
+    public function summary_json($id = NULL) {
+        $bid = (int)$id;
+        if ($bid <= 0) {
+            return $this->json(array('ok' => FALSE, 'error' => 'Invalid backlog item ID.'), 404);
+        }
+        $overview = $this->Backlog_model->get_register_overview();
+        $found    = NULL;
+        foreach ($overview['rows'] as $row) {
+            if ((int)$row->id === $bid) {
+                $found = $row;
+                break;
+            }
+        }
+        if (!$found) {
+            return $this->json(array('ok' => FALSE, 'error' => 'Backlog item not found.'), 404);
+        }
+
+        return $this->json(array(
+            'ok'   => TRUE,
+            'item' => array(
+                'id'                   => (int)$found->id,
+                'machine_display'      => (string)$found->machine_display,
+                'equipment_id'         => !empty($found->equipment_id) ? (int)$found->equipment_id : 0,
+                'asset_label'          => (string)$found->asset_label,
+                'model'                => (string)$found->model ?: '—',
+                'serial_no'            => (string)$found->serial_no ?: '—',
+                'start_odometer'       => (string)$found->start_odometer ?: '—',
+                'start_date'           => (string)$found->start_date ?: '—',
+                'days_down'            => (int)$found->days_down,
+                'deadline'             => (string)$found->deadline ?: '—',
+                'is_overdue'           => (bool)$found->is_overdue,
+                'priority'             => (string)$found->priority ?: '—',
+                'machine_status'       => (string)$found->machine_status ?: '—',
+                'status'               => (string)$found->status,
+                'is_open'              => (bool)$found->is_open,
+                'source'               => (string)$found->source ?: 'Other',
+                'description'          => (string)$found->description,
+                'observation'          => (string)$found->observation,
+                'reported_by'          => (string)$found->reported_by ?: '—',
+                'in_charge'            => (string)$found->in_charge ?: '—',
+                'mechanic'             => (string)$found->mechanic ?: '—',
+                'supervisor'           => (string)$found->supervisor ?: '—',
+                'planned_date'         => (string)$found->planned_date ?: '—',
+                'estimated_duration'   => $found->estimated_duration !== NULL ? ((int)$found->estimated_duration . ' min') : '—',
+                'work_order_id'        => !empty($found->work_order_id) ? (int)$found->work_order_id : 0,
+                'wo_number'            => isset($found->wo_number) && $found->wo_number ? (string)$found->wo_number : '',
+                'wo_status'            => isset($found->wo_status) && $found->wo_status ? (string)$found->wo_status : '',
+                'inspection_record_id' => (int)$found->inspection_record_id,
+                'recurrence_of'        => !empty($found->recurrence_of) ? (int)$found->recurrence_of : 0,
+                'end_date'             => (string)$found->end_date ?: '—',
+                'end_odometer'         => (string)$found->end_odometer ?: '—',
+                'closing_remarks'      => (string)$found->closing_remarks,
+                'verifier_name'        => (string)$found->verifier_name ?: '—',
+                'verified_at'          => isset($found->verified_at) && $found->verified_at ? (string)$found->verified_at : '—',
+                'verification_notes'   => isset($found->verification_notes) && $found->verification_notes ? (string)$found->verification_notes : '',
+                'can_edit'             => (bool)$this->can_write(),
+                'can_close'            => (bool)($found->is_open && $this->is_supervisor()),
+            ),
+        ));
     }
 
     /* ── CREATE ────────────────────────────────────────── */
@@ -213,6 +591,10 @@ class Backlog extends MY_Controller {
     /* ── internals ─────────────────────────────────────── */
 
     private function _filter() {
+        $search = $this->input->get('search');
+        if ($search === null || $search === '') {
+            $search = $this->input->get('q');
+        }
         return array(
             'status'         => $this->input->get('status'),
             'priority'       => $this->input->get('priority'),
@@ -222,7 +604,7 @@ class Backlog extends MY_Controller {
             'date_from'      => $this->input->get('date_from'),
             'date_to'        => $this->input->get('date_to'),
             'overdue'        => $this->input->get('overdue'),
-            'search'         => $this->input->get('search'),
+            'search'         => $search,
         );
     }
 
@@ -233,6 +615,10 @@ class Backlog extends MY_Controller {
     }
 
     private function _form($item, $errors, $post = null) {
+        $statuses = Backlog_model::STATUSES;
+        if (!$this->is_supervisor() && (!$item || $item->status !== 'Closed')) {
+            $statuses = array_values(array_diff($statuses, array('Closed')));
+        }
         $this->render('backlog/form', array(
             'item'       => $item,
             'post'       => $post,
@@ -240,7 +626,7 @@ class Backlog extends MY_Controller {
             'equipment'  => $this->_equipment_list(),
             'sources'    => Backlog_model::SOURCES,
             'priorities' => Backlog_model::PRIORITIES,
-            'statuses'   => Backlog_model::STATUSES,
+            'statuses'   => $statuses,
             'machine_statuses' => Backlog_model::MACHINE_STATUSES,
             'page_title' => $item ? 'Edit Backlog Item' : 'New Backlog Item',
         ));
@@ -275,6 +661,18 @@ class Backlog extends MY_Controller {
         }
         $status = in_array($this->_v($in, 'status'), Backlog_model::STATUSES, true)
             ? $this->_v($in, 'status') : 'Open';
+        $newlyClosing = ($status === 'Closed' && (!$item || $item->status !== 'Closed'));
+        if ($newlyClosing) {
+            if (!$this->is_supervisor()) {
+                $errors['status'] = 'Closing a defect requires supervisor verification.';
+            } elseif ($item && !empty($item->work_order_id) && $this->db->table_exists('work_orders')) {
+                $wo = $this->db->select('id, wo_number, status')
+                    ->where('id', (int)$item->work_order_id)->get('work_orders')->row();
+                if ($wo && !in_array($wo->status, array('Completed', 'Closed'), TRUE)) {
+                    $errors['status'] = 'Work order ' . $wo->wo_number . ' is still "' . $wo->status . '" — finish it first.';
+                }
+            }
+        }
         if ($status === 'Closed' && !$end) {
             $end = date('Y-m-d');
         }
@@ -314,6 +712,16 @@ class Backlog extends MY_Controller {
             'planned_date'    => $this->_is_date($planned_date) ? $planned_date : NULL,
             'estimated_duration' => is_numeric($estimated_duration) ? (int)$estimated_duration : NULL,
         );
+        if ($newlyClosing) {
+            if ($this->db->field_exists('verified_by', 'backlogs')) {
+                $data['verified_by']        = $this->user_id;
+                $data['verified_at']        = date('Y-m-d H:i:s');
+                $data['verification_notes'] = 'Verified on edit by supervisor.';
+            }
+            if ($this->db->field_exists('closed_by', 'backlogs')) {
+                $data['closed_by'] = $this->user_id;
+            }
+        }
 
         if ($item) {
             $ok = $this->Backlog_model->update($item->id, $data);
