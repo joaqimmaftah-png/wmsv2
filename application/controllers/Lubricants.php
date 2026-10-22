@@ -460,22 +460,33 @@ class Lubricants extends MY_Controller {
                 return;
             }
             $name = trim((string)$this->input->post('name', TRUE));
-            if ($name === '') {
-                $this->session->set_flashdata('error', 'Lubricant name is required.');
+            $category = trim((string)$this->input->post('category', TRUE));
+            $unit = trim((string)$this->input->post('unit', TRUE)) ?: 'L';
+            $grade = trim((string)$this->input->post('grade', TRUE));
+            $description = trim((string)$this->input->post('description', TRUE));
+            $costRaw = trim((string)$this->input->post('unit_cost', TRUE));
+            $cost = $costRaw === '' ? 0.0 : (is_numeric($costRaw) ? (float)$costRaw : -1.0);
+            if ($name === '' || strlen($name) > 100 || strlen($grade) > 50
+                || strlen($description) > 300 || !in_array($category, Lubricant_model::$CATEGORIES, TRUE)
+                || !in_array($unit, array('L', 'Kg', 'Pcs'), TRUE)
+                || !is_finite($cost) || $cost < 0 || $cost > 99999999.99) {
+                $this->session->set_flashdata('error', 'Type not saved: check name, category, unit, cost and field lengths.');
                 redirect('lubricants/types');
                 return;
             }
-            $cost = trim((string)$this->input->post('unit_cost', TRUE));
-            $row  = array(
+            $row = array(
                 'name'        => $name,
-                'category'    => Lubricant_model::clean_category($this->input->post('category', TRUE)),
-                'grade'       => trim((string)$this->input->post('grade', TRUE)) ?: NULL,
-                'unit'        => trim((string)$this->input->post('unit', TRUE)) ?: 'L',
-                'unit_cost'   => ($cost !== '' && is_numeric($cost)) ? max(0.0, (float)$cost) : 0.0,
-                'description' => trim((string)$this->input->post('description', TRUE)) ?: NULL,
+                'category'    => $category,
+                'grade'       => $grade !== '' ? $grade : NULL,
+                'unit'        => $unit,
+                'unit_cost'   => round($cost, 2),
+                'description' => $description !== '' ? $description : NULL,
             );
-            $this->db->insert('lube_types', $row);
-            $this->session->set_flashdata('success', 'Lube type added.');
+            if (!$this->db->insert('lube_types', $row)) {
+                $this->session->set_flashdata('error', 'Lube type could not be saved. Please try again.');
+            } else {
+                $this->session->set_flashdata('success', 'Lube type added.');
+            }
             redirect('lubricants/types');
             return;
         }
@@ -500,28 +511,36 @@ class Lubricants extends MY_Controller {
             $lube_type_id = (int)$this->input->post('lube_type_id', TRUE);
             $eqType       = $eq_type_id > 0 ? $this->db->where('id', $eq_type_id)->get('equipment_types')->row() : NULL;
             $lubeType     = $lube_type_id > 0 ? $this->Lubricant_model->get_type_by_id($lube_type_id) : NULL;
-            if (!$eqType || !$lubeType) {
+            if (!$eqType || !$lubeType || $lubeType->status !== 'Active') {
                 $this->session->set_flashdata('error', 'Valid equipment type and lubricant type are required.');
                 redirect('lubricants/specifications');
                 return;
             }
 
-            $rec_raw = trim((string)$this->input->post('recommended_qty', TRUE));
-            $int_raw = trim((string)$this->input->post('service_interval_hours', TRUE));
+            $recRaw = trim((string)$this->input->post('recommended_qty', TRUE));
+            $intRaw = trim((string)$this->input->post('service_interval_hours', TRUE));
+            $notes  = trim((string)$this->input->post('notes', TRUE));
+            $recQty = is_numeric($recRaw) ? (float)$recRaw : -1.0;
+            if (!is_finite($recQty) || $recQty < 0 || $recQty > 99999999.99
+                || ($intRaw !== '' && (!ctype_digit($intRaw) || (float)$intRaw > 2147483647))
+                || strlen($notes) > 300) {
+                $this->session->set_flashdata('error', 'Specification not saved: check quantity, interval and notes.');
+                redirect('lubricants/specifications');
+                return;
+            }
             $row = array(
                 'equipment_type_id'      => $eq_type_id,
                 'lube_type_id'           => $lube_type_id,
-                'recommended_qty'        => ($rec_raw !== '' && is_numeric($rec_raw)) ? max(0.0, (float)$rec_raw) : 0.0,
-                'service_interval_hours' => ($int_raw !== '' && is_numeric($int_raw)) ? max(0, (int)$int_raw) : NULL,
-                'notes'                  => trim((string)$this->input->post('notes', TRUE)) ?: NULL,
+                'recommended_qty'        => round($recQty, 2),
+                'service_interval_hours' => $intRaw !== '' ? (int)$intRaw : NULL,
+                'notes'                  => $notes !== '' ? $notes : NULL,
             );
             $existing = $this->Lubricant_model->get_spec($eq_type_id, $lube_type_id);
-            if ($existing) {
-                $this->db->where('id', (int)$existing->id)->update('lube_specifications', $row);
-            } else {
-                $this->db->insert('lube_specifications', $row);
-            }
-            $this->session->set_flashdata('success', 'Specification saved.');
+            $saved = $existing
+                ? $this->db->where('id', (int)$existing->id)->update('lube_specifications', $row)
+                : $this->db->insert('lube_specifications', $row);
+            $this->session->set_flashdata($saved ? 'success' : 'error',
+                $saved ? 'Specification saved.' : 'Specification could not be saved. Please try again.');
             redirect('lubricants/specifications');
             return;
         }

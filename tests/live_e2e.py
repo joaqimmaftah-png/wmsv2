@@ -816,9 +816,9 @@ try:
     m_lub_resp.read()
     assert '/dashboard' in m_lub_url, f'Expected Manager redirect to /dashboard on /lubricants, got {m_lub_url}'
 
-    # Supervisor adds custom lube grade (verifies MySQL 8.0 ENUM safety even if legacy 'Brake Fluid' posted)
+    # Invalid legacy category must be rejected (never silently converted to Other).
     _, _, sup_lt_b = get_bytes('/lubricants/types', opener)
-    st_lt_c, _, _ = post_op(opener, '/lubricants/types', {
+    st_lt_bad, _, lt_bad_b = post_op(opener, '/lubricants/types', {
         'csrf_token_wms': csrf_from(sup_lt_b.decode('utf-8', 'replace')),
         'name': 'PAO Synthetic Oil',
         'category': 'Brake Fluid',
@@ -826,12 +826,23 @@ try:
         'unit': 'L',
         'unit_cost': '950.00',
     })
-    assert st_lt_c == 200
+    assert st_lt_bad == 200 and 'Type not saved' in lt_bad_b and 'PAO Synthetic Oil</td>' not in lt_bad_b
+
+    # A valid existing enum category saves with its original value.
+    st_lt_c, _, lt_good_b = post_op(opener, '/lubricants/types', {
+        'csrf_token_wms': csrf_from(lt_bad_b),
+        'name': 'PAO Synthetic Oil',
+        'category': 'Other',
+        'grade': 'PAO 68',
+        'unit': 'L',
+        'unit_cost': '950.00',
+    })
+    assert st_lt_c == 200 and 'PAO Synthetic Oil' in lt_good_b
 
     # Storekeeper defines OEM spec (28L Engine Oil), saves monthly budget, and logs 2 consumption issues (EX 006 & C-HEADT 007)
     _, _, st_spec_b = get_bytes('/lubricants/specifications', store_op)
     st_spec_html = st_spec_b.decode('utf-8', 'replace')
-    et_m = re.search(r'<select name="equipment_type_id"[^>]*>.*?<option value="(\d+)">', st_spec_html, re.S)
+    et_m = re.search(r'<select\b[^>]*\bname="equipment_type_id"[^>]*>.*?<option value="(\d+)">', st_spec_html, re.S)
     assert et_m, 'Missing equipment_type_id option on /lubricants/specifications'
     st_sp_save, _, _ = post_op(store_op, '/lubricants/specifications', {
         'csrf_token_wms': csrf_from(st_spec_html),
@@ -842,6 +853,17 @@ try:
         'notes': 'CAT sump standard',
     })
     assert st_sp_save == 200
+
+    # Invalid negative specification cannot silently zero an already-saved OEM standard.
+    _, _, spec_before_b = get_bytes('/lubricants/specifications', store_op)
+    st_sp_bad, _, sp_bad_html = post_op(store_op, '/lubricants/specifications', {
+        'csrf_token_wms': csrf_from(spec_before_b.decode('utf-8', 'replace')),
+        'equipment_type_id': et_m.group(1),
+        'lube_type_id': '1',
+        'recommended_qty': '-10',
+        'service_interval_hours': '250',
+    })
+    assert st_sp_bad == 200 and 'Specification not saved' in sp_bad_html and '28.00 L' in sp_bad_html
 
     _, _, st_bgt_b = get_bytes(f'/lubricants/budget?year={cur_yr}&month={cur_mo}', store_op)
     st_bgt_save, _, st_bgt_after = post_op(store_op, '/lubricants/budget', {
