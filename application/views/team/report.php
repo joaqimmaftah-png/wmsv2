@@ -1606,19 +1606,22 @@ $clean_reset_url = site_url('team/report') . '?month=' . rawurlencode($period['m
       var weeks = seg.weeks || [];
       for (var w = 0; w < weeks.length; w++) {
         var wk = weeks[w];
-        html += '<tr class="ts-wk-band"><td colspan="6">' + escHtml(wk.label) + '</td></tr>';
+        var wkLabel = wk.label || ('WEEK ' + (w + 1));
+        var wkDaysWorked = 0;
+        html += '<tr class="ts-wk-band"><td colspan="6">' + escHtml(wkLabel) + '</td></tr>';
         var days = wk.days || [];
         for (var d = 0; d < days.length; d++) {
           var dy = days[d];
+          if (dy.worked) wkDaysWorked++;
           var openShift = (dy.time_in && !dy.time_out && dy.status === 'Present');
           var rowStyle = dy.is_sunday ? 'background:#fafafa;color:var(--t3);' : '';
           var obsHtml = escHtml(dy.observation || '');
           if (openShift) {
-            obsHtml = '<span class="badge badge-amber">Missing check-out</span> ' + obsHtml;
+            obsHtml = '<span class="badge badge-amber">Missing check-out</span>' + (obsHtml ? ' ' + obsHtml : '');
           } else if (dy.status === 'Absent') {
-            obsHtml = '<span class="badge badge-red">ABSENT</span>' + (dy.notes ? ' ' + escHtml(dy.notes) : '');
+            obsHtml = '<span class="badge badge-red">' + (obsHtml || 'ABSENT') + '</span>';
           } else if (dy.status === 'Leave') {
-            obsHtml = '<span class="badge badge-amber">LEAVE</span>' + (dy.notes ? ' ' + escHtml(dy.notes) : '');
+            obsHtml = '<span class="badge badge-amber">' + (obsHtml || 'LEAVE') + '</span>';
           }
           html += '<tr style="' + rowStyle + '">'
             + '<td class="mono">' + escHtml(dy.date_label) + '</td>'
@@ -1630,7 +1633,7 @@ $clean_reset_url = site_url('team/report') . '?month=' . rawurlencode($period['m
             + '</tr>';
         }
         html += '<tr class="ts-wk-sub">'
-          + '<td colspan="4">Weekly Total — ' + Number(wk.days_worked) + ' day(s) worked</td>'
+          + '<td colspan="4">Weekly Total — ' + wkDaysWorked + ' day(s) worked</td>'
           + '<td class="mono" style="text-align:right;">' + escHtml(wk.hours_label || '0') + '</td>'
           + '<td></td></tr>';
       }
