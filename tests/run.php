@@ -2340,7 +2340,7 @@ for ($oi = 1; $oi <= 500; $oi++) {
         'order_date'             => '2026-10-01',
         'expected_delivery_date' => $isLate ? '2000-01-01' : ($isSoon ? date('Y-m-d', strtotime('+3 days')) : '2099-12-31'),
         'actual_delivery_date'   => NULL,
-        'status'                 => ($oi <= 2) ? 'In Transit' : (($oi <= 490) ? 'Order Placed' : 'Verified & Closed'),
+        'status'                 => ($oi <= 2) ? 'In Transit' : (($oi <= 490) ? 'Sent to Supplier' : 'Verified & Closed'),
         'tracking_number'        => ($oi === 1) ? 'DHL-8841209' : '',
         'carrier'                => ($oi === 1) ? 'DHL Express' : '',
         'currency'               => ($oi % 2 === 1) ? 'USD' : 'TZS',

@@ -447,17 +447,17 @@ try:
     assert st_po1 == 200 and '/orders/view/' in po1_url, f'PO1 create failed: {st_po1} {po1_url}'
     po1_id = int(po1_url.rstrip('/').split('/')[-1])
 
-    # Manager (role_id = 4) approves Pending Approval -> Order Placed per MANAGER_WRITE_WHITELIST,
-    # then Storekeeper advances Dispatched -> In Transit
+    # Manager (role_id = 4) approves Pending Approval -> Sent to Supplier per MANAGER_WRITE_WHITELIST,
+    # then Storekeeper advances Confirmed -> In Transit
     _, _, mgr_pv_b = get_bytes(f'/orders/view/{po1_id}', mgr_op)
     st_mgr_app, _, _ = post_op(mgr_op, f'/orders/update_status/{po1_id}', {
         'csrf_token_wms': csrf_from(mgr_pv_b.decode('utf-8', 'replace')),
-        'status': 'Order Placed',
+        'status': 'Sent to Supplier',
         'notes': 'Approved by Manager',
     })
     assert st_mgr_app == 200, f'Manager PO approval failed: {st_mgr_app}'
 
-    for next_st in ('Dispatched', 'In Transit'):
+    for next_st in ('Confirmed', 'In Transit'):
         _, _, pv_b = get_bytes(f'/orders/view/{po1_id}', store_op)
         st_up, _, _ = post_op(store_op, f'/orders/update_status/{po1_id}', {
             'csrf_token_wms': csrf_from(pv_b.decode('utf-8', 'replace')),
@@ -503,7 +503,7 @@ try:
     })
     assert st_po2 == 200 and '/orders/view/' in po2_url
     po2_id = int(po2_url.rstrip('/').split('/')[-1])
-    for next_st in ('Order Placed', 'Dispatched', 'In Transit'):
+    for next_st in ('Sent to Supplier', 'Confirmed', 'In Transit'):
         _, _, pv2_b = get_bytes(f'/orders/view/{po2_id}', store_op)
         st_up2, _, _ = post_op(store_op, f'/orders/update_status/{po2_id}', {
             'csrf_token_wms': csrf_from(pv2_b.decode('utf-8', 'replace')),
