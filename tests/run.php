@@ -2449,6 +2449,225 @@ check('ORD-06 Clean View Render, Verbatim EX 006 / C-HEADT 007, RBAC Gate & XSS 
     implode('; ', $ordWarnings));
 
 /* ─────────────────────────────────────────────────────────────────────────
+   Section 21 — Pending Spare Parts Board Overhaul (SP-01..SP-06)
+   ───────────────────────────────────────────────────────────────────────── */
+
+if (!class_exists('Spareparts_model', FALSE)) {
+    require_once APPPATH . 'models/Spareparts_model.php';
+}
+
+class SparepartsBoardFakeDB {
+    public $queries = 0;
+    public $updatedAlertIds = array();
+    private $lines   = array();
+    private $mats    = array();
+    private $allocs  = array();
+    private $poItems = array();
+    private $alerts  = array();
+    private $fromTable = '';
+    private $whereClauses = array();
+
+    public function __construct(array $lines, array $mats, array $allocs, array $poItems, array $alerts) {
+        $this->lines   = $lines;
+        $this->mats    = $mats;
+        $this->allocs  = $allocs;
+        $this->poItems = $poItems;
+        $this->alerts  = $alerts;
+    }
+    public function dbprefix($t = '') { return (string)$t; }
+    public function table_exists($t) {
+        return in_array($t, array(
+            'wo_spare_allocations', 'spare_part_alerts', 'wo_spare_parts',
+            'materials', 'spare_order_items', 'spare_orders',
+        ), TRUE);
+    }
+    public function select($s, $escape = NULL) { return $this; }
+    public function from($t) { $this->fromTable = (string)$t; return $this; }
+    public function join($t, $c, $type = '') { return $this; }
+    public function where($k, $v = NULL, $escape = NULL) {
+        $this->whereClauses[] = array((string)$k, $v);
+        return $this;
+    }
+    public function or_where($k, $v = NULL, $escape = NULL) {
+        $this->whereClauses[] = array('OR:' . (string)$k, $v);
+        return $this;
+    }
+    public function where_in($k, $vals) { return $this; }
+    public function where_not_in($k, $vals) { return $this; }
+    public function group_start() { return $this; }
+    public function group_end() { return $this; }
+    public function group_by($g) { return $this; }
+    public function order_by($c, $d = '') { return $this; }
+    public function limit($n) { return $this; }
+    public function update($table, $data) {
+        $this->queries++;
+        if ($table === 'spare_part_alerts') {
+            foreach ($this->whereClauses as $wc) {
+                if ($wc[0] === 'id') $this->updatedAlertIds[] = (int)$wc[1];
+            }
+        }
+        $this->whereClauses = array();
+        return TRUE;
+    }
+    public function get($table = NULL) {
+        $this->queries++;
+        $src = $table !== NULL ? (string)$table : $this->fromTable;
+        $wcs = $this->whereClauses;
+        $this->whereClauses = array();
+
+        if (strpos($src, 'wo_spare_parts') === 0) {
+            return new TeamRosterFakeResult($this->lines);
+        }
+        if ($src === 'materials') {
+            return new TeamRosterFakeResult($this->mats);
+        }
+        if (strpos($src, 'wo_spare_allocations') === 0) {
+            return new TeamRosterFakeResult($this->allocs);
+        }
+        if (strpos($src, 'spare_order_items') === 0) {
+            return new TeamRosterFakeResult($this->poItems);
+        }
+        if (strpos($src, 'spare_part_alerts') === 0) {
+            // If scoped to technician (wo.created_by filter present), filter alerts
+            $techUid = NULL;
+            $wantedId = NULL;
+            foreach ($wcs as $wc) {
+                if ($wc[0] === 'wo.created_by') $techUid = (int)$wc[1];
+                if ($wc[0] === 'a.id') $wantedId = (int)$wc[1];
+            }
+            $out = array();
+            foreach ($this->alerts as $al) {
+                if ($wantedId !== NULL && (int)$al->id !== $wantedId) continue;
+                if ($techUid !== NULL && (int)$al->owner_id !== $techUid) continue;
+                $out[] = $al;
+            }
+            return new TeamRosterFakeResult($out);
+        }
+        return new TeamRosterFakeResult(array());
+    }
+}
+
+$fakeSpMats = array(
+    (object)array(
+        'id' => 501, 'item_code' => 'SP-FLT-501', 'description' => 'Primary Fuel Filter',
+        'part_number_size' => '1R-0750', 'unit' => 'pcs',
+        'initial_stock' => 20, 'qty_received' => 5, 'qty_sortie' => 5,
+        'supplier_name' => 'Mantrac CAT', 'location' => 'BIN A-01',
+    ),
+);
+$fakeSpLines = array();
+for ($si = 1; $si <= 500; $si++) {
+    $fakeSpLines[] = (object)array(
+        'id'              => $si,
+        'work_order_id'   => $si,
+        'wo_number'       => ($si === 2) ? 'WO-XSS<script>alert(8)</script>' : sprintf('WO-SP-%04d', $si),
+        'wo_status'       => 'Waiting Parts',
+        'priority'        => ($si === 1) ? 'Critical' : 'High',
+        'wo_title'        => 'Hydraulic service',
+        'wo_created_by'   => 1,
+        'wo_assigned_to'  => '',
+        'supervisor_id'   => 1,
+        'equipment_db_id' => 1,
+        'registration_no' => ($si === 1) ? 'EX 006' : 'C-HEADT 007',
+        'brand'           => 'CAT',
+        'model'           => '336D2L',
+        'item_code'       => ($si <= 499) ? 'SP-FLT-501' : 'UNKNOWN-CODE',
+        'part_name'       => 'Primary Fuel Filter',
+        'part_number'     => '1R-0750',
+        'quantity'        => 2,
+        'unit'            => 'pcs',
+        'spare_type'      => 'New',
+    );
+}
+$fakeSpAllocs = array(
+    (object)array(
+        'id' => 81, 'wo_spare_part_id' => 1, 'work_order_id' => 1, 'material_id' => 501,
+        'qty_allocated' => 2, 'status' => 'Allocated', 'wo_number' => 'WO-SP-0001',
+        'wo_status' => 'Waiting Parts', 'allocated_at' => '2026-10-22 10:00:00',
+    ),
+);
+$fakeSpPo = array((object)array('material_id' => 501, 'outstanding' => 12));
+$fakeSpAlerts = array((object)array(
+    'id' => 77, 'owner_id' => 1, 'work_order_id' => 1, 'wo_number' => 'WO-SP-0001',
+    'registration_no' => 'EX 006', 'alert_type' => 'Available',
+    'message' => 'Filter arrived', 'status' => 'New',
+    'rb_first' => 'CI', 'rb_last' => 'Storekeeper', 'created_at' => '2026-10-22 10:05:00',
+));
+
+$spFakeDb = new SparepartsBoardFakeDB($fakeSpLines, $fakeSpMats, $fakeSpAllocs, $fakeSpPo, $fakeSpAlerts);
+$spModel  = new Spareparts_model();
+$spModel->db = $spFakeDb;
+$spOvTech = $spModel->get_board_overview(99, 2); // Unassigned technician #99
+
+check('SP-03 Constant O(1) SQL Scaling: 500 pending lines + allocations + POs + role-scoped alerts hydrated in <= 5 SQL queries',
+    count($spOvTech['lines']) === 500 && $spFakeDb->queries <= 5,
+    'queries=' . $spFakeDb->queries);
+
+check('SP-01 Horizontal Alert Isolation: unassigned Technician sees 0 peer alerts AND cannot mark peer alert #77 read',
+    (int)$spOvTech['summary']['new_alerts'] === 0
+    && $spModel->mark_alert_read(77, 99, 2) === FALSE
+    && empty($spFakeDb->updatedAlertIds)
+    && $spModel->mark_alert_read(77, 1, 1) === TRUE
+    && in_array(77, $spFakeDb->updatedAlertIds, TRUE));
+
+$spWarnings = array();
+$renderSpIndex = function ($canWrite, $canOrder, $canViewOrders) use ($spOvTech, &$spWarnings) {
+    $lines           = array_slice($spOvTech['lines'], 0, 2);
+    $groups          = array();
+    $unlinked        = array();
+    $line_allocs     = $spOvTech['line_allocs'];
+    $on_order        = $spOvTech['on_order'];
+    $summary         = $spOvTech['summary'];
+    $ready_wos       = array_slice($spOvTech['ready_wos'], 0, 2);
+    $new_alerts      = array();
+    $tab_counts      = array('all' => 500, 'pending' => 0, 'available' => 498, 'allocated' => 1, 'unlinked' => 1, 'ready_wos' => 499);
+    $tab             = 'all';
+    $q               = '';
+    $filter          = array('status' => '', 'priority' => '', 'wo_status' => '', 'search' => '');
+    $sort            = 'priority';
+    $dir             = 'asc';
+    $view_mode       = 'table';
+    $per_page        = 25;
+    $allowed_pp      = array(10, 25, 50, 100, 150);
+    $current_page    = 1;
+    $total_pages     = 20;
+    $total_filtered  = 500;
+    $offset          = 0;
+    $filtered_totals = array('qty_required' => 4.0, 'qty_available' => 4.0, 'qty_allocated' => 2.0, 'qty_shortfall' => 0.0);
+    $can_write       = $canWrite;
+    $can_order       = $canOrder;
+    $can_view_orders = $canViewOrders;
+
+    set_error_handler(function ($severity, $message, $file, $line) use (&$spWarnings) {
+        $spWarnings[] = "$message ($file:$line)";
+        return TRUE;
+    });
+    ob_start();
+    include APPPATH . 'views/spareparts/index.php';
+    $out = ob_get_clean();
+    restore_error_handler();
+    return $out;
+};
+
+$spStoreHtml = $renderSpIndex(TRUE, TRUE, TRUE);
+$spTechHtml  = $renderSpIndex(TRUE, FALSE, FALSE);
+$spMgrHtml   = $renderSpIndex(FALSE, FALSE, TRUE);
+
+check('SP-02 & SP-06 Clean View Render, Verbatim EX 006 / C-HEADT 007, Multi-Role RBAC & XSS Neutralization in spareparts/index.php',
+    empty($spWarnings)
+    && strpos($spStoreHtml, 'id="spOrderBtn"') !== FALSE
+    && strpos($spTechHtml, 'id="spOrderBtn"') === FALSE
+    && strpos($spTechHtml, '>View Orders<') === FALSE
+    && strpos($spMgrHtml, '>View Orders<') !== FALSE
+    && strpos($spMgrHtml, '>Allocate<') === FALSE
+    && strpos($spMgrHtml, '>Issue<') === FALSE
+    && strpos($spStoreHtml, 'EX 006') !== FALSE
+    && strpos($spStoreHtml, 'C-HEADT 007') !== FALSE
+    && strpos($spStoreHtml, '<script>alert(8)</script>') === FALSE
+    && strpos($spStoreHtml, 'id="spDrawer" role="dialog" aria-modal="true"') !== FALSE,
+    implode('; ', $spWarnings));
+
+/* ─────────────────────────────────────────────────────────────────────────
    Result
    ───────────────────────────────────────────────────────────────────────── */
 

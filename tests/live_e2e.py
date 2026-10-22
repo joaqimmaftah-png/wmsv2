@@ -574,7 +574,107 @@ try:
     st_m_oxls, _, m_oxls_b = get_bytes('/orders/export_xlsx', mgr_op)
     assert st_m_oxls == 200 and m_oxls_b[:4] == b'PK\x03\x04'
 
-    print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS, INSPECTIONS, BACKLOG, INVENTORY & SPARE ORDERS E2E CHECKS PASSED!')
+    # Pending Spares SP-01..SP-06 Live Alert Isolation, Allocation, RBAC & Export Verification
+    _, _, mat_new_b = get_bytes('/materials/create', store_op)
+    st_mc, _, _ = post_op(store_op, '/materials/create', {
+        'csrf_token_wms': csrf_from(mat_new_b.decode('utf-8', 'replace')),
+        'item_code': 'SP-EX-006',
+        'category': 'SPARE PART',
+        'description': 'Main Boom Seal Kit',
+        'part_number_size': '295-5609',
+        'unit': 'Set',
+        'initial_stock': '5',
+        'min_stock': '2',
+        'location': 'BIN C-03',
+    })
+    assert st_mc == 200
+
+    sql_sp = f"""
+    INSERT INTO wo_spare_parts (work_order_id, item_code, part_name, part_number, quantity, unit)
+    VALUES ({int(wo1_id)}, 'SP-EX-006', '=SUM(3,4)', '295-5609', 2, 'Set');
+    INSERT INTO spare_part_alerts (wo_spare_part_id, work_order_id, material_id, item_code, part_name, qty_received, stock_after, alert_type, message, received_by, status, created_at)
+    SELECT sp.id, {int(wo2_id)}, m.id, 'SP-EX-006', 'Kingpin Seal Kit', 2, 5, 'Available',
+           'Stock arrived for WO-CI-HOLD-02', {int(sup_id)}, 'New', NOW()
+    FROM wo_spare_parts sp
+    CROSS JOIN materials m
+    WHERE sp.work_order_id = {int(wo2_id)} AND m.item_code = 'SP-EX-006'
+    LIMIT 1;
+    """
+    subprocess.run(
+        ['mysql', '-h', '127.0.0.1', '-uroot', f'-p{os.environ["WMS_DB_PASS"]}', 'wms_fresh'],
+        input=sql_sp.encode('utf-8'),
+        check=True,
+    )
+
+    # Fetch alert ID from Manager alerts page; verify unassigned Technician CANNOT mark it read (SP-01)!
+    _, _, m_al_b = get_bytes('/spareparts/alerts', mgr_op)
+    m_al_html = m_al_b.decode('utf-8', 'replace')
+    al_m = re.search(r'spareparts/mark_read/(\d+)', m_al_html)
+    assert al_m, 'Expected New alert on /spareparts/alerts for Manager'
+    peer_al_id = int(al_m.group(1))
+
+    _, _, t_sp_b = get_bytes('/spareparts', tech_op)
+    t_sp_html = t_sp_b.decode('utf-8', 'replace')
+    assert 'id="spOrderBtn"' not in t_sp_html and '>View Orders<' not in t_sp_html
+    post_op(tech_op, f'/spareparts/mark_read/{peer_al_id}', {'csrf_token_wms': csrf_from(t_sp_html)})
+
+    # Alert must STILL be New for Manager because Technician did not own WO-CI-HOLD-02!
+    _, _, m_al2_b = get_bytes('/spareparts/alerts', mgr_op)
+    m_al2_html = m_al2_b.decode('utf-8', 'replace')
+    assert f'spareparts/mark_read/{peer_al_id}' in m_al2_html, 'Horizontal tamper: Technician marked peer WO alert read!'
+
+    # Manager (whitelisted in MANAGER_WRITE_WHITELIST) marks alert read cleanly
+    post_op(mgr_op, f'/spareparts/mark_read/{peer_al_id}', {'csrf_token_wms': csrf_from(m_al2_html)})
+    _, _, m_al3_b = get_bytes('/spareparts/alerts', mgr_op)
+    assert f'spareparts/mark_read/{peer_al_id}' not in m_al3_b.decode('utf-8', 'replace')
+
+    # Storekeeper allocates 2 sets against EX 006 demand line
+    _, _, st_sp_b = get_bytes('/spareparts', store_op)
+    st_sp_html = st_sp_b.decode('utf-8', 'replace')
+    alloc_m = re.search(r'spareparts/allocate/(\d+)', st_sp_html)
+    assert alloc_m and 'id="spOrderBtn"' in st_sp_html
+    sp_line1_id = int(alloc_m.group(1))
+    st_al_post, _, _ = post_op(store_op, f'/spareparts/allocate/{sp_line1_id}', {
+        'csrf_token_wms': csrf_from(st_sp_html),
+        'qty': '2',
+    })
+    assert st_al_post == 200
+
+    # Manager read-only board, summary_json, UTF-8 BOM CSV & Styled XLSX verification
+    st_m_sp, _, m_sp_b = get_bytes('/spareparts', mgr_op)
+    m_sp_html = m_sp_b.decode('utf-8', 'replace')
+    assert (
+        st_m_sp == 200
+        and 'EX 006' in m_sp_html
+        and 'C-HEADT 007' in m_sp_html
+        and 'Allocated' in m_sp_html
+        and '>Allocate<' not in m_sp_html
+        and '>Issue<' not in m_sp_html
+        and 'id="spOrderBtn"' not in m_sp_html
+    )
+    st_m_spj, _, m_spj_b = get_bytes(f'/spareparts/summary_json/{sp_line1_id}', mgr_op)
+    m_spj = json.loads(m_spj_b.decode('utf-8'))
+    assert (
+        st_m_spj == 200
+        and m_spj.get('ok') is True
+        and m_spj['line']['can_write'] is False
+        and m_spj['line']['registration_no'] == 'EX 006'
+        and m_spj['line']['avail_status'] == 'Allocated'
+        and len(m_spj['allocations']) == 1
+    )
+    st_m_spcsv, _, m_spcsv_b = get_bytes('/spareparts/export_csv', mgr_op)
+    m_spcsv_txt = m_spcsv_b.decode('utf-8-sig')
+    assert (
+        st_m_spcsv == 200
+        and m_spcsv_b.startswith(b'\xef\xbb\xbf')
+        and "'=SUM(3,4)" in m_spcsv_txt
+        and 'EX 006' in m_spcsv_txt
+        and 'C-HEADT 007' in m_spcsv_txt
+    )
+    st_m_spxls, _, m_spxls_b = get_bytes('/spareparts/export_xlsx', mgr_op)
+    assert st_m_spxls == 200 and m_spxls_b[:4] == b'PK\x03\x04'
+
+    print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS, INSPECTIONS, BACKLOG, INVENTORY, SPARE ORDERS & PENDING SPARES E2E CHECKS PASSED!')
 except BaseException:
     tb = traceback.format_exc().replace('\n', '%0A')
     print(f'::error title=PythonE2E::{tb}', flush=True)

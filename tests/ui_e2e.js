@@ -1066,6 +1066,98 @@ for (const rawLine of cookieLines) {
     assert(ordMobile.docOverflow <= 0, '/orders Mobile 390px overflowed: ' + ordMobile.docOverflow);
     assert(ordMobile.tableDisplay === 'none' && ordMobile.cardsDisplay === 'block', '/orders Mobile Card View failed: ' + JSON.stringify(ordMobile));
 
+    // =========================================================================
+    // 13. PENDING SPARES BOARD (/spareparts) DESKTOP 1440x900 & MOBILE 390x844
+    // =========================================================================
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/spareparts' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("spShell"))')) break;
+      await sleep(200);
+    }
+
+    const spDesktop = await evalJs(`(async () => {
+      const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+      const tblWrap = document.querySelector('.sp-table-wrap');
+      const tblOverflow = tblWrap ? (tblWrap.scrollWidth - tblWrap.clientWidth) : -1;
+
+      // Slash shortcut focuses #spSearchInput
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+      const slashFocused = (document.activeElement === document.getElementById('spSearchInput'));
+      document.activeElement.blur();
+
+      // Multi-select checkbox opens #spBatchBar with ?ids= on both CSV & Excel buttons
+      const firstCb = document.querySelector('.sp-row-check');
+      firstCb.checked = true;
+      firstCb.dispatchEvent(new Event('change', { bubbles: true }));
+      const batchVisible = document.getElementById('spBatchBar').classList.contains('is-open');
+      const batchCsvHref = document.getElementById('spBatchExportBtn').getAttribute('href') || '';
+      const batchXlsHref = document.getElementById('spBatchXlsxBtn').getAttribute('href') || '';
+
+      // Open Slide-Over Demand & Allocation Inspector Drawer
+      const trigger = document.querySelector('button[data-sp-open]');
+      trigger.focus();
+      trigger.click();
+      for (let w = 0; w < 25; w++) {
+        if (document.getElementById('spDrawerBody').textContent.includes('Stock Reservations')) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const drawerOpen = document.getElementById('spDrawer').classList.contains('is-open');
+      const firstHeader = document.getElementById('spDrawerTitle').textContent;
+
+      // ArrowRight steps drawer between demand lines
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      for (let w = 0; w < 25; w++) {
+        if (document.getElementById('spDrawerTitle').textContent !== firstHeader) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const secondHeader = document.getElementById('spDrawerTitle').textContent;
+
+      // Escape closes drawer and restores focus
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const drawerClosed = !document.getElementById('spDrawer').classList.contains('is-open');
+      const focusRestored = (document.activeElement === trigger);
+
+      // Toggle By Part <-> Cards <-> Table views smoothly
+      document.querySelector('[data-sp-view="groups"]').click();
+      const groupsShown = getComputedStyle(document.querySelector('.sp-groups-container')).display !== 'none'
+        && getComputedStyle(document.querySelector('.sp-table-wrap')).display === 'none';
+      document.querySelector('[data-sp-view="cards"]').click();
+      const cardsShown = getComputedStyle(document.querySelector('.sp-cards-container')).display !== 'none'
+        && getComputedStyle(document.querySelector('.sp-table-wrap')).display === 'none';
+      document.querySelector('[data-sp-view="table"]').click();
+
+      return {
+        docOverflow, tblOverflow, slashFocused,
+        batchVisible, batchCsvHref, batchXlsHref,
+        drawerOpen, stepped: firstHeader !== secondHeader,
+        drawerClosed, focusRestored, groupsShown, cardsShown
+      };
+    })()`);
+
+    assert(spDesktop.docOverflow <= 0, '/spareparts Desktop overflowed: ' + JSON.stringify(spDesktop));
+    assert(spDesktop.tblOverflow <= 0, '/spareparts Table overflowed: ' + JSON.stringify(spDesktop));
+    assert(spDesktop.slashFocused === true, '/spareparts Slash shortcut failed: ' + JSON.stringify(spDesktop));
+    assert(spDesktop.batchVisible && spDesktop.batchCsvHref.includes('ids=') && spDesktop.batchXlsHref.includes('ids='), '/spareparts Batch bar failed: ' + JSON.stringify(spDesktop));
+    assert(spDesktop.drawerOpen === true, '/spareparts Drawer failed: ' + JSON.stringify(spDesktop));
+    assert(spDesktop.stepped === true, '/spareparts ArrowRight navigation failed: ' + JSON.stringify(spDesktop));
+    assert(spDesktop.drawerClosed && spDesktop.focusRestored, '/spareparts Escape close/focus failed: ' + JSON.stringify(spDesktop));
+    assert(spDesktop.groupsShown && spDesktop.cardsShown, '/spareparts By Part / Cards switcher failed: ' + JSON.stringify(spDesktop));
+
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/spareparts' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("spShell"))')) break;
+      await sleep(200);
+    }
+    const spMobile = await evalJs(`(() => ({
+      docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      tableDisplay: getComputedStyle(document.querySelector('.sp-table-wrap')).display,
+      cardsDisplay: getComputedStyle(document.querySelector('.sp-cards-container')).display
+    }))()`);
+    assert(spMobile.docOverflow <= 0, '/spareparts Mobile 390px overflowed: ' + spMobile.docOverflow);
+    assert(spMobile.tableDisplay === 'none' && spMobile.cardsDisplay === 'block', '/spareparts Mobile Card View failed: ' + JSON.stringify(spMobile));
+
     ws.close();
     console.log('ALL HEADLESS CHROME DESKTOP (1440x900) & MOBILE (390x844) UI E2E ASSERTIONS PASSED!');
   } catch (err) {

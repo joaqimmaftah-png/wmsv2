@@ -312,28 +312,213 @@ class Spareparts_model extends CI_Model {
         return array('lines' => $lines, 'summary' => $summary);
     }
 
-    /** Quick board KPIs. */
-    public function get_board_summary() {
-        $out = array('lines' => 0, 'available_lines' => 0, 'pending_lines' => 0,
-                      'wos' => 0, 'ready_wos' => 0, 'new_alerts' => 0);
-        if (!$this->tables_ready()) return $out;
+    /** Quick board KPIs (role-scoped unread alert count when $role_id given). */
+    public function get_board_summary($user_id = null, $role_id = null) {
+        $ov = $this->get_board_overview($user_id, $role_id);
+        return $ov['summary'];
+    }
 
-        $lines = $this->get_pending_lines();
-        $by_wo = array();
-        foreach ($lines as $l) {
-            $out['lines']++;
-            $ok = ($l->avail_status === self::STATUS_AVAILABLE || $l->avail_status === self::STATUS_ALLOCATED);
-            if ($ok) $out['available_lines']++;
-            else     $out['pending_lines']++;
-            $by_wo[(int)$l->work_order_id][] = $ok;
+    /**
+     * Single-pass O(1) board hydrator for /spareparts, exports, and summary_json.
+     *
+     * Executes at most 5 flat SQL queries regardless of pending line volume
+     * (replaces the prior 3x full `materials` scans + 6x allocation scans).
+     */
+    public function get_board_overview($user_id = null, $role_id = null) {
+        $summary = array(
+            'lines'           => 0,
+            'available_lines' => 0,
+            'pending_lines'   => 0,
+            'partial_lines'   => 0,
+            'allocated_lines' => 0,
+            'unlinked_lines'  => 0,
+            'wos'             => 0,
+            'ready_wos'       => 0,
+            'on_order_parts'  => 0,
+            'new_alerts'      => 0,
+        );
+        $empty = array(
+            'lines'        => array(),
+            'line_allocs'  => array(),
+            'on_order'     => array(),
+            'summary'      => $summary,
+            'ready_wos'    => array(),
+            'ready_wo_ids' => array(),
+            'new_alerts'   => array(),
+        );
+        if (!$this->tables_ready()) return $empty;
+
+        // Query 1: All pending spare-part demand lines with WO + Fleet Asset metadata
+        $lines = $this->db->select('sp.*, wo.wo_number, wo.status AS wo_status, wo.priority,
+                wo.title AS wo_title, wo.created_by AS wo_created_by,
+                wo.assigned_to AS wo_assigned_to, wo.supervisor_id,
+                e.id AS equipment_db_id, e.registration_no, e.brand, e.model')
+            ->from('wo_spare_parts sp')
+            ->join('work_orders wo', 'wo.id = sp.work_order_id')
+            ->join('equipment e', 'e.id = wo.equipment_id', 'left')
+            ->where_in('wo.status', self::$PENDING_WO_STATUSES)
+            ->where('(sp.spare_type IS NULL OR sp.spare_type <> \'From Machine\')', null, false)
+            ->order_by('wo.priority', 'ASC')
+            ->order_by('wo.wo_number', 'ASC')
+            ->get()->result();
+        if (!$lines) $lines = array();
+
+        $lineAllocs = array();
+        $onOrder    = array();
+        $readyWos   = array();
+        $readyWoIds = array();
+
+        if (!empty($lines)) {
+            // Query 2: Projected catalog index (10 scalar fields, once per request)
+            $index = array('by_id' => array(), 'by_code' => array(), 'by_part' => array());
+            $matRows = $this->db->select('id, item_code, description, part_number_size, unit, initial_stock, qty_received, qty_sortie, supplier_name, location')
+                ->from('materials')
+                ->get()->result();
+            if ($matRows) {
+                foreach ($matRows as $m) {
+                    $index['by_id'][(int)$m->id] = $m;
+                    $c = $this->_key($m->item_code);
+                    if ($c !== '' && !isset($index['by_code'][$c])) $index['by_code'][$c] = $m;
+                    $p = $this->_key(isset($m->part_number_size) ? $m->part_number_size : '');
+                    if ($p !== '' && !isset($index['by_part'][$p])) $index['by_part'][$p] = $m;
+                }
+            }
+
+            // Query 3: Single pass over wo_spare_allocations builds BOTH reserved map AND line_allocs
+            $reserved = array();
+            $allocRows = $this->db->select('a.*, wo.wo_number, wo.status AS wo_status')
+                ->from('wo_spare_allocations a')
+                ->join('wo_spare_parts sp', 'sp.id = a.wo_spare_part_id')
+                ->join('work_orders wo', 'wo.id = a.work_order_id')
+                ->where_in('a.status', array('Allocated', 'Issued'))
+                ->order_by('a.allocated_at', 'ASC')
+                ->get()->result();
+            if ($allocRows) {
+                foreach ($allocRows as $ar) {
+                    $lineAllocs[(int)$ar->wo_spare_part_id][] = $ar;
+                    if ($ar->status === 'Allocated' && in_array($ar->wo_status, self::$PENDING_WO_STATUSES, TRUE)) {
+                        $mid = (int)$ar->material_id;
+                        if (!isset($reserved[$mid])) $reserved[$mid] = 0.0;
+                        $reserved[$mid] += (float)$ar->qty_allocated;
+                    }
+                }
+            }
+
+            // Query 4: Open purchase-order quantities per material
+            $onOrder = $this->get_on_order_by_material();
+            $summary['on_order_parts'] = count($onOrder);
+
+            $byWo = array();
+            foreach ($lines as $line) {
+                $mat = $this->resolve_material(
+                    isset($line->item_code) ? $line->item_code : '',
+                    isset($line->part_number) ? $line->part_number : '',
+                    $index
+                );
+                $line->material     = $mat;
+                $line->material_id  = $mat ? (int)$mat->id : null;
+                $line->stock_qty    = $this->_balance($mat);
+                $line->item_unit    = $mat ? $mat->unit : (isset($line->unit) ? $line->unit : 'pcs');
+                $line->on_order_qty = ($mat && isset($onOrder[(int)$mat->id])) ? (float)$onOrder[(int)$mat->id] : 0.0;
+
+                $alloc = 0.0;
+                $issued = 0.0;
+                if (isset($lineAllocs[(int)$line->id])) {
+                    foreach ($lineAllocs[(int)$line->id] as $a) {
+                        if ($a->status === 'Issued') $issued += (float)$a->qty_allocated;
+                        else                         $alloc  += (float)$a->qty_allocated;
+                    }
+                }
+                $line->qty_allocated = $alloc;
+                $line->qty_issued    = $issued;
+                $line->qty_required  = isset($line->quantity) ? (float)$line->quantity : 0.0;
+
+                if ($mat) {
+                    $resTot  = isset($reserved[(int)$mat->id]) ? $reserved[(int)$mat->id] : 0.0;
+                    $line->free_qty = max(0, $line->stock_qty - $resTot);
+                    $satisfied = $alloc + $issued;
+                    $needed    = max(0, $line->qty_required - $satisfied);
+                    $coverable = min($line->free_qty, $needed);
+                    $line->qty_available = $satisfied + $coverable;
+
+                    if ($needed <= 0) {
+                        $line->avail_status = $alloc > 0 ? self::STATUS_ALLOCATED : self::STATUS_AVAILABLE;
+                    } elseif ($coverable >= $needed) {
+                        $line->avail_status = self::STATUS_AVAILABLE;
+                    } elseif ($coverable > 0) {
+                        $line->avail_status = self::STATUS_PARTIAL;
+                    } else {
+                        $line->avail_status = self::STATUS_PENDING;
+                    }
+                } else {
+                    $line->free_qty      = 0;
+                    $line->qty_available = $alloc + $issued;
+                    $line->avail_status  = self::STATUS_UNLINKED;
+                }
+                $line->qty_shortfall = max(0.0, round($line->qty_required - $line->qty_available, 2));
+
+                $summary['lines']++;
+                $ok = ($line->avail_status === self::STATUS_AVAILABLE || $line->avail_status === self::STATUS_ALLOCATED);
+                if ($ok) $summary['available_lines']++;
+                else     $summary['pending_lines']++;
+                if ($line->avail_status === self::STATUS_PARTIAL)   $summary['partial_lines']++;
+                if ($line->avail_status === self::STATUS_ALLOCATED) $summary['allocated_lines']++;
+                if ($line->avail_status === self::STATUS_UNLINKED)  $summary['unlinked_lines']++;
+
+                $wid = (int)$line->work_order_id;
+                if (!isset($byWo[$wid])) {
+                    $byWo[$wid] = array(
+                        'wo_number'       => $line->wo_number,
+                        'registration_no' => isset($line->registration_no) ? $line->registration_no : '',
+                        'title'           => isset($line->wo_title) ? $line->wo_title : '',
+                        'work_order_id'   => $wid,
+                        'ok'              => true,
+                        'parts'           => 0,
+                    );
+                }
+                $byWo[$wid]['parts']++;
+                if (!$ok) $byWo[$wid]['ok'] = false;
+            }
+
+            $summary['wos'] = count($byWo);
+            foreach ($byWo as $wid => $w) {
+                if ($w['ok']) {
+                    $readyWos[]         = $w;
+                    $readyWoIds[$wid]   = true;
+                    $summary['ready_wos']++;
+                }
+            }
         }
-        $out['wos'] = count($by_wo);
-        foreach ($by_wo as $flags) {
-            if (!in_array(false, $flags, true)) $out['ready_wos']++;
+
+        // Query 5: Role-scoped alerts (fetches recent alerts + unread count in 1 query)
+        $newAlerts = array();
+        if ((int)$role_id !== 5) {
+            if ($role_id !== null) {
+                $this->_scope_alert_query($user_id, $role_id);
+                $alertRows = $this->_hydrate_alerts(
+                    $this->db->order_by('a.created_at', 'DESC')->limit(50)->get()->result()
+                );
+                if ($alertRows) {
+                    foreach ($alertRows as $ar) {
+                        if ($ar->status === 'New') $summary['new_alerts']++;
+                    }
+                    $newAlerts = array_slice($alertRows, 0, 5);
+                }
+            } else {
+                $summary['new_alerts'] = (int)$this->db->where('status', 'New')
+                    ->count_all_results('spare_part_alerts');
+            }
         }
-        $out['new_alerts'] = (int)$this->db->where('status', 'New')
-            ->count_all_results('spare_part_alerts');
-        return $out;
+
+        return array(
+            'lines'        => $lines,
+            'line_allocs'  => $lineAllocs,
+            'on_order'     => $onOrder,
+            'summary'      => $summary,
+            'ready_wos'    => $readyWos,
+            'ready_wo_ids' => $readyWoIds,
+            'new_alerts'   => $newAlerts,
+        );
     }
 
     /** Work orders whose required parts are ALL available (the jobs that can proceed now). */
@@ -507,8 +692,13 @@ class Spareparts_model extends CI_Model {
         return $this->_hydrate_alerts($this->db->order_by('a.created_at', 'DESC')->limit((int)$limit)->get()->result());
     }
 
-    public function mark_alert_read($id, $user_id = null) {
+    public function mark_alert_read($id, $user_id = null, $role_id = null) {
         if (!$this->tables_ready()) return false;
+        if ($role_id !== null) {
+            $this->_scope_alert_query($user_id, $role_id);
+            $visible = $this->db->where('a.id', (int)$id)->get()->row();
+            if (!$visible) return false;
+        }
         return $this->db->where('id', (int)$id)->update('spare_part_alerts', array(
             'status'  => 'Read',
             'read_at' => date('Y-m-d H:i:s'),
