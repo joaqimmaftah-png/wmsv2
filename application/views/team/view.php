@@ -37,11 +37,47 @@ foreach ($attendance as $a) {
         <div style="font-size:12px;color:#64748b;text-align:left;">
           <div class="mb-1"><i class="bi bi-person-badge me-2"></i><?= $worker->employee_id ?></div>
           <div class="mb-1"><i class="bi bi-envelope me-2"></i><?= htmlspecialchars((string)$worker->email, ENT_QUOTES, 'UTF-8') ?></div>
+          <?php if (!empty($worker_site)): ?><div class="mb-1"><i class="bi bi-geo-alt me-2"></i>Site: <strong><?= htmlspecialchars((string)$worker_site, ENT_QUOTES, 'UTF-8') ?></strong></div><?php endif; ?>
           <?php if ($worker->phone): ?><div class="mb-1"><i class="bi bi-phone me-2"></i><?= htmlspecialchars((string)$worker->phone, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
           <?php if ($worker->join_date): ?><div class="mb-1"><i class="bi bi-calendar me-2"></i>Joined <?= date('d M Y', strtotime($worker->join_date)) ?></div><?php endif; ?>
         </div>
       </div>
     </div>
+
+    <?php if (!empty($can_download_timesheet)): ?>
+    <!-- AML Individual Attendance Sheet Quick Download -->
+    <div class="wms-card mb-3">
+      <div class="card-head"><i class="bi bi-file-earmark-pdf text-danger me-1"></i>AML Attendance Sheet</div>
+      <div class="card-body">
+        <form method="get" action="<?= base_url('team/timesheet/' . (int)$worker->id) ?>" class="d-flex flex-column gap-2">
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label mb-1" style="font-size:11px;">Month</label>
+              <input type="month" name="month" class="form-control form-control-sm" value="<?= date('Y-m') ?>">
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1" style="font-size:11px;">Period</label>
+              <?php $def_half = ((int)date('j') <= 15) ? 'h1' : 'h2'; ?>
+              <select name="period" class="form-select form-select-sm">
+                <option value="h1" <?= $def_half === 'h1' ? 'selected' : '' ?>>1st Half (01–15)</option>
+                <option value="h2" <?= $def_half === 'h2' ? 'selected' : '' ?>>2nd Half (16–End)</option>
+                <option value="full">Full Month (2 Sheets)</option>
+                <option value="full_compact">Full Month (1 Page)</option>
+              </select>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-1">
+            <button type="submit" name="format" value="pdf" class="btn btn-danger btn-sm flex-fill">
+              <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
+            </button>
+            <button type="submit" name="format" value="xlsx" class="btn btn-outline-success btn-sm flex-fill">
+              <i class="bi bi-file-earmark-excel me-1"></i>Download XLSX
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <?php endif; ?>
 
     <!-- Quick Stats -->
     <div class="wms-card mb-3">

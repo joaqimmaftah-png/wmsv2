@@ -140,10 +140,11 @@ jobs:
           curl -fsSL -b "$COOKIES" -c "$COOKIES" "http://127.0.0.1:8000/reports/export_annual_report_xlsx" -o /tmp/annual.xlsx
           python3 -c 'data=open("/tmp/annual.xlsx","rb").read(); assert data[:4]==b"PK\x03\x04", f"Corrupt XLSX header: {data[:80]!r}"; print("Valid XLSX bytes:", len(data))'
 
-          # Live end-to-end verification of ATTENDANCE_WORKFLOW.md lifecycle
+          # Live end-to-end verification of ATTENDANCE_WORKFLOW.md lifecycle + AML Timesheets
           php scripts/create-admin.php tech1@ci.local "AdminPass123!" "John" "Moshi" 2
+          php scripts/create-admin.php mgr@ci.local "AdminPass123!" "CI" "Manager" 4
           python3 - <<'PY'
-          import http.cookiejar, json, re, urllib.error, urllib.parse, urllib.request
+          import http.cookiejar, io, json, re, urllib.error, urllib.parse, urllib.request, zipfile
 
           cj = http.cookiejar.MozillaCookieJar('/tmp/cookies.txt')
           cj.load(ignore_discard=True, ignore_expires=True)
@@ -152,6 +153,10 @@ jobs:
 
           def get(path):
               return opener.open(BASE + path).read().decode('utf-8', 'replace')
+
+          def get_bytes(path, op=opener):
+              r = op.open(BASE + path)
+              return r.status, r.headers, r.read()
 
           def csrf_from(html):
               m = re.search(r'name=["\x27]csrf_token_wms["\x27]\s+value=["\x27]([^"\x27]+)', html)
@@ -235,6 +240,54 @@ jobs:
           # 6. Printable fixed QR poster renders valid v1.<site>.0.<mac> token
           print_html = get('/attendance/print_qr')
           assert re.search(r'v1\.\d+\.0\.[0-9a-f]{32}', print_html), 'Static printed QR token missing!'
-          print('ALL LIVE ATTENDANCE WORKFLOW E2E CHECKS PASSED!')
+
+          # 7. Live AML Individual Attendance Sheet E2E checks (Supervisor, Manager & Technician RBAC)
+          rep_html = get('/team/report')
+          assert 'All Timesheets (PDF)' in rep_html and 'Workshop Main Gate' in rep_html, 'Live QR site missing from /team/report!'
+          assert '16/Jul/26' not in rep_html and 'MONTH OF JULY 2026' not in rep_html
+
+          st, hdrs, pdf1 = get_bytes('/team/timesheet/1?period=h2')
+          assert st == 200 and pdf1[:8] == b'%PDF-1.4', 'Invalid single worker PDF'
+          assert b'CI Supervisor' in pdf1 and b'Workshop Main Gate' in pdf1, 'Live worker/site missing from PDF!'
+
+          st, hdrs, xlsx1 = get_bytes('/team/timesheet/1?period=full&format=xlsx')
+          assert st == 200 and xlsx1[:4] == b'PK\x03\x04', 'Invalid single worker XLSX'
+          with zipfile.ZipFile(io.BytesIO(xlsx1)) as zf:
+              assert 'xl/media/image1.png' in zf.namelist()
+              assert 'xl/worksheets/sheet1.xml' in zf.namelist()
+              assert 'xl/worksheets/sheet2.xml' in zf.namelist()
+
+          st, _, batch_pdf = get_bytes('/team/timesheets_batch?period=h1')
+          assert st == 200 and batch_pdf[:8] == b'%PDF-1.4', 'Invalid batch PDF'
+
+          st, _, batch_xlsx = get_bytes('/team/timesheets_batch?period=h1&format=xlsx')
+          assert st == 200 and batch_xlsx[:4] == b'PK\x03\x04', 'Invalid batch XLSX'
+
+          def session_opener(email):
+              jar = http.cookiejar.CookieJar()
+              op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+              html0 = op.open(BASE + '/login').read().decode('utf-8', 'replace')
+              tok0 = csrf_from(html0)
+              req = urllib.request.Request(BASE + '/login', data=urllib.parse.urlencode({
+                  'csrf_token_wms': tok0, 'email': email, 'password': 'AdminPass123!'
+              }).encode())
+              op.open(req).read()
+              return op
+
+          # Manager (role_id = 4) read-only access succeeds on both individual & batch endpoints
+          mgr_op = session_opener('mgr@ci.local')
+          st_mgr1, _, mgr_pdf = get_bytes('/team/timesheet/1?period=h1', mgr_op)
+          st_mgr2, _, mgr_batch = get_bytes('/team/timesheets_batch?period=h1', mgr_op)
+          assert st_mgr1 == 200 and mgr_pdf[:8] == b'%PDF-1.4'
+          assert st_mgr2 == 200 and mgr_batch[:8] == b'%PDF-1.4'
+
+          # Technician (role_id = 2) can export OWN sheet (/team/timesheet/3) and is blocked from other workers (/team/timesheet/1)
+          tech_op = session_opener('tech1@ci.local')
+          st_own, _, own_pdf = get_bytes('/team/timesheet/3?period=h1', tech_op)
+          assert st_own == 200 and own_pdf[:8] == b'%PDF-1.4' and b'John Moshi' in own_pdf
+          st_other, hdr_other, other_body = get_bytes('/team/timesheet/1?period=h1', tech_op)
+          assert not other_body.startswith(b'%PDF-1.4'), 'Technician must NOT receive another user PDF!'
+
+          print('ALL LIVE ATTENDANCE WORKFLOW & AML TIMESHEET E2E CHECKS PASSED!')
           PY
 

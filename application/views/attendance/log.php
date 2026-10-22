@@ -31,6 +31,7 @@ foreach ($punches as $p) $by_user[(int)$p->user_id][] = $p;
            value="<?= $h($date) ?>">
     <button type="submit" class="btn btn-primary btn-sm">Load</button>
     <a href="<?= base_url('attendance/log?date=' . date('Y-m-d')) ?>" class="btn btn-ghost btn-sm">Today</a>
+    <a href="<?= base_url('team/report?month=' . rawurlencode(substr((string)$date, 0, 7))) ?>" class="btn btn-ghost btn-sm">AML Timesheets →</a>
     <a href="<?= base_url('attendance') ?>" class="btn btn-ghost btn-sm">← Attendance</a>
   </form>
 </div>

@@ -125,6 +125,18 @@ if ($role_value === '' && !empty($roles)) {
                value="<?= htmlspecialchars((string)($val('position'))) ?>">
       </div>
       <div>
+        <label class="form-label">Assigned Site / Location</label>
+        <input type="text" name="site" list="aml-worker-sites" class="form-control" maxlength="100"
+               placeholder="e.g. WORKSHOP, KALIMVA, MSATA"
+               value="<?= htmlspecialchars((string)($val('site'))) ?>">
+        <datalist id="aml-worker-sites">
+          <?php if (!empty($sites) && is_array($sites)): foreach ($sites as $sn): ?>
+          <option value="<?= htmlspecialchars((string)$sn, ENT_QUOTES, 'UTF-8') ?>"></option>
+          <?php endforeach; endif; ?>
+        </datalist>
+        <div class="form-hint">Printed on the AML Individual Attendance Sheet header (auto-falls back to QR check-in site if blank).</div>
+      </div>
+      <div>
         <label class="form-label">Skill Level</label>
         <select name="skill_level" class="form-select">
           <?php foreach ($skills as $s): ?>

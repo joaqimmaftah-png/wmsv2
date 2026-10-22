@@ -70,36 +70,62 @@ class Team_model extends CI_Model {
      * the days actually judged — present + absent + leave — while rest days and
      * holidays are reported separately and excluded.
      */
-    public function get_monthly_report($month) {
-        $from = "{$month}-01";
-        $to   = date('Y-m-t', strtotime($from));
+    public function get_monthly_report($month, $from = NULL, $to = NULL, $site_filter = NULL) {
+        if (!$from || !$to) {
+            $from = "{$month}-01";
+            $to   = date('Y-m-t', strtotime($from));
+        }
 
         $workers = $this->get_all_active();
         $result  = [];
+        $ci      = get_instance();
+        $has_ts  = FALSE;
+        if (isset($ci->load)) {
+            $ci->load->model('Timesheet_model');
+            $has_ts = isset($ci->Timesheet_model);
+        }
+        $site_trim = is_string($site_filter) ? trim($site_filter) : '';
 
         foreach ($workers as $w) {
-            $counts = $this->db->select('status, COUNT(*) as cnt')
+            $w_site = $has_ts
+                ? $ci->Timesheet_model->resolve_worker_site($w, $from, $to, NULL)
+                : (isset($w->site) ? (string)$w->site : '');
+            if ($site_trim !== '' && strcasecmp($w_site, $site_trim) !== 0) {
+                continue;
+            }
+
+            $rows = $this->db->select('status, check_in, check_out, hours_worked')
                 ->where('user_id', $w->id)->where('date >=', $from)->where('date <=', $to)
-                ->group_by('status')->get('attendance')->result_array();
+                ->get('attendance')->result_array();
 
             $stats = ['Present' => 0, 'Absent' => 0, 'Leave' => 0, 'Rest' => 0, 'Holiday' => 0];
-            foreach ($counts as $c) {
-                if (isset($stats[$c['status']])) $stats[$c['status']] = (int)$c['cnt'];
+            $hours_sum = 0.0;
+            foreach ($rows as $r) {
+                if (isset($stats[$r['status']])) $stats[$r['status']]++;
+                if (isset($r['hours_worked']) && $r['hours_worked'] !== NULL && is_numeric($r['hours_worked'])) {
+                    $hours_sum += (float)$r['hours_worked'];
+                } elseif (!empty($r['check_in']) && !empty($r['check_out']) && function_exists('wms_hours_between')) {
+                    $calc = wms_hours_between($r['check_in'], $r['check_out']);
+                    if ($calc !== NULL) $hours_sum += $calc;
+                }
             }
 
             $total = $stats['Present'] + $stats['Absent'] + $stats['Leave'];
             $pct   = $total > 0 ? round($stats['Present'] / $total * 100, 0) : 0;
             $result[] = (object)[
-                'employee_id' => $w->employee_id,
-                'full_name'   => $w->first_name . ' ' . $w->last_name,
-                'position'    => $w->position,
-                'present'     => $stats['Present'],
-                'absent'      => $stats['Absent'],
-                'leave'       => $stats['Leave'],
-                'rest'        => $stats['Rest'],
-                'holiday'     => $stats['Holiday'],
-                'total'       => $total,
-                'pct'         => $pct,
+                'id'           => (int)$w->id,
+                'employee_id'  => $w->employee_id,
+                'full_name'    => $w->first_name . ' ' . $w->last_name,
+                'position'     => $w->position,
+                'site'         => $w_site,
+                'present'      => $stats['Present'],
+                'absent'       => $stats['Absent'],
+                'leave'        => $stats['Leave'],
+                'rest'         => $stats['Rest'],
+                'holiday'      => $stats['Holiday'],
+                'hours_worked' => round($hours_sum, 2),
+                'total'        => $total,
+                'pct'          => $pct,
             ];
         }
         return $result;

@@ -30,6 +30,7 @@ uploads/**
 !uploads/.htaccess
 !uploads/**/.gitkeep
 !uploads/logoam.png
+!uploads/aml_timesheet_banner.png
 
 # --- Database exports ------------------------------------------------------
 # Only the schema + master-data file is source. A dump of a real database

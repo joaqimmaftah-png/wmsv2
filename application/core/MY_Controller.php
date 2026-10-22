@@ -52,6 +52,7 @@ class MY_Controller extends CI_Controller {
     public $Kpi_engine_model;
     public $Auth_throttle_model;
     public $Attendance_model;
+    public $Timesheet_model;
 
     /**
      * PHP 8.x parameter guard: CodeIgniter 3 dispatches URL segments directly

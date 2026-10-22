@@ -32,6 +32,7 @@ class Settings extends MY_Controller {
         $data['settings_descriptions'] = Settings_model::descriptions();
         $data['report_keys']           = Settings_model::report_keys();
         $data['forecast_keys']         = Settings_model::forecast_keys();
+        $data['timesheet_keys']        = Settings_model::timesheet_keys();
         $data['page_title'] = 'System Settings';
         $this->render('settings/index', $data);
     }

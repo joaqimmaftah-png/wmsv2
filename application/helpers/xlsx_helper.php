@@ -95,7 +95,14 @@ class XlsxWriter {
      */
     public function addImage($file, array $opts = array()) {
         if (!is_file($file)) return $this;                      // nothing to embed
-        $size = @getimagesize($file);
+        $size = function_exists('getimagesize') ? @getimagesize($file) : false;
+        if ($size === false) {
+            $hdr = @file_get_contents($file, false, null, 0, 24);
+            if ($hdr !== false && strlen($hdr) === 24 && substr($hdr, 0, 8) === "\x89PNG\r\n\x1a\n") {
+                $d = unpack('NW/NH', substr($hdr, 16, 8));
+                $size = array((int)$d['W'], (int)$d['H']);
+            }
+        }
         if ($size === false) return $this;                      // not an image a reader can use
 
         $ext = strtolower((string)(pathinfo($file, PATHINFO_EXTENSION)));
@@ -634,12 +641,15 @@ class XlsxWriter {
               'fontSize'=>10,'fontName'=>'Arial',
               'fg'=>'000000','bg'=>null,
               'align'=>'general','valign'=>'bottom',
-              'wrapText'=>false,'border'=>null,'numFmt'=>null];
+              'wrapText'=>false,'border'=>null,
+              'borderL'=>null,'borderR'=>null,'borderT'=>null,'borderB'=>null,
+              'numFmt'=>null];
         foreach (explode('|', $key) as $part) {
             $part = trim((string)($part));
-            if ($part==='bold')              $p['bold']     = true;
-            elseif ($part==='italic')        $p['italic']   = true;
-            elseif ($part==='wrap')          $p['wrapText'] = true;
+            if ($part==='bold')              $p['bold']      = true;
+            elseif ($part==='italic')        $p['italic']    = true;
+            elseif ($part==='underline')     $p['underline'] = true;
+            elseif ($part==='wrap')          $p['wrapText']  = true;
             elseif (strpos($part,'fontSize:')===0)  $p['fontSize'] = (float)substr($part,9);
             elseif (strpos($part,'fontName:')===0)  $p['fontName'] = substr($part,9);
             elseif (strpos($part,'align:')===0)     $p['align']    = substr($part,6);
@@ -653,6 +663,10 @@ class XlsxWriter {
             elseif (strpos($part,'bg:')===0)        $p['bg']       = substr($part,3);
             elseif (strpos($part,'fg:')===0)        $p['fg']       = substr($part,3);
             elseif (strpos($part,'border:')===0)    $p['border']   = substr($part,7);
+            elseif (strpos($part,'borderL:')===0)   $p['borderL']  = substr($part,8);
+            elseif (strpos($part,'borderR:')===0)   $p['borderR']  = substr($part,8);
+            elseif (strpos($part,'borderT:')===0)   $p['borderT']  = substr($part,8);
+            elseif (strpos($part,'borderB:')===0)   $p['borderB']  = substr($part,8);
             elseif (strpos($part,'numFmt:')===0)    $p['numFmt']   = substr($part,7);
         }
         return $p;
@@ -688,9 +702,15 @@ class XlsxWriter {
                 else $fillMap[$key]=array_search($fx,$fills);
             } else $fillMap[$key]=0;
             // border
-            if ($p['border']) {
-                $b=$p['border'];
-                $bx="<border><left style=\"$b\"><color rgb=\"FF000000\"/></left><right style=\"$b\"><color rgb=\"FF000000\"/></right><top style=\"$b\"><color rgb=\"FF000000\"/></top><bottom style=\"$b\"><color rgb=\"FF000000\"/></bottom><diagonal/></border>";
+            $bl = $p['borderL'] ?: $p['border'];
+            $br = $p['borderR'] ?: $p['border'];
+            $bt = $p['borderT'] ?: $p['border'];
+            $bb = $p['borderB'] ?: $p['border'];
+            if ($bl || $br || $bt || $bb) {
+                $side = function ($st, $tag) {
+                    return $st ? "<{$tag} style=\"{$st}\"><color rgb=\"FF000000\"/></{$tag}>" : "<{$tag}/>";
+                };
+                $bx = '<border>' . $side($bl, 'left') . $side($br, 'right') . $side($bt, 'top') . $side($bb, 'bottom') . '<diagonal/></border>';
                 if (!in_array($bx,$borders)){$borderMap[$key]=count($borders);$borders[]=$bx;}
                 else $borderMap[$key]=array_search($bx,$borders);
             } else $borderMap[$key]=0;
