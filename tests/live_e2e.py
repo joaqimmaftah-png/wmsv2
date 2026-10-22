@@ -803,7 +803,155 @@ try:
         assert '<f>' not in sheet_xml, f'Formula injection <f> leaked into Suppliers XLSX: {sheet_xml[:400]}'
         assert "'=SUM(7,8) Hans Weber" in shared_xml and 'EX 006' in shared_xml
 
-    print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS, INSPECTIONS, BACKLOG, INVENTORY, SPARE ORDERS, PENDING SPARES & SUPPLIERS E2E CHECKS PASSED!')
+    # Lubricants & Lube Budget LUB-01..LUB-06 End-to-End OEM Variance, Budget Allocation, RBAC & Export Verification
+    import datetime
+    today_dt = datetime.date.today()
+    today_str = today_dt.strftime('%Y-%m-%d')
+    cur_yr = str(today_dt.year)
+    cur_mo = str(today_dt.month)
+
+    # Manager (role_id = 4) is barred from /lubricants per ACCESS_MATRIX['lubricants'] = [1, 2, 3]
+    m_lub_resp = mgr_op.open(BASE + '/lubricants')
+    m_lub_url = m_lub_resp.geturl()
+    m_lub_resp.read()
+    assert '/dashboard' in m_lub_url, f'Expected Manager redirect to /dashboard on /lubricants, got {m_lub_url}'
+
+    # Supervisor adds custom lube grade (verifies MySQL 8.0 ENUM safety even if legacy 'Brake Fluid' posted)
+    _, _, sup_lt_b = get_bytes('/lubricants/types', opener)
+    st_lt_c, _, _ = post_op(opener, '/lubricants/types', {
+        'csrf_token_wms': csrf_from(sup_lt_b.decode('utf-8', 'replace')),
+        'name': 'PAO Synthetic Oil',
+        'category': 'Brake Fluid',
+        'grade': 'PAO 68',
+        'unit': 'L',
+        'unit_cost': '950.00',
+    })
+    assert st_lt_c == 200
+
+    # Storekeeper defines OEM spec (28L Engine Oil), saves monthly budget, and logs 2 consumption issues (EX 006 & C-HEADT 007)
+    _, _, st_spec_b = get_bytes('/lubricants/specifications', store_op)
+    st_spec_html = st_spec_b.decode('utf-8', 'replace')
+    et_m = re.search(r'<select name="equipment_type_id"[^>]*>.*?<option value="(\d+)">', st_spec_html, re.S)
+    assert et_m, 'Missing equipment_type_id option on /lubricants/specifications'
+    st_sp_save, _, _ = post_op(store_op, '/lubricants/specifications', {
+        'csrf_token_wms': csrf_from(st_spec_html),
+        'equipment_type_id': et_m.group(1),
+        'lube_type_id': '1',
+        'recommended_qty': '28.0',
+        'service_interval_hours': '250',
+        'notes': 'CAT sump standard',
+    })
+    assert st_sp_save == 200
+
+    _, _, st_bgt_b = get_bytes(f'/lubricants/budget?year={cur_yr}&month={cur_mo}', store_op)
+    st_bgt_save, _, st_bgt_after = post_op(store_op, '/lubricants/budget', {
+        'csrf_token_wms': csrf_from(st_bgt_b.decode('utf-8', 'replace')),
+        'year': cur_yr,
+        'month': cur_mo,
+        'budget[1][qty]': '200',
+        'budget[1][cost]': '520',
+        'budget[2][qty]': '150',
+        'budget[2][cost]': '680',
+        'budget[999999][qty]': '50',
+    })
+    assert st_bgt_save == 200 and '104,000.00' in st_bgt_after
+
+    _, _, st_rec_b = get_bytes('/lubricants/record', store_op)
+    st_rec_html = st_rec_b.decode('utf-8', 'replace')
+    eq1_m = re.search(r'<option value="(\d+)">\s*EX 006\b', st_rec_html)
+    eq2_m = re.search(r'<option value="(\d+)">\s*C-HEADT 007\b', st_rec_html)
+    assert eq1_m and eq2_m, 'Missing verbatim EX 006 / C-HEADT 007 options on /lubricants/record'
+
+    st_r1, _, _ = post_op(store_op, '/lubricants/record', {
+        'csrf_token_wms': csrf_from(st_rec_html),
+        'equipment_id': eq1_m.group(1),
+        'lube_type_id': '1',
+        'quantity_used': '32.5',
+        'equipment_hours': '1425',
+        'consumption_date': today_str,
+        'work_order_id': str(wo1_id),
+        'variance_reason': '=SUM(2,3) Hose burst top-up',
+        'notes': 'Store drum #4',
+    })
+    assert st_r1 == 200
+
+    _, _, st_rec2_b = get_bytes('/lubricants/record', store_op)
+    st_r2, _, _ = post_op(store_op, '/lubricants/record', {
+        'csrf_token_wms': csrf_from(st_rec2_b.decode('utf-8', 'replace')),
+        'equipment_id': eq2_m.group(1),
+        'lube_type_id': '2',
+        'quantity_used': '20.0',
+        'equipment_hours': '98450',
+        'consumption_date': today_str,
+        'variance_reason': 'Scheduled hydraulic top-up',
+    })
+    assert st_r2 == 200
+
+    # Technician (role_id = 2) is strictly Read-Only on /lubricants & blocked from /lubricants/budget + spec/budget POSTs
+    t_bgt_resp = tech_op.open(BASE + '/lubricants/budget')
+    t_bgt_url = t_bgt_resp.geturl()
+    t_bgt_resp.read()
+    assert t_bgt_url.rstrip('/').endswith('/lubricants'), f'Expected Technician redirect to /lubricants on /lubricants/budget, got {t_bgt_url}'
+
+    _, _, t_prof_b = get_bytes('/users/profile', tech_op)
+    _, t_bgt_post_url, _ = post_op(tech_op, '/lubricants/budget', {
+        'csrf_token_wms': csrf_from(t_prof_b.decode('utf-8', 'replace')),
+        'year': cur_yr,
+        'month': cur_mo,
+        'budget[1][qty]': '999999',
+        'budget[1][cost]': '999999',
+    })
+    assert t_bgt_post_url.rstrip('/').endswith('/lubricants')
+    # Verify Technician's tampered POST did NOT alter Storekeeper's 104,000.00 Engine Oil budget!
+    _, _, st_bgt_chk_b = get_bytes(f'/lubricants/budget?year={cur_yr}&month={cur_mo}', store_op)
+    assert '104,000.00' in st_bgt_chk_b.decode('utf-8', 'replace')
+
+    st_t_lub, _, t_lub_b = get_bytes('/lubricants', tech_op)
+    t_lub_html = t_lub_b.decode('utf-8', 'replace')
+    lub_id_m = re.search(r'data-lub-open="(\d+)"', t_lub_html)
+    assert (
+        st_t_lub == 200
+        and lub_id_m
+        and 'EX 006' in t_lub_html
+        and 'C-HEADT 007' in t_lub_html
+        and 'id="lubRecordBtn"' not in t_lub_html
+        and '+ Record Consumption' not in t_lub_html
+        and '/lubricants/budget' not in t_lub_html
+    )
+
+    # Verify summary_json, direct Storekeeper/Technician CSV & XLSX exports, and Budget CSV/XLSX exports
+    st_t_lj, _, t_lj_b = get_bytes(f'/lubricants/summary_json/{lub_id_m.group(1)}', tech_op)
+    t_lj = json.loads(t_lj_b.decode('utf-8'))
+    assert st_t_lj == 200 and t_lj.get('ok') is True and t_lj['record']['can_write'] is False
+
+    st_s_lcsv, _, s_lcsv_b = get_bytes('/lubricants/export_csv', store_op)
+    s_lcsv_txt = s_lcsv_b.decode('utf-8-sig')
+    assert (
+        st_s_lcsv == 200
+        and s_lcsv_b.startswith(b'\xef\xbb\xbf')
+        and "'=SUM(2,3) Hose burst top-up" in s_lcsv_txt
+        and 'EX 006' in s_lcsv_txt
+        and 'C-HEADT 007' in s_lcsv_txt
+    )
+
+    st_s_lxls, _, s_lxls_b = get_bytes('/lubricants/export_xlsx', store_op)
+    assert st_s_lxls == 200 and s_lxls_b[:4] == b'PK\x03\x04'
+    with zipfile.ZipFile(io.BytesIO(s_lxls_b), 'r') as zf:
+        l_sheet = zf.read('xl/worksheets/sheet1.xml').decode('utf-8')
+        l_shared = zf.read('xl/sharedStrings.xml').decode('utf-8')
+        assert '<f>' not in l_sheet, f'Formula injection <f> leaked into Lubricants XLSX: {l_sheet[:400]}'
+        assert "'=SUM(2,3) Hose burst top-up" in l_shared and 'EX 006' in l_shared
+
+    st_b_csv, _, b_csv_b = get_bytes(f'/lubricants/budget_csv?year={cur_yr}&month={cur_mo}', store_op)
+    assert st_b_csv == 200 and b_csv_b.startswith(b'\xef\xbb\xbf') and 'Engine Oil' in b_csv_b.decode('utf-8-sig')
+    st_b_xls, _, b_xls_b = get_bytes(f'/lubricants/budget_xlsx?year={cur_yr}&month={cur_mo}', store_op)
+    assert st_b_xls == 200 and b_xls_b[:4] == b'PK\x03\x04'
+
+    # Also smoke-test /lubricants/forecast 200 response with zero PHP errors
+    st_fc, _, fc_b = get_bytes('/lubricants/forecast', store_op)
+    assert st_fc == 200 and 'Lubricant Consumption Forecast' in fc_b.decode('utf-8', 'replace')
+
+    print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS, INSPECTIONS, BACKLOG, INVENTORY, SPARE ORDERS, PENDING SPARES, SUPPLIERS & LUBRICANTS E2E CHECKS PASSED!')
 except BaseException:
     tb = traceback.format_exc().replace('\n', '%0A')
     print(f'::error title=PythonE2E::{tb}', flush=True)

@@ -1258,6 +1258,126 @@ for (const rawLine of cookieLines) {
     const supViewMobileOverflow = await evalJs('document.documentElement.scrollWidth - window.innerWidth');
     assert(supViewMobileOverflow <= 0, '/suppliers/view/46 Mobile 390px overflowed: ' + supViewMobileOverflow);
 
+    // =========================================================================
+    // 15. LUBRICANTS & LUBE BUDGET (/lubricants & /lubricants/budget) 1440x900 & 390x844
+    // =========================================================================
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/lubricants' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("lubShell"))')) break;
+      await sleep(200);
+    }
+
+    const lubDesktop = await evalJs(`(async () => {
+      const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+      const tblWrap = document.querySelector('.lub-table-wrap');
+      const tblOverflow = tblWrap ? (tblWrap.scrollWidth - tblWrap.clientWidth) : -1;
+
+      // Slash shortcut focuses #lubSearchInput
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+      const slashFocused = (document.activeElement === document.getElementById('lubSearchInput'));
+      document.activeElement.blur();
+
+      // Multi-select checkbox opens #lubBatchBar with ?ids= on both CSV & Excel buttons
+      const firstCb = document.querySelector('.lub-row-check');
+      firstCb.checked = true;
+      firstCb.dispatchEvent(new Event('change', { bubbles: true }));
+      const batchVisible = document.getElementById('lubBatchBar').classList.contains('is-open');
+      const batchCsvHref = document.getElementById('lubBatchExportBtn').getAttribute('href') || '';
+      const batchXlsHref = document.getElementById('lubBatchXlsxBtn').getAttribute('href') || '';
+
+      // Open Slide-Over Fluid Consumption Dossier Drawer
+      const trigger = document.querySelector('button[data-lub-open]');
+      trigger.focus();
+      trigger.click();
+      for (let w = 0; w < 25; w++) {
+        if (document.getElementById('lubDrawerBody').textContent.includes('OEM Specification')) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const drawerOpen = document.getElementById('lubDrawer').classList.contains('is-open');
+      const firstHeader = document.getElementById('lubDrawerTitle').textContent;
+
+      // ArrowRight steps drawer between EX 006 and C-HEADT 007 records
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      for (let w = 0; w < 25; w++) {
+        if (document.getElementById('lubDrawerTitle').textContent !== firstHeader) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const secondHeader = document.getElementById('lubDrawerTitle').textContent;
+
+      // Escape closes drawer and restores focus
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const drawerClosed = !document.getElementById('lubDrawer').classList.contains('is-open');
+      const focusRestored = (document.activeElement === trigger);
+
+      // Toggle By Machine <-> Cards <-> Table views smoothly
+      document.querySelector('[data-lub-view="groups"]').click();
+      const groupsShown = getComputedStyle(document.querySelector('.lub-groups-container')).display !== 'none'
+        && getComputedStyle(document.querySelector('.lub-table-wrap')).display === 'none';
+      document.querySelector('[data-lub-view="cards"]').click();
+      const cardsShown = getComputedStyle(document.querySelector('.lub-cards-container')).display !== 'none'
+        && getComputedStyle(document.querySelector('.lub-table-wrap')).display === 'none';
+      document.querySelector('[data-lub-view="table"]').click();
+
+      return {
+        docOverflow, tblOverflow, slashFocused,
+        batchVisible, batchCsvHref, batchXlsHref,
+        drawerOpen, stepped: firstHeader !== secondHeader,
+        drawerClosed, focusRestored, groupsShown, cardsShown
+      };
+    })()`);
+
+    assert(lubDesktop.docOverflow <= 0, '/lubricants Desktop overflowed: ' + JSON.stringify(lubDesktop));
+    assert(lubDesktop.tblOverflow <= 0, '/lubricants Table overflowed: ' + JSON.stringify(lubDesktop));
+    assert(lubDesktop.slashFocused === true, '/lubricants Slash shortcut failed: ' + JSON.stringify(lubDesktop));
+    assert(lubDesktop.batchVisible && lubDesktop.batchCsvHref.includes('ids=') && lubDesktop.batchXlsHref.includes('ids='), '/lubricants Batch bar failed: ' + JSON.stringify(lubDesktop));
+    assert(lubDesktop.drawerOpen === true, '/lubricants Drawer failed: ' + JSON.stringify(lubDesktop));
+    assert(lubDesktop.stepped === true, '/lubricants ArrowRight navigation failed: ' + JSON.stringify(lubDesktop));
+    assert(lubDesktop.drawerClosed && lubDesktop.focusRestored, '/lubricants Escape close/focus failed: ' + JSON.stringify(lubDesktop));
+    assert(lubDesktop.groupsShown && lubDesktop.cardsShown, '/lubricants By Machine / Cards switcher failed: ' + JSON.stringify(lubDesktop));
+
+    // Verify /lubricants/budget Desktop 1440x900 live calculator + zero overflow
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/lubricants/budget' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("lubBudgetShell"))')) break;
+      await sleep(200);
+    }
+    const bgtDesktop = await evalJs(`(() => {
+      const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+      const tblWrap = document.querySelector('.bgt-table-wrap');
+      const tblOverflow = tblWrap ? (tblWrap.scrollWidth - tblWrap.clientWidth) : -1;
+      const q1 = document.querySelector('.budget-qty');
+      const before = document.getElementById('grandTotal').textContent;
+      q1.value = '300';
+      q1.dispatchEvent(new Event('input', { bubbles: true }));
+      const after = document.getElementById('grandTotal').textContent;
+      return { docOverflow, tblOverflow, liveRecalc: before !== after };
+    })()`);
+    assert(bgtDesktop.docOverflow <= 0 && bgtDesktop.tblOverflow <= 0 && bgtDesktop.liveRecalc, '/lubricants/budget Desktop failed: ' + JSON.stringify(bgtDesktop));
+
+    // Verify Mobile 390x844 on BOTH /lubricants AND /lubricants/budget
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/lubricants' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("lubShell"))')) break;
+      await sleep(200);
+    }
+    const lubMobile = await evalJs(`(() => ({
+      docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      tableDisplay: getComputedStyle(document.querySelector('.lub-table-wrap')).display,
+      cardsDisplay: getComputedStyle(document.querySelector('.lub-cards-container')).display
+    }))()`);
+    assert(lubMobile.docOverflow <= 0, '/lubricants Mobile 390px overflowed: ' + lubMobile.docOverflow);
+    assert(lubMobile.tableDisplay === 'none' && lubMobile.cardsDisplay === 'block', '/lubricants Mobile Card View failed: ' + JSON.stringify(lubMobile));
+
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/lubricants/budget' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("lubBudgetShell"))')) break;
+      await sleep(200);
+    }
+    const bgtMobileOverflow = await evalJs('document.documentElement.scrollWidth - window.innerWidth');
+    assert(bgtMobileOverflow <= 0, '/lubricants/budget Mobile 390px overflowed: ' + bgtMobileOverflow);
+
     ws.close();
     console.log('ALL HEADLESS CHROME DESKTOP (1440x900) & MOBILE (390x844) UI E2E ASSERTIONS PASSED!');
   } catch (err) {
