@@ -476,6 +476,16 @@ jobs:
           PY
 
           # Headless Google Chrome Browser UI & Accessibility E2E Suite (1440x900 Desktop + 390x844 Mobile)
+          # Seed 2 ephemeral PM schedules in CI DB (`wms_fresh`) using real existing equipment IDs
+          mysql -h 127.0.0.1 -uroot -p"${{ matrix.root_pass }}" wms_fresh -e "
+            SET @eq1 = (SELECT MIN(id) FROM equipment);
+            SET @eq2 = (SELECT MAX(id) FROM equipment);
+            INSERT INTO pm_schedules (id, equipment_id, schedule_name, description, interval_type, interval_value, standard_hours, last_done_date, last_done_hours, next_due_date, next_due_hours, status, tasks_checklist)
+            VALUES
+              (901, @eq1, '250-Hour Engine Service', 'Oil & primary fuel filters', 'Hours', 250, 8.0, '2026-09-15', 1000, '2026-10-15', 1250, 'Active', 'Drain oil\nReplace filters'),
+              (902, @eq2, '500-Hour Hydraulic Service', 'Return filters & breathers', 'Hours', 500, 12.0, '2026-10-01', 1000, '2026-11-25', 1500, 'Active', 'Inspect hoses');
+          "
+
           node - <<'NODE'
           const fs = require('fs');
           const { spawn } = require('child_process');
@@ -906,6 +916,99 @@ jobs:
               }))()`);
               assert(eqMobile.docOverflow <= 0, '/equipment Mobile 390px overflowed: ' + eqMobile.docOverflow);
               assert(eqMobile.tableDisplay === 'none' && eqMobile.cardsDisplay === 'block', '/equipment Mobile Card View failed: ' + JSON.stringify(eqMobile));
+
+              // ---------------------------------------------------------------
+              // /pm Enterprise PM Planner Desktop (1440x900) & Mobile (390x844) E2E
+              // ---------------------------------------------------------------
+              await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+              await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/pm' });
+              for (let i = 0; i < 40; i++) {
+                if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("pmShell"))')) break;
+                await sleep(200);
+              }
+              const pmDesktop = await evalJs(`(async () => {
+                const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+                const tblWrap = document.querySelector('.pm-table-wrap');
+                const tblOverflow = tblWrap ? (tblWrap.scrollWidth - tblWrap.clientWidth) : -1;
+
+                // Slash shortcut focuses search input
+                document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+                const slashFocused = (document.activeElement === document.getElementById('pmSearchInput'));
+                document.activeElement.blur();
+
+                // Select first row checkbox -> opens sticky batch bar with ?ids=
+                const firstCb = document.querySelector('.pm-row-check');
+                firstCb.checked = true;
+                firstCb.dispatchEvent(new Event('change', { bubbles: true }));
+                const batchVisible = document.getElementById('pmBatchBar').classList.contains('is-open');
+                const batchCsvHref = document.getElementById('pmBatchExportBtn').getAttribute('href') || '';
+
+                // Open Slide-Over PM Schedule Inspector Drawer
+                const trigger = document.querySelector('.pm-inspect-trigger');
+                trigger.focus();
+                trigger.click();
+                for (let w = 0; w < 25; w++) {
+                  if (document.getElementById('pmDrawerBody').textContent.includes('Schedule Parameters')) break;
+                  await new Promise((r) => setTimeout(r, 100));
+                }
+                const drawerOpen = document.getElementById('pmDrawer').classList.contains('is-open');
+                const hasParams = document.getElementById('pmDrawerBody').textContent.includes('Standard Hours (F4)');
+                const firstHeader = document.getElementById('pmDrawerTitle').textContent;
+
+                // ArrowRight steps drawer to next PM schedule
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+                await new Promise((r) => setTimeout(r, 250));
+                const secondHeader = document.getElementById('pmDrawerTitle').textContent;
+
+                // Escape closes drawer and restores focus to trigger button
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                const drawerClosed = !document.getElementById('pmDrawer').classList.contains('is-open');
+                const focusRestored = (document.activeElement === trigger);
+
+                // Toggle Cards <-> Table view smoothly
+                document.querySelector('[data-pm-view="cards"]').click();
+                const cardsShown = getComputedStyle(document.querySelector('.pm-cards-container')).display !== 'none'
+                  && getComputedStyle(document.querySelector('.pm-table-wrap')).display === 'none';
+                document.querySelector('[data-pm-view="table"]').click();
+
+                // Verify live CSV export endpoint returns 200 + PM Schedule columns
+                const csvRes = await fetch('/pm/export_csv?per_page=10', { credentials: 'same-origin' });
+                const csvText = await csvRes.text();
+                const csvOk = csvRes.status === 200
+                  && csvText.includes('Schedule ID')
+                  && csvText.includes('Compliance Status')
+                  && csvText.includes('250-Hour Engine Service');
+
+                return {
+                  docOverflow, tblOverflow, slashFocused, batchVisible, batchCsvHref,
+                  drawerOpen, hasParams, stepped: firstHeader !== secondHeader,
+                  drawerClosed, focusRestored, cardsShown, csvOk
+                };
+              })()`);
+
+              assert(pmDesktop.docOverflow <= 0, '/pm Desktop overflowed: ' + pmDesktop.docOverflow);
+              assert(pmDesktop.tblOverflow <= 0, '/pm Table wrapper overflowed: ' + pmDesktop.tblOverflow);
+              assert(pmDesktop.slashFocused === true, '/pm Slash shortcut failed');
+              assert(pmDesktop.batchVisible && pmDesktop.batchCsvHref.includes('ids='), '/pm Batch bar failed');
+              assert(pmDesktop.drawerOpen && pmDesktop.hasParams, '/pm Drawer missed Schedule Parameters');
+              assert(pmDesktop.stepped === true, '/pm ArrowRight navigation failed');
+              assert(pmDesktop.drawerClosed && pmDesktop.focusRestored, '/pm Escape close/focus failed');
+              assert(pmDesktop.cardsShown === true, '/pm Cards switcher failed');
+              assert(pmDesktop.csvOk === true, '/pm CSV export failed');
+
+              await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+              await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/pm' });
+              for (let i = 0; i < 40; i++) {
+                if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("pmShell"))')) break;
+                await sleep(200);
+              }
+              const pmMobile = await evalJs(`(() => ({
+                docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+                tableDisplay: getComputedStyle(document.querySelector('.pm-table-wrap')).display,
+                cardsDisplay: getComputedStyle(document.querySelector('.pm-cards-container')).display
+              }))()`);
+              assert(pmMobile.docOverflow <= 0, '/pm Mobile 390px overflowed: ' + pmMobile.docOverflow);
+              assert(pmMobile.tableDisplay === 'none' && pmMobile.cardsDisplay === 'block', '/pm Mobile Card View failed: ' + JSON.stringify(pmMobile));
 
               ws.close();
               console.log('ALL HEADLESS CHROME DESKTOP (1440x900) & MOBILE (390x844) UI E2E ASSERTIONS PASSED!');
