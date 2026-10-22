@@ -360,16 +360,31 @@ jobs:
 
           # Headless Google Chrome Browser UI & Accessibility E2E Suite (1440x900 Desktop + 390x844 Mobile)
           node - <<'NODE'
+          const fs = require('fs');
           const { spawn } = require('child_process');
           const assert = require('assert');
           const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+          // Reuse authenticated Supervisor session cookie directly from /tmp/cookies.txt (zero login form race)
+          const cookieLines = fs.readFileSync('/tmp/cookies.txt', 'utf8').split(/\r?\n/);
+          const cookiesToSet = [];
+          for (const rawLine of cookieLines) {
+            const line = rawLine.trim().replace(/^#HttpOnly_/, '');
+            if (!line || line.startsWith('#')) continue;
+            const parts = line.split('\t');
+            if (parts.length >= 7) {
+              cookiesToSet.push({
+                name: parts[5], value: parts[6], domain: '127.0.0.1', path: parts[2] || '/'
+              });
+            }
+          }
 
           (async () => {
             const chrome = spawn('google-chrome', [
               '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
               '--no-first-run', '--no-default-browser-check', '--user-data-dir=/tmp/wms-chrome-profile',
               '--remote-allow-origins=*', '--remote-debugging-port=9222',
-              '--window-size=1440,900', 'http://127.0.0.1:8000/login'
+              '--window-size=1440,900', 'about:blank'
             ], { stdio: 'ignore' });
 
             try {
@@ -408,27 +423,16 @@ jobs:
                 return res.result ? res.result.value : undefined;
               };
 
+              await cdp('Network.enable');
+              for (const ck of cookiesToSet) {
+                await cdp('Network.setCookie', ck);
+              }
               await cdp('Page.enable');
               await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
 
-              // Wait for login form and authenticate in real Chromium session
-              for (let i = 0; i < 40; i++) {
-                if (await evalJs('Boolean(document.querySelector("input[name=email]"))')) break;
-                await sleep(200);
-              }
-              await evalJs(`
-                document.querySelector('input[name="email"]').value = 'admin@ci.local';
-                document.querySelector('input[name="password"]').value = 'AdminPass123!';
-                document.querySelector('form').submit();
-              `);
-              for (let i = 0; i < 40; i++) {
-                if (await evalJs('location.pathname !== "/login"')) break;
-                await sleep(200);
-              }
-
               await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/team/report' });
-              for (let i = 0; i < 40; i++) {
-                if (await evalJs('Boolean(document.getElementById("tsShell"))')) break;
+              for (let i = 0; i < 50; i++) {
+                if (await evalJs('document.readyState === "complete" && Boolean(document.querySelector(".ts-row-chk"))')) break;
                 await sleep(200);
               }
 
