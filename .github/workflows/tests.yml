@@ -183,10 +183,10 @@ jobs:
             VALUES
               (9901, 'CI-FLT-9901', 'SPARE PART', 'Primary Fuel Filter Spin-On', '1R-0750', 'pcs', 4, 2, 3, 3, 5, 12, 34.50, 'Mantrac CAT', 'EX 006', 'BIN A-12'),
               (9902, 'CI-HYD-9902', 'SPARE PART', 'Boom Cylinder Seal Kit', '295-5609', 'Set', 2, 0, 2, 0, 2, 6, 88.00, 'HydraForce TZ', 'C-HEADT 007', 'BIN B-04');
-            INSERT INTO material_transactions (id, material_id, type, txn_date, qty, stock_before, stock_after, reference_no, allocation_type, equipment_id, allocation_label, person, source, notes)
+            INSERT INTO material_transactions (material_id, type, txn_date, qty, stock_before, stock_after, reference_no, allocation_type, equipment_id, allocation_label, person, source, notes)
             VALUES
-              (29901, 9901, 'RECEIVE', '2026-10-20', 2, 1, 3, 'MRN-9901', 'Other', NULL, NULL, 'CI Storekeeper', 'Order GRN', 'CI seed receipt'),
-              (29902, 9902, 'ISSUE', '2026-10-21', 1, 1, 0, 'REQ-9902', 'Equipment', @eq1, 'EX 006', 'John Moshi', 'Manual', 'CI seed machine issue');
+              (9901, 'RECEIVE', '2026-10-20', 2, 1, 3, 'MRN-9901', 'Other', NULL, NULL, 'CI Storekeeper', 'Order GRN', 'CI seed receipt'),
+              (9902, 'ISSUE', '2026-10-21', 1, 1, 0, 'REQ-9902', 'Equipment', @eq1, 'EX 006', 'John Moshi', 'Manual', 'CI seed machine issue');
           "
 
           node tests/ui_e2e.js
