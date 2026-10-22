@@ -69,6 +69,10 @@ class Users extends MY_Controller {
                     'join_date'   => $this->input->post('join_date', TRUE) ?: NULL,
                     'status'      => 'Active',
                 );
+                if ($this->db->field_exists('site', 'users')) {
+                    $site_in = trim((string)$this->input->post('site', TRUE));
+                    $data['site'] = $site_in !== '' ? substr($site_in, 0, 100) : NULL;
+                }
                 $this->db->insert('users', $data);
                 $this->session->set_flashdata('success', 'User ' . $data['first_name'] . ' ' . $data['last_name'] . ' created successfully.');
                 redirect('users');
@@ -76,6 +80,8 @@ class Users extends MY_Controller {
             $data['form_data'] = $this->input->post();
         }
 
+        $this->load->model('Timesheet_model');
+        $data['sites']      = $this->Timesheet_model->site_options();
         $data['roles']      = $this->db->get('roles')->result();
         $data['edit_mode']  = FALSE;
         $data['page_title'] = 'Create New User';
@@ -113,6 +119,10 @@ class Users extends MY_Controller {
                     'skill_level' => $this->input->post('skill_level', TRUE) ?: 'Junior',
                     'status'      => $this->input->post('status', TRUE),
                 );
+                if ($this->db->field_exists('site', 'users')) {
+                    $site_in = trim((string)$this->input->post('site', TRUE));
+                    $update['site'] = $site_in !== '' ? substr($site_in, 0, 100) : NULL;
+                }
 
                 // Optional password change
                 $new_pw = $this->input->post('new_password', TRUE);
@@ -130,6 +140,8 @@ class Users extends MY_Controller {
             $data['form_data'] = $this->input->post();
         }
 
+        $this->load->model('Timesheet_model');
+        $data['sites']      = $this->Timesheet_model->site_options();
         $data['user']       = $user;
         $data['roles']      = $this->db->get('roles')->result();
         $data['edit_mode']  = TRUE;

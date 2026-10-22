@@ -58,6 +58,15 @@ $v = function($field, $default='') use ($u, $fd) {
       <input type="text" name="position" class="form-control" value="<?= $v('position') ?>" placeholder="Heavy Equipment Technician">
     </div>
     <div>
+      <label class="form-label">Assigned Site / Location</label>
+      <input type="text" name="site" list="aml-user-sites" class="form-control" maxlength="100" value="<?= $v('site') ?>" placeholder="e.g. WORKSHOP, KALIMVA, MSATA">
+      <datalist id="aml-user-sites">
+        <?php if (!empty($sites) && is_array($sites)): foreach ($sites as $sn): ?>
+        <option value="<?= htmlspecialchars((string)$sn, ENT_QUOTES, 'UTF-8') ?>"></option>
+        <?php endforeach; endif; ?>
+      </datalist>
+    </div>
+    <div>
       <label class="form-label">Join Date</label>
       <input type="date" name="join_date" class="form-control" value="<?= $v('join_date') ?>">
     </div>

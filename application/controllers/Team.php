@@ -4,10 +4,12 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 class Team extends MY_Controller {
 
     public $Attendance_model;
+    public $Timesheet_model;
 
     public function __construct() {
         parent::__construct();
-        $this->load->model(array('Team_model', 'Attendance_model'));
+        $this->load->model(array('Team_model', 'Attendance_model', 'Timesheet_model'));
+        $this->load->helper('attendance');
     }
 
     public function index() {
@@ -52,6 +54,9 @@ class Team extends MY_Controller {
                     'join_date'   => $field('join_date') !== '' ? $field('join_date') : NULL,
                     'status'      => 'Active',
                 );
+                if ($this->db->field_exists('site', 'users')) {
+                    $data['site'] = $field('site') !== '' ? substr($field('site'), 0, 100) : NULL;
+                }
 
                 $photo = $this->_upload_photo();
                 if ($photo) $data['photo'] = $photo;
@@ -76,6 +81,7 @@ class Team extends MY_Controller {
                 'errors'     => $errors,
                 'worker'     => $posted,
                 'roles'      => $this->db->get('roles')->result(),
+                'sites'      => $this->Timesheet_model->site_options(),
                 'is_edit'    => FALSE,
                 'page_title' => 'Add Worker',
             );
@@ -84,6 +90,7 @@ class Team extends MY_Controller {
         }
 
         $data['roles']      = $this->db->get('roles')->result();
+        $data['sites']      = $this->Timesheet_model->site_options();
         $data['is_edit']    = FALSE;
         $data['page_title'] = 'Add Worker';
         $this->render('team/form', $data);
@@ -103,6 +110,12 @@ class Team extends MY_Controller {
         $data['leave_balance']= $this->Team_model->get_leave_balance($id);
         $data['leave_year']   = (int)date('Y');
         $data['cert_alert_days'] = $this->_cert_alert_days();
+        $data['worker_site']  = $this->Timesheet_model->resolve_worker_site(
+            $data['worker'], date('Y-m-01'), date('Y-m-t')
+        );
+        $data['can_download_timesheet'] = (
+            $this->is_supervisor() || $this->is_manager() || (int)$id === (int)$this->user_id
+        );
         // The view tests this flag for the edit / certification controls.
         // (`role_id` is injected by render() as well; an explicit flag keeps
         // the intent local instead of comparing the layout's global.)
@@ -170,10 +183,11 @@ class Team extends MY_Controller {
                     ->get('attendance')->row();
 
                 $row = array(
-                    'status'     => $record['status'],
-                    'check_in'   => $check_in,
-                    'check_out'  => $check_out,
-                    'created_by' => $this->user_id,
+                    'status'       => $record['status'],
+                    'check_in'     => $check_in,
+                    'check_out'    => $check_out,
+                    'hours_worked' => wms_hours_between($check_in, $check_out),
+                    'created_by'   => $this->user_id,
                 );
 
                 if ($existing) {
@@ -314,6 +328,9 @@ class Team extends MY_Controller {
                                         ? $field('status') : $worker->status,
                     'join_date'   => $field('join_date') !== '' ? $field('join_date') : NULL,
                 );
+                if ($this->db->field_exists('site', 'users')) {
+                    $update['site'] = $field('site') !== '' ? substr($field('site'), 0, 100) : NULL;
+                }
 
                 // A blank password box means "keep the current password" (the
                 // form says so); only a typed value is hashed.
@@ -347,12 +364,14 @@ class Team extends MY_Controller {
                 'join_date'   => $worker->join_date,
                 'phone'       => $worker->phone,
                 'position'    => $worker->position,
+                'site'        => isset($worker->site) ? $worker->site : NULL,
             ), $post);
 
             $data = array(
                 'errors'     => $errors,
                 'worker'     => $posted,
                 'roles'      => $this->db->get('roles')->result(),
+                'sites'      => $this->Timesheet_model->site_options(),
                 'is_edit'    => TRUE,
                 'page_title' => 'Edit — ' . $worker->first_name . ' ' . $worker->last_name,
             );
@@ -362,6 +381,7 @@ class Team extends MY_Controller {
 
         $data['worker']     = $worker;
         $data['roles']      = $this->db->get('roles')->result();
+        $data['sites']      = $this->Timesheet_model->site_options();
         $data['is_edit']    = TRUE;
         $data['page_title'] = 'Edit — ' . $worker->first_name . ' ' . $worker->last_name;
         $this->render('team/form', $data);
@@ -824,17 +844,124 @@ class Team extends MY_Controller {
     }
 
     public function report() {
-        $month = $this->input->get('month');
-        // A malformed month reached strtotime(), which returned false and turned
-        // the report into January 1970 while the header still showed the input.
-        if (!is_string($month) || !preg_match('/^([0-9]{4})-(0[1-9]|1[0-2])$/D', $month)) {
-            $month = date('Y-m');
-        }
-        $data['report']     = $this->Team_model->get_monthly_report($month);
-        $data['workers']    = $this->Team_model->get_all_active();
-        $data['month']      = $month;
-        $data['page_title'] = 'Attendance Report';
+        $period = wms_timesheet_resolve_period(
+            $this->input->get('month', TRUE),
+            $this->input->get('period', TRUE),
+            $this->input->get('from', TRUE),
+            $this->input->get('to', TRUE)
+        );
+        $site_filter = trim((string)$this->input->get('site', TRUE));
+
+        $data['report']          = $this->Team_model->get_monthly_report(
+            $period['month'], $period['start_date'], $period['end_date'], $site_filter
+        );
+        $data['workers']         = $this->Team_model->get_all_active();
+        $data['month']           = $period['month'];
+        $data['period']          = $period;
+        $data['site_filter']     = $site_filter;
+        $data['sites']           = $this->Timesheet_model->site_options();
+        $data['can_batch']       = ($this->is_supervisor() || $this->is_manager());
+        $data['current_user_id'] = (int)$this->user_id;
+        $data['page_title']      = 'Attendance Report & Timesheets';
         $this->render('team/report', $data);
+    }
+
+    /**
+     * Download or preview a single worker's AML Individual Attendance Sheet
+     * (`PDF` by default, or native `.xlsx` when `?format=xlsx`).
+     *
+     * Supervisors & Managers may export any worker; Technicians & Store Keepers
+     * may download their own sheet.
+     */
+    public function timesheet($user_id) {
+        $uid = (int)$user_id;
+        if ($uid <= 0) show_404();
+
+        if (!$this->is_supervisor() && !$this->is_manager() && $uid !== (int)$this->user_id) {
+            $this->session->set_flashdata('error', 'You can only download your own attendance sheet.');
+            redirect('team/view/' . (int)$this->user_id);
+            return;
+        }
+
+        $period = wms_timesheet_resolve_period(
+            $this->input->get('month', TRUE),
+            $this->input->get('period', TRUE),
+            $this->input->get('from', TRUE),
+            $this->input->get('to', TRUE)
+        );
+        $site_override = trim((string)$this->input->get('site', TRUE));
+
+        $sheets = $this->Timesheet_model->build_for_worker($uid, $period, $site_override);
+        if (empty($sheets)) show_404();
+
+        $emp_slug  = preg_replace('/[^A-Za-z0-9_-]+/', '_', (string)$sheets[0]['employee_id']);
+        $name_slug = preg_replace('/[^A-Za-z0-9_-]+/', '_', (string)$sheets[0]['full_name']);
+        $base_name = trim('AML_Timesheet_' . $emp_slug . '_' . $name_slug . '_' . $period['file_slug'], '_');
+
+        $this->_stream_timesheet_export($sheets, $base_name);
+    }
+
+    /**
+     * One-click batch download of AML Individual Attendance Sheets across all
+     * active staff (multi-page A4 PDF or multi-tab Excel `.xlsx`).
+     */
+    public function timesheets_batch() {
+        if (!$this->is_supervisor() && !$this->is_manager()) {
+            $this->session->set_flashdata('error', 'Access denied.');
+            redirect('dashboard');
+            return;
+        }
+
+        $period = wms_timesheet_resolve_period(
+            $this->input->get('month', TRUE),
+            $this->input->get('period', TRUE),
+            $this->input->get('from', TRUE),
+            $this->input->get('to', TRUE)
+        );
+        $site_filter = trim((string)$this->input->get('site', TRUE));
+
+        $sheets = $this->Timesheet_model->build_for_all_active($period, $site_filter);
+        if (empty($sheets)) {
+            $this->session->set_flashdata('error', 'No active workers matched the selected filter.');
+            redirect('team/report?month=' . rawurlencode($period['month']));
+            return;
+        }
+
+        $site_slug = $site_filter !== '' ? ('_' . preg_replace('/[^A-Za-z0-9_-]+/', '_', $site_filter)) : '';
+        $base_name = 'AML_Timesheets_All_Workers' . $site_slug . '_' . $period['file_slug'];
+
+        $this->_stream_timesheet_export($sheets, $base_name);
+    }
+
+    /** Stream either PDF or XLSX binary cleanly with safe HTTP headers. */
+    private function _stream_timesheet_export(array $sheets, $base_name) {
+        $format  = strtolower(trim((string)$this->input->get('format', TRUE)));
+        $preview = ((string)$this->input->get('preview', TRUE) === '1');
+
+        if ($format === 'xlsx' || $format === 'excel') {
+            require_once APPPATH . 'libraries/Timesheet_excel.php';
+            $bytes = (new Timesheet_excel())->render($sheets);
+            $filename = $base_name . '.xlsx';
+            if (ob_get_level()) @ob_end_clean();
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            header('Content-Length: ' . strlen($bytes));
+            header('Cache-Control: private, max-age=0, must-revalidate');
+            echo $bytes;
+            exit;
+        }
+
+        require_once APPPATH . 'libraries/Timesheet_pdf.php';
+        $bytes = (new Timesheet_pdf($sheets))->render();
+        $filename = $base_name . '.pdf';
+        $disp = $preview ? 'inline' : 'attachment';
+        if (ob_get_level()) @ob_end_clean();
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: ' . $disp . '; filename="' . $filename . '"');
+        header('Content-Length: ' . strlen($bytes));
+        header('Cache-Control: private, max-age=0, must-revalidate');
+        echo $bytes;
+        exit;
     }
 
     /* ─────────────────────────────────────────────────────

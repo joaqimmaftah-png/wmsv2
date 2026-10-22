@@ -291,6 +291,13 @@ $is_ceo        = ($role_id == 5);
       <span class="ni-tip"><?= $is_technician ? 'My Attendance Records' : 'Attendance Records'; ?></span>
     </a>
 
+    <!-- AML Individual Attendance Sheets & Monthly Summary -->
+    <a href="<?= base_url($is_technician ? ('team/view/' . (int)$this->session->userdata('user_id')) : 'team/report'); ?>" class="ni <?= ni_active('team/report'); ?>" title="<?= $is_technician ? 'My Timesheet' : 'Timesheets & Report'; ?>">
+      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+      <span class="ni-label"><?= $is_technician ? 'My Timesheet' : 'Timesheets'; ?></span>
+      <span class="ni-tip"><?= $is_technician ? 'Download AML Individual Attendance Sheet' : 'AML Individual Attendance Sheets & Monthly Summary'; ?></span>
+    </a>
+
     <!-- On-Site Overview — Supervisor, Technician, Manager -->
     <a href="<?= base_url('attendance'); ?>" class="ni <?= ($uri==='attendance'||$uri==='attendance/index')?'on':''; ?>" title="On-Site Status">
       <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
@@ -345,6 +352,11 @@ $is_ceo        = ($role_id == 5);
       <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg></div>
       <span class="ni-label">My Attendance</span>
       <span class="ni-tip">My Attendance Records</span>
+    </a>
+    <a href="<?= base_url('team/view/' . (int)$this->session->userdata('user_id')); ?>" class="ni" title="My Timesheet">
+      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+      <span class="ni-label">My Timesheet</span>
+      <span class="ni-tip">Download AML Individual Attendance Sheet</span>
     </a>
     <a href="<?= base_url('attendance'); ?>" class="ni <?= ($uri==='attendance'||$uri==='attendance/index')?'on':''; ?>" title="On-Site Status">
       <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>

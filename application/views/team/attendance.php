@@ -8,7 +8,7 @@
     <?php if (!empty($punching)): ?>
       <a href="<?= base_url('attendance/log?date='.rawurlencode((string)$date)) ?>" class="btn btn-ghost btn-sm">Punch log →</a>
     <?php endif; ?>
-    <a href="<?= base_url('team/report') ?>" class="btn btn-ghost btn-sm">Monthly Report →</a>
+    <a href="<?= base_url('team/report?month=' . rawurlencode(substr((string)$date, 0, 7))) ?>" class="btn btn-primary btn-sm">AML Timesheets &amp; Report →</a>
   </div>
 </div>
 

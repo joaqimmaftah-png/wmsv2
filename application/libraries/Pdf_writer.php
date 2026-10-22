@@ -18,6 +18,7 @@ class Pdf_writer {
 
     private $pages = array();   // each: array('w'=>, 'h'=>, 'content'=>string)
     private $images = array();  // each: array('raw'=>rgb bytes, 'w'=>, 'h'=>)
+    private $imageMap = array(); // sha1 => existing image index (dedup across pages)
     private $curContent = '';
     private $curW = 595.28;
     private $curH = 841.89;
@@ -64,8 +65,9 @@ class Pdf_writer {
         if ($text === null || $text === '') return;
         list($r, $g, $b) = $color;
         $tx = $x;
+        $is_bold = in_array($font, array('F2', 'F3', 'F4'), true);
         if ($align !== 'L' && $max_w !== null) {
-            $tw = self::text_width($text, $size, ($font === 'F2'));
+            $tw = self::text_width($text, $size, $is_bold);
             if ($align === 'C') $tx = $x + ($max_w - $tw) / 2;
             elseif ($align === 'R') $tx = $x + $max_w - $tw;
         }
@@ -81,9 +83,10 @@ class Pdf_writer {
      * baseline of the first line at $y_top. Returns the height used.
      */
     public function text_wrapped($x, $y_top, $text, $font, $size, $max_w, $line_h, $max_lines, $color = array(0, 0, 0)) {
+        $is_bold = in_array($font, array('F2', 'F3', 'F4'), true);
         $lines = array();
         foreach (preg_split("/\r\n|\n|\r/", (string) $text) as $raw) {
-            $wrapped = self::wrap_line(trim((string)($raw)), $size, $max_w, ($font === 'F2'));
+            $wrapped = self::wrap_line(trim((string)($raw)), $size, $max_w, $is_bold);
             if (empty($wrapped)) $wrapped = array('');
             foreach ($wrapped as $w) $lines[] = $w;
         }
@@ -98,8 +101,14 @@ class Pdf_writer {
 
     /** Embed an RGB image (raw bytes, top-to-bottom rows, 3 bytes/px) at ($x,$y) sized ($draw_w x $draw_h). */
     public function image_rgb($raw_rgb, $px_w, $px_h, $x, $y, $draw_w, $draw_h) {
-        $idx = count($this->images);
-        $this->images[] = array('raw' => $raw_rgb, 'w' => $px_w, 'h' => $px_h);
+        $key = $px_w . 'x' . $px_h . ':' . sha1($raw_rgb);
+        if (isset($this->imageMap[$key])) {
+            $idx = $this->imageMap[$key];
+        } else {
+            $idx = count($this->images);
+            $this->images[] = array('raw' => $raw_rgb, 'w' => $px_w, 'h' => $px_h);
+            $this->imageMap[$key] = $idx;
+        }
         $this->curContent .= sprintf("q\n%.2F 0 0 %.2F %.2F %.2F cm\n/Im%d Do\nQ\n", $draw_w, $draw_h, $x, $y, $idx);
     }
 
@@ -108,10 +117,17 @@ class Pdf_writer {
     private static function char_factor($ch, $bold) {
         if ($ch === ' ') return 0.278;
         if (ctype_digit($ch)) return 0.556;
-        if (in_array($ch, array('i', 'l', 'j', 'I', '.', ',', "'", ':', ';', '!', '|', 'f', 't'))) return 0.28;
-        if (in_array($ch, array('m', 'w', 'M', 'W'))) return $bold ? 0.95 : 0.833;
-        if (ctype_upper($ch)) return $bold ? 0.72 : 0.667;
-        return $bold ? 0.60 : 0.5;
+        if (in_array($ch, array('.', ',', ';', ':', '!', '|', "'", 'i', 'l', 'j'), true)) return $bold ? 0.278 : 0.222;
+        if ($ch === 'I') return 0.278;
+        if (in_array($ch, array('f', 't', 'r', '/', '-'), true)) return $bold ? 0.350 : 0.305;
+        if ($ch === 'W') return 0.944;
+        if ($ch === 'M') return 0.833;
+        if ($ch === 'w') return $bold ? 0.778 : 0.722;
+        if ($ch === 'm') return $bold ? 0.889 : 0.833;
+        if (in_array($ch, array('G', 'O', 'Q'), true)) return 0.778;
+        if (in_array($ch, array('C', 'D', 'H', 'N', 'R', 'U'), true)) return 0.722;
+        if (ctype_upper($ch)) return 0.667;
+        return $bold ? 0.575 : 0.525;
     }
 
     public static function text_width($text, $size, $bold = false) {
@@ -156,18 +172,20 @@ class Pdf_writer {
         $this->_finish_current_page();
 
         $n_images = count($this->images);
-        $img_base = 6; // 1 catalog, 2 pages, 3 font1, 4 font2, 5 resources
+        $img_base = 8; // 1 catalog, 2 pages, 3..6 fonts (F1..F4), 7 resources
         $content_base = $img_base + $n_images;
 
         $xobj_entries = '';
         for ($i = 0; $i < $n_images; $i++) $xobj_entries .= "/Im{$i} " . ($img_base + $i) . " 0 R ";
-        $resources = "<< /Font << /F1 3 0 R /F2 4 0 R >> /XObject << {$xobj_entries}>> >>";
+        $resources = "<< /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> /XObject << {$xobj_entries}>> >>";
 
         $body = array();
         $body[1] = "<< /Type /Catalog /Pages 2 0 R >>";
         $body[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
         $body[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>";
-        $body[5] = $resources;
+        $body[5] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-BoldOblique /Encoding /WinAnsiEncoding >>";
+        $body[6] = "<< /Type /Font /Subtype /Type1 /BaseFont /Times-BoldItalic /Encoding /WinAnsiEncoding >>";
+        $body[7] = $resources;
 
         for ($i = 0; $i < $n_images; $i++) {
             $img = $this->images[$i];
@@ -194,7 +212,7 @@ class Pdf_writer {
 
             $page_obj_num = $obj_num;
             $body[$page_obj_num] = sprintf(
-                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %.2F %.2F] /Resources 5 0 R /Contents %d 0 R >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %.2F %.2F] /Resources 7 0 R /Contents %d 0 R >>",
                 $page['w'], $page['h'], $content_obj_num
             );
             $kids[] = $page_obj_num;

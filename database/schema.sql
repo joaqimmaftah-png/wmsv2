@@ -778,6 +778,7 @@ CREATE TABLE `users` (
   `password` varchar(255) NOT NULL,
   `phone` varchar(30) DEFAULT NULL,
   `position` varchar(100) DEFAULT NULL,
+  `site` varchar(100) DEFAULT NULL,
   `skill_level` enum('Junior','Senior','Expert','Specialist') DEFAULT 'Junior',
   `photo` varchar(255) DEFAULT NULL,
   `join_date` date DEFAULT NULL,
@@ -1860,7 +1861,13 @@ INSERT INTO `settings` (`setting_key`, `setting_value`, `description`) VALUES
 ('attendance_gate_enabled', '0', 'Attendance: 1 = only offer and accept technicians who are checked in on site and free of unfinished work orders - 0 = assignable as before'),
 ('attendance_open_session_policy', 'warn', 'Attendance: warn = accept a check-out with an open work session and name it - block = refuse the check-out until the session is closed'),
 ('attendance_qr_ttl_seconds', '60', 'Attendance: how long one signed site QR token stays valid, seconds (10-3600)'),
-('attendance_qr_grace_seconds', '120', 'Attendance: how long a just-expired site QR token is still accepted, seconds (0-3600)');
+('attendance_qr_grace_seconds', '120', 'Attendance: how long a just-expired site QR token is still accepted, seconds (0-3600)'),
+('timesheet_prepared_by', 'AGANO Elie', 'AML Individual Attendance Sheet: Prepared by name (left footer column)'),
+('timesheet_prepared_title', 'Assistant Admin HR', 'AML Individual Attendance Sheet: Prepared by job title'),
+('timesheet_checked_by', 'Supervisor''s', 'AML Individual Attendance Sheet: Checked by label/name (centre footer column)'),
+('timesheet_checked_title', '', 'AML Individual Attendance Sheet: Checked by subtitle (blank prints dotted signature line)'),
+('timesheet_approved_by', 'BUZINDU RUB. Serge', 'AML Individual Attendance Sheet: Approved by name (right footer column)'),
+('timesheet_approved_title', 'HR Manager', 'AML Individual Attendance Sheet: Approved by job title');
 
 INSERT INTO `shifts` (`id`, `name`, `start_time`, `end_time`, `description`) VALUES
 (1, 'Day Shift', '06:00:00', '18:00:00', '12-hour day rotation'),
@@ -17848,7 +17855,8 @@ INSERT INTO `schema_migrations` (`version`, `filename`, `checksum`, `applied_at`
   ('0010', '0010_attendance_punches.sql', 'a31f2a2911fddf591a6eea7bef488956f1a0eefef3678152c66121c28a7080fb', NOW()),
   ('0011', '0011_restore_verbatim_asset_machine_ids.sql', '69721ba7a7f9e2a5fc2f3dc10a9bab111ad69bebeabe0e80bbe07bd4675ac953', NOW()),
   ('0012', '0012_sync_equipment_with_asset_register.sql', 'bcf5cb6f2c5a96ce63c9782aafe53df524d89c7ef07316cca78c536e0d25c668', NOW()),
-  ('0013', '0013_reconcile_stale_equipment_duplicates.sql', '2f18908982a107d08a5e16ffb307fa3da4d963dc9a4121c9d2a863ab430471ce', NOW())
+  ('0013', '0013_reconcile_stale_equipment_duplicates.sql', '2f18908982a107d08a5e16ffb307fa3da4d963dc9a4121c9d2a863ab430471ce', NOW()),
+  ('0014', '0014_worker_site_and_timesheet_settings.sql', 'cd8b51e3741f792ed864d5b911fa89b0af2f57b0c513e0520a439e9833dffe28', NOW())
 ON DUPLICATE KEY UPDATE `filename` = VALUES(`filename`), `checksum` = VALUES(`checksum`);
 
 COMMIT;

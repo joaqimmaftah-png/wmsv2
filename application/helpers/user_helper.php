@@ -30,7 +30,7 @@ if (!function_exists('wms_session_user')) {
         static $fields = array(
             'id', 'role_id', 'employee_id',
             'first_name', 'last_name', 'email',
-            'position', 'photo', 'signature', 'status',
+            'position', 'site', 'photo', 'signature', 'status',
         );
 
         $user = new stdClass();

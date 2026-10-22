@@ -373,7 +373,7 @@ check('Schema: seeds all 630 inspection_items', strpos($schemaSql, 'INSERT IGNOR
 
 $migFiles = glob(__DIR__ . '/../database/migrations/[0-9][0-9][0-9][0-9]_*.sql');
 sort($migFiles, SORT_STRING);
-is_same('Migrations: all 13 ordered SQL migrations present (0001..0013)', 13, count($migFiles));
+is_same('Migrations: all 14 ordered SQL migrations present (0001..0014)', 14, count($migFiles));
 foreach ($migFiles as $mf) {
     $bn  = basename($mf);
     $sum = hash_file('sha256', $mf);
@@ -381,7 +381,14 @@ foreach ($migFiles as $mf) {
     $mSql = file_get_contents($mf);
     check("Security (K-02): {$bn} never embeds staff accounts or session dumps",
         strpos($mSql, 'INSERT INTO `users`') === FALSE && strpos($mSql, 'INSERT INTO `ci_sessions`') === FALSE);
+    check("Data hygiene: {$bn} never imports sample timesheet dates (July 2026)",
+        stripos($mSql, '16/Jul/26') === FALSE && stripos($mSql, 'MONTH OF JULY 2026') === FALSE);
 }
+check('Schema: users table defines optional `site` column and timesheet signatory settings without sample dates',
+    strpos($schemaSql, '`site` varchar(100) DEFAULT NULL') !== FALSE
+    && strpos($schemaSql, "'timesheet_prepared_by'") !== FALSE
+    && stripos($schemaSql, '16/Jul/26') === FALSE
+    && stripos($schemaSql, 'MONTH OF JULY 2026') === FALSE);
 check('Schema: seeds all 116 fleet rows into equipment', strpos($schemaSql, 'INSERT INTO `equipment`') !== FALSE);
 check('Schema: preserves verbatim Asset Register Machine IDs (EX 006, C-HEADT 007, C-HEADT 008)',
     strpos($schemaSql, "'EX 006', 'EX 006'") !== FALSE
@@ -468,6 +475,124 @@ check('Attendance punch: Attendance::record verifies active eligible user row li
     && strpos($attControllerSrc, 'Settings_model->save(') === FALSE);
 check('Attendance navigation: sidebar exposes Punch Log to both Supervisors and Managers',
     strpos($sidebarSrc, '$is_supervisor || $is_manager') !== FALSE);
+
+/* ─────────────────────────────────────────────────────────────────────────
+   10. AML Individual Attendance Sheet — Dynamic Calendar, PDF & XLSX Exports
+   ───────────────────────────────────────────────────────────────────────── */
+
+defined('APPPATH') || define('APPPATH', __DIR__ . '/../application/');
+defined('FCPATH')  || define('FCPATH',  __DIR__ . '/../');
+require_once APPPATH . 'libraries/Timesheet_pdf.php';
+require_once APPPATH . 'libraries/Timesheet_excel.php';
+
+// Hours helper edge cases
+is_same('Timesheet hours: 07:30 to 17:00 = 9.5h', 9.5, wms_hours_between('07:30:00', '17:00:00'));
+is_same('Timesheet hours: overnight shift 22:00 to 06:00 = 8.0h', 8.0, wms_hours_between('22:00', '06:00'));
+is_same('Timesheet hours: blank input returns NULL', NULL, wms_hours_between('', '17:00'));
+is_same('Timesheet hours formatting: trims .00 cleanly', '9', wms_timesheet_format_hours(9.0));
+is_same('Timesheet hours formatting: keeps half hour 9.5', '9.5', wms_timesheet_format_hours(9.5));
+
+// Dynamic period resolution across months, halves, leap February, and custom range swap
+$pFull = wms_timesheet_resolve_period('2026-10', 'full');
+is_same('Timesheet period: full month resolves two half-month sheets (01-15 & 16-31)', 2, count($pFull['segments']));
+is_same('Timesheet period: full month heading uses live selected month', 'MONTH OF OCTOBER 2026', $pFull['month_heading']);
+is_same('Timesheet period: segment 1 spans 01..15',
+    array('start_date' => '2026-10-01', 'end_date' => '2026-10-15', 'month_heading' => 'MONTH OF OCTOBER 2026'),
+    $pFull['segments'][0]);
+is_same('Timesheet period: segment 2 spans 16..31',
+    array('start_date' => '2026-10-16', 'end_date' => '2026-10-31', 'month_heading' => 'MONTH OF OCTOBER 2026'),
+    $pFull['segments'][1]);
+
+$pLeap = wms_timesheet_resolve_period('2028-02', 'h2');
+is_same('Timesheet period: leap February 2nd half ends on 2028-02-29', '2028-02-29', $pLeap['end_date']);
+
+$pCustomSwap = wms_timesheet_resolve_period('2026-10', 'custom', '2026-10-20', '2026-10-05');
+is_same('Timesheet period: reversed custom range swaps cleanly', '2026-10-05', $pCustomSwap['start_date']);
+is_same('Timesheet period: reversed custom range end date', '2026-10-20', $pCustomSwap['end_date']);
+
+// Monday–Sunday week builder & observation mapping
+$sampleAtt = array(
+    '2026-10-16' => array('status' => 'Present', 'check_in' => '07:30:00', 'check_out' => '17:00:00', 'hours_worked' => 9.5),
+    '2026-10-18' => array('status' => 'Rest',    'check_in' => NULL,       'check_out' => NULL,       'hours_worked' => NULL),
+    '2026-10-21' => array('status' => 'Leave',   'check_in' => NULL,       'check_out' => NULL,       'hours_worked' => NULL, 'notes' => 'Auto: approved leave request #9'),
+    '2026-10-22' => array('status' => 'Absent',  'check_in' => NULL,       'check_out' => NULL,       'hours_worked' => NULL, 'notes' => 'Excused hospital visit'),
+);
+$gridOctH2 = wms_timesheet_build_weeks('2026-10-16', '2026-10-31', $sampleAtt, array('2026-10-21' => 'Annual Leave'));
+is_same('Timesheet grid: 16..31 Oct 2026 spans 3 Monday-Sunday weekly blocks (Fri-Sun, Mon-Sun, Mon-Sat)', 3, count($gridOctH2['weeks']));
+is_same('Timesheet grid: counts Present days accurately', 1, $gridOctH2['total_days_worked']);
+is_same('Timesheet grid: sums total hours accurately', 9.5, $gridOctH2['total_hours']);
+check('Timesheet grid: marks Sunday is_sunday = TRUE', $gridOctH2['weeks'][0]['days'][2]['is_sunday'] === TRUE);
+is_same('Timesheet grid: maps approved leave request type cleanly into OBSERVATION', 'ANNUAL LEAVE', $gridOctH2['weeks'][1]['days'][2]['observation']);
+is_same('Timesheet grid: maps Absent + custom note cleanly into OBSERVATION', 'ABSENT - Excused hospital visit', $gridOctH2['weeks'][1]['days'][3]['observation']);
+is_same('Timesheet grid: leaves future unrecorded days blank for pen-and-ink sign-off', '', $gridOctH2['weeks'][2]['days'][0]['observation']);
+
+// Corporate AML banner asset & pure-PHP zlib PNG decoder
+$bannerAsset = FCPATH . 'uploads/aml_timesheet_banner.png';
+check('Timesheet banner: clean corporate graphic exists at uploads/aml_timesheet_banner.png', is_file($bannerAsset));
+$decodedBanner = Timesheet_pdf::decode_png_to_rgb($bannerAsset);
+check('Timesheet banner: pure-PHP zlib decoder extracts 616x141 RGB pixels cleanly without ext-gd',
+    is_array($decodedBanner)
+    && $decodedBanner['width'] === 616
+    && $decodedBanner['height'] === 141
+    && strlen($decodedBanner['rgb']) === 616 * 141 * 3);
+
+// Render multi-page PDF across standard half-month, 4-week edge case (May 2027 16..31: Sun..Mon = 4 week blocks!), and compact full-month
+$sigDefaults = array(
+    'prepared_by' => 'AGANO Elie', 'prepared_title' => 'Assistant Admin HR',
+    'checked_by' => "Supervisor's", 'checked_title' => '',
+    'approved_by' => 'BUZINDU RUB. Serge', 'approved_title' => 'HR Manager',
+);
+$testSheets = array(
+    array(
+        'user_id' => 10, 'employee_id' => 'EMP010', 'full_name' => 'Amina Ndayishimiye',
+        'position' => 'Auto Electrician', 'site' => 'WORKSHOP',
+        'month_heading' => 'MONTH OF OCTOBER 2026', 'segment_index' => 1, 'segment_count' => 1,
+        'grid' => $gridOctH2, 'signatories' => $sigDefaults,
+    ),
+    array(
+        'user_id' => 10, 'employee_id' => 'EMP010', 'full_name' => 'Amina Ndayishimiye',
+        'position' => 'Auto Electrician', 'site' => 'KALIMVA',
+        'month_heading' => 'MONTH OF AUGUST 2026', 'segment_index' => 1, 'segment_count' => 1,
+        'grid' => wms_timesheet_build_weeks('2026-08-16', '2026-08-31'), // 4 Monday-Sunday blocks edge case!
+        'signatories' => $sigDefaults,
+    ),
+    array(
+        'user_id' => 11, 'employee_id' => 'EMP011', 'full_name' => 'Jean-Pierre Habimana / Plant: #2',
+        'position' => 'Heavy Mechanic', 'site' => 'MSATA',
+        'month_heading' => 'MONTH OF OCTOBER 2026', 'segment_index' => 1, 'segment_count' => 1,
+        'grid' => wms_timesheet_build_weeks('2026-10-01', '2026-10-31'), // Full compact 1-page month!
+        'signatories' => $sigDefaults,
+    ),
+);
+$pdfBin = (new Timesheet_pdf($testSheets))->render();
+check('Timesheet PDF: outputs valid %PDF-1.4 document with single deduplicated XObject image',
+    strncmp($pdfBin, '%PDF-1.4', 8) === 0
+    && substr_count($pdfBin, '/Subtype /Image') === 1
+    && strpos($pdfBin, '/Count 3') !== FALSE);
+
+$xlsxBin = (new Timesheet_excel())->render($testSheets);
+check('Timesheet XLSX: outputs valid OOXML ZIP binary starting with PK\\x03\\x04',
+    strncmp($xlsxBin, "PK\x03\x04", 4) === 0 && strlen($xlsxBin) > 15000);
+if (class_exists('ZipArchive')) {
+    $tmpXlsx = tempnam(sys_get_temp_dir(), 'ts_test_');
+    file_put_contents($tmpXlsx, $xlsxBin);
+    $za = new ZipArchive();
+    check('Timesheet XLSX: opens cleanly in ZipArchive with deduplicated PNG, valid ECMA-376 cNvPr id>=2, Normal cellStyle & live formulas',
+        $za->open($tmpXlsx) === TRUE
+        && $za->locateName('xl/media/image1.png') !== FALSE
+        && $za->locateName('xl/media/image2.png') === FALSE
+        && strpos((string)$za->getFromName('xl/drawings/drawing1.xml'), 'cNvPr id="00"') === FALSE
+        && strpos((string)$za->getFromName('xl/drawings/drawing1.xml'), 'cNvPr id="2"') !== FALSE
+        && strpos((string)$za->getFromName('xl/styles.xml'), '<cellStyle name="Normal"') !== FALSE
+        && strpos((string)$za->getFromName('xl/worksheets/sheet1.xml'), 'IF(SUM(E12:E14)&gt;0,SUM(E12:E14),&quot;&quot;)') !== FALSE
+        && strpos((string)$za->getFromName('xl/worksheets/sheet1.xml'), 'IF(COUNT(E12:E14,E18:E24,E28:E33)&gt;0,COUNT(E12:E14,E18:E24,E28:E33),&quot;&quot;)') !== FALSE);
+    $za->close();
+    @unlink($tmpXlsx);
+}
+$tsModelSrc = file_get_contents(APPPATH . 'models/Timesheet_model.php');
+check('Timesheet model: queries report_sites.label (never non-existent report_sites.name)',
+    strpos($tsModelSrc, "select('label')") !== FALSE
+    && strpos($tsModelSrc, "get('report_sites')") !== FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
    Result

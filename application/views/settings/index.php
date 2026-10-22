@@ -212,6 +212,48 @@
         </div>
       </div>
 
+      <?php /* ── Individual Attendance Sheet (AML Signatories) ── */ ?>
+      <div class="ch" style="margin-top:26px;"><div><div class="ct">Individual Attendance Sheet (AML Signatories)</div>
+        <div class="cs">Names and titles printed in the three-column approval block at the bottom of exported PDF &amp; Excel attendance sheets</div></div></div>
+      <div class="form-grid cols-2" style="gap:16px;margin-bottom:24px;">
+        <div>
+          <label class="form-label">Prepared By — Name</label>
+          <input type="text" name="settings[timesheet_prepared_by]" class="form-control" maxlength="120"
+                 value="<?= htmlspecialchars((string)($rval('timesheet_prepared_by', $rdef['timesheet_prepared_by']))) ?>">
+          <div class="cs" style="margin-top:4px;"><?= $rdesc['timesheet_prepared_by'] ?></div>
+        </div>
+        <div>
+          <label class="form-label">Prepared By — Title</label>
+          <input type="text" name="settings[timesheet_prepared_title]" class="form-control" maxlength="120"
+                 value="<?= htmlspecialchars((string)($rval('timesheet_prepared_title', $rdef['timesheet_prepared_title']))) ?>">
+          <div class="cs" style="margin-top:4px;"><?= $rdesc['timesheet_prepared_title'] ?></div>
+        </div>
+        <div>
+          <label class="form-label">Checked By — Heading</label>
+          <input type="text" name="settings[timesheet_checked_by]" class="form-control" maxlength="120"
+                 value="<?= htmlspecialchars((string)($rval('timesheet_checked_by', $rdef['timesheet_checked_by']))) ?>">
+          <div class="cs" style="margin-top:4px;"><?= $rdesc['timesheet_checked_by'] ?></div>
+        </div>
+        <div>
+          <label class="form-label">Checked By — Subtitle (leave blank for signature line)</label>
+          <input type="text" name="settings[timesheet_checked_title]" class="form-control" maxlength="120"
+                 value="<?= htmlspecialchars((string)($rval('timesheet_checked_title', $rdef['timesheet_checked_title']))) ?>">
+          <div class="cs" style="margin-top:4px;"><?= $rdesc['timesheet_checked_title'] ?></div>
+        </div>
+        <div>
+          <label class="form-label">Approved By — Name</label>
+          <input type="text" name="settings[timesheet_approved_by]" class="form-control" maxlength="120"
+                 value="<?= htmlspecialchars((string)($rval('timesheet_approved_by', $rdef['timesheet_approved_by']))) ?>">
+          <div class="cs" style="margin-top:4px;"><?= $rdesc['timesheet_approved_by'] ?></div>
+        </div>
+        <div>
+          <label class="form-label">Approved By — Title</label>
+          <input type="text" name="settings[timesheet_approved_title]" class="form-control" maxlength="120"
+                 value="<?= htmlspecialchars((string)($rval('timesheet_approved_title', $rdef['timesheet_approved_title']))) ?>">
+          <div class="cs" style="margin-top:4px;"><?= $rdesc['timesheet_approved_title'] ?></div>
+        </div>
+      </div>
+
       <div class="flex ai-c gap-10" style="justify-content:flex-end;">
         <button type="submit" class="btn btn-primary">Save Settings</button>
       </div>

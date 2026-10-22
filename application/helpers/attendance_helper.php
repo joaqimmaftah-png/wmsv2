@@ -426,3 +426,309 @@ function wms_attendance_day_summary(array $punches) {
     );
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   AML Individual Attendance Sheet — pure calculation & period helpers
+   ───────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Elapsed hours between two HH:MM(:SS) clock times, rounded to 2 decimals.
+ * Handles overnight shifts (e.g. 22:00 -> 06:00 = 8.0h). Returns NULL when
+ * either time is absent/invalid or equal.
+ *
+ * @param  mixed $check_in
+ * @param  mixed $check_out
+ * @return float|null
+ */
+function wms_hours_between($check_in, $check_out) {
+    if (!is_scalar($check_in) || !is_scalar($check_out)) return NULL;
+    $in_s  = trim((string)$check_in);
+    $out_s = trim((string)$check_out);
+    if (!preg_match('/^(?:([01][0-9]|2[0-3])):([0-5][0-9])(?::([0-5][0-9]))?$/D', $in_s, $m1)) return NULL;
+    if (!preg_match('/^(?:([01][0-9]|2[0-3])):([0-5][0-9])(?::([0-5][0-9]))?$/D', $out_s, $m2)) return NULL;
+
+    $in_sec  = ((int)$m1[1]) * 3600 + ((int)$m1[2]) * 60 + (isset($m1[3]) && $m1[3] !== '' ? (int)$m1[3] : 0);
+    $out_sec = ((int)$m2[1]) * 3600 + ((int)$m2[2]) * 60 + (isset($m2[3]) && $m2[3] !== '' ? (int)$m2[3] : 0);
+
+    if ($in_sec === $out_sec) return NULL;
+    $diff = ($out_sec > $in_sec) ? ($out_sec - $in_sec) : ((86400 - $in_sec) + $out_sec);
+    return round($diff / 3600, 2);
+}
+
+/**
+ * Format numeric hours cleanly without trailing zeros (e.g. 8, 8.5, 8.25).
+ *
+ * @param  float|int|string|null $hours
+ * @return string
+ */
+function wms_timesheet_format_hours($hours) {
+    if ($hours === NULL || $hours === '' || !is_numeric($hours)) return '';
+    $f = round((float)$hours, 2);
+    if ($f <= 0) return '';
+    return rtrim(rtrim(number_format($f, 2, '.', ''), '0'), '.');
+}
+
+/**
+ * Resolve dynamic calendar dates & printable A4 sheet segments for a month /
+ * half-month / custom payroll period. Defaults strictly to live current month.
+ *
+ * @param  string|null $month        'YYYY-MM'
+ * @param  string|null $period_mode  'full' | 'full_compact' | 'h1' | 'h2' | 'custom'
+ * @param  string|null $from         'YYYY-MM-DD' when $period_mode === 'custom'
+ * @param  string|null $to           'YYYY-MM-DD' when $period_mode === 'custom'
+ * @return array{month:string,period_mode:string,start_date:string,end_date:string,period_label:string,month_heading:string,file_slug:string,segments:array<int,array{start_date:string,end_date:string,month_heading:string}>}
+ */
+function wms_timesheet_resolve_period($month = NULL, $period_mode = 'full', $from = NULL, $to = NULL) {
+    $valid_ymd = function ($s) {
+        if (!is_string($s) || !preg_match('/^([0-9]{4})-([0-9]{2})-([0-9]{2})$/D', $s, $m)) return NULL;
+        return checkdate((int)$m[2], (int)$m[3], (int)$m[1]) ? $s : NULL;
+    };
+
+    if (!is_string($month) || !preg_match('/^([0-9]{4})-(0[1-9]|1[0-2])$/D', $month)) {
+        $month = date('Y-m');
+    }
+
+    $mode = is_string($period_mode) ? strtolower(trim($period_mode)) : 'full';
+    if (!in_array($mode, array('full', 'full_compact', 'h1', 'h2', 'custom'), TRUE)) {
+        $mode = 'full';
+    }
+
+    $first_of_month = $month . '-01';
+    $last_of_month  = date('Y-m-t', strtotime($first_of_month));
+    $mid_of_month   = $month . '-15';
+    $h2_of_month    = $month . '-16';
+    $month_heading  = 'MONTH OF ' . strtoupper(date('F Y', strtotime($first_of_month)));
+
+    if ($mode === 'custom') {
+        $s = $valid_ymd($from);
+        $e = $valid_ymd($to);
+        if (!$s || !$e) {
+            $mode = 'full';
+        } else {
+            if ($e < $s) {
+                $tmp = $s; $s = $e; $e = $tmp;
+            }
+            // Cap custom range at 62 days so a mistyped year cannot generate hundreds of pages
+            $max_end = date('Y-m-d', strtotime($s . ' +61 days'));
+            if ($e > $max_end) $e = $max_end;
+
+            $segments = array();
+            $cur = strtotime($s);
+            $end_ts = strtotime($e);
+            $total_days = (int)round(($end_ts - $cur) / 86400) + 1;
+            if ($total_days <= 18) {
+                $segments[] = array(
+                    'start_date'    => $s,
+                    'end_date'      => $e,
+                    'month_heading' => 'MONTH OF ' . strtoupper(date('F Y', $end_ts)),
+                );
+            } else {
+                while ($cur <= $end_ts) {
+                    $chunk_end = min($end_ts, strtotime('+15 days', $cur));
+                    $segments[] = array(
+                        'start_date'    => date('Y-m-d', $cur),
+                        'end_date'      => date('Y-m-d', $chunk_end),
+                        'month_heading' => 'MONTH OF ' . strtoupper(date('F Y', $chunk_end)),
+                    );
+                    $cur = strtotime('+1 day', $chunk_end);
+                }
+            }
+            return array(
+                'month'         => substr($e, 0, 7),
+                'period_mode'   => 'custom',
+                'start_date'    => $s,
+                'end_date'      => $e,
+                'period_label'  => date('d M Y', strtotime($s)) . ' – ' . date('d M Y', strtotime($e)),
+                'month_heading' => 'MONTH OF ' . strtoupper(date('F Y', $end_ts)),
+                'file_slug'     => $s . '_to_' . $e,
+                'segments'      => $segments,
+            );
+        }
+    }
+
+    if ($mode === 'h1') {
+        return array(
+            'month'         => $month,
+            'period_mode'   => 'h1',
+            'start_date'    => $first_of_month,
+            'end_date'      => $mid_of_month,
+            'period_label'  => date('01 – 15 F Y', strtotime($first_of_month)),
+            'month_heading' => $month_heading,
+            'file_slug'     => $month . '_01-15',
+            'segments'      => array(
+                array('start_date' => $first_of_month, 'end_date' => $mid_of_month, 'month_heading' => $month_heading),
+            ),
+        );
+    }
+
+    if ($mode === 'h2') {
+        return array(
+            'month'         => $month,
+            'period_mode'   => 'h2',
+            'start_date'    => $h2_of_month,
+            'end_date'      => $last_of_month,
+            'period_label'  => date('16 – t F Y', strtotime($first_of_month)),
+            'month_heading' => $month_heading,
+            'file_slug'     => $month . '_16-' . substr($last_of_month, 8, 2),
+            'segments'      => array(
+                array('start_date' => $h2_of_month, 'end_date' => $last_of_month, 'month_heading' => $month_heading),
+            ),
+        );
+    }
+
+    if ($mode === 'full_compact') {
+        return array(
+            'month'         => $month,
+            'period_mode'   => 'full_compact',
+            'start_date'    => $first_of_month,
+            'end_date'      => $last_of_month,
+            'period_label'  => date('F Y', strtotime($first_of_month)) . ' (1 Page)',
+            'month_heading' => $month_heading,
+            'file_slug'     => $month,
+            'segments'      => array(
+                array('start_date' => $first_of_month, 'end_date' => $last_of_month, 'month_heading' => $month_heading),
+            ),
+        );
+    }
+
+    // Default 'full': full calendar month rendered across AML's two spacious
+    // half-month sheets (01–15 and 16–End) so every row keeps full wet-ink signing height.
+    return array(
+        'month'         => $month,
+        'period_mode'   => 'full',
+        'start_date'    => $first_of_month,
+        'end_date'      => $last_of_month,
+        'period_label'  => date('F Y', strtotime($first_of_month)),
+        'month_heading' => $month_heading,
+        'file_slug'     => $month,
+        'segments'      => array(
+            array('start_date' => $first_of_month, 'end_date' => $mid_of_month,  'month_heading' => $month_heading),
+            array('start_date' => $h2_of_month,    'end_date' => $last_of_month, 'month_heading' => $month_heading),
+        ),
+    );
+}
+
+/**
+ * Group a date window into Monday–Sunday weekly blocks matching the AML
+ * Individual Attendance Sheet layout, merging live `attendance` & `leave_requests`.
+ *
+ * @param  string               $start_date          'YYYY-MM-DD'
+ * @param  string               $end_date            'YYYY-MM-DD'
+ * @param  array<string,array>  $attendance_by_date  keyed by 'YYYY-MM-DD'
+ * @param  array<string,string> $leave_by_date       keyed by 'YYYY-MM-DD' => leave_type
+ * @param  string               $auto_leave_prefix   internal marker prefix stripped from notes
+ * @return array{start_date:string,end_date:string,weeks:array,days_worked:int,total_hours:float,total_hours_label:string,day_count:int}
+ */
+function wms_timesheet_build_weeks(
+    $start_date,
+    $end_date,
+    array $attendance_by_date = array(),
+    array $leave_by_date = array(),
+    $auto_leave_prefix = 'Auto: approved leave request #'
+) {
+    $weeks       = array();
+    $cur_days    = array();
+    $cur_hours   = 0.0;
+    $days_worked = 0;
+    $total_hours = 0.0;
+    $day_count   = 0;
+
+    $ts     = strtotime($start_date);
+    $end_ts = strtotime($end_date);
+
+    while ($ts !== FALSE && $end_ts !== FALSE && $ts <= $end_ts) {
+        $iso = date('Y-m-d', $ts);
+        $dow = (int)date('N', $ts); // 1 = Monday .. 7 = Sunday
+
+        if ($dow === 1 && !empty($cur_days)) {
+            $weeks[] = array(
+                'days'        => $cur_days,
+                'hours'       => round($cur_hours, 2),
+                'hours_label' => wms_timesheet_format_hours($cur_hours),
+            );
+            $cur_days  = array();
+            $cur_hours = 0.0;
+        }
+
+        $att    = isset($attendance_by_date[$iso]) ? (array)$attendance_by_date[$iso] : NULL;
+        $status = ($att && isset($att['status'])) ? (string)$att['status'] : '';
+
+        $raw_in   = ($att && !empty($att['check_in']))  ? (string)$att['check_in']  : '';
+        $raw_out  = ($att && !empty($att['check_out'])) ? (string)$att['check_out'] : '';
+        $time_in  = $raw_in !== ''  ? substr($raw_in, 0, 5)  : '';
+        $time_out = $raw_out !== '' ? substr($raw_out, 0, 5) : '';
+
+        $hours = NULL;
+        if ($att && isset($att['hours_worked']) && $att['hours_worked'] !== NULL && $att['hours_worked'] !== '' && is_numeric($att['hours_worked'])) {
+            $hours = round((float)$att['hours_worked'], 2);
+        } elseif ($raw_in !== '' && $raw_out !== '') {
+            $hours = wms_hours_between($raw_in, $raw_out);
+        }
+
+        $note = ($att && isset($att['notes']) && $att['notes'] !== NULL) ? trim((string)$att['notes']) : '';
+        if ($auto_leave_prefix !== '' && strpos($note, $auto_leave_prefix) === 0) {
+            $note = '';
+        }
+
+        $leave_label = isset($leave_by_date[$iso]) ? strtoupper(trim((string)$leave_by_date[$iso])) : '';
+        $observation = '';
+        if ($status === 'Leave') {
+            $base = $leave_label !== '' ? $leave_label : 'LEAVE';
+            $observation = ($note !== '' && stripos($note, $base) === FALSE) ? ($base . ' — ' . $note) : ($note !== '' ? $note : $base);
+        } elseif ($status === 'Rest') {
+            $observation = $note !== '' ? $note : 'REST';
+        } elseif ($status === 'Holiday') {
+            $observation = $note !== '' ? $note : 'HOLIDAY';
+        } elseif ($status === 'Absent') {
+            $observation = $note !== '' ? ('ABSENT - ' . $note) : 'ABSENT';
+        } else {
+            $observation = $note;
+        }
+
+        $worked = ($status === 'Present') || ($time_in !== '') || ($hours !== NULL && $hours > 0);
+        if ($worked) $days_worked++;
+
+        if ($hours !== NULL && $hours > 0) {
+            $cur_hours   += $hours;
+            $total_hours += $hours;
+        }
+
+        $cur_days[] = array(
+            'date_iso'    => $iso,
+            'dow'         => $dow,
+            'day_name'    => strtoupper(date('l', $ts)),
+            'date_label'  => date('d/M/y', $ts),
+            'is_sunday'   => ($dow === 7),
+            'status'      => $status,
+            'time_in'     => $time_in,
+            'time_out'    => $time_out,
+            'hours'       => $hours,
+            'hours_label' => wms_timesheet_format_hours($hours),
+            'worked'      => $worked,
+            'observation' => $observation,
+        );
+
+        $day_count++;
+        $ts = strtotime('+1 day', $ts);
+    }
+
+    if (!empty($cur_days)) {
+        $weeks[] = array(
+            'days'        => $cur_days,
+            'hours'       => round($cur_hours, 2),
+            'hours_label' => wms_timesheet_format_hours($cur_hours),
+        );
+    }
+
+    return array(
+        'start_date'        => $start_date,
+        'end_date'          => $end_date,
+        'weeks'             => $weeks,
+        'days_worked'       => $days_worked,
+        'total_days_worked' => $days_worked,
+        'total_hours'       => round($total_hours, 2),
+        'total_hours_label' => wms_timesheet_format_hours($total_hours),
+        'day_count'         => $day_count,
+    );
+}
+
+

@@ -84,6 +84,14 @@ class Settings_model extends CI_Model {
         'attendance_qr_grace_seconds'      => '120',
         'attendance_location_retention_days'=> '365',
         'attendance_static_qr_sites'       => '',
+
+        /* ── AML Individual Attendance Sheet signatories ────────────── */
+        'timesheet_prepared_by'            => 'AGANO Elie',
+        'timesheet_prepared_title'         => 'Assistant Admin HR',
+        'timesheet_checked_by'             => "Supervisor's",
+        'timesheet_checked_title'          => '',
+        'timesheet_approved_by'            => 'BUZINDU RUB. Serge',
+        'timesheet_approved_title'         => 'HR Manager',
     );
 
     const DESCRIPTIONS = array(
@@ -117,6 +125,13 @@ class Settings_model extends CI_Model {
         'attendance_qr_grace_seconds'       => 'Attendance: how long a just-expired site QR token is still accepted, in seconds (0-3600), to absorb the refresh moment',
         'attendance_location_retention_days'=> 'Attendance: days to retain raw punch GPS coordinates/IP/UA before scrubbing location evidence (0 = keep indefinitely, 30-3650)',
         'attendance_static_qr_sites'        => 'Attendance: comma-separated site IDs allowed to accept printed/fixed site QR codes alongside rotating QR',
+
+        'timesheet_prepared_by'             => 'AML Individual Attendance Sheet: Prepared by name (left footer column)',
+        'timesheet_prepared_title'          => 'AML Individual Attendance Sheet: Prepared by job title',
+        'timesheet_checked_by'              => 'AML Individual Attendance Sheet: Checked by label or name (centre footer column)',
+        'timesheet_checked_title'           => 'AML Individual Attendance Sheet: Checked by subtitle (leave blank to print dotted signature line)',
+        'timesheet_approved_by'             => 'AML Individual Attendance Sheet: Approved by name (right footer column)',
+        'timesheet_approved_title'          => 'AML Individual Attendance Sheet: Approved by job title',
     );
 
     const BREAKDOWN_COUNT_MODES = array('start_in_period', 'overlapping');
@@ -505,6 +520,14 @@ class Settings_model extends CI_Model {
                     $clean[trim((string)($type))] = round($d, 1);
                 }
                 return $clean ? json_encode($clean) : '{}';
+
+            case 'timesheet_prepared_by':
+            case 'timesheet_prepared_title':
+            case 'timesheet_checked_by':
+            case 'timesheet_checked_title':
+            case 'timesheet_approved_by':
+            case 'timesheet_approved_title':
+                return substr(trim((string)$value), 0, 120);
         }
         return $value;
     }
@@ -561,6 +584,18 @@ class Settings_model extends CI_Model {
             'weekly_open_hours', 'daily_open_hours', 'default_availability_target',
             'report_week_start_day', 'breakdown_count_mode', 'mtbf_zero_failure_mode',
             'pm_meter_stale_days',
+        );
+    }
+
+    /** Signatory keys for the AML Individual Attendance Sheet footer. */
+    public static function timesheet_keys() {
+        return array(
+            'timesheet_prepared_by',
+            'timesheet_prepared_title',
+            'timesheet_checked_by',
+            'timesheet_checked_title',
+            'timesheet_approved_by',
+            'timesheet_approved_title',
         );
     }
 

@@ -95,7 +95,14 @@ class XlsxWriter {
      */
     public function addImage($file, array $opts = array()) {
         if (!is_file($file)) return $this;                      // nothing to embed
-        $size = @getimagesize($file);
+        $size = function_exists('getimagesize') ? @getimagesize($file) : false;
+        if ($size === false) {
+            $hdr = @file_get_contents($file, false, null, 0, 24);
+            if ($hdr !== false && strlen($hdr) === 24 && substr($hdr, 0, 8) === "\x89PNG\r\n\x1a\n") {
+                $d = unpack('NW/NH', substr($hdr, 16, 8));
+                $size = array((int)$d['W'], (int)$d['H']);
+            }
+        }
         if ($size === false) return $this;                      // not an image a reader can use
 
         $ext = strtolower((string)(pathinfo($file, PATHINFO_EXTENSION)));
@@ -284,21 +291,28 @@ class XlsxWriter {
             $zip->addFromString("xl/worksheets/sheet".($i+1).".xml", $xml);
         }
 
-        // 4. images (W4.1): one media file per image, one drawing part per sheet
+        // 4. images (W4.1): deduplicate identical source files in xl/media/, one drawing part per sheet
         $media = 1;
+        $mediaByPath = array();
         foreach ($this->sheets as $i => $sheet) {
             if (empty($sheet['images'])) continue;
 
             $rels = '';
             $anchors = '';
             foreach ($sheet['images'] as $n => $img) {
-                $part = 'image' . $media . '.' . $img['ext'];
-                $zip->addFile($img['file'], 'xl/media/' . $part);
+                $keyPath = realpath($img['file']) ?: $img['file'];
+                if (!isset($mediaByPath[$keyPath])) {
+                    $part = 'image' . $media . '.' . $img['ext'];
+                    $zip->addFile($img['file'], 'xl/media/' . $part);
+                    $mediaByPath[$keyPath] = $part;
+                    $media++;
+                } else {
+                    $part = $mediaByPath[$keyPath];
+                }
                 $rid = 'rId' . ($n + 1);
                 $rels .= '<Relationship Id="' . $rid . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"'
                        . ' Target="../media/' . $part . '"/>';
-                $anchors .= $this->_anchorXml($img, $rid);
-                $media++;
+                $anchors .= $this->_anchorXml($img, $rid, $n + 2);
             }
 
             $zip->addFromString('xl/drawings/drawing' . ($i + 1) . '.xml',
@@ -410,15 +424,16 @@ class XlsxWriter {
         return $map;
     }
 
-    /** One <xdr:oneCellAnchor> — the anchor the approved workbook uses for its logo. */
-    private function _anchorXml($img, $rid) {
+    /** One <xdr:oneCellAnchor> — ST_DrawingElementId must be >= 1 even when anchored at A1 (col=0,row=0). */
+    private function _anchorXml($img, $rid, $picId = 2) {
         $name = htmlspecialchars((string)($img['name']), ENT_XML1);
+        $cNvId = max(2, (int)$picId);
         return '<xdr:oneCellAnchor>'
             . '<xdr:from><xdr:col>' . $img['col'] . '</xdr:col><xdr:colOff>' . $img['x'] . '</xdr:colOff>'
             . '<xdr:row>' . $img['row'] . '</xdr:row><xdr:rowOff>' . $img['y'] . '</xdr:rowOff></xdr:from>'
             . '<xdr:ext cx="' . $img['cx'] . '" cy="' . $img['cy'] . '"/>'
             . '<xdr:pic>'
-            . '<xdr:nvPicPr><xdr:cNvPr id="' . ($img['col'] . $img['row']) . '" name="' . $name . '"/>'
+            . '<xdr:nvPicPr><xdr:cNvPr id="' . $cNvId . '" name="' . $name . '"/>'
             . '<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>'
             . '<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="' . $rid . '" cstate="print"/>'
             . '<a:stretch><a:fillRect/></a:stretch></xdr:blipFill>'
@@ -634,12 +649,15 @@ class XlsxWriter {
               'fontSize'=>10,'fontName'=>'Arial',
               'fg'=>'000000','bg'=>null,
               'align'=>'general','valign'=>'bottom',
-              'wrapText'=>false,'border'=>null,'numFmt'=>null];
+              'wrapText'=>false,'border'=>null,
+              'borderL'=>null,'borderR'=>null,'borderT'=>null,'borderB'=>null,
+              'numFmt'=>null];
         foreach (explode('|', $key) as $part) {
             $part = trim((string)($part));
-            if ($part==='bold')              $p['bold']     = true;
-            elseif ($part==='italic')        $p['italic']   = true;
-            elseif ($part==='wrap')          $p['wrapText'] = true;
+            if ($part==='bold')              $p['bold']      = true;
+            elseif ($part==='italic')        $p['italic']    = true;
+            elseif ($part==='underline')     $p['underline'] = true;
+            elseif ($part==='wrap')          $p['wrapText']  = true;
             elseif (strpos($part,'fontSize:')===0)  $p['fontSize'] = (float)substr($part,9);
             elseif (strpos($part,'fontName:')===0)  $p['fontName'] = substr($part,9);
             elseif (strpos($part,'align:')===0)     $p['align']    = substr($part,6);
@@ -653,6 +671,10 @@ class XlsxWriter {
             elseif (strpos($part,'bg:')===0)        $p['bg']       = substr($part,3);
             elseif (strpos($part,'fg:')===0)        $p['fg']       = substr($part,3);
             elseif (strpos($part,'border:')===0)    $p['border']   = substr($part,7);
+            elseif (strpos($part,'borderL:')===0)   $p['borderL']  = substr($part,8);
+            elseif (strpos($part,'borderR:')===0)   $p['borderR']  = substr($part,8);
+            elseif (strpos($part,'borderT:')===0)   $p['borderT']  = substr($part,8);
+            elseif (strpos($part,'borderB:')===0)   $p['borderB']  = substr($part,8);
             elseif (strpos($part,'numFmt:')===0)    $p['numFmt']   = substr($part,7);
         }
         return $p;
@@ -688,9 +710,15 @@ class XlsxWriter {
                 else $fillMap[$key]=array_search($fx,$fills);
             } else $fillMap[$key]=0;
             // border
-            if ($p['border']) {
-                $b=$p['border'];
-                $bx="<border><left style=\"$b\"><color rgb=\"FF000000\"/></left><right style=\"$b\"><color rgb=\"FF000000\"/></right><top style=\"$b\"><color rgb=\"FF000000\"/></top><bottom style=\"$b\"><color rgb=\"FF000000\"/></bottom><diagonal/></border>";
+            $bl = $p['borderL'] ?: $p['border'];
+            $br = $p['borderR'] ?: $p['border'];
+            $bt = $p['borderT'] ?: $p['border'];
+            $bb = $p['borderB'] ?: $p['border'];
+            if ($bl || $br || $bt || $bb) {
+                $side = function ($st, $tag) {
+                    return $st ? "<{$tag} style=\"{$st}\"><color rgb=\"FF000000\"/></{$tag}>" : "<{$tag}/>";
+                };
+                $bx = '<border>' . $side($bl, 'left') . $side($br, 'right') . $side($bt, 'top') . $side($bb, 'bottom') . '<diagonal/></border>';
                 if (!in_array($bx,$borders)){$borderMap[$key]=count($borders);$borders[]=$bx;}
                 else $borderMap[$key]=array_search($bx,$borders);
             } else $borderMap[$key]=0;
@@ -729,6 +757,7 @@ class XlsxWriter {
 <borders count="'.count($borders).'">'.implode('',$borders).'</borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
 <cellXfs count="'.count($xfOrder).'">'.$xfs.'</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>';
     }
 
