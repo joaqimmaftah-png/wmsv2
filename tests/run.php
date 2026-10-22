@@ -2668,6 +2668,205 @@ check('SP-02 & SP-06 Clean View Render, Verbatim EX 006 / C-HEADT 007, Multi-Rol
     implode('; ', $spWarnings));
 
 /* ─────────────────────────────────────────────────────────────────────────
+   22. Supplier Directory & Sourcing Board Suite (SUP-01 .. SUP-06)
+   ───────────────────────────────────────────────────────────────────────── */
+
+require_once APPPATH . 'helpers/currency_helper.php';
+if (!class_exists('Supplier_model', FALSE)) {
+    require_once APPPATH . 'models/Supplier_model.php';
+}
+
+class SupplierDirectoryFakeDB {
+    public $queries    = 0;
+    public $deletedIds = array();
+    private $suppliers = array();
+    private $contacts  = array();
+    private $catalog   = array();
+    private $orders    = array();
+    private $fromTable = '';
+    private $whereMap  = array();
+
+    public function __construct(array $suppliers, array $contacts, array $catalog, array $orders) {
+        $this->suppliers = $suppliers;
+        $this->contacts  = $contacts;
+        $this->catalog   = $catalog;
+        $this->orders    = $orders;
+    }
+
+    public function table_exists($t) {
+        return in_array($t, array('suppliers', 'supplier_contacts', 'supplier_materials', 'spare_orders'), TRUE);
+    }
+    public function select($s, $escape = NULL) { return $this; }
+    public function from($t) { $this->fromTable = (string)$t; return $this; }
+    public function join($t, $c, $type = '') { return $this; }
+    public function where($k, $v = NULL) { $this->whereMap[(string)$k] = $v; return $this; }
+    public function order_by($c, $d = '') { return $this; }
+    public function limit($n) { return $this; }
+
+    public function count_all_results($table = '') {
+        $this->queries++;
+        $sid = isset($this->whereMap['supplier_id']) ? (int)$this->whereMap['supplier_id'] : 0;
+        $this->whereMap = array();
+        if ($table === 'spare_orders') {
+            $cnt = 0;
+            foreach ($this->orders as $o) {
+                if ((int)$o->supplier_id === $sid) $cnt++;
+            }
+            return $cnt;
+        }
+        return 0;
+    }
+
+    public function delete($table = '') {
+        $this->queries++;
+        $id = isset($this->whereMap['id']) ? (int)$this->whereMap['id'] : 0;
+        $this->whereMap = array();
+        if ($table === 'suppliers' && $id > 0) {
+            $this->deletedIds[] = $id;
+            return TRUE;
+        }
+        return FALSE;
+    }
+
+    public function get($table = NULL) {
+        $this->queries++;
+        $src = $table !== NULL ? (string)$table : $this->fromTable;
+        $this->fromTable = '';
+        $this->whereMap  = array();
+        if (strpos($src, 'suppliers') === 0) return new TeamRosterFakeResult($this->suppliers);
+        if (strpos($src, 'supplier_contacts') === 0) return new TeamRosterFakeResult($this->contacts);
+        if (strpos($src, 'supplier_materials') === 0) return new TeamRosterFakeResult($this->catalog);
+        if (strpos($src, 'spare_orders') === 0) return new TeamRosterFakeResult($this->orders);
+        return new TeamRosterFakeResult(array());
+    }
+}
+
+$fakeSuppliers = array();
+for ($vi = 1; $vi <= 500; $vi++) {
+    $fakeSuppliers[] = (object)array(
+        'id'                       => $vi,
+        'company_name'             => ($vi === 1) ? 'ALPROM TRADERS LTD' : (($vi === 2) ? 'Evil<script>alert(9)</script>' : sprintf('VENDOR-%04d LTD', $vi)),
+        'tax_id'                   => sprintf('TIN-%05d', $vi),
+        'country'                  => ($vi % 2 === 0) ? 'Tanzania' : 'Uganda',
+        'city'                     => ($vi % 2 === 0) ? 'Dar es Salaam' : 'Kampala',
+        'address'                  => 'Plot 12 Industrial Area',
+        'currency'                 => ($vi === 1) ? 'UGX' : 'USD',
+        'payment_terms'            => '30 days net',
+        'lead_time_guarantee_days' => 14,
+        'status'                   => ($vi === 2) ? '<img src=x onerror=alert(9)>' : (($vi === 3) ? 'Blacklisted' : 'Active'),
+        'notes'                    => '=HYPERLINK("http://evil")',
+    );
+}
+$fakeSupContacts = array(
+    (object)array('id' => 11, 'supplier_id' => 1, 'name' => 'Grace Namukasa', 'role' => 'Sales Lead', 'phone' => '+256-700-111222', 'email' => 'grace@alprom.example'),
+);
+$fakeSupCatalog = array(
+    (object)array('id' => 21, 'supplier_id' => 1, 'material_id' => 501, 'item_code' => 'SP-FLT-501', 'part_number' => '1R-0750', 'description' => 'Primary Fuel Filter', 'unit_price' => 34.50, 'currency' => 'USD', 'moq' => 2, 'lead_time_days' => 10, 'is_preferred' => 1),
+);
+$fakeSupOrders = array(
+    (object)array('id' => 31, 'order_no' => 'PO-2026-0031', 'supplier_id' => 1, 'status' => 'In Transit', 'currency' => 'USD', 'total_cost' => 1450.00, 'order_date' => '2026-10-10', 'expected_delivery_date' => '2026-10-25', 'actual_delivery_date' => NULL, 'wo_number' => 'WO-SP-0001', 'registration_no' => 'EX 006'),
+    (object)array('id' => 32, 'order_no' => 'PO-2026-0032', 'supplier_id' => 1, 'status' => 'Verified & Closed', 'currency' => 'USD', 'total_cost' => 820.00, 'order_date' => '2026-09-10', 'expected_delivery_date' => '2026-09-25', 'actual_delivery_date' => '2026-09-22', 'wo_number' => 'WO-SP-0002', 'registration_no' => 'C-HEADT 007'),
+);
+
+$supFakeDb = new SupplierDirectoryFakeDB($fakeSuppliers, $fakeSupContacts, $fakeSupCatalog, $fakeSupOrders);
+$supModel  = new Supplier_model();
+$supModel->db = $supFakeDb;
+$supOv = $supModel->get_directory_overview();
+
+check('SUP-03 Constant O(1) SQL Scaling: 500 suppliers + contacts + catalog + fleet POs hydrated in <= 4 SQL queries',
+    count($supOv['rows']) === 500
+    && $supFakeDb->queries <= 4
+    && (int)$supOv['rows'][0]->item_count === 1
+    && (int)$supOv['rows'][0]->order_count === 2
+    && (int)$supOv['rows'][0]->on_time_rate === 100
+    && in_array('EX 006', $supOv['rows'][0]->fleet_assets, TRUE)
+    && in_array('C-HEADT 007', $supOv['rows'][0]->fleet_assets, TRUE),
+    'queries=' . $supFakeDb->queries);
+
+check('SUP-04 Referential Integrity Delete Guard: blocks hard delete on supplier #1 with linked POs while allowing unlinked supplier #2',
+    $supModel->delete(1) === FALSE
+    && !in_array(1, $supFakeDb->deletedIds, TRUE)
+    && $supModel->delete(2) === TRUE
+    && in_array(2, $supFakeDb->deletedIds, TRUE));
+
+$supWarnings = array();
+$renderSupViews = function ($canWrite) use ($supOv, $fakeSupContacts, $fakeSupCatalog, $fakeSupOrders, &$supWarnings) {
+    $suppliers      = array_slice($supOv['rows'], 0, 3);
+    $groups         = array(
+        (object)array('country' => 'Uganda', 'suppliers' => array($supOv['rows'][0]), 'total_count' => 1, 'active_count' => 1, 'item_count' => 1, 'open_orders' => 1),
+    );
+    $countries      = $supOv['countries'];
+    $currencies     = $supOv['currencies'];
+    $kpi            = $supOv['kpi'];
+    $tab_counts     = array('all' => 500, 'active' => 499, 'with_catalog' => 1, 'with_orders' => 1, 'flagged' => 1);
+    $tab            = 'all';
+    $q              = '1R-0750';
+    $filter         = array('country' => '', 'currency' => '', 'status' => '', 'search' => '');
+    $sort           = 'company_name';
+    $dir            = 'asc';
+    $view_mode      = 'table';
+    $per_page       = 25;
+    $allowed_pp     = array(10, 25, 50, 100, 150);
+    $current_page   = 1;
+    $total_pages    = 20;
+    $total_filtered = 500;
+    $offset         = 0;
+    $can_write      = $canWrite;
+
+    $supplier         = $supOv['rows'][1]; // hostile XSS supplier name + invalid status
+    $contacts         = $fakeSupContacts;
+    $catalog          = $fakeSupCatalog;
+    $materials        = array((object)array('id' => 501, 'item_code' => 'SP-FLT-501', 'description' => 'Primary Fuel Filter'));
+    $on_time          = array('rate' => 100, 'sample' => 1);
+    $recent_orders    = $fakeSupOrders;
+    $linked_order_cnt = 2;
+    $results          = array(
+        (object)array(
+            'supplier_id' => 2, 'company_name' => 'Evil<script>alert(9)</script>', 'country' => 'Uganda',
+            'supplier_status' => '<img src=x onerror=alert(9)>', 'description' => 'Primary Fuel Filter',
+            'part_number' => '1R-0750', 'item_code' => 'SP-FLT-501', 'unit_price' => 34.50,
+            'currency' => 'USD', 'lead_time_days' => 10, 'is_preferred' => 1,
+        ),
+    );
+
+    set_error_handler(function ($severity, $message, $file, $line) use (&$supWarnings) {
+        $supWarnings[] = "$message ($file:$line)";
+        return TRUE;
+    });
+    ob_start();
+    include APPPATH . 'views/suppliers/index.php';
+    include APPPATH . 'views/suppliers/view.php';
+    include APPPATH . 'views/suppliers/find_part.php';
+    $out = ob_get_clean();
+    restore_error_handler();
+    return $out;
+};
+
+$supWriteHtml = $renderSupViews(TRUE);
+$supReadHtml  = $renderSupViews(FALSE);
+
+check('SUP-01, SUP-02 & SUP-06 Clean Render, XSS Neutralization, Verbatim EX 006 / C-HEADT 007 & Read-Only Manager RBAC across suppliers/{index,view,find_part}.php',
+    empty($supWarnings)
+    && strpos($supWriteHtml, 'id="supAddBtn"') !== FALSE
+    && strpos($supWriteHtml, '+ Add Contact') !== FALSE
+    && strpos($supWriteHtml, '+ Add Catalog Item') !== FALSE
+    && strpos($supReadHtml, 'id="supAddBtn"') === FALSE
+    && strpos($supReadHtml, 'Edit Vendor') === FALSE
+    && strpos($supReadHtml, '+ New Order') === FALSE
+    && strpos($supReadHtml, '+ Add Contact') === FALSE
+    && strpos($supReadHtml, '+ Add Catalog Item') === FALSE
+    && strpos($supReadHtml, '>Order<') === FALSE
+    && strpos($supReadHtml, 'Export CSV') !== FALSE
+    && strpos($supReadHtml, 'Export Excel') !== FALSE
+    && strpos($supWriteHtml, 'ALPROM TRADERS LTD') !== FALSE
+    && strpos($supWriteHtml, 'EX 006') !== FALSE
+    && strpos($supWriteHtml, 'C-HEADT 007') !== FALSE
+    && strpos($supWriteHtml, '<script>alert(9)</script>') === FALSE
+    && strpos($supWriteHtml, '<img src=x onerror=alert(9)>') === FALSE
+    && strpos($supWriteHtml, 'id="supDrawer" role="dialog" aria-modal="true"') !== FALSE,
+    implode('; ', $supWarnings));
+
+/* ─────────────────────────────────────────────────────────────────────────
    Result
    ───────────────────────────────────────────────────────────────────────── */
 

@@ -1158,6 +1158,106 @@ for (const rawLine of cookieLines) {
     assert(spMobile.docOverflow <= 0, '/spareparts Mobile 390px overflowed: ' + spMobile.docOverflow);
     assert(spMobile.tableDisplay === 'none' && spMobile.cardsDisplay === 'block', '/spareparts Mobile Card View failed: ' + JSON.stringify(spMobile));
 
+    // =========================================================================
+    // 14. SUPPLIERS DIRECTORY (/suppliers) DESKTOP 1440x900 & MOBILE 390x844
+    // =========================================================================
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/suppliers' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("supShell"))')) break;
+      await sleep(200);
+    }
+
+    const supDesktop = await evalJs(`(async () => {
+      const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+      const tblWrap = document.querySelector('.sup-table-wrap');
+      const tblOverflow = tblWrap ? (tblWrap.scrollWidth - tblWrap.clientWidth) : -1;
+
+      // Slash shortcut focuses #supSearchInput
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+      const slashFocused = (document.activeElement === document.getElementById('supSearchInput'));
+      document.activeElement.blur();
+
+      // Multi-select checkbox opens #supBatchBar with ?ids= on both CSV & Excel buttons
+      const firstCb = document.querySelector('.sup-row-check');
+      firstCb.checked = true;
+      firstCb.dispatchEvent(new Event('change', { bubbles: true }));
+      const batchVisible = document.getElementById('supBatchBar').classList.contains('is-open');
+      const batchCsvHref = document.getElementById('supBatchExportBtn').getAttribute('href') || '';
+      const batchXlsHref = document.getElementById('supBatchXlsxBtn').getAttribute('href') || '';
+
+      // Open Slide-Over Vendor Inspector Drawer
+      const trigger = document.querySelector('button[data-sup-open]');
+      trigger.focus();
+      trigger.click();
+      for (let w = 0; w < 25; w++) {
+        if (document.getElementById('supDrawerBody').textContent.includes('Commercial Terms')) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const drawerOpen = document.getElementById('supDrawer').classList.contains('is-open');
+      const firstHeader = document.getElementById('supDrawerTitle').textContent;
+
+      // ArrowRight steps drawer between vendors
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      for (let w = 0; w < 25; w++) {
+        if (document.getElementById('supDrawerTitle').textContent !== firstHeader) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const secondHeader = document.getElementById('supDrawerTitle').textContent;
+
+      // Escape closes drawer and restores focus
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const drawerClosed = !document.getElementById('supDrawer').classList.contains('is-open');
+      const focusRestored = (document.activeElement === trigger);
+
+      // Toggle By Country <-> Cards <-> Table views smoothly
+      document.querySelector('[data-sup-view="groups"]').click();
+      const groupsShown = getComputedStyle(document.querySelector('.sup-groups-container')).display !== 'none'
+        && getComputedStyle(document.querySelector('.sup-table-wrap')).display === 'none';
+      document.querySelector('[data-sup-view="cards"]').click();
+      const cardsShown = getComputedStyle(document.querySelector('.sup-cards-container')).display !== 'none'
+        && getComputedStyle(document.querySelector('.sup-table-wrap')).display === 'none';
+      document.querySelector('[data-sup-view="table"]').click();
+
+      return {
+        docOverflow, tblOverflow, slashFocused,
+        batchVisible, batchCsvHref, batchXlsHref,
+        drawerOpen, stepped: firstHeader !== secondHeader,
+        drawerClosed, focusRestored, groupsShown, cardsShown
+      };
+    })()`);
+
+    assert(supDesktop.docOverflow <= 0, '/suppliers Desktop overflowed: ' + JSON.stringify(supDesktop));
+    assert(supDesktop.tblOverflow <= 0, '/suppliers Table overflowed: ' + JSON.stringify(supDesktop));
+    assert(supDesktop.slashFocused === true, '/suppliers Slash shortcut failed: ' + JSON.stringify(supDesktop));
+    assert(supDesktop.batchVisible && supDesktop.batchCsvHref.includes('ids=') && supDesktop.batchXlsHref.includes('ids='), '/suppliers Batch bar failed: ' + JSON.stringify(supDesktop));
+    assert(supDesktop.drawerOpen === true, '/suppliers Drawer failed: ' + JSON.stringify(supDesktop));
+    assert(supDesktop.stepped === true, '/suppliers ArrowRight navigation failed: ' + JSON.stringify(supDesktop));
+    assert(supDesktop.drawerClosed && supDesktop.focusRestored, '/suppliers Escape close/focus failed: ' + JSON.stringify(supDesktop));
+    assert(supDesktop.groupsShown && supDesktop.cardsShown, '/suppliers By Country / Cards switcher failed: ' + JSON.stringify(supDesktop));
+
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/suppliers' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("supShell"))')) break;
+      await sleep(200);
+    }
+    const supMobile = await evalJs(`(() => ({
+      docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      tableDisplay: getComputedStyle(document.querySelector('.sup-table-wrap')).display,
+      cardsDisplay: getComputedStyle(document.querySelector('.sup-cards-container')).display
+    }))()`);
+    assert(supMobile.docOverflow <= 0, '/suppliers Mobile 390px overflowed: ' + supMobile.docOverflow);
+    assert(supMobile.tableDisplay === 'none' && supMobile.cardsDisplay === 'block', '/suppliers Mobile Card View failed: ' + JSON.stringify(supMobile));
+
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/suppliers/view/46' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && document.body && document.body.textContent.includes("ALPROM TRADERS LTD")')) break;
+      await sleep(200);
+    }
+    const supViewMobileOverflow = await evalJs('document.documentElement.scrollWidth - window.innerWidth');
+    assert(supViewMobileOverflow <= 0, '/suppliers/view/46 Mobile 390px overflowed: ' + supViewMobileOverflow);
+
     ws.close();
     console.log('ALL HEADLESS CHROME DESKTOP (1440x900) & MOBILE (390x844) UI E2E ASSERTIONS PASSED!');
   } catch (err) {
