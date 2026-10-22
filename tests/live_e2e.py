@@ -679,7 +679,9 @@ try:
     import zipfile
 
     # Technician (role_id = 2) is barred from /suppliers per ACCESS_MATRIX['suppliers'] = [1, 3, 4]
-    _, t_sup_url, _ = get_bytes('/suppliers', tech_op)
+    t_sup_resp = tech_op.open(BASE + '/suppliers')
+    t_sup_url = t_sup_resp.geturl()
+    t_sup_resp.read()
     assert '/dashboard' in t_sup_url, f'Expected Technician redirect to /dashboard on /suppliers, got {t_sup_url}'
 
     # Storekeeper adds formula-prefixed contact + catalog quote to Mantrac CAT Intl (sup_id_new, linked to EX 006 PO)
@@ -763,8 +765,9 @@ try:
     assert st_m_fp == 200 and 'Mantrac CAT Intl' in m_fp_html and '>Order<' not in m_fp_html
 
     # Manager mutation attempt on /suppliers/create must redirect to /dashboard
+    _, _, mgr_prof_b = get_bytes('/users/profile', mgr_op)
     _, m_mut_url, _ = post_op(mgr_op, '/suppliers/create', {
-        'csrf_token_wms': csrf_from(m_sup_html),
+        'csrf_token_wms': csrf_from(mgr_prof_b.decode('utf-8', 'replace')),
         'company_name': 'Blocked Manager Vendor',
         'country': 'Uganda',
     })
