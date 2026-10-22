@@ -645,7 +645,7 @@ for (const rawLine of cookieLines) {
       document.activeElement.blur();
 
       // Supervisor Verify modal opens with target action & Escape restores focus
-      const verifyBtn = document.querySelector('[data-bl-close-id]');
+      const verifyBtn = document.querySelector('[data-bl-close-id="961"]');
       verifyBtn.focus();
       verifyBtn.click();
       const closeModalOpen = document.getElementById('blCloseModal').classList.contains('is-open')
@@ -662,7 +662,7 @@ for (const rawLine of cookieLines) {
       const batchCsvHref = document.getElementById('blBatchExportBtn').getAttribute('href') || '';
 
       // Open Slide-Over Defect Inspector Drawer (BL-0961)
-      const trigger = document.querySelector('.bl-inspect-trigger');
+      const trigger = document.querySelector('[data-bl-open="961"]');
       trigger.focus();
       trigger.click();
       for (let w = 0; w < 25; w++) {
