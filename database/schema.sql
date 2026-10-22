@@ -17855,8 +17855,8 @@ INSERT INTO `schema_migrations` (`version`, `filename`, `checksum`, `applied_at`
   ('0010', '0010_attendance_punches.sql', 'a31f2a2911fddf591a6eea7bef488956f1a0eefef3678152c66121c28a7080fb', NOW()),
   ('0011', '0011_restore_verbatim_asset_machine_ids.sql', '69721ba7a7f9e2a5fc2f3dc10a9bab111ad69bebeabe0e80bbe07bd4675ac953', NOW()),
   ('0012', '0012_sync_equipment_with_asset_register.sql', 'bcf5cb6f2c5a96ce63c9782aafe53df524d89c7ef07316cca78c536e0d25c668', NOW()),
-  ('0013', '0013_reconcile_stale_equipment_duplicates.sql', '2f18908982a107d08a5e16ffb307fa3da4d963dc9a4121c9d2a863ab430471ce', NOW())
-ON DUPLICATE KEY UPDATE `filename` = VALUES(`filename`), `checksum` = VALUES(`checksum`),
-  ('0014', '0014_worker_site_and_timesheet_settings.sql', 'cd8b51e3741f792ed864d5b911fa89b0af2f57b0c513e0520a439e9833dffe28', NOW());
+  ('0013', '0013_reconcile_stale_equipment_duplicates.sql', '2f18908982a107d08a5e16ffb307fa3da4d963dc9a4121c9d2a863ab430471ce', NOW()),
+  ('0014', '0014_worker_site_and_timesheet_settings.sql', 'cd8b51e3741f792ed864d5b911fa89b0af2f57b0c513e0520a439e9833dffe28', NOW())
+ON DUPLICATE KEY UPDATE `filename` = VALUES(`filename`), `checksum` = VALUES(`checksum`);
 
 COMMIT;
