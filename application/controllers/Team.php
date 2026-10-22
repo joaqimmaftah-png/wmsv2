@@ -13,17 +13,380 @@ class Team extends MY_Controller {
     }
 
     public function index() {
-        $data['workers']    = $this->Team_model->get_all();
-        // Leave requests waiting for a decision (supervisors only — the
-        // approve/reject action is guarded as well, this just hides the panel).
-        $data['pending_leave'] = $this->is_supervisor()
+        // Horizontal PII/HR privacy: only Supervisors & Managers view the full workforce directory;
+        // Technicians & Store Keepers go cleanly to their own profile record.
+        if (!$this->is_supervisor() && !$this->is_manager()) {
+            redirect('team/view/' . (int)$this->user_id);
+            return;
+        }
+
+        $ctx = $this->_build_roster_dataset();
+
+        $per_page_in = (int)$this->input->get('per_page', TRUE);
+        $per_page    = in_array($per_page_in, array(10, 25, 50, 100), TRUE) ? $per_page_in : 25;
+
+        $total_filtered = count($ctx['rows']);
+        $total_pages    = max(1, (int)ceil($total_filtered / $per_page));
+        $page_in        = (int)$this->input->get('page', TRUE);
+        $page           = max(1, min($total_pages, $page_in > 0 ? $page_in : 1));
+        $offset         = ($page - 1) * $per_page;
+        $paged_rows     = array_slice($ctx['rows'], $offset, $per_page);
+
+        $view_in   = strtolower(trim((string)$this->input->get('view', TRUE)));
+        $view_mode = ($view_in === 'cards') ? 'cards' : 'table';
+
+        $pending_leave = $this->is_supervisor()
             ? $this->Team_model->get_pending_leave_requests()
             : array();
-        // "Add Worker" is supervisor-only (Team::create enforces it too); hide
-        // the button from the roles that would only be redirected.
-        $data['is_supervisor'] = $this->is_supervisor();
-        $data['page_title'] = 'Team Management';
+
+        // Map worker ID -> roster row so Pending Leave rows surface live open WO workload (0 extra queries)
+        $roster_by_id = array();
+        foreach ($ctx['all_rows'] as $rw) {
+            $roster_by_id[(int)$rw->id] = $rw;
+        }
+
+        $data = array(
+            'workers'        => $paged_rows,
+            'roster_by_id'   => $roster_by_id,
+            'pending_leave'  => $pending_leave,
+            'total_filtered' => $total_filtered,
+            'total_scope'    => $ctx['total_scope'],
+            'tab_counts'     => $ctx['tab_counts'],
+            'summary'        => array_merge($ctx['summary'], array('pending_leave' => count($pending_leave))),
+            'site_filter'    => $ctx['site_filter'],
+            'role_filter'    => $ctx['role_filter'],
+            'skill_filter'   => $ctx['skill_filter'],
+            'search_query'   => $ctx['search_query'],
+            'active_tab'     => $ctx['active_tab'],
+            'sort_by'        => $ctx['sort_by'],
+            'sort_dir'       => $ctx['sort_dir'],
+            'per_page'       => $per_page,
+            'page'           => $page,
+            'total_pages'    => $total_pages,
+            'showing_from'   => $total_filtered > 0 ? ($offset + 1) : 0,
+            'showing_to'     => min($total_filtered, $offset + count($paged_rows)),
+            'view_mode'      => $view_mode,
+            'sites'          => $this->Timesheet_model->site_options(),
+            'roles_list'     => $this->db->order_by('id', 'ASC')->get('roles')->result(),
+            'skills_list'    => array('Junior', 'Senior', 'Expert', 'Specialist'),
+            'is_supervisor'  => $this->is_supervisor(),
+            'is_manager'     => $this->is_manager(),
+            'page_title'     => 'Team Management',
+        );
         $this->render('team/index', $data);
+    }
+
+    /**
+     * Export filtered/sorted Workforce Directory as UTF-8 BOM CSV with formula-injection
+     * sanitization (accessible to Supervisors & Managers).
+     */
+    public function roster_csv() {
+        if (!$this->is_supervisor() && !$this->is_manager()) {
+            $this->session->set_flashdata('error', 'Access denied.');
+            redirect('team/view/' . (int)$this->user_id);
+            return;
+        }
+
+        $ctx     = $this->_build_roster_dataset();
+        $rows    = $ctx['rows'];
+        $sel_ids = $this->_parse_selected_ids();
+        if (!empty($sel_ids)) {
+            $allow = array_fill_keys($sel_ids, TRUE);
+            $rows  = array_values(array_filter($rows, function ($r) use ($allow) {
+                return isset($allow[(int)$r->id]);
+            }));
+        }
+
+        $safe_cell = function ($v) {
+            $s = (string)$v;
+            if ($s !== '' && in_array($s[0], array('=', '+', '-', '@', "\t", "\r"), TRUE)) {
+                return "'" . $s;
+            }
+            return $s;
+        };
+
+        $filename = 'WMS_Workforce_Directory_' . date('Y-m-d') . '.csv';
+        if (ob_get_level()) @ob_end_clean();
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: private, max-age=0, must-revalidate');
+
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, array(
+            'Employee ID', 'Full Name', 'Role', 'Position', 'Skill Level', 'Site',
+            'Status', 'On Site Today', 'Current Shift', 'Active Work Orders',
+            'Valid Certs', 'Expiring Certs', 'Expired Certs',
+            'Email', 'Phone', 'Join Date',
+        ), ',', '"', '\\');
+
+        foreach ($rows as $r) {
+            fputcsv($out, array(
+                $safe_cell($r->employee_id),
+                $safe_cell($r->full_name),
+                $safe_cell(ucfirst($r->role_name)),
+                $safe_cell($r->position),
+                $safe_cell($r->skill_level),
+                $safe_cell($r->site),
+                $safe_cell($r->effective_status),
+                $r->on_site_today ? 'Yes' : 'No',
+                $safe_cell($r->current_shift),
+                (int)$r->active_wo_count,
+                (int)$r->cert_valid,
+                (int)$r->cert_expiring,
+                (int)$r->cert_expired,
+                $safe_cell($r->email),
+                $safe_cell($r->phone),
+                $safe_cell($r->join_date),
+            ), ',', '"', '\\');
+        }
+        fclose($out);
+        exit;
+    }
+
+    /**
+     * JSON endpoint backing the right-side Slide-Over Staff Inspector Drawer on `/team`.
+     */
+    public function member_json($user_id) {
+        $uid = (int)$user_id;
+        $send_json = function ($status_code, array $payload) {
+            if (ob_get_level()) @ob_end_clean();
+            http_response_code($status_code);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: private, no-store, max-age=0');
+            echo json_encode($payload);
+            exit;
+        };
+
+        if ($uid <= 0) {
+            $send_json(404, array('ok' => FALSE, 'error' => 'Invalid staff identifier.'));
+        }
+        if (!$this->is_supervisor() && !$this->is_manager() && $uid !== (int)$this->user_id) {
+            $send_json(403, array('ok' => FALSE, 'error' => 'You can only inspect your own staff profile.'));
+        }
+
+        $worker = $this->Team_model->get_by_id($uid);
+        if (!$worker) {
+            $send_json(404, array('ok' => FALSE, 'error' => 'Staff member not found.'));
+        }
+
+        $this->Team_model->refresh_cert_status($uid);
+
+        $today   = date('Y-m-d');
+        $s_map   = $this->Timesheet_model->resolve_sites_for_workers(array($worker), date('Y-m-01'), date('Y-m-t'), NULL);
+        $s_info  = isset($s_map[$uid]) ? $s_map[$uid] : array('site' => '', 'source' => '');
+        $on_site = $this->Attendance_model->ready() ? $this->Attendance_model->on_site_map($today) : array();
+
+        $att_rows = $this->Team_model->get_attendance_history($uid, 30);
+        $p_cnt = 0; $a_cnt = 0; $l_cnt = 0;
+        foreach ($att_rows as $ar) {
+            if ($ar->status === 'Present') $p_cnt++;
+            elseif ($ar->status === 'Absent') $a_cnt++;
+            elseif ($ar->status === 'Leave') $l_cnt++;
+        }
+        $judged_30 = $p_cnt + $a_cnt + $l_cnt;
+        $att_pct   = $judged_30 > 0 ? (int)round($p_cnt / $judged_30 * 100, 0) : NULL;
+
+        $certs_raw = $this->Team_model->get_certifications($uid);
+        $certs_out = array();
+        foreach ($certs_raw as $c) {
+            $days_left = !empty($c->expiry_date)
+                ? (int)floor((strtotime($c->expiry_date) - strtotime($today)) / 86400)
+                : NULL;
+            $certs_out[] = array(
+                'cert_name'    => (string)$c->cert_name,
+                'cert_number'  => isset($c->cert_number) ? (string)$c->cert_number : '',
+                'issuing_body' => isset($c->issuing_body) ? (string)$c->issuing_body : '',
+                'expiry_date'  => !empty($c->expiry_date) ? date('d M Y', strtotime($c->expiry_date)) : '',
+                'status'       => (string)$c->status,
+                'days_left'    => $days_left,
+                'document_url' => !empty($c->document) ? base_url($c->document) : '',
+            );
+        }
+
+        $leaves_raw = array_slice($this->Team_model->get_leave_history($uid), 0, 5);
+        $leaves_out = array();
+        $eff_status = (string)$worker->status;
+        foreach ($leaves_raw as $lr) {
+            if ($eff_status === 'Active' && $lr->status === 'Approved'
+                && $lr->start_date <= $today && $lr->end_date >= $today) {
+                $eff_status = 'On Leave';
+            }
+            $leaves_out[] = array(
+                'leave_type' => (string)$lr->leave_type,
+                'start_date' => date('d M Y', strtotime($lr->start_date)),
+                'end_date'   => date('d M Y', strtotime($lr->end_date)),
+                'days_count' => (int)$lr->days_count,
+                'status'     => (string)$lr->status,
+            );
+        }
+
+        $balances_raw = $this->Team_model->get_leave_balance($uid);
+        $annual_rem   = NULL;
+        foreach ($balances_raw as $b) {
+            if ($b['type'] === 'Annual Leave' && $b['remaining'] !== NULL) {
+                $annual_rem = round((float)$b['remaining'], 1);
+                break;
+            }
+        }
+
+        $open_wos = $this->Team_model->get_worker_open_workorders($uid);
+
+        $send_json(200, array(
+            'ok'               => TRUE,
+            'id'               => $uid,
+            'employee_id'      => (string)$worker->employee_id,
+            'full_name'        => trim((string)$worker->first_name . ' ' . (string)$worker->last_name),
+            'role_name'        => ucfirst((string)$worker->role_name),
+            'position'         => isset($worker->position) ? (string)$worker->position : '',
+            'skill_level'      => isset($worker->skill_level) ? (string)$worker->skill_level : 'Junior',
+            'status'           => $eff_status,
+            'site'             => $s_info['site'],
+            'site_source'      => $s_info['source'],
+            'on_site_today'    => isset($on_site[$uid]),
+            'email'            => isset($worker->email) ? (string)$worker->email : '',
+            'phone'            => isset($worker->phone) ? (string)$worker->phone : '',
+            'join_date'        => !empty($worker->join_date) ? date('d M Y', strtotime($worker->join_date)) : '',
+            'last_login'       => !empty($worker->last_login) ? date('d M Y H:i', strtotime($worker->last_login)) : '',
+            'photo_url'        => !empty($worker->photo) ? base_url('uploads/photos/' . rawurlencode(basename((string)$worker->photo))) : '',
+            'att_30d'          => array(
+                'pct'     => $att_pct,
+                'present' => $p_cnt,
+                'absent'  => $a_cnt,
+                'leave'   => $l_cnt,
+            ),
+            'annual_remaining' => $annual_rem,
+            'open_workorders'  => $open_wos,
+            'certifications'   => $certs_out,
+            'recent_leaves'    => $leaves_out,
+        ));
+    }
+
+    /**
+     * Shared server-side filter, status-tab counting, KPI rollup & deterministic
+     * multi-column sort pipeline for `/team` and `/team/roster_csv`.
+     */
+    private function _build_roster_dataset() {
+        $site_filter  = trim((string)$this->input->get('site', TRUE));
+        $role_in      = (int)$this->input->get('role', TRUE);
+        $role_filter  = ($role_in > 0) ? $role_in : 0;
+        $skill_in     = trim((string)$this->input->get('skill', TRUE));
+        $valid_skills = array('Junior', 'Senior', 'Expert', 'Specialist');
+        $skill_filter = in_array($skill_in, $valid_skills, TRUE) ? $skill_in : '';
+        $search_query = trim((string)$this->input->get('q', TRUE));
+        if (strlen($search_query) > 100) $search_query = substr($search_query, 0, 100);
+
+        $tab_in     = strtolower(trim((string)$this->input->get('tab', TRUE)));
+        $valid_tabs = array('all', 'active', 'on_site', 'on_leave', 'cert_alert', 'inactive');
+        $active_tab = in_array($tab_in, $valid_tabs, TRUE) ? $tab_in : 'all';
+
+        $sort_in    = strtolower(trim((string)$this->input->get('sort', TRUE)));
+        $valid_sort = array('name', 'employee_id', 'role', 'site', 'skill', 'active_wos', 'certs', 'join_date', 'status');
+        $sort_by    = in_array($sort_in, $valid_sort, TRUE) ? $sort_in : 'name';
+
+        $dir_in   = strtolower(trim((string)$this->input->get('dir', TRUE)));
+        $sort_dir = ($dir_in === 'desc') ? 'desc' : 'asc';
+
+        $all_rows = $this->Team_model->get_roster_overview();
+
+        // Scope by Role + Skill + Site + Search BEFORE status tab counts so counts match filter scope
+        $scoped = array();
+        $q_low  = function_exists('mb_strtolower') ? mb_strtolower($search_query, 'UTF-8') : strtolower($search_query);
+        foreach ($all_rows as $r) {
+            if ($role_filter > 0 && (int)$r->role_id !== $role_filter) continue;
+            if ($skill_filter !== '' && $r->skill_level !== $skill_filter) continue;
+            if ($site_filter !== '' && strcasecmp($r->site, $site_filter) !== 0) continue;
+            if ($q_low !== '') {
+                $hay = strtolower(
+                    $r->employee_id . ' ' . $r->full_name . ' ' . $r->email . ' ' . $r->phone . ' '
+                    . $r->position . ' ' . $r->site . ' ' . $r->role_name . ' ' . $r->skill_level . ' ' . $r->current_shift
+                );
+                if (strpos($hay, $q_low) === FALSE) continue;
+            }
+            $scoped[] = $r;
+        }
+
+        $tab_counts = array(
+            'all'        => count($scoped),
+            'active'     => 0,
+            'on_site'    => 0,
+            'on_leave'   => 0,
+            'cert_alert' => 0,
+            'inactive'   => 0,
+        );
+        $sum_wos = 0; $sum_crit_wos = 0; $sum_exp_certs = 0; $sum_soon_certs = 0;
+
+        foreach ($scoped as $r) {
+            if ($r->effective_status === 'Active')   $tab_counts['active']++;
+            if ($r->effective_status === 'On Leave') $tab_counts['on_leave']++;
+            if ($r->effective_status === 'Inactive') $tab_counts['inactive']++;
+            if ($r->on_site_today)                   $tab_counts['on_site']++;
+            if ($r->has_cert_alert)                  $tab_counts['cert_alert']++;
+
+            $sum_wos        += (int)$r->active_wo_count;
+            $sum_crit_wos   += (int)$r->critical_wo_count;
+            $sum_exp_certs  += (int)$r->cert_expired;
+            $sum_soon_certs += (int)$r->cert_expiring;
+        }
+
+        $rows = array();
+        foreach ($scoped as $r) {
+            if ($active_tab === 'active'     && $r->effective_status !== 'Active')   continue;
+            if ($active_tab === 'on_site'    && !$r->on_site_today)                  continue;
+            if ($active_tab === 'on_leave'   && $r->effective_status !== 'On Leave') continue;
+            if ($active_tab === 'cert_alert' && !$r->has_cert_alert)                 continue;
+            if ($active_tab === 'inactive'   && $r->effective_status !== 'Inactive') continue;
+            $rows[] = $r;
+        }
+
+        $mul = ($sort_dir === 'desc') ? -1 : 1;
+        usort($rows, function ($a, $b) use ($sort_by, $mul) {
+            $cmp = 0;
+            switch ($sort_by) {
+                case 'employee_id': $cmp = strnatcasecmp($a->employee_id, $b->employee_id); break;
+                case 'role':        $cmp = strnatcasecmp($a->role_name, $b->role_name); break;
+                case 'site':        $cmp = strnatcasecmp($a->site, $b->site); break;
+                case 'skill':       $cmp = ((int)$a->skill_rank <=> (int)$b->skill_rank); break;
+                case 'active_wos':  $cmp = ((int)$a->active_wo_count <=> (int)$b->active_wo_count); break;
+                case 'certs':
+                    $sa = ((int)$a->cert_expired * 100) + ((int)$a->cert_expiring * 10) + (int)$a->cert_total;
+                    $sb = ((int)$b->cert_expired * 100) + ((int)$b->cert_expiring * 10) + (int)$b->cert_total;
+                    $cmp = ($sa <=> $sb);
+                    break;
+                case 'join_date':   $cmp = strcmp($a->join_date !== '' ? $a->join_date : '9999-99-99', $b->join_date !== '' ? $b->join_date : '9999-99-99'); break;
+                case 'status':      $cmp = strnatcasecmp($a->effective_status, $b->effective_status); break;
+                case 'name':
+                default:            $cmp = strnatcasecmp($a->full_name, $b->full_name); break;
+            }
+            if ($cmp !== 0) return $cmp * $mul;
+            $tie = strnatcasecmp($a->full_name, $b->full_name);
+            return $tie !== 0 ? $tie : ((int)$a->id <=> (int)$b->id);
+        });
+
+        return array(
+            'site_filter'  => $site_filter,
+            'role_filter'  => $role_filter,
+            'skill_filter' => $skill_filter,
+            'search_query' => $search_query,
+            'active_tab'   => $active_tab,
+            'sort_by'      => $sort_by,
+            'sort_dir'     => $sort_dir,
+            'total_scope'  => count($scoped),
+            'tab_counts'   => $tab_counts,
+            'summary'      => array(
+                'total_staff'    => count($scoped),
+                'active_staff'   => $tab_counts['active'],
+                'inactive_staff' => $tab_counts['inactive'],
+                'on_site_today'  => $tab_counts['on_site'],
+                'on_leave_today' => $tab_counts['on_leave'],
+                'open_wos'       => $sum_wos,
+                'critical_wos'   => $sum_crit_wos,
+                'cert_expired'   => $sum_exp_certs,
+                'cert_expiring'  => $sum_soon_certs,
+            ),
+            'all_rows'     => $all_rows,
+            'rows'         => $rows,
+        );
     }
 
     public function create() {
@@ -97,6 +460,12 @@ class Team extends MY_Controller {
     }
 
     public function view($id) {
+        if (!$this->is_supervisor() && !$this->is_manager() && (int)$id !== (int)$this->user_id) {
+            $this->session->set_flashdata('error', 'You can only view your own staff profile.');
+            redirect('team/view/' . (int)$this->user_id);
+            return;
+        }
+
         $data['worker']       = $this->Team_model->get_by_id($id);
         if (!$data['worker']) show_404();
 
@@ -289,7 +658,7 @@ class Team extends MY_Controller {
 
             $this->session->set_flashdata('success',
                 'Leave request submitted.' . ($warning ? ' ' . $warning : ''));
-            redirect('team');
+            redirect(($this->is_supervisor() || $this->is_manager()) ? 'team' : ('team/view/' . (int)$this->user_id));
         }
 
         $data['balances']    = $this->Team_model->get_leave_balance($this->user_id);

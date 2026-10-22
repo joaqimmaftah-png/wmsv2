@@ -145,7 +145,7 @@ jobs:
           php scripts/create-admin.php tech1@ci.local "AdminPass123!" "John" "Moshi" 2
           php scripts/create-admin.php mgr@ci.local "AdminPass123!" "CI" "Manager" 4
           python3 - <<'PY'
-          import http.cookiejar, io, json, re, subprocess, tempfile, traceback, urllib.error, urllib.parse, urllib.request, zipfile, zlib
+          import http.cookiejar, io, json, os, re, subprocess, tempfile, traceback, urllib.error, urllib.parse, urllib.request, zipfile, zlib
 
           try:
               cj = http.cookiejar.MozillaCookieJar('/tmp/cookies.txt')
@@ -351,7 +351,70 @@ jobs:
               st_other, hdr_other, other_body = get_bytes(f'/team/timesheet/{sup_id}?period=h1', tech_op)
               assert not other_body.startswith(b'%PDF-1.4'), 'Technician must NOT receive another user PDF!'
 
-              print('ALL LIVE ATTENDANCE WORKFLOW & AML TIMESHEET E2E CHECKS PASSED!')
+              # 8. Live Enterprise Workforce Directory (/team) E2E checks (Supervisor, Manager & Technician RBAC)
+              sql_seed = f"""
+              INSERT INTO certifications (user_id, cert_name, cert_number, issuing_body, issued_date, expiry_date, status)
+              VALUES ({int(tech_id)}, 'Heavy Excavator Safety', 'CERT-EX-01', 'OSHA TZ', '2024-01-01', '2025-01-01', 'Valid');
+              INSERT INTO work_orders (wo_number, equipment_id, title, type, priority, status, assigned_to, created_by)
+              SELECT 'WO-CI-TEAM-01', id, 'Main boom cylinder seal leak', 'Corrective Maintenance', 'Critical', 'In Progress', '{int(tech_id)}', {int(sup_id)}
+              FROM equipment WHERE registration_no = 'EX 006' LIMIT 1;
+              INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, days_count, reason, status)
+              VALUES ({int(tech_id)}, 'Annual Leave', '2026-11-10', '2026-11-12', 3, 'Family event', 'Pending');
+              """
+              subprocess.run(
+                  ['mysql', '-h', '127.0.0.1', '-uroot', f'-p{os.environ["WMS_DB_PASS"]}', 'wms_fresh'],
+                  input=sql_seed.encode('utf-8'),
+                  check=True,
+              )
+
+              team_html = get('/team')
+              assert 'role="tablist"' in team_html and 'id="tmDrawer"' in team_html, 'Missing tabs/drawer on /team!'
+              assert '1 Expired' in team_html, 'Stale certification status was NOT auto-refreshed on /team!'
+              assert '1 Open WO' in team_html, 'Pending leave approval queue missed live open WO warning!'
+              assert 'On Site' in team_html, 'Live geofenced QR On Site badge missing on /team!'
+
+              # Verify server-side status tabs, search, sorting & out-of-range pagination clamping
+              cert_tab_html = get('/team?tab=cert_alert')
+              assert 'John Moshi' in cert_tab_html and 'data-member-name="CI Supervisor"' not in cert_tab_html
+              onsite_tab_html = get('/team?tab=on_site')
+              assert 'data-member-name="CI Supervisor"' in onsite_tab_html and 'data-member-name="John Moshi"' not in onsite_tab_html
+              clamp_html = get('/team?sort=active_wos&dir=desc&per_page=10&page=999')
+              assert 'aria-sort="descending"' in clamp_html and 'John Moshi' in clamp_html
+
+              # Verify Staff Inspector Drawer JSON endpoint (/team/member_json/{tech_id})
+              st_mj, _, mj_raw = get_bytes(f'/team/member_json/{tech_id}')
+              mj_doc = json.loads(mj_raw.decode('utf-8'))
+              assert st_mj == 200 and mj_doc.get('ok') is True and mj_doc.get('full_name') == 'John Moshi'
+              assert any(w.get('wo_number') == 'WO-CI-TEAM-01' and w.get('machine') == 'EX 006' for w in mj_doc.get('open_workorders', []))
+              assert any(c.get('cert_name') == 'Heavy Excavator Safety' and c.get('status') == 'Expired' for c in mj_doc.get('certifications', []))
+
+              # Verify Workforce Roster CSV export (UTF-8 BOM + multi-select ?ids= filter)
+              st_rcsv, _, rcsv_raw = get_bytes(f'/team/roster_csv?ids={tech_id}')
+              assert st_rcsv == 200 and rcsv_raw.startswith(b'\xef\xbb\xbf'), '/team/roster_csv missing UTF-8 BOM!'
+              rcsv_txt = rcsv_raw.decode('utf-8-sig')
+              assert 'John Moshi' in rcsv_txt and 'CI Supervisor' not in rcsv_txt and 'Active Work Orders' in rcsv_txt
+
+              # Manager (role_id = 4) read-only access succeeds on /team, /team/roster_csv & /team/member_json while hiding mutations
+              st_mgr_tm, _, mgr_tm_b = get_bytes('/team', mgr_op)
+              mgr_tm_html = mgr_tm_b.decode('utf-8', 'replace')
+              assert st_mgr_tm == 200 and 'Export CSV' in mgr_tm_html and 'Add Worker' not in mgr_tm_html and 'Edit Worker Profile' not in mgr_tm_html
+              st_mgr_rc, _, mgr_rc_b = get_bytes('/team/roster_csv', mgr_op)
+              assert st_mgr_rc == 200 and mgr_rc_b.startswith(b'\xef\xbb\xbf')
+              st_mgr_mj, _, mgr_mj_b = get_bytes(f'/team/member_json/{tech_id}', mgr_op)
+              assert st_mgr_mj == 200 and json.loads(mgr_mj_b.decode('utf-8')).get('ok') is True
+
+              # Technician (role_id = 2) Horizontal Privacy on /team, /team/view/{peer} & /team/member_json/{peer}
+              st_tech_tm, _, tech_tm_b = get_bytes('/team', tech_op)
+              tech_tm_html = tech_tm_b.decode('utf-8', 'replace')
+              assert st_tech_tm == 200 and 'John Moshi' in tech_tm_html and 'mgr@ci.local' not in tech_tm_html
+              st_peer_view, _, peer_view_b = get_bytes(f'/team/view/{sup_id}', tech_op)
+              assert b'admin@ci.local' not in peer_view_b, 'Horizontal PII leak on /team/view/{peer_id}!'
+              st_own_mj, _, own_mj_b = get_bytes(f'/team/member_json/{tech_id}', tech_op)
+              assert st_own_mj == 200 and json.loads(own_mj_b.decode('utf-8')).get('full_name') == 'John Moshi'
+              st_forb_mj, _, _ = get_bytes(f'/team/member_json/{sup_id}', tech_op)
+              assert st_forb_mj == 403, f'Expected HTTP 403 for peer member_json, got {st_forb_mj}'
+
+              print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY & AML TIMESHEET E2E CHECKS PASSED!')
           except BaseException:
               tb = traceback.format_exc().replace('\n', '%0A')
               print(f'::error title=PythonE2E::{tb}', flush=True)
@@ -512,6 +575,104 @@ jobs:
               }))()`);
               assert(mobileCheck.docOverflow <= 0, 'Mobile 390px viewport overflowed horizontally: ' + mobileCheck.docOverflow);
               assert(mobileCheck.tableDisplay === 'none' && mobileCheck.cardsDisplay === 'block', 'Mobile responsive Card View did not activate: ' + JSON.stringify(mobileCheck));
+
+              // 3. Verify Desktop 1440x900 & Mobile 390x844 UI, Contrast & Drawer on /team
+              await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+              await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/team?sort=active_wos&dir=desc' });
+              for (let i = 0; i < 50; i++) {
+                if (await evalJs('document.readyState === "complete" && Boolean(document.querySelector(".tm-row-chk"))')) break;
+                await sleep(200);
+              }
+
+              const teamDesktop = await evalJs(`(async () => {
+                const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+                const tblWrap = document.querySelector('.tm-table-wrap');
+                const tblOverflow = tblWrap ? (tblWrap.scrollWidth - tblWrap.clientWidth) : -1;
+
+                // Measure live WCAG contrast ratio of .tm-avatar foreground vs background
+                function relLum(rgbStr) {
+                  const m = rgbStr.match(/\\d+/g).map(Number).slice(0, 3).map((v) => {
+                    const s = v / 255;
+                    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+                  });
+                  return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2];
+                }
+                const av = document.querySelector('.tm-avatar');
+                const avStyle = getComputedStyle(av);
+                const l1 = relLum(avStyle.color), l2 = relLum(avStyle.backgroundColor);
+                const avatarContrast = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+
+                // Slash shortcut focuses #tmSearchInput
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+                const slashFocused = (document.activeElement && document.activeElement.id === 'tmSearchInput');
+                document.activeElement.blur();
+
+                // Multi-select checkbox reveals batch bar
+                const chk = document.querySelector('.tm-row-chk');
+                chk.checked = true;
+                chk.dispatchEvent(new Event('change', { bubbles: true }));
+                const batchVisible = !document.getElementById('tmBatchBar').hidden;
+                const batchCsvHref = document.getElementById('tmBatchCsv').getAttribute('href');
+
+                // Open Staff Inspector Drawer on first row (John Moshi with WO-CI-TEAM-01)
+                const trigger = document.querySelector('.tm-staff-btn.js-open-member');
+                trigger.focus();
+                trigger.click();
+                for (let w = 0; w < 25; w++) {
+                  if (document.getElementById('tmDrawerBody').textContent.includes('WO-CI-TEAM-01')) break;
+                  await new Promise((r) => setTimeout(r, 100));
+                }
+                const drawerOpen = !document.getElementById('tmDrawer').hidden;
+                const drawerText = document.getElementById('tmDrawerBody').textContent;
+                const hasWoAndCert = drawerText.includes('WO-CI-TEAM-01') && drawerText.includes('EX 006') && drawerText.includes('Heavy Excavator Safety');
+                const firstName = document.getElementById('tmDrawerTitle').textContent;
+
+                // ArrowRight steps to next staff member
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+                await new Promise((r) => setTimeout(r, 250));
+                const secondName = document.getElementById('tmDrawerTitle').textContent;
+
+                // Escape closes drawer and restores focus
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                const drawerClosed = document.getElementById('tmDrawer').hidden;
+                const focusRestored = (document.activeElement === trigger);
+
+                // Toggle Cards <-> Table view
+                document.querySelector('[data-set-view="cards"]').click();
+                const cardsShown = getComputedStyle(document.querySelector('.tm-cards-container')).display !== 'none'
+                  && getComputedStyle(document.querySelector('.tm-table-wrap')).display === 'none';
+                document.querySelector('[data-set-view="table"]').click();
+
+                return {
+                  docOverflow, tblOverflow, avatarContrast, slashFocused, batchVisible, batchCsvHref,
+                  drawerOpen, hasWoAndCert, stepped: firstName !== secondName,
+                  drawerClosed, focusRestored, cardsShown
+                };
+              })()`);
+
+              assert(teamDesktop.docOverflow <= 0, '/team Desktop viewport overflowed: ' + teamDesktop.docOverflow);
+              assert(teamDesktop.tblOverflow <= 0, '/team Desktop table overflowed: ' + teamDesktop.tblOverflow);
+              assert(teamDesktop.avatarContrast >= 4.5, '/team Avatar contrast failed WCAG AA: ' + teamDesktop.avatarContrast);
+              assert(teamDesktop.slashFocused === true, '/team Slash shortcut failed');
+              assert(teamDesktop.batchVisible && teamDesktop.batchCsvHref.includes('ids='), '/team Batch bar failed');
+              assert(teamDesktop.drawerOpen && teamDesktop.hasWoAndCert, '/team Drawer missed WO-CI-TEAM-01 / EX 006 / Cert');
+              assert(teamDesktop.stepped === true, '/team ArrowRight drawer navigation failed');
+              assert(teamDesktop.drawerClosed && teamDesktop.focusRestored, '/team Escape close / focus restore failed');
+              assert(teamDesktop.cardsShown === true, '/team Cards view switcher failed');
+
+              await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+              await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/team' });
+              for (let i = 0; i < 40; i++) {
+                if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("tmShell"))')) break;
+                await sleep(200);
+              }
+              const teamMobile = await evalJs(`(() => ({
+                docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+                tableDisplay: getComputedStyle(document.querySelector('.tm-table-wrap')).display,
+                cardsDisplay: getComputedStyle(document.querySelector('.tm-cards-container')).display
+              }))()`);
+              assert(teamMobile.docOverflow <= 0, '/team Mobile 390px overflowed: ' + teamMobile.docOverflow);
+              assert(teamMobile.tableDisplay === 'none' && teamMobile.cardsDisplay === 'block', '/team Mobile Card View failed: ' + JSON.stringify(teamMobile));
 
               ws.close();
               console.log('ALL HEADLESS CHROME DESKTOP (1440x900) & MOBILE (390x844) UI E2E ASSERTIONS PASSED!');
