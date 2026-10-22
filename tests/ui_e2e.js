@@ -634,6 +634,21 @@ for (const rawLine of cookieLines) {
       if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("blShell"))')) break;
       await sleep(200);
     }
+    const blPage1 = await evalJs(`(() => {
+      const tblWrap = document.querySelector('.bl-table-wrap');
+      return {
+        docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+        tblOverflow: tblWrap ? (tblWrap.scrollWidth - tblWrap.clientWidth) : -1,
+        rowCount: document.querySelectorAll('tr[data-bl-id]').length
+      };
+    })()`);
+    assert(blPage1.docOverflow <= 0 && blPage1.tblOverflow <= 0 && blPage1.rowCount > 0, '/backlog Page 1 failed: ' + JSON.stringify(blPage1));
+
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/backlog?sort=start_date&dir=desc' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.querySelector(\'[data-bl-open="961"]\'))')) break;
+      await sleep(200);
+    }
     const blDesktop = await evalJs(`(async () => {
       const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
       const tblWrap = document.querySelector('.bl-table-wrap');
@@ -673,7 +688,7 @@ for (const rawLine of cookieLines) {
       const hasInspLink = document.getElementById('blDrawerBody').textContent.includes('INSP-951');
       const firstHeader = document.getElementById('blDrawerTitle').textContent;
 
-      // ArrowRight steps drawer to BL-0962
+      // ArrowRight steps drawer to next defect
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
       await new Promise((r) => setTimeout(r, 250));
       const secondHeader = document.getElementById('blDrawerTitle').textContent;
@@ -705,13 +720,13 @@ for (const rawLine of cookieLines) {
       };
     })()`);
 
-    assert(blDesktop.docOverflow <= 0, '/backlog Desktop overflowed: ' + blDesktop.docOverflow);
-    assert(blDesktop.tblOverflow <= 0, '/backlog Table wrapper overflowed: ' + blDesktop.tblOverflow);
-    assert(blDesktop.slashFocused === true, '/backlog Slash shortcut failed');
-    assert(blDesktop.closeModalOpen && blDesktop.closeModalClosed, '/backlog Supervisor Verify modal failed');
-    assert(blDesktop.batchVisible && blDesktop.batchCsvHref.includes('ids='), '/backlog Batch bar failed');
-    assert(blDesktop.drawerOpen && blDesktop.hasInspLink, '/backlog Drawer missed INSP-951 link');
-    assert(blDesktop.stepped === true, '/backlog ArrowRight navigation failed');
+    assert(blDesktop.docOverflow <= 0, '/backlog Desktop overflowed: ' + JSON.stringify(blDesktop));
+    assert(blDesktop.tblOverflow <= 0, '/backlog Table wrapper overflowed: ' + JSON.stringify(blDesktop));
+    assert(blDesktop.slashFocused === true, '/backlog Slash shortcut failed: ' + JSON.stringify(blDesktop));
+    assert(blDesktop.closeModalOpen && blDesktop.closeModalClosed, '/backlog Supervisor Verify modal failed: ' + JSON.stringify(blDesktop));
+    assert(blDesktop.batchVisible && blDesktop.batchCsvHref.includes('ids='), '/backlog Batch bar failed: ' + JSON.stringify(blDesktop));
+    assert(blDesktop.drawerOpen && blDesktop.hasInspLink, '/backlog Drawer missed INSP-951 link: ' + JSON.stringify(blDesktop));
+    assert(blDesktop.stepped === true, '/backlog ArrowRight navigation failed: ' + JSON.stringify(blDesktop));
     assert(blDesktop.drawerClosed && blDesktop.focusRestored, '/backlog Escape close/focus failed');
     assert(blDesktop.cardsShown === true, '/backlog Cards switcher failed');
     assert(blDesktop.csvOk === true, '/backlog CSV export failed');
