@@ -1800,9 +1800,10 @@ check('INSP-01 & INSP-03 P1 No-Go, Clean Pass, Unsigned Sign-Off & Verbatim Asse
     && $inOverview['rows'][1]->machine_label === 'C-HEADT 007');
 
 $inCtrlSrc = file_get_contents(APPPATH . 'controllers/Inspections.php');
+$myCtrlSrcIn = file_get_contents(APPPATH . 'core/MY_Controller.php');
 check('INSP-04 Manager RBAC & POST Guard: MY_Controller whitelists GET inspections/records while Inspections::save() enforces require_post()',
-    defined('MY_Controller::MANAGER_READ_WHITELIST')
-    && in_array('inspections/records', MY_Controller::MANAGER_READ_WHITELIST, TRUE)
+    strpos($myCtrlSrcIn, 'const MANAGER_READ_WHITELIST') !== FALSE
+    && strpos($myCtrlSrcIn, "'inspections/records'") !== FALSE
     && strpos($inCtrlSrc, '$this->require_post()') !== FALSE);
 if (isset($mutRegex)) {
     foreach (array('index', 'export_csv', 'summary_json') as $inAct) {

@@ -415,7 +415,7 @@ class Inspection_model extends CI_Model {
 
         // Query 3: All inspection records joined cleanly to Asset Register `equipment`
         $records = $this->db
-            ->select('ir.*, e.registration_no AS equip_reg_no, e.category AS equip_category, e.location AS equip_location, e.brand AS equip_brand, e.model AS equip_model')
+            ->select('ir.*, e.registration_no AS equip_reg_no, e.location AS equip_location, e.brand AS equip_brand, e.model AS equip_model')
             ->from('inspection_records ir')
             ->join('equipment e', 'e.id = ir.equipment_id', 'left')
             ->order_by('ir.inspection_date', 'DESC')
