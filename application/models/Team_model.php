@@ -70,38 +70,69 @@ class Team_model extends CI_Model {
      * the days actually judged — present + absent + leave — while rest days and
      * holidays are reported separately and excluded.
      */
-    public function get_monthly_report($month, $from = NULL, $to = NULL, $site_filter = NULL) {
+    public function get_monthly_report($month, $from = NULL, $to = NULL, $site_filter = NULL, $only_user_id = NULL) {
         if (!$from || !$to) {
             $from = "{$month}-01";
             $to   = date('Y-m-t', strtotime($from));
         }
 
-        $workers = $this->get_all_active();
-        $result  = [];
-        $ci      = get_instance();
-        $has_ts  = FALSE;
+        if ($only_user_id !== NULL && (int)$only_user_id > 0) {
+            $one = $this->get_by_id((int)$only_user_id);
+            $workers = $one ? array($one) : array();
+        } else {
+            $workers = $this->get_all_active();
+        }
+        if (empty($workers)) return array();
+
+        $ci = get_instance();
+        $has_ts = FALSE;
         if (isset($ci->load)) {
             $ci->load->model('Timesheet_model');
             $has_ts = isset($ci->Timesheet_model);
         }
         $site_trim = is_string($site_filter) ? trim($site_filter) : '';
 
+        // Bulk site resolution across all workers (<= 2 SQL queries total, zero N+1)
+        $sites_map = $has_ts
+            ? $ci->Timesheet_model->resolve_sites_for_workers($workers, $from, $to, NULL)
+            : array();
+
+        $worker_ids = array();
+        foreach ($workers as $w) $worker_ids[] = (int)$w->id;
+
+        // Single bulk query for all attendance records in [from .. to]
+        $att_by_user = array();
+        $all_rows = $this->db->select('user_id, status, check_in, check_out, hours_worked')
+            ->where_in('user_id', $worker_ids)
+            ->where('date >=', $from)
+            ->where('date <=', $to)
+            ->get('attendance')->result_array();
+        foreach ($all_rows as $ar) {
+            $att_by_user[(int)$ar['user_id']][] = $ar;
+        }
+
+        $result = array();
         foreach ($workers as $w) {
-            $w_site = $has_ts
-                ? $ci->Timesheet_model->resolve_worker_site($w, $from, $to, NULL)
-                : (isset($w->site) ? (string)$w->site : '');
+            $uid     = (int)$w->id;
+            $s_info  = isset($sites_map[$uid])
+                ? $sites_map[$uid]
+                : array('site' => isset($w->site) ? (string)$w->site : '', 'source' => isset($w->site) && $w->site !== '' ? 'profile' : '');
+            $w_site  = $s_info['site'];
+
             if ($site_trim !== '' && strcasecmp($w_site, $site_trim) !== 0) {
                 continue;
             }
 
-            $rows = $this->db->select('status, check_in, check_out, hours_worked')
-                ->where('user_id', $w->id)->where('date >=', $from)->where('date <=', $to)
-                ->get('attendance')->result_array();
-
-            $stats = ['Present' => 0, 'Absent' => 0, 'Leave' => 0, 'Rest' => 0, 'Holiday' => 0];
+            $rows = isset($att_by_user[$uid]) ? $att_by_user[$uid] : array();
+            $stats = array('Present' => 0, 'Absent' => 0, 'Leave' => 0, 'Rest' => 0, 'Holiday' => 0);
             $hours_sum = 0.0;
+            $missing_checkout = 0;
+
             foreach ($rows as $r) {
                 if (isset($stats[$r['status']])) $stats[$r['status']]++;
+                if (!empty($r['check_in']) && empty($r['check_out']) && $r['status'] === 'Present') {
+                    $missing_checkout++;
+                }
                 if (isset($r['hours_worked']) && $r['hours_worked'] !== NULL && is_numeric($r['hours_worked'])) {
                     $hours_sum += (float)$r['hours_worked'];
                 } elseif (!empty($r['check_in']) && !empty($r['check_out']) && function_exists('wms_hours_between')) {
@@ -110,23 +141,35 @@ class Team_model extends CI_Model {
                 }
             }
 
+            $recorded_days = count($rows);
             $total = $stats['Present'] + $stats['Absent'] + $stats['Leave'];
-            $pct   = $total > 0 ? round($stats['Present'] / $total * 100, 0) : 0;
-            $result[] = (object)[
-                'id'           => (int)$w->id,
-                'employee_id'  => $w->employee_id,
-                'full_name'    => $w->first_name . ' ' . $w->last_name,
-                'position'     => $w->position,
-                'site'         => $w_site,
-                'present'      => $stats['Present'],
-                'absent'       => $stats['Absent'],
-                'leave'        => $stats['Leave'],
-                'rest'         => $stats['Rest'],
-                'holiday'      => $stats['Holiday'],
-                'hours_worked' => round($hours_sum, 2),
-                'total'        => $total,
-                'pct'          => $pct,
-            ];
+            // Distinguish unrecorded worker (NULL) from genuine 0% presence (0)
+            $pct = $total > 0 ? (int)round($stats['Present'] / $total * 100, 0) : NULL;
+
+            $result[] = (object)array(
+                'id'               => $uid,
+                'employee_id'      => (string)$w->employee_id,
+                'full_name'        => trim((string)$w->first_name . ' ' . (string)$w->last_name),
+                'first_name'       => (string)$w->first_name,
+                'last_name'        => (string)$w->last_name,
+                'role_id'          => (int)$w->role_id,
+                'role_name'        => isset($w->role_name) ? (string)$w->role_name : '',
+                'position'         => isset($w->position) ? (string)$w->position : '',
+                'skill_level'      => isset($w->skill_level) ? (string)$w->skill_level : '',
+                'site'             => $w_site,
+                'site_source'      => $s_info['source'],
+                'present'          => $stats['Present'],
+                'absent'           => $stats['Absent'],
+                'leave'            => $stats['Leave'],
+                'rest'             => $stats['Rest'],
+                'holiday'          => $stats['Holiday'],
+                'hours_worked'     => round($hours_sum, 2),
+                'missing_checkout' => $missing_checkout,
+                'recorded_days'    => $recorded_days,
+                'has_records'      => ($recorded_days > 0),
+                'total'            => $total,
+                'pct'              => $pct,
+            );
         }
         return $result;
     }

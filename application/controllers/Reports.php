@@ -2015,13 +2015,25 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                 fclose($out);
                 break;
             case 'attendance':
-                $rows = $this->Team_model->get_monthly_report($month);
-                $filename = "Attendance_{$month}.csv";
-                header('Content-Type: text/csv');
-                header("Content-Disposition: attachment; filename={$filename}");
+                $this->load->helper('attendance');
+                $period = wms_timesheet_resolve_period(
+                    $month,
+                    $this->input->get('period', TRUE),
+                    $this->input->get('from', TRUE),
+                    $this->input->get('to', TRUE)
+                );
+                $site = trim((string)$this->input->get('site', TRUE));
+                $rows = $this->Team_model->get_monthly_report($period['month'], $period['start_date'], $period['end_date'], $site);
+                $filename = 'Attendance_' . $period['file_slug'] . '.csv';
+                header('Content-Type: text/csv; charset=utf-8');
+                header("Content-Disposition: attachment; filename=\"{$filename}\"");
                 $out = fopen('php://output', 'w');
-                fputcsv($out, ['Employee ID','Name','Position','Present','Absent','Leave','Rest','Holiday','Working Days','Attendance %'], ',', '"', '\\');
-                foreach ($rows as $r) fputcsv($out, [$r->employee_id,$r->full_name,$r->position,$r->present,$r->absent,$r->leave,$r->rest,$r->holiday,$r->total,$r->pct], ',', '"', '\\');
+                fwrite($out, "\xEF\xBB\xBF");
+                fputcsv($out, ['Employee ID','Name','Role','Position','Site','Present','Absent','Leave','Rest','Holiday','Hours Worked','Working Days','Attendance %'], ',', '"', '\\');
+                foreach ($rows as $r) {
+                    $pct_str = ($r->pct === NULL) ? 'No records' : ($r->pct . '%');
+                    fputcsv($out, [$r->employee_id,$r->full_name,$r->role_name,$r->position,$r->site,$r->present,$r->absent,$r->leave,$r->rest,$r->holiday,$r->hours_worked,$r->total,$pct_str], ',', '"', '\\');
+                }
                 fclose($out);
                 break;
             case 'lubricants':

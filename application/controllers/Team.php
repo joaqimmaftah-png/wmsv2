@@ -844,26 +844,194 @@ class Team extends MY_Controller {
     }
 
     public function report() {
+        $ctx = $this->_build_report_dataset();
+
+        $per_page_in = (int)$this->input->get('per_page', TRUE);
+        $per_page = in_array($per_page_in, array(10, 25, 50, 100), TRUE) ? $per_page_in : 25;
+
+        $total_filtered = count($ctx['rows']);
+        $total_pages    = max(1, (int)ceil($total_filtered / $per_page));
+        $page_in        = (int)$this->input->get('page', TRUE);
+        $page           = max(1, min($total_pages, $page_in > 0 ? $page_in : 1));
+        $offset         = ($page - 1) * $per_page;
+        $paged_rows     = array_slice($ctx['rows'], $offset, $per_page);
+
+        $view_in   = strtolower(trim((string)$this->input->get('view', TRUE)));
+        $view_mode = ($view_in === 'cards') ? 'cards' : 'table';
+
+        $data = array(
+            'report'           => $paged_rows,
+            'total_filtered'   => $total_filtered,
+            'total_scope'      => $ctx['total_scope'],
+            'tab_counts'       => $ctx['tab_counts'],
+            'summary'          => $ctx['summary'],
+            'month'            => $ctx['period']['month'],
+            'period'           => $ctx['period'],
+            'site_filter'      => $ctx['site_filter'],
+            'role_filter'      => $ctx['role_filter'],
+            'search_query'     => $ctx['search_query'],
+            'active_tab'       => $ctx['active_tab'],
+            'sort_by'          => $ctx['sort_by'],
+            'sort_dir'         => $ctx['sort_dir'],
+            'per_page'         => $per_page,
+            'page'             => $page,
+            'total_pages'      => $total_pages,
+            'showing_from'     => $total_filtered > 0 ? ($offset + 1) : 0,
+            'showing_to'       => min($total_filtered, $offset + count($paged_rows)),
+            'view_mode'        => $view_mode,
+            'sites'            => $this->Timesheet_model->site_options(),
+            'roles_list'       => $this->db->order_by('id', 'ASC')->get('roles')->result(),
+            'can_batch'        => $ctx['can_view_all'],
+            'is_supervisor'    => $this->is_supervisor(),
+            'current_user_id'  => (int)$this->user_id,
+            'page_title'       => $ctx['can_view_all']
+                ? 'Attendance Report & Individual Timesheets'
+                : 'My Attendance & Timesheet',
+        );
+        $this->render('team/report', $data);
+    }
+
+    /**
+     * Export the currently filtered/sorted Attendance Summary table as UTF-8 CSV
+     * (respecting RBAC scoping, period, site, role, status tab, search & selection).
+     */
+    public function report_csv() {
+        $ctx  = $this->_build_report_dataset();
+        $rows = $ctx['rows'];
+
+        $sel_ids = $this->_parse_selected_ids();
+        if (!empty($sel_ids)) {
+            $allow = array_fill_keys($sel_ids, TRUE);
+            $rows  = array_values(array_filter($rows, function ($r) use ($allow) {
+                return isset($allow[(int)$r->id]);
+            }));
+        }
+
+        $safe_cell = function ($v) {
+            $s = (string)$v;
+            if ($s !== '' && in_array($s[0], array('=', '+', '-', '@', "\t", "\r"), TRUE)) {
+                return "'" . $s;
+            }
+            return $s;
+        };
+
+        $filename = 'AML_Attendance_Summary_' . $ctx['period']['file_slug'] . '.csv';
+        if (ob_get_level()) @ob_end_clean();
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: private, max-age=0, must-revalidate');
+
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, array(
+            'Employee ID', 'Name', 'Role', 'Position', 'Site',
+            'Present', 'Absent', 'Leave', 'Rest', 'Holiday',
+            'Hours Worked', 'Working Days', 'Attendance Rate',
+        ), ',', '"', '\\');
+
+        foreach ($rows as $r) {
+            $rate = ($r->pct === NULL) ? 'No records' : ($r->pct . '%');
+            fputcsv($out, array(
+                $safe_cell($r->employee_id),
+                $safe_cell($r->full_name),
+                $safe_cell($r->role_name),
+                $safe_cell($r->position),
+                $safe_cell($r->site),
+                (int)$r->present,
+                (int)$r->absent,
+                (int)$r->leave,
+                (int)$r->rest,
+                (int)$r->holiday,
+                (float)$r->hours_worked,
+                (int)$r->total,
+                $rate,
+            ), ',', '"', '\\');
+        }
+        fclose($out);
+        exit;
+    }
+
+    /**
+     * JSON endpoint backing the right-side Slide-Over AML Attendance Sheet
+     * Inspector on `/team/report` (avoids losing table state or downloading
+     * files just to verify daily check-ins, check-outs & observations).
+     */
+    public function sheet_json($user_id) {
+        $uid = (int)$user_id;
+        $send_json = function ($status_code, array $payload) {
+            if (ob_get_level()) @ob_end_clean();
+            http_response_code($status_code);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: private, no-store, max-age=0');
+            echo json_encode($payload);
+            exit;
+        };
+
+        if ($uid <= 0) {
+            $send_json(404, array('ok' => FALSE, 'error' => 'Invalid worker identifier.'));
+        }
+        if (!$this->is_supervisor() && !$this->is_manager() && $uid !== (int)$this->user_id) {
+            $send_json(403, array('ok' => FALSE, 'error' => 'You may only inspect your own attendance sheet.'));
+        }
+
         $period = wms_timesheet_resolve_period(
             $this->input->get('month', TRUE),
             $this->input->get('period', TRUE),
             $this->input->get('from', TRUE),
             $this->input->get('to', TRUE)
         );
-        $site_filter = trim((string)$this->input->get('site', TRUE));
+        $site_override = trim((string)$this->input->get('site', TRUE));
 
-        $data['report']          = $this->Team_model->get_monthly_report(
-            $period['month'], $period['start_date'], $period['end_date'], $site_filter
-        );
-        $data['workers']         = $this->Team_model->get_all_active();
-        $data['month']           = $period['month'];
-        $data['period']          = $period;
-        $data['site_filter']     = $site_filter;
-        $data['sites']           = $this->Timesheet_model->site_options();
-        $data['can_batch']       = ($this->is_supervisor() || $this->is_manager());
-        $data['current_user_id'] = (int)$this->user_id;
-        $data['page_title']      = 'Attendance Report & Timesheets';
-        $this->render('team/report', $data);
+        $sheets = $this->Timesheet_model->build_for_worker($uid, $period, $site_override);
+        if (empty($sheets)) {
+            $send_json(404, array('ok' => FALSE, 'error' => 'Worker not found.'));
+        }
+
+        $first = $sheets[0];
+        $segments_out = array();
+        $tot_days_worked = 0;
+        $tot_hours = 0.0;
+        $missing_out = 0;
+
+        foreach ($sheets as $sh) {
+            $g = $sh['grid'];
+            $tot_days_worked += (int)$g['days_worked'];
+            $tot_hours += (float)$g['total_hours'];
+            foreach ($g['weeks'] as $wk) {
+                foreach ($wk['days'] as $d) {
+                    if ($d['time_in'] !== '' && $d['time_out'] === '' && $d['status'] === 'Present') {
+                        $missing_out++;
+                    }
+                }
+            }
+            $segments_out[] = array(
+                'index'         => (int)$sh['segment_index'],
+                'count'         => (int)$sh['segment_count'],
+                'month_heading' => (string)$sh['month_heading'],
+                'start_date'    => (string)$g['start_date'],
+                'end_date'      => (string)$g['end_date'],
+                'days_worked'   => (int)$g['days_worked'],
+                'total_hours'   => (string)$g['total_hours_label'],
+                'weeks'         => $g['weeks'],
+            );
+        }
+
+        $send_json(200, array(
+            'ok'               => TRUE,
+            'user_id'          => $uid,
+            'employee_id'      => (string)$first['employee_id'],
+            'full_name'        => (string)$first['full_name'],
+            'position'         => (string)$first['position'],
+            'role_name'        => isset($first['role_name']) ? (string)$first['role_name'] : '',
+            'site'             => (string)$first['site'],
+            'site_source'      => isset($first['site_source']) ? (string)$first['site_source'] : '',
+            'period_label'     => (string)$period['period_label'],
+            'total_days'       => $tot_days_worked,
+            'total_hours'      => wms_timesheet_format_hours($tot_hours),
+            'missing_checkout' => $missing_out,
+            'signatories'      => $first['signatories'],
+            'segments'         => $segments_out,
+        ));
     }
 
     /**
@@ -903,7 +1071,7 @@ class Team extends MY_Controller {
 
     /**
      * One-click batch download of AML Individual Attendance Sheets across all
-     * active staff (multi-page A4 PDF or multi-tab Excel `.xlsx`).
+     * matching or explicitly selected active staff (multi-page PDF or `.xlsx`).
      */
     public function timesheets_batch() {
         if (!$this->is_supervisor() && !$this->is_manager()) {
@@ -912,25 +1080,199 @@ class Team extends MY_Controller {
             return;
         }
 
+        $ctx = $this->_build_report_dataset();
+        $sel_ids = $this->_parse_selected_ids();
+
+        // Filter matched IDs from active table criteria (tab/role/search/site) and optional checkbox selection
+        $matched_ids = array();
+        $allow_map   = !empty($sel_ids) ? array_fill_keys($sel_ids, TRUE) : NULL;
+        foreach ($ctx['rows'] as $r) {
+            $id = (int)$r->id;
+            if ($allow_map !== NULL && !isset($allow_map[$id])) continue;
+            $matched_ids[] = $id;
+        }
+
+        if (empty($matched_ids)) {
+            $this->session->set_flashdata('error', 'No active workers matched the selected filter.');
+            redirect('team/report?month=' . rawurlencode($ctx['period']['month']));
+            return;
+        }
+
+        $sheets = $this->Timesheet_model->build_for_all_active(
+            $ctx['period'],
+            $ctx['site_filter'],
+            $matched_ids
+        );
+        if (empty($sheets)) {
+            $this->session->set_flashdata('error', 'No active workers matched the selected filter.');
+            redirect('team/report?month=' . rawurlencode($ctx['period']['month']));
+            return;
+        }
+
+        $site_slug = $ctx['site_filter'] !== '' ? ('_' . preg_replace('/[^A-Za-z0-9_-]+/', '_', $ctx['site_filter'])) : '';
+        $sel_slug  = !empty($sel_ids) ? ('_Selected_' . count($matched_ids)) : '_All_Workers';
+        $base_name = 'AML_Timesheets' . $sel_slug . $site_slug . '_' . $ctx['period']['file_slug'];
+
+        $this->_stream_timesheet_export($sheets, $base_name);
+    }
+
+    /** Parse optional comma-separated positive integer IDs (`?ids=2,5,9`). */
+    private function _parse_selected_ids() {
+        $raw = trim((string)$this->input->get('ids', TRUE));
+        if ($raw === '') return array();
+        $out = array();
+        foreach (explode(',', $raw) as $part) {
+            $n = (int)trim($part);
+            if ($n > 0) $out[$n] = $n;
+        }
+        return array_values($out);
+    }
+
+    /**
+     * Shared server-side filter, status-tab counting, KPI aggregation & sort
+     * pipeline so HTML table view, card view, CSV export, and batch PDF/XLSX
+     * export always operate on the exact same dataset & RBAC rules.
+     */
+    private function _build_report_dataset() {
         $period = wms_timesheet_resolve_period(
             $this->input->get('month', TRUE),
             $this->input->get('period', TRUE),
             $this->input->get('from', TRUE),
             $this->input->get('to', TRUE)
         );
-        $site_filter = trim((string)$this->input->get('site', TRUE));
+        $site_filter  = trim((string)$this->input->get('site', TRUE));
+        $role_in      = (int)$this->input->get('role', TRUE);
+        $role_filter  = ($role_in > 0) ? $role_in : 0;
+        $search_query = trim((string)$this->input->get('q', TRUE));
+        if (strlen($search_query) > 100) $search_query = substr($search_query, 0, 100);
 
-        $sheets = $this->Timesheet_model->build_for_all_active($period, $site_filter);
-        if (empty($sheets)) {
-            $this->session->set_flashdata('error', 'No active workers matched the selected filter.');
-            redirect('team/report?month=' . rawurlencode($period['month']));
-            return;
+        $tab_in     = strtolower(trim((string)$this->input->get('tab', TRUE)));
+        $valid_tabs = array('all', 'recorded', 'unrecorded', 'absent', 'leave');
+        $active_tab = in_array($tab_in, $valid_tabs, TRUE) ? $tab_in : 'all';
+
+        $sort_in    = strtolower(trim((string)$this->input->get('sort', TRUE)));
+        $valid_sort = array('name', 'employee_id', 'site', 'present', 'absent', 'leave', 'hours', 'total', 'pct');
+        $sort_by    = in_array($sort_in, $valid_sort, TRUE) ? $sort_in : 'name';
+
+        $dir_in   = strtolower(trim((string)$this->input->get('dir', TRUE)));
+        $sort_dir = ($dir_in === 'desc') ? 'desc' : 'asc';
+
+        // Strict RBAC horizontal privacy: only Supervisor (1) and Manager (4) view all staff
+        $can_view_all = ($this->is_supervisor() || $this->is_manager());
+        $only_uid     = $can_view_all ? NULL : (int)$this->user_id;
+
+        $base_rows = $this->Team_model->get_monthly_report(
+            $period['month'],
+            $period['start_date'],
+            $period['end_date'],
+            $site_filter,
+            $only_uid
+        );
+
+        // Apply Role + Search filter BEFORE computing Status Tab counts so counts match search/filter scope
+        $scoped = array();
+        $q_low  = function_exists('mb_strtolower') ? mb_strtolower($search_query, 'UTF-8') : strtolower($search_query);
+        foreach ($base_rows as $r) {
+            if ($role_filter > 0 && (int)$r->role_id !== $role_filter) {
+                continue;
+            }
+            if ($q_low !== '') {
+                $hay = strtolower(
+                    $r->employee_id . ' ' . $r->full_name . ' ' . $r->position . ' ' . $r->site . ' ' . $r->role_name
+                );
+                if (strpos($hay, $q_low) === FALSE) {
+                    continue;
+                }
+            }
+            $scoped[] = $r;
         }
 
-        $site_slug = $site_filter !== '' ? ('_' . preg_replace('/[^A-Za-z0-9_-]+/', '_', $site_filter)) : '';
-        $base_name = 'AML_Timesheets_All_Workers' . $site_slug . '_' . $period['file_slug'];
+        // Compute transparent Status Tab counts across current search/site/role dataset
+        $tab_counts = array(
+            'all'        => count($scoped),
+            'recorded'   => 0,
+            'unrecorded' => 0,
+            'absent'     => 0,
+            'leave'      => 0,
+        );
+        $sum_present = 0; $sum_absent = 0; $sum_leave = 0;
+        $sum_hours = 0.0; $sum_judged = 0; $sum_missing_out = 0;
 
-        $this->_stream_timesheet_export($sheets, $base_name);
+        foreach ($scoped as $r) {
+            if ($r->has_records) $tab_counts['recorded']++;
+            else $tab_counts['unrecorded']++;
+            if ((int)$r->absent > 0) $tab_counts['absent']++;
+            if ((int)$r->leave > 0)  $tab_counts['leave']++;
+
+            $sum_present     += (int)$r->present;
+            $sum_absent      += (int)$r->absent;
+            $sum_leave       += (int)$r->leave;
+            $sum_hours       += (float)$r->hours_worked;
+            $sum_judged      += (int)$r->total;
+            $sum_missing_out += (int)$r->missing_checkout;
+        }
+
+        // Apply active Status Tab filter
+        $rows = array();
+        foreach ($scoped as $r) {
+            if ($active_tab === 'recorded'   && !$r->has_records)      continue;
+            if ($active_tab === 'unrecorded' && $r->has_records)       continue;
+            if ($active_tab === 'absent'     && (int)$r->absent <= 0)  continue;
+            if ($active_tab === 'leave'      && (int)$r->leave <= 0)   continue;
+            $rows[] = $r;
+        }
+
+        // Deterministic multi-column sorting (tie-broken by full_name ASC, id ASC)
+        $mul = ($sort_dir === 'desc') ? -1 : 1;
+        usort($rows, function ($a, $b) use ($sort_by, $mul) {
+            $cmp = 0;
+            switch ($sort_by) {
+                case 'employee_id': $cmp = strnatcasecmp($a->employee_id, $b->employee_id); break;
+                case 'site':        $cmp = strnatcasecmp($a->site, $b->site); break;
+                case 'present':     $cmp = ((int)$a->present <=> (int)$b->present); break;
+                case 'absent':      $cmp = ((int)$a->absent  <=> (int)$b->absent); break;
+                case 'leave':       $cmp = ((int)$a->leave   <=> (int)$b->leave); break;
+                case 'hours':       $cmp = ((float)$a->hours_worked <=> (float)$b->hours_worked); break;
+                case 'total':       $cmp = ((int)$a->total   <=> (int)$b->total); break;
+                case 'pct':
+                    $pa = ($a->pct === NULL) ? -1 : (int)$a->pct;
+                    $pb = ($b->pct === NULL) ? -1 : (int)$b->pct;
+                    $cmp = ($pa <=> $pb);
+                    break;
+                case 'name':
+                default:
+                    $cmp = strnatcasecmp($a->full_name, $b->full_name);
+                    break;
+            }
+            if ($cmp !== 0) return $cmp * $mul;
+            $tie = strnatcasecmp($a->full_name, $b->full_name);
+            return $tie !== 0 ? $tie : ((int)$a->id <=> (int)$b->id);
+        });
+
+        return array(
+            'period'       => $period,
+            'site_filter'  => $site_filter,
+            'role_filter'  => $role_filter,
+            'search_query' => $search_query,
+            'active_tab'   => $active_tab,
+            'sort_by'      => $sort_by,
+            'sort_dir'     => $sort_dir,
+            'can_view_all' => $can_view_all,
+            'total_scope'  => count($scoped),
+            'tab_counts'   => $tab_counts,
+            'summary'      => array(
+                'staff_count'      => count($scoped),
+                'recorded_staff'   => $tab_counts['recorded'],
+                'unrecorded_staff' => $tab_counts['unrecorded'],
+                'present_days'     => $sum_present,
+                'absent_days'      => $sum_absent,
+                'leave_days'       => $sum_leave,
+                'hours_worked'     => round($sum_hours, 2),
+                'missing_checkout' => $sum_missing_out,
+                'overall_pct'      => $sum_judged > 0 ? (int)round($sum_present / $sum_judged * 100, 0) : NULL,
+            ),
+            'rows'         => $rows,
+        );
     }
 
     /** Stream either PDF or XLSX binary cleanly with safe HTTP headers. */

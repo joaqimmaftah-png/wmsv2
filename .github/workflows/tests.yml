@@ -157,8 +157,11 @@ jobs:
                   return op.open(BASE + path).read().decode('utf-8', 'replace')
 
               def get_bytes(path, op=opener):
-                  r = op.open(BASE + path)
-                  return r.status, r.headers, r.read()
+                  try:
+                      r = op.open(BASE + path)
+                      return r.status, r.headers, r.read()
+                  except urllib.error.HTTPError as e:
+                      return e.code, e.headers, e.read()
 
               def csrf_from(html):
                   m = re.search(r'name=["\x27]csrf_token_wms["\x27]\s+value=["\x27]([^"\x27]+)', html)
@@ -254,13 +257,32 @@ jobs:
                   return b'\n'.join(out)
 
               rep_html = get('/team/report')
-              assert 'All Timesheets (PDF)' in rep_html and 'Workshop Main Gate' in rep_html, 'Live QR site missing from /team/report!'
+              assert 'All PDF Sheets' in rep_html and 'Workshop Main Gate' in rep_html, 'Live QR site missing from /team/report!'
+              assert 'role="tablist"' in rep_html and 'id="tsDrawer"' in rep_html, 'Enterprise DataTable tabs/drawer missing!'
               assert '16/Jul/26' not in rep_html and 'MONTH OF JULY 2026' not in rep_html
 
-              m_sup  = re.search(r'/team/view/(\d+)[^>]*>\s*CI Supervisor', rep_html)
-              m_tech = re.search(r'/team/view/(\d+)[^>]*>\s*John Moshi', rep_html)
+              m_sup  = re.search(r'data-worker-row="(\d+)"[^>]*data-worker-name="CI Supervisor"', rep_html)
+              m_tech = re.search(r'data-worker-row="(\d+)"[^>]*data-worker-name="John Moshi"', rep_html)
               assert m_sup and m_tech, 'Expected both CI Supervisor and John Moshi in /team/report'
               sup_id, tech_id = m_sup.group(1), m_tech.group(1)
+
+              # Verify sorting, search, status tabs, card view & pagination query handling
+              sorted_html = get('/team/report?sort=hours&dir=desc&tab=recorded&per_page=10&page=1')
+              assert 'aria-sort="descending"' in sorted_html and 'CI Supervisor' in sorted_html
+              search_html = get('/team/report?q=Moshi&view=cards')
+              assert 'John Moshi' in search_html and 'data-worker-name="CI Supervisor"' not in search_html and 'ts-mode-cards' in search_html
+
+              # Verify JSON Drawer endpoint for live weekly AML sheet inspection
+              st_js, _, js_raw = get_bytes(f'/team/sheet_json/{sup_id}?period=full')
+              js_doc = json.loads(js_raw.decode('utf-8'))
+              assert st_js == 200 and js_doc.get('ok') is True and js_doc.get('full_name') == 'CI Supervisor'
+              assert js_doc.get('site') == 'Workshop Main Gate' and len(js_doc.get('segments', [])) == 2
+
+              # Verify Summary CSV export (UTF-8 BOM, filtered columns & multi-select ids)
+              st_csv, _, csv_raw = get_bytes(f'/team/report_csv?ids={sup_id}')
+              assert st_csv == 200 and csv_raw.startswith(b'\xef\xbb\xbf'), 'CSV missing UTF-8 BOM!'
+              csv_txt = csv_raw.decode('utf-8-sig')
+              assert 'CI Supervisor' in csv_txt and 'John Moshi' not in csv_txt and 'Hours Worked' in csv_txt
 
               st, hdrs, pdf1 = get_bytes(f'/team/timesheet/{sup_id}?period=full')
               assert st == 200 and pdf1[:8] == b'%PDF-1.4', 'Invalid single worker PDF'
@@ -274,8 +296,9 @@ jobs:
                   assert 'xl/worksheets/sheet1.xml' in zf.namelist()
                   assert 'xl/worksheets/sheet2.xml' in zf.namelist()
 
-              st, _, batch_pdf = get_bytes('/team/timesheets_batch?period=h1')
-              assert st == 200 and batch_pdf[:8] == b'%PDF-1.4', 'Invalid batch PDF'
+              st, _, batch_pdf = get_bytes(f'/team/timesheets_batch?period=h1&ids={sup_id}')
+              assert st == 200 and batch_pdf[:8] == b'%PDF-1.4', 'Invalid multi-selected batch PDF'
+              assert b'CI Supervisor' in pdf_streams(batch_pdf) and b'John Moshi' not in pdf_streams(batch_pdf)
 
               st, _, batch_xlsx = get_bytes('/team/timesheets_batch?period=h1&format=xlsx')
               assert st == 200 and batch_xlsx[:4] == b'PK\x03\x04', 'Invalid batch XLSX'
@@ -294,15 +317,35 @@ jobs:
                   mcj.load(ignore_discard=True, ignore_expires=True)
                   return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(mcj))
 
-              # Manager (role_id = 4) read-only access succeeds on both individual & batch endpoints
+              # Manager (role_id = 4) read-only access succeeds across report, CSV, JSON drawer & PDF exports
               mgr_op = session_opener('mgr@ci.local')
-              st_mgr1, _, mgr_pdf = get_bytes(f'/team/timesheet/{sup_id}?period=h1', mgr_op)
-              st_mgr2, _, mgr_batch = get_bytes('/team/timesheets_batch?period=h1', mgr_op)
+              st_mgr_rep, _, mgr_rep_b = get_bytes('/team/report', mgr_op)
+              st_mgr_js,  _, mgr_js_b  = get_bytes(f'/team/sheet_json/{sup_id}?period=h1', mgr_op)
+              st_mgr_csv, _, mgr_csv_b = get_bytes('/team/report_csv', mgr_op)
+              st_mgr1,    _, mgr_pdf   = get_bytes(f'/team/timesheet/{sup_id}?period=h1', mgr_op)
+              st_mgr2,    _, mgr_batch = get_bytes('/team/timesheets_batch?period=h1', mgr_op)
+              assert st_mgr_rep == 200 and b'All PDF Sheets' in mgr_rep_b
+              assert st_mgr_js == 200 and json.loads(mgr_js_b.decode('utf-8')).get('ok') is True
+              assert st_mgr_csv == 200 and mgr_csv_b.startswith(b'\xef\xbb\xbf')
               assert st_mgr1 == 200 and mgr_pdf[:8] == b'%PDF-1.4'
               assert st_mgr2 == 200 and mgr_batch[:8] == b'%PDF-1.4'
 
-              # Technician (role_id = 2) can export OWN sheet and is blocked from other workers
+              # Technician (role_id = 2) Horizontal Privacy: sees ONLY own record on /team/report, /team/report_csv & /team/sheet_json
               tech_op = session_opener('tech1@ci.local')
+              st_tech_rep, _, tech_rep_b = get_bytes('/team/report', tech_op)
+              tech_rep_html = tech_rep_b.decode('utf-8', 'replace')
+              assert st_tech_rep == 200 and 'My Attendance &amp; Timesheet' in tech_rep_html
+              assert 'John Moshi' in tech_rep_html and 'CI Supervisor' not in tech_rep_html, 'Horizontal privacy leak on /team/report!'
+
+              st_tech_csv, _, tech_csv_b = get_bytes('/team/report_csv', tech_op)
+              tech_csv_txt = tech_csv_b.decode('utf-8-sig')
+              assert st_tech_csv == 200 and 'John Moshi' in tech_csv_txt and 'CI Supervisor' not in tech_csv_txt, 'Horizontal privacy leak on CSV!'
+
+              st_own_js, _, own_js_b = get_bytes(f'/team/sheet_json/{tech_id}?period=h1', tech_op)
+              assert st_own_js == 200 and json.loads(own_js_b.decode('utf-8')).get('full_name') == 'John Moshi'
+              st_forb_js, _, _ = get_bytes(f'/team/sheet_json/{sup_id}?period=h1', tech_op)
+              assert st_forb_js == 403, f'Expected HTTP 403 for peer sheet_json, got {st_forb_js}'
+
               st_own, _, own_pdf = get_bytes(f'/team/timesheet/{tech_id}?period=h1', tech_op)
               assert st_own == 200 and own_pdf[:8] == b'%PDF-1.4' and b'John Moshi' in pdf_streams(own_pdf)
               st_other, hdr_other, other_body = get_bytes(f'/team/timesheet/{sup_id}?period=h1', tech_op)
@@ -314,4 +357,171 @@ jobs:
               print(f'::error title=PythonE2E::{tb}', flush=True)
               raise
           PY
+
+          # Headless Google Chrome Browser UI & Accessibility E2E Suite (1440x900 Desktop + 390x844 Mobile)
+          node - <<'NODE'
+          const fs = require('fs');
+          const { spawn } = require('child_process');
+          const assert = require('assert');
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+          // Reuse authenticated Supervisor session cookie directly from /tmp/cookies.txt (zero login form race)
+          const cookieLines = fs.readFileSync('/tmp/cookies.txt', 'utf8').split(/\r?\n/);
+          const cookiesToSet = [];
+          for (const rawLine of cookieLines) {
+            const line = rawLine.trim().replace(/^#HttpOnly_/, '');
+            if (!line || line.startsWith('#')) continue;
+            const parts = line.split('\t');
+            if (parts.length >= 7) {
+              cookiesToSet.push({
+                name: parts[5], value: parts[6], domain: '127.0.0.1', path: parts[2] || '/'
+              });
+            }
+          }
+
+          (async () => {
+            const chrome = spawn('google-chrome', [
+              '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
+              '--no-first-run', '--no-default-browser-check', '--user-data-dir=/tmp/wms-chrome-profile',
+              '--remote-allow-origins=*', '--remote-debugging-port=9222',
+              '--window-size=1440,900', 'about:blank'
+            ], { stdio: 'ignore' });
+
+            try {
+              let targets = null;
+              for (let i = 0; i < 80; i++) {
+                try {
+                  const r = await fetch('http://127.0.0.1:9222/json');
+                  const j = await r.json();
+                  if (Array.isArray(j) && j.find((t) => t.type === 'page')) { targets = j; break; }
+                } catch (_) {}
+                await sleep(250);
+              }
+              assert(targets, 'Chrome DevTools endpoint failed to start');
+              const page = targets.find((t) => t.type === 'page');
+              const ws = new WebSocket(page.webSocketDebuggerUrl);
+              await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+
+              let seq = 0;
+              const pending = new Map();
+              ws.onmessage = (ev) => {
+                const msg = JSON.parse(ev.data);
+                if (msg.id && pending.has(msg.id)) {
+                  const { resolve, reject } = pending.get(msg.id);
+                  pending.delete(msg.id);
+                  msg.error ? reject(new Error(JSON.stringify(msg.error))) : resolve(msg.result);
+                }
+              };
+              const cdp = (method, params = {}) => new Promise((resolve, reject) => {
+                const id = ++seq;
+                pending.set(id, { resolve, reject });
+                ws.send(JSON.stringify({ id, method, params }));
+              });
+              const evalJs = async (expression) => {
+                const res = await cdp('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+                if (res.exceptionDetails) throw new Error('JS Exception: ' + JSON.stringify(res.exceptionDetails));
+                return res.result ? res.result.value : undefined;
+              };
+
+              await cdp('Network.enable');
+              for (const ck of cookiesToSet) {
+                await cdp('Network.setCookie', ck);
+              }
+              await cdp('Page.enable');
+              await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+
+              await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/team/report' });
+              for (let i = 0; i < 50; i++) {
+                if (await evalJs('document.readyState === "complete" && Boolean(document.querySelector(".ts-row-chk"))')) break;
+                await sleep(200);
+              }
+
+              // 1. Verify Desktop 1440px layout has ZERO horizontal scrollbar overflow & interactive controls work
+              const desktopCheck = await evalJs(`(async () => {
+                const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+                const tblWrap = document.querySelector('.ts-table-wrap');
+                const tblOverflow = tblWrap ? (tblWrap.scrollWidth - tblWrap.clientWidth) : -1;
+
+                // Keyboard '/' focuses search input
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+                const slashFocused = (document.activeElement && document.activeElement.id === 'tsSearchInput');
+                document.activeElement.blur();
+
+                // Select first worker checkbox -> batch bar appears
+                const chk = document.querySelector('.ts-row-chk');
+                chk.checked = true;
+                chk.dispatchEvent(new Event('change', { bubbles: true }));
+                const batchVisible = !document.getElementById('tsBatchBar').hidden;
+                const batchHref = document.getElementById('tsBatchPdf').getAttribute('href');
+
+                // Click worker name -> right-side Slide-Over AML Sheet Drawer opens & fetches live JSON
+                const trigger = document.querySelector('.ts-worker-name.js-open-sheet');
+                trigger.focus();
+                trigger.click();
+                for (let w = 0; w < 25; w++) {
+                  if (document.getElementById('tsDrawerBody').textContent.includes('WEEK 1')) break;
+                  await new Promise((r) => setTimeout(r, 100));
+                }
+                const drawerOpen = !document.getElementById('tsDrawer').hidden;
+                const drawerHasWeeks = document.getElementById('tsDrawerBody').textContent.includes('WEEK 1');
+                const firstTitle = document.getElementById('tsDrawerTitle').textContent;
+
+                // ArrowRight steps to next worker inside open drawer
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+                await new Promise((r) => setTimeout(r, 300));
+                const secondTitle = document.getElementById('tsDrawerTitle').textContent;
+
+                // Escape closes drawer and restores focus to trigger element
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                const drawerClosed = document.getElementById('tsDrawer').hidden;
+                const focusRestored = (document.activeElement === trigger);
+
+                // Toggle Cards <-> Table view smoothly without reload
+                document.querySelector('[data-set-view="cards"]').click();
+                const cardsShown = getComputedStyle(document.querySelector('.ts-cards-container')).display !== 'none'
+                  && getComputedStyle(document.querySelector('.ts-table-wrap')).display === 'none';
+                document.querySelector('[data-set-view="table"]').click();
+
+                return {
+                  docOverflow, tblOverflow, slashFocused, batchVisible, batchHref,
+                  drawerOpen, drawerHasWeeks, stepped: firstTitle !== secondTitle,
+                  drawerClosed, focusRestored, cardsShown
+                };
+              })()`);
+
+              assert(desktopCheck.docOverflow <= 0, 'Desktop viewport overflowed horizontally: ' + desktopCheck.docOverflow);
+              assert(desktopCheck.tblOverflow <= 0, 'Desktop table wrapper overflowed horizontally: ' + desktopCheck.tblOverflow);
+              assert(desktopCheck.slashFocused === true, 'Slash shortcut failed to focus search input');
+              assert(desktopCheck.batchVisible === true && desktopCheck.batchHref.includes('ids='), 'Batch selection bar failed');
+              assert(desktopCheck.drawerOpen && desktopCheck.drawerHasWeeks, 'Slide-over AML drawer failed to render weekly rows');
+              assert(desktopCheck.stepped === true, 'ArrowRight navigation inside drawer did not advance to next worker');
+              assert(desktopCheck.drawerClosed && desktopCheck.focusRestored, 'Escape key failed to close drawer & restore focus');
+              assert(desktopCheck.cardsShown === true, 'View mode switcher failed to display Card View');
+
+              // 2. Verify Mobile 390x844 responsive auto-card adaptation & zero horizontal overflow
+              await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+              await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/team/report' });
+              for (let i = 0; i < 40; i++) {
+                if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("tsShell"))')) break;
+                await sleep(200);
+              }
+              const mobileCheck = await evalJs(`(() => ({
+                docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+                tableDisplay: getComputedStyle(document.querySelector('.ts-table-wrap')).display,
+                cardsDisplay: getComputedStyle(document.querySelector('.ts-cards-container')).display
+              }))()`);
+              assert(mobileCheck.docOverflow <= 0, 'Mobile 390px viewport overflowed horizontally: ' + mobileCheck.docOverflow);
+              assert(mobileCheck.tableDisplay === 'none' && mobileCheck.cardsDisplay === 'block', 'Mobile responsive Card View did not activate: ' + JSON.stringify(mobileCheck));
+
+              ws.close();
+              console.log('ALL HEADLESS CHROME DESKTOP (1440x900) & MOBILE (390x844) UI E2E ASSERTIONS PASSED!');
+            } catch (err) {
+              console.error('::error title=ChromeUIE2E::' + (err && err.stack ? err.stack.replace(/\n/g, '%0A') : String(err)));
+              process.exitCode = 1;
+            } finally {
+              chrome.kill('SIGKILL');
+            }
+          })();
+          NODE
+
 

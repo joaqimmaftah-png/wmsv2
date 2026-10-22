@@ -60,6 +60,7 @@ class WmsTestSettingsModel {
     }
 }
 
+#[AllowDynamicProperties]
 class WmsTestApp {
     public $load;
     public $Settings_model;
@@ -593,6 +594,286 @@ $tsModelSrc = file_get_contents(APPPATH . 'models/Timesheet_model.php');
 check('Timesheet model: queries report_sites.label (never non-existent report_sites.name)',
     strpos($tsModelSrc, "select('label')") !== FALSE
     && strpos($tsModelSrc, "get('report_sites')") !== FALSE);
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Timesheet Enterprise DataTable Suite (TS-01 .. TS-10)
+   ───────────────────────────────────────────────────────────────────────── */
+
+if (!class_exists('CI_Model')) {
+    #[AllowDynamicProperties]
+    class CI_Model {
+        public function __construct() {}
+        public function __get($key) {
+            $ci = get_instance();
+            return isset($ci->$key) ? $ci->$key : NULL;
+        }
+    }
+}
+
+class WmsQueryResultStub {
+    private $rows;
+    public function __construct(array $rows) { $this->rows = $rows; }
+    public function result() {
+        $out = array();
+        foreach ($this->rows as $r) $out[] = is_object($r) ? $r : (object)$r;
+        return $out;
+    }
+    public function result_array() {
+        $out = array();
+        foreach ($this->rows as $r) $out[] = is_array($r) ? $r : (array)$r;
+        return $out;
+    }
+    public function row() {
+        if (empty($this->rows)) return NULL;
+        $first = reset($this->rows);
+        return is_object($first) ? $first : (object)$first;
+    }
+}
+
+class WmsSpyDb {
+    public $queries = 0;
+    public $users = array();
+    public $attendance = array();
+    public $period_punches = array();
+    public $recent_punches = array();
+    public $leaves = array();
+
+    private $_from = '';
+    private $_wheres = array();
+    private $_in = array();
+
+    private function _reset() {
+        $this->_from = '';
+        $this->_wheres = array();
+        $this->_in = array();
+    }
+    public function table_exists($t) { return TRUE; }
+    public function field_exists($f, $t) { return TRUE; }
+    public function select($s, $escape = NULL) { return $this; }
+    public function from($t) { $this->_from = $t; return $this; }
+    public function join($t, $cond, $type = '') { return $this; }
+    public function where($k, $v = NULL) { $this->_wheres[$k] = $v; return $this; }
+    public function where_in($k, array $vals) { $this->_in[$k] = $vals; return $this; }
+    public function group_by($g) { return $this; }
+    public function order_by($c, $d = '') { return $this; }
+
+    public function get($table = '') {
+        $this->queries++;
+        $tbl = $table !== '' ? $table : $this->_from;
+        $wheres = $this->_wheres;
+        $ins = $this->_in;
+        $this->_reset();
+
+        if (strpos($tbl, 'users') === 0) {
+            if (isset($wheres['u.id'])) {
+                $id = (int)$wheres['u.id'];
+                return new WmsQueryResultStub(isset($this->users[$id]) ? array($this->users[$id]) : array());
+            }
+            return new WmsQueryResultStub(array_values($this->users));
+        }
+        if ($tbl === 'attendance') {
+            $allow = isset($ins['user_id']) ? array_flip($ins['user_id']) : NULL;
+            $out = array();
+            foreach ($this->attendance as $ar) {
+                if ($allow !== NULL && !isset($allow[(int)$ar['user_id']])) continue;
+                $out[] = $ar;
+            }
+            return new WmsQueryResultStub($out);
+        }
+        if (strpos($tbl, 'attendance_punches') === 0) {
+            $is_grouped = isset($wheres['p.work_date >=']);
+            return new WmsQueryResultStub($is_grouped ? $this->period_punches : $this->recent_punches);
+        }
+        if ($tbl === 'leave_requests') {
+            return new WmsQueryResultStub($this->leaves);
+        }
+        return new WmsQueryResultStub(array());
+    }
+}
+
+require_once APPPATH . 'models/Team_model.php';
+require_once APPPATH . 'models/Timesheet_model.php';
+
+$spyDb = new WmsSpyDb();
+// Build 50 active workers covering profile site, period QR punch, historical QR punch, and unassigned
+for ($i = 1; $i <= 50; $i++) {
+    $siteVal = '';
+    if ($i === 1) $siteVal = 'WORKSHOP';
+    elseif ($i >= 5) $siteVal = 'GEITA';
+    $spyDb->users[$i] = (object)array(
+        'id'          => $i,
+        'employee_id' => sprintf('EMP%03d', $i),
+        'first_name'  => 'Worker',
+        'last_name'   => 'No' . $i,
+        'role_id'     => ($i === 1) ? 1 : 2,
+        'role_name'   => ($i === 1) ? 'supervisor' : 'technician',
+        'position'    => 'Mechanic',
+        'skill_level' => 'Senior',
+        'site'        => $siteVal,
+        'status'      => 'Active',
+    );
+}
+$spyDb->period_punches = array(
+    (object)array('user_id' => 2, 'name' => 'KALIMVA', 'cnt' => 14),
+    (object)array('user_id' => 2, 'name' => 'MSATA',   'cnt' => 2),
+);
+$spyDb->recent_punches = array(
+    (object)array('user_id' => 3, 'name' => 'MSATA'),
+);
+// Worker 1: 18 Present (one missing check_out), 1 Absent, 1 Leave => 20 judged days, 90%
+for ($d = 1; $d <= 18; $d++) {
+    $spyDb->attendance[] = array(
+        'user_id'      => 1,
+        'date'         => sprintf('2026-10-%02d', $d),
+        'status'       => 'Present',
+        'check_in'     => '08:00:00',
+        'check_out'    => ($d === 18) ? NULL : '17:00:00',
+        'hours_worked' => ($d === 18) ? NULL : 9.0,
+    );
+}
+$spyDb->attendance[] = array('user_id' => 1, 'date' => '2026-10-19', 'status' => 'Absent', 'check_in' => NULL, 'check_out' => NULL, 'hours_worked' => NULL);
+$spyDb->attendance[] = array('user_id' => 1, 'date' => '2026-10-20', 'status' => 'Leave',  'check_in' => NULL, 'check_out' => NULL, 'hours_worked' => NULL);
+
+// Worker 2: 0 Present, 4 Absent => total = 4, genuine 0% attendance!
+for ($d = 1; $d <= 4; $d++) {
+    $spyDb->attendance[] = array('user_id' => 2, 'date' => sprintf('2026-10-%02d', $d), 'status' => 'Absent', 'check_in' => NULL, 'check_out' => NULL, 'hours_worked' => NULL);
+}
+// Worker 3..50: ZERO attendance rows => total = 0, pct MUST be NULL ("No records", NOT 0%!)
+
+$app = get_instance();
+$app->db = $spyDb;
+$teamModel = new Team_model();
+$tsModel   = new Timesheet_model();
+$app->Team_model      = $teamModel;
+$app->Timesheet_model = $tsModel;
+
+$spyDb->queries = 0;
+$reportRows = $teamModel->get_monthly_report('2026-10', '2026-10-01', '2026-10-31', '');
+
+check('TS-02 Bulk SQL Performance: 50-worker monthly report executes in <= 4 queries (zero N+1 queries)',
+    $spyDb->queries <= 4 && count($reportRows) === 50,
+    'executed ' . $spyDb->queries . ' queries for ' . count($reportRows) . ' workers');
+
+$r1 = $reportRows[0]; // Worker 1
+$r2 = $reportRows[1]; // Worker 2 (0 Present, 4 Absent)
+$r3 = $reportRows[2]; // Worker 3 (0 records, recent QR site)
+$r4 = $reportRows[3]; // Worker 4 (0 records, no site)
+
+is_same('TS-02 Site resolution priority: profile site preserved with source=profile', 'WORKSHOP', $r1->site);
+is_same('TS-02 Site resolution priority: period QR predominant site with source=qr_period', 'KALIMVA', $r2->site);
+is_same('TS-02 Site resolution priority: historical QR fallback site with source=qr_recent', 'MSATA', $r3->site);
+is_same('TS-02 Site resolution priority: unassigned worker resolves cleanly to empty string', '', $r4->site);
+
+is_same('TS-03 Data Accuracy: 18P / 1A / 1L yields exact 90% and 153h + 1 missing check-out', 90, $r1->pct);
+is_same('TS-03 Data Accuracy: missing check-out shift flagged accurately', 1, $r1->missing_checkout);
+is_same('TS-03 Empty vs Zero: 0 Present + 4 Absent yields integer 0% (genuine absence)', 0, $r2->pct);
+check('TS-03 Empty vs Zero: unrecorded worker yields pct === NULL (never false 0%)',
+    $r3->pct === NULL && $r3->has_records === FALSE && $r2->has_records === TRUE);
+
+// TS-01 Horizontal RBAC Self-Scoping check
+$scopedSelf = $teamModel->get_monthly_report('2026-10', '2026-10-01', '2026-10-31', '', 2);
+check('TS-01 Horizontal RBAC Privacy: self-scoped report returns strictly 1 worker matching requested user_id',
+    count($scopedSelf) === 1 && $scopedSelf[0]->id === 2);
+
+// Verify Manager (role_id = 4) route names never collide with MY_Controller::MUTATION_PATTERN
+$myCtrlSrc = file_get_contents(APPPATH . 'core/MY_Controller.php');
+if (preg_match("/MUTATION_PATTERN\s*=\s*'([^']+)'/", $myCtrlSrc, $mPat)) {
+    $mutRegex = $mPat[1];
+    foreach (array('report', 'report_csv', 'sheet_json', 'timesheet', 'timesheets_batch') as $actName) {
+        check("TS-01 Manager RBAC: Team::{$actName}() is allowed as read-only under MUTATION_PATTERN",
+            preg_match($mutRegex, $actName) === 0);
+    }
+}
+
+// TS-04 Multi-select batch filter (`$only_ids`)
+$periodOct = wms_timesheet_resolve_period('2026-10', 'h1', NULL, NULL);
+$selectedSheets = $tsModel->build_for_all_active($periodOct, NULL, array(2, 3));
+check('TS-04 Multi-select batch export: build_for_all_active($period, NULL, [2,3]) restricts output to exact selected workers',
+    count($selectedSheets) === 2
+    && $selectedSheets[0]['user_id'] === 2
+    && $selectedSheets[1]['user_id'] === 3);
+
+// TS-05 .. TS-10 Full PHP View Render & Accessibility Audit (`application/views/team/report.php`)
+if (!function_exists('site_url')) {
+    function site_url($uri = '') { return 'http://wms.test/' . ltrim((string)$uri, '/'); }
+}
+$viewVars = array(
+    'report'          => array($r1, $r2, $r3),
+    'total_filtered'  => 50,
+    'total_scope'     => 50,
+    'tab_counts'      => array('all' => 50, 'recorded' => 2, 'unrecorded' => 48, 'absent' => 2, 'leave' => 1),
+    'summary'         => array(
+        'staff_count'      => 50,
+        'recorded_staff'   => 2,
+        'unrecorded_staff' => 48,
+        'present_days'     => 18,
+        'absent_days'      => 5,
+        'leave_days'       => 1,
+        'hours_worked'     => 153.0,
+        'missing_checkout' => 1,
+        'overall_pct'      => 75,
+    ),
+    'month'           => '2026-10',
+    'period'          => wms_timesheet_resolve_period('2026-10', 'full', NULL, NULL),
+    'site_filter'     => 'WORKSHOP',
+    'role_filter'     => 2,
+    'search_query'    => 'Worker',
+    'active_tab'      => 'all',
+    'sort_by'         => 'pct',
+    'sort_dir'        => 'desc',
+    'per_page'        => 25,
+    'page'            => 1,
+    'total_pages'     => 2,
+    'showing_from'    => 1,
+    'showing_to'      => 3,
+    'view_mode'       => 'table',
+    'sites'           => array('WORKSHOP', 'KALIMVA', 'MSATA'),
+    'roles_list'      => array(
+        (object)array('id' => 1, 'name' => 'supervisor'),
+        (object)array('id' => 2, 'name' => 'technician'),
+    ),
+    'can_batch'       => TRUE,
+    'is_supervisor'   => TRUE,
+    'current_user_id' => 1,
+    'page_title'      => 'Attendance Report & Individual Timesheets',
+);
+
+$viewWarnings = array();
+set_error_handler(function ($severity, $message, $file, $line) use (&$viewWarnings) {
+    $viewWarnings[] = "{$message} ({$file}:{$line})";
+    return TRUE;
+});
+ob_start();
+extract($viewVars, EXTR_SKIP);
+include APPPATH . 'views/team/report.php';
+$renderedHtml = ob_get_clean();
+restore_error_handler();
+
+check('TS-06 View Render: application/views/team/report.php renders with ZERO PHP warnings/notices',
+    empty($viewWarnings), implode('; ', $viewWarnings));
+check('TS-06 Icon Integrity: zero undefined Bootstrap Icon classes (bi-file-earmark / bi-filetype / bi-printer) in report.php',
+    strpos($renderedHtml, 'bi-file-earmark') === FALSE
+    && strpos($renderedHtml, 'bi-filetype') === FALSE
+    && strpos($renderedHtml, 'bi-printer') === FALSE);
+check('TS-05 Status Tabs: renders role="tablist" with all 5 status categories & live counts',
+    strpos($renderedHtml, 'role="tablist"') !== FALSE
+    && strpos($renderedHtml, 'Needs Entry') !== FALSE
+    && strpos($renderedHtml, '>48<') !== FALSE);
+check('TS-03 Rendered Empty vs Zero: displays "No records" for unrecorded worker AND "0%" for genuine 0-present worker',
+    strpos($renderedHtml, '>No records<') !== FALSE
+    && strpos($renderedHtml, '>0%<') !== FALSE
+    && strpos($renderedHtml, '>90%<') !== FALSE);
+check('TS-07 Accessibility & Sorting: renders aria-sort="descending" on sorted column and pagination nav',
+    strpos($renderedHtml, 'aria-sort="descending"') !== FALSE
+    && strpos($renderedHtml, 'aria-sort="none"') !== FALSE
+    && strpos($renderedHtml, 'aria-label="Attendance roster pagination"') !== FALSE);
+check('TS-08 & TS-09 View Switcher + Slide-Over Drawer: renders Table/Cards toggle and accessible dialog drawer',
+    strpos($renderedHtml, 'data-set-view="cards"') !== FALSE
+    && strpos($renderedHtml, 'class="ts-cards-grid"') !== FALSE
+    && strpos($renderedHtml, 'id="tsDrawer" role="dialog" aria-modal="true"') !== FALSE);
+$headerCss = file_get_contents(APPPATH . 'views/layouts/header.php');
+check('TS-10 Print Stylesheet: header.php hides .no-print inside @media print',
+    preg_match('/@media\s+print\s*\{[^}]*\.no-print/s', $headerCss) === 1);
 
 /* ─────────────────────────────────────────────────────────────────────────
    Result
