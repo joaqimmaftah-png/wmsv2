@@ -130,9 +130,13 @@ jobs:
             --data-urlencode "password=AdminPass123!" >/dev/null
 
           for ROUTE in dashboard equipment workorders pm inspections materials spareparts suppliers orders lubricants team team/report team/create attendance attendance/sites attendance/board attendance/print_qr attendance/log backlog reports forecast users users/create settings; do
-            BODY=$(curl -fsSL -b "$COOKIES" -c "$COOKIES" "http://127.0.0.1:8000/$ROUTE")
+            if ! BODY=$(curl -fsSL -b "$COOKIES" -c "$COOKIES" "http://127.0.0.1:8000/$ROUTE"); then
+              ERR_SNIP=$(curl -sSL -b "$COOKIES" -c "$COOKIES" "http://127.0.0.1:8000/$ROUTE" | tr '\r\n' ' ' | cut -c1-450)
+              echo "::error title=RouteFail::Route /$ROUTE returned HTTP error: $ERR_SNIP"
+              exit 1
+            fi
             if echo "$BODY" | grep -Eq "Severity: (Warning|Notice|Deprecated|Error)|Fatal error|Uncaught|Database Error"; then
-              echo "PHP error output found on /$ROUTE!"
+              echo "::error title=RoutePhpErr::PHP error on /$ROUTE: $(echo "$BODY" | grep -E "Severity:|Fatal error|Uncaught|Database Error" | head -n 3 | tr '\r\n' ' ')"
               exit 1
             fi
           done

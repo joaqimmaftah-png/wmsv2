@@ -1548,6 +1548,7 @@ if ($GLOBALS['wms_test_fail'] > 0) {
     echo "\nFailures:\n";
     foreach ($GLOBALS['wms_test_failures'] as $failure) {
         echo '  - ' . $failure . "\n";
+        echo '::error title=UnitTestFail::' . str_replace(array("\r", "\n"), ' ', $failure) . "\n";
     }
     exit(1);
 }

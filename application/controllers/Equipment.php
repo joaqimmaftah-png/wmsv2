@@ -6,6 +6,7 @@ class Equipment extends MY_Controller {
     public function __construct() {
         parent::__construct();
         $this->load->model('Equipment_model');
+        $this->load->model('Workorder_model');
     }
 
     /**
@@ -18,6 +19,7 @@ class Equipment extends MY_Controller {
     private function _build_fleet_dataset($paginate = TRUE) {
         $overview = $this->Equipment_model->get_fleet_overview();
         $all_rows = $overview['rows'];
+        $eq_types = $this->db->order_by('name', 'ASC')->get('equipment_types')->result();
 
         $tab = strtolower(trim((string)$this->input->get('tab')));
         $legacy_status = trim((string)$this->input->get('status'));
@@ -80,7 +82,11 @@ class Equipment extends MY_Controller {
             'pm_overdue_machines' => 0,
         );
         $categories_map = array();
-        $groups_seen    = array();
+        foreach ($eq_types as $et) {
+            $ec = trim((string)(isset($et->category) ? $et->category : ''));
+            if ($ec !== '') $categories_map[$ec] = TRUE;
+        }
+        $groups_seen = array();
 
         foreach ($all_rows as $eq) {
             $tab_counts['all']++;
@@ -259,8 +265,11 @@ class Equipment extends MY_Controller {
         sort($report_groups, SORT_NATURAL | SORT_FLAG_CASE);
 
         return array(
+            'equipment'      => $rows,
             'equipment_list' => $rows,
-            'types'          => $this->Equipment_model->get_types(),
+            'eq_types'       => $eq_types,
+            'types'          => $eq_types,
+            'eq_categories'  => $categories,
             'categories'     => $categories,
             'locations'      => $overview['locations'],
             'report_sites'   => $overview['report_sites'],
@@ -287,19 +296,21 @@ class Equipment extends MY_Controller {
             'offset'         => $offset,
             'can_create_eq'  => $this->is_supervisor(),
             'can_create_wo'  => ((int)$this->current_user->role_id !== 4),
-            'filters'        => array(
-                'status'   => $legacy_status,
-                'type'     => $f_type ? (string)$f_type : '',
-                'category' => $f_category,
-                'location' => $f_location,
-                'search'   => $q,
+            'filter'         => array(
+                'status'       => $legacy_status,
+                'type'         => $f_type ? (string)$f_type : '',
+                'category'     => $f_category,
+                'location'     => $f_location,
+                'search'       => $q,
+                'report_group' => $f_group,
+                'reportable'   => $f_rep,
             ),
         );
     }
 
     public function index() {
         $data = $this->_build_fleet_dataset(TRUE);
-        $data['page_title'] = 'Equipment Fleet';
+        $data['page_title'] = 'Equipment Register';
         $this->render('maintenance/equipment', $data);
     }
 
@@ -375,15 +386,13 @@ class Equipment extends MY_Controller {
             return;
         }
 
-        $this->load->model('Workorder_model');
-        $this->load->model('Pm_model');
-        $specs      = $this->Equipment_model->get_specs($id);
+        $specs      = $this->_equipment_specs($id);
         $kpi        = $this->Equipment_model->get_equipment_kpi($id, 30);
-        $pm_list    = $this->Pm_model->get_by_equipment($id);
+        $pm_list    = $this->Equipment_model->get_pm_schedules($id);
         $wo_history = $this->Workorder_model->get_by_equipment($id, 8);
         $sites      = $this->Equipment_model->report_sites();
 
-        $smap = equip_status_map($eq->status);
+        $smap  = equip_status_map($eq->status);
         $today = date('Y-m-d');
 
         $spec_items = array();
@@ -477,61 +486,93 @@ class Equipment extends MY_Controller {
             $this->session->set_flashdata('error', 'Access denied.');
             redirect('equipment');
         }
-        $data['page_title']    = 'Add Equipment';
-        $data['types']         = $this->Equipment_model->get_types();
-        $data['eq_types']      = $data['types'];
-        $data['report_groups'] = $this->Equipment_model->report_groups();
-        $data['report_sites']  = $this->Equipment_model->report_sites();
-        $data['equipment']     = null;
 
         if ($this->input->post()) {
-            $this->form_validation->set_rules('registration_no', 'Registration No', 'required|is_unique[equipment.registration_no]');
-            $this->form_validation->set_rules('equipment_type_id', 'Equipment Type', 'required');
-            $this->form_validation->set_rules('brand', 'Brand', 'required');
-            $this->form_validation->set_rules('model', 'Model', 'required');
-
-            if ($this->form_validation->run()) {
-                $yr_in = $this->input->post('year') ?: $this->input->post('year_manufacture');
-                $insert = [
-                    'registration_no'   => strtoupper($this->input->post('registration_no', TRUE)),
-                    'equipment_type_id' => $this->input->post('equipment_type_id'),
-                    'brand'             => $this->input->post('brand', TRUE),
-                    'model'             => $this->input->post('model', TRUE),
-                    'year'              => $yr_in ? (int)$yr_in : null,
-                    'serial_number'     => $this->input->post('serial_number', TRUE),
-                    'engine_model'      => $this->input->post('engine_model', TRUE),
-                    'current_hours'     => (float)$this->input->post('current_hours'),
-                    'current_km'        => (float)$this->input->post('current_km'),
-                    'status'            => $this->input->post('status') ?: 'Available',
-                    'location'          => $this->input->post('location', TRUE),
-                    'purchase_date'     => $this->input->post('purchase_date') ?: null,
-                    'warranty_expiry'   => $this->input->post('warranty_expiry') ?: null,
-                    'report_group'      => $this->input->post('report_group', TRUE) ?: null,
-                    'report_sort'       => $this->input->post('report_sort') !== '' ? (int)$this->input->post('report_sort') : null,
-                    'include_in_weekly_report' => $this->input->post('include_in_weekly_report') ? 1 : 0,
-                ];
-                $new_id = $this->Equipment_model->create($insert);
-                $this->session->set_flashdata('success', 'Equipment added successfully.');
-                redirect('equipment/view/' . $new_id);
+            $year_raw = $this->input->post('year', TRUE);
+            $reg_no   = trim((string)$this->input->post('registration_no', TRUE));
+            if ($reg_no === '') {
+                $this->session->set_flashdata('error', 'Registration / Machine ID is required.');
+                redirect('equipment/create');
+                return;
             }
+            if ($this->db->where('registration_no', $reg_no)->count_all_results('equipment') > 0) {
+                $this->session->set_flashdata('error', 'Equipment registration "' . $reg_no . '" already exists.');
+                redirect('equipment/create');
+                return;
+            }
+            $data = [
+                'equipment_type_id' => $this->input->post('equipment_type_id', TRUE),
+                'registration_no'   => $reg_no,
+                'brand'             => $this->input->post('brand', TRUE),
+                'model'             => $this->input->post('model', TRUE),
+                'year'              => ($year_raw !== '' && $year_raw !== null && is_numeric($year_raw)) ? (int)$year_raw : NULL,
+                'serial_number'     => $this->input->post('serial_number', TRUE) ?: NULL,
+                'engine_model'      => $this->input->post('engine_model', TRUE) ?: NULL,
+                'current_hours'     => $this->input->post('current_hours', TRUE) ?: 0,
+                'current_km'        => $this->input->post('current_km', TRUE) ?: 0,
+                'location'          => $this->Equipment_model->sanitize_location($this->input->post('location', TRUE))['value'],   // W0.5
+                'purchase_date'     => $this->input->post('purchase_date', TRUE) ?: NULL,
+                'warranty_expiry'   => $this->input->post('warranty_expiry', TRUE) ?: NULL,
+                'notes'             => $this->input->post('notes', TRUE) ?: NULL,
+                'status'            => 'Available',
+            ];
+            // W0.3 — weekly-report classification (group / order / included)
+            $data = array_merge($data, $this->Equipment_model->sanitize_reportability([
+                'report_group'             => $this->input->post('report_group', TRUE),
+                'report_sort'              => $this->input->post('report_sort', TRUE),
+                'include_in_weekly_report' => $this->input->post('include_in_weekly_report', TRUE),
+            ]));
+
+            // Handle photo upload
+            if (!empty($_FILES['photo']['name'])) {
+                $config = [
+                    'upload_path'   => './uploads/photos/',
+                    'allowed_types' => 'gif|jpg|jpeg|png',
+                    'max_size'      => 5000,
+                    'file_name'     => 'eq_' . time(),
+                ];
+                $this->load->library('upload', $config);
+                if ($this->upload->do_upload('photo')) {
+                    $data['photo'] = $this->upload->data('file_name');
+                }
+            }
+
+            $this->Equipment_model->create($data);
+            $this->session->set_flashdata('success', 'Equipment added successfully.');
+            redirect('equipment');
         }
+
+        $data['eq_types']      = $this->db->get('equipment_types')->result();
+        $data['report_groups'] = $this->Equipment_model->report_groups();
+        $data['report_sites']  = $this->Equipment_model->report_sites();      // W0.5
+        $data['page_title']    = 'Add Equipment';
         $this->render('maintenance/equipment_form', $data);
     }
 
     public function view($id) {
-        $eq = $this->Equipment_model->get_by_id($id);
-        if (!$eq) show_404();
-        $this->load->model('Workorder_model');
-        $this->load->model('Pm_model');
-        $data['page_title']   = $eq->registration_no;
-        $data['equipment']    = $eq;
-        $data['specs']        = $this->Equipment_model->get_specs($id);
-        $data['kpi']          = $this->Equipment_model->get_equipment_kpi($id, 30);
+        $data['equipment']    = $this->Equipment_model->get_by_id($id);
+        if (!$data['equipment']) show_404();
         $data['wo_history']   = $this->Workorder_model->get_by_equipment($id, 20);
-        $data['pm_list']      = $this->Pm_model->get_by_equipment($id);
-        $data['meter_history']= $this->Equipment_model->get_meter_history($id, 10);
-        $data['report_sites'] = $this->Equipment_model->report_sites();
+        $data['pm_list']      = $this->Equipment_model->get_pm_schedules($id);
+        $data['kpi']          = $this->Equipment_model->get_equipment_kpi($id);
+        $data['specs']        = $this->_equipment_specs($id);
+        $data['report_sites'] = $this->Equipment_model->report_sites();       // W0.5
+        $data['page_title']   = 'Equipment: ' . $data['equipment']->registration_no;
         $this->render('maintenance/equipment_view', $data);
+    }
+
+    /**
+     * Specification sheet rows for one machine, in the Excel column order.
+     * Returns an empty array when the `equipment_specs` table is missing.
+     */
+    private function _equipment_specs($id) {
+        if (!$this->db->table_exists('equipment_specs')) return array();
+        return $this->db->select('spec_key, spec_label, spec_value')
+                        ->from('equipment_specs')
+                        ->where('equipment_id', (int)$id)
+                        ->where('spec_value !=', '')
+                        ->order_by('sort_order, spec_label')
+                        ->get()->result();
     }
 
     public function edit($id) {
@@ -539,55 +580,83 @@ class Equipment extends MY_Controller {
             $this->session->set_flashdata('error', 'Access denied.');
             redirect('equipment');
         }
-        $eq = $this->Equipment_model->get_by_id($id);
-        if (!$eq) show_404();
-        $data['page_title']    = 'Edit: ' . $eq->registration_no;
-        $data['equipment']     = $eq;
-        $data['types']         = $this->Equipment_model->get_types();
-        $data['eq_types']      = $data['types'];
-        $data['report_groups'] = $this->Equipment_model->report_groups();
-        $data['report_sites']  = $this->Equipment_model->report_sites();
+
+        $equipment = $this->Equipment_model->get_by_id($id);
+        if (!$equipment) show_404();
 
         if ($this->input->post()) {
-            $this->form_validation->set_rules('equipment_type_id', 'Equipment Type', 'required');
-            $this->form_validation->set_rules('brand', 'Brand', 'required');
-            $this->form_validation->set_rules('model', 'Model', 'required');
+            $year_raw = $this->input->post('year', TRUE);
+            $data = [
+                'equipment_type_id' => $this->input->post('equipment_type_id', TRUE),
+                'registration_no'   => trim((string)$this->input->post('registration_no', TRUE)),
+                'brand'             => $this->input->post('brand', TRUE),
+                'model'             => $this->input->post('model', TRUE),
+                'year'              => ($year_raw !== '' && $year_raw !== null && is_numeric($year_raw)) ? (int)$year_raw : NULL,
+                'serial_number'     => $this->input->post('serial_number', TRUE) ?: NULL,
+                'engine_model'      => $this->input->post('engine_model', TRUE) ?: NULL,
+                'current_hours'     => $this->input->post('current_hours', TRUE) ?: 0,
+                'current_km'        => $this->input->post('current_km', TRUE) ?: 0,
+                'location'          => $this->Equipment_model->sanitize_location($this->input->post('location', TRUE))['value'],   // W0.5
+                'status'            => $this->input->post('status', TRUE),
+                'purchase_date'     => $this->input->post('purchase_date', TRUE) ?: NULL,
+                'warranty_expiry'   => $this->input->post('warranty_expiry', TRUE) ?: NULL,
+                'notes'             => $this->input->post('notes', TRUE) ?: NULL,
+            ];
+            // W0.3 — weekly-report classification (group / order / included)
+            $data = array_merge($data, $this->Equipment_model->sanitize_reportability([
+                'report_group'             => $this->input->post('report_group', TRUE),
+                'report_sort'              => $this->input->post('report_sort', TRUE),
+                'include_in_weekly_report' => $this->input->post('include_in_weekly_report', TRUE),
+            ]));
 
-            if ($this->form_validation->run()) {
-                $yr_in = $this->input->post('year') ?: $this->input->post('year_manufacture');
-                $update = [
-                    'equipment_type_id' => $this->input->post('equipment_type_id'),
-                    'brand'             => $this->input->post('brand', TRUE),
-                    'model'             => $this->input->post('model', TRUE),
-                    'year'              => $yr_in ? (int)$yr_in : null,
-                    'serial_number'     => $this->input->post('serial_number', TRUE),
-                    'engine_model'      => $this->input->post('engine_model', TRUE),
-                    'current_hours'     => (float)$this->input->post('current_hours'),
-                    'current_km'        => (float)$this->input->post('current_km'),
-                    'status'            => $this->input->post('status'),
-                    'location'          => $this->input->post('location', TRUE),
-                    'purchase_date'     => $this->input->post('purchase_date') ?: null,
-                    'warranty_expiry'   => $this->input->post('warranty_expiry') ?: null,
-                    'report_group'      => $this->input->post('report_group', TRUE) ?: null,
-                    'report_sort'       => $this->input->post('report_sort') !== '' ? (int)$this->input->post('report_sort') : null,
-                    'include_in_weekly_report' => $this->input->post('include_in_weekly_report') ? 1 : 0,
-                ];
-                $this->Equipment_model->update($id, $update);
-                $this->session->set_flashdata('success', 'Equipment updated.');
-                redirect('equipment/view/' . $id);
-            }
+            $this->Equipment_model->update($id, $data);
+            $this->session->set_flashdata('success', 'Equipment updated.');
+            redirect("equipment/view/{$id}");
         }
+
+        $data['equipment']     = $equipment;
+        $data['eq_types']      = $this->db->get('equipment_types')->result();
+        $data['report_groups'] = $this->Equipment_model->report_groups();
+        $data['report_sites']  = $this->Equipment_model->report_sites();      // W0.5
+        $data['page_title']    = 'Edit Equipment: ' . $equipment->registration_no;
         $this->render('maintenance/equipment_form', $data);
     }
 
     public function update_hours($id) {
-        $eq = $this->Equipment_model->get_by_id($id);
-        if (!$eq) show_404();
-        $hours = (float)$this->input->post('current_hours');
-        $km    = (float)$this->input->post('current_km');
-        $notes = $this->input->post('notes', TRUE);
-        $this->Equipment_model->record_meter_reading($id, $hours, $km, $this->current_user->id, $notes);
-        $this->session->set_flashdata('success', 'Meter reading updated.');
-        redirect('equipment/view/' . $id);
+        if (!$this->require_post()) return;
+
+        $equipment = $this->Equipment_model->get_by_id($id);
+        if (!$equipment) show_404();
+
+        $override = (bool)$this->input->post('meter_override');
+        $messages = array();
+        $errors   = array();
+
+        foreach (array('current_hours' => 'Hours', 'current_km' => 'Kilometres') as $field => $unit) {
+            $raw = $this->input->post($field, TRUE);
+            if ($raw === null || $raw === '') continue;
+
+            if (!is_numeric($raw)) {
+                $errors[] = ($unit === 'Kilometres' ? 'Kilometres' : 'Hours') . ' must be a number.';
+                continue;
+            }
+            if (!$override && abs((float)$raw - (float)$equipment->{$field}) < 0.0001) continue;
+
+            $result = $this->Equipment_model->record_meter_reading(
+                $id, date('Y-m-d'), (float)$raw, 'Manual', null, $this->user_id,
+                array('unit' => $unit, 'override' => $override)
+            );
+            if (empty($result['ok'])) $errors[] = $result['message'];
+            else                      $messages[] = $result['message'];
+        }
+
+        if (!empty($errors)) {
+            $this->session->set_flashdata('error', implode(' ', $errors));
+        } elseif (!empty($messages)) {
+            $this->session->set_flashdata('success', implode(' ', $messages));
+        } else {
+            $this->session->set_flashdata('success', 'Nothing changed — the readings are the same as the machine already shows.');
+        }
+        redirect("equipment/view/{$id}");
     }
 }
