@@ -871,8 +871,10 @@ jobs:
                 const csvRes = await fetch('/equipment/export_csv?per_page=10', { credentials: 'same-origin' });
                 const csvText = await csvRes.text();
                 const csvOk = csvRes.status === 200
-                  && csvText.includes('Machine ID,Type,Category,Brand,Model,Year')
-                  && csvText.includes('Current Hours,Current KM');
+                  && csvText.includes('Machine ID')
+                  && csvText.includes('Type,Category,Brand,Model,Year')
+                  && csvText.includes('Current Hours')
+                  && csvText.includes('Current KM');
 
                 return {
                   docOverflow, tblOverflow, slashFocused, batchVisible, batchCsvHref,

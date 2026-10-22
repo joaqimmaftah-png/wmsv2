@@ -702,7 +702,7 @@ $show_to   = min($offset + $per_page, $total_filtered);
   var cntEl      = document.getElementById('eqSelectedCount');
   var exportBtn  = document.getElementById('eqBatchExportBtn');
   var clearBtn   = document.getElementById('eqBatchClearBtn');
-  var baseCsvUrl = <?= json_encode(base_url('equipment/export_csv')) ?>;
+  var baseCsvUrl = <?= json_encode(base_url('equipment/export_csv'), JSON_UNESCAPED_SLASHES) ?>;
 
   function syncSelection() {
     var ids = [];
@@ -745,7 +745,7 @@ $show_to   = min($offset + $per_page, $total_filtered);
   var subEl      = document.getElementById('eqDrawerSub');
   var bodyEl     = document.getElementById('eqDrawerBody');
   var footEl     = document.getElementById('eqDrawerFoot');
-  var summaryBase = <?= json_encode(base_url('equipment/summary_json/')) ?>;
+  var summaryBase = <?= json_encode(base_url('equipment/summary_json/'), JSON_UNESCAPED_SLASHES) ?>;
   var lastTrigger = null;
 
   function esc(s) {
