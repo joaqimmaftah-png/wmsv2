@@ -2284,6 +2284,171 @@ check('TXN-03 Verbatim Asset Link, Reference No & XSS Neutralization in material
     && strpos($txnSupHtml, 'id="txnDrawer" role="dialog" aria-modal="true"') !== FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
+   Section 20 — Spare Orders Register Overhaul (ORD-01..ORD-06)
+   ───────────────────────────────────────────────────────────────────────── */
+
+if (!class_exists('Order_model', FALSE)) {
+    require_once APPPATH . 'models/Order_model.php';
+}
+
+class OrderRegisterFakeDB {
+    public $queries = 0;
+    private $orders = array();
+    private $items  = array();
+    private $fromTable = '';
+
+    public function __construct(array $orders, array $items) {
+        $this->orders = $orders;
+        $this->items  = $items;
+    }
+    public function dbprefix($t = '') { return (string)$t; }
+    public function table_exists($t) {
+        return in_array($t, array('spare_orders', 'spare_order_items', 'work_orders', 'equipment', 'users'), TRUE);
+    }
+    public function select($s, $escape = NULL) { return $this; }
+    public function from($t) { $this->fromTable = (string)$t; return $this; }
+    public function join($t, $c, $type = '') { return $this; }
+    public function where($k, $v = NULL) { return $this; }
+    public function where_in($k, $vals) { return $this; }
+    public function group_by($g) { return $this; }
+    public function order_by($c, $d = '') { return $this; }
+    public function get($table = NULL) {
+        $this->queries++;
+        $src = $table !== NULL ? (string)$table : $this->fromTable;
+        if (strpos($src, 'spare_orders') === 0) {
+            return new TeamRosterFakeResult($this->orders);
+        }
+        if (strpos($src, 'spare_order_items') === 0) {
+            return new TeamRosterFakeResult($this->items);
+        }
+        return new TeamRosterFakeResult(array());
+    }
+}
+
+$fakeOrders = array();
+$fakeOrderItems = array();
+for ($oi = 1; $oi <= 500; $oi++) {
+    $isLate = ($oi === 1);
+    $isSoon = ($oi === 2);
+    $fakeOrders[] = (object)array(
+        'id'                     => $oi,
+        'order_no'               => ($oi === 2) ? 'PO-XSS<script>alert(7)</script>' : sprintf('PO-2026-%04d', $oi),
+        'supplier_id'            => 10,
+        'supplier_name'          => ($oi === 1) ? 'Mantrac CAT Intl' : 'HydraForce TZ',
+        'country'                => ($oi === 1) ? 'Germany' : 'Tanzania',
+        'shipping_method'        => ($oi === 1) ? 'Air Freight' : 'Road Transport',
+        'order_date'             => '2026-10-01',
+        'expected_delivery_date' => $isLate ? '2000-01-01' : ($isSoon ? date('Y-m-d', strtotime('+3 days')) : '2099-12-31'),
+        'actual_delivery_date'   => NULL,
+        'status'                 => ($oi <= 2) ? 'In Transit' : (($oi <= 490) ? 'Order Placed' : 'Verified & Closed'),
+        'tracking_number'        => ($oi === 1) ? 'DHL-8841209' : '',
+        'carrier'                => ($oi === 1) ? 'DHL Express' : '',
+        'currency'               => ($oi % 2 === 1) ? 'USD' : 'TZS',
+        'total_cost'             => ($oi % 2 === 1) ? 100.00 : 250000.00,
+        'discrepancy_flag'       => ($oi === 1) ? 'Shortage' : 'None',
+        'discrepancy_notes'      => ($oi === 1) ? '3 sets short' : NULL,
+        'linked_wo_id'           => ($oi === 1) ? 1 : (($oi === 2) ? 2 : NULL),
+        'wo_number'              => ($oi === 1) ? 'WO-AML-001' : (($oi === 2) ? 'WO-AML-002' : NULL),
+        'wo_title'               => ($oi === 1) ? 'Main boom seal kit' : NULL,
+        'equipment_id'           => ($oi === 1) ? 1 : (($oi === 2) ? 2 : NULL),
+        'equipment_code'         => ($oi === 1) ? 'EX 006' : (($oi === 2) ? 'C-HEADT 007' : NULL),
+        'first_name'             => 'CI',
+        'last_name'              => 'Storekeeper',
+        'notes'                  => '',
+    );
+    $fakeOrderItems[] = (object)array(
+        'id'           => $oi,
+        'order_id'     => $oi,
+        'description'  => ($oi === 1) ? 'Main Boom Seal Kit' : 'Fuel Filter Spin-On',
+        'part_number'  => ($oi === 1) ? '295-5609' : '1R-0750',
+        'qty_ordered'  => 4,
+        'qty_received' => ($oi === 1) ? 1 : 0,
+    );
+}
+
+$ordFakeDb = new OrderRegisterFakeDB($fakeOrders, $fakeOrderItems);
+$ordModel  = new Order_model();
+$ordModel->db = $ordFakeDb;
+$ordOv = $ordModel->get_register_overview();
+
+check('ORD-02 Constant O(1) SQL Scaling: 500 POs + line items + KPIs hydrated in <= 2 SQL queries (replaces 9-query index storm)',
+    count($ordOv['rows']) === 500 && $ordFakeDb->queries <= 2,
+    'queries=' . $ordFakeDb->queries);
+
+check('ORD-03 & K-11 Multi-Currency Open Commitment: groups USD and TZS separately & tracks partial GRN fulfillment (1/4 = 25%)',
+    (int)$ordOv['kpi']['open_orders'] === 490
+    && (int)$ordOv['kpi']['in_transit'] === 2
+    && (int)$ordOv['kpi']['overdue'] === 1
+    && (int)$ordOv['kpi']['due_soon'] === 1
+    && (int)$ordOv['kpi']['discrepancies'] === 1
+    && abs($ordOv['kpi']['open_spend_by_ccy']['USD'] - 24500.0) < 0.01
+    && abs($ordOv['kpi']['open_spend_by_ccy']['TZS'] - 61250000.0) < 0.01
+    && (int)$ordOv['rows'][0]->fulfillment_pct === 25
+    && $ordOv['rows'][0]->equipment_code === 'EX 006');
+
+$ordControllerSrc = file_get_contents(APPPATH . 'controllers/Orders.php');
+check('ORD-01 & ORD-05 Server-Side RBAC & Exports in Orders.php: can_write() guards create/receive/upload_document, honours Manager update_status whitelist + CSV/XLSX/JSON',
+    substr_count($ordControllerSrc, 'if (!$this->can_write())') >= 3
+    && strpos($ordControllerSrc, '!$this->can_write() && !$this->is_manager()') !== FALSE
+    && strpos($ordControllerSrc, 'public function summary_json(') !== FALSE
+    && strpos($ordControllerSrc, 'public function export_csv(') !== FALSE
+    && strpos($ordControllerSrc, 'public function export_xlsx(') !== FALSE);
+
+$ordWarnings = array();
+$renderOrdIndex = function ($canWrite) use ($ordOv, &$ordWarnings) {
+    $orders          = array_slice($ordOv['rows'], 0, 2);
+    $suppliers       = array((object)array('id' => 10, 'company_name' => 'Mantrac CAT Intl'));
+    $countries       = array('Germany', 'Tanzania');
+    $statuses        = Order_model::$STATUSES;
+    $methods         = Order_model::$SHIPPING_METHODS;
+    $kpi             = $ordOv['kpi'];
+    $tab_counts      = array('all' => 500, 'open' => 490, 'transit' => 2, 'overdue' => 1, 'discrepancy' => 1, 'closed' => 10);
+    $tab             = 'all';
+    $q               = '';
+    $filter          = array('status' => '', 'supplier' => '', 'country' => '', 'shipping_method' => '', 'search' => '');
+    $sort            = 'order_date';
+    $dir             = 'desc';
+    $view_mode       = 'table';
+    $per_page        = 25;
+    $allowed_pp      = array(10, 25, 50, 100, 150);
+    $current_page    = 1;
+    $total_pages     = 20;
+    $total_filtered  = 500;
+    $offset          = 0;
+    $filtered_totals = array(
+        'qty_ordered'  => 8.0,
+        'qty_received' => 1.0,
+        'by_currency'  => array('USD' => 100.00, 'TZS' => 250000.00),
+    );
+    $can_write       = $canWrite;
+
+    set_error_handler(function ($severity, $message, $file, $line) use (&$ordWarnings) {
+        $ordWarnings[] = "$message ($file:$line)";
+        return TRUE;
+    });
+    ob_start();
+    include APPPATH . 'views/orders/index.php';
+    $out = ob_get_clean();
+    restore_error_handler();
+    return $out;
+};
+
+$ordSupHtml = $renderOrdIndex(TRUE);
+$ordMgrHtml = $renderOrdIndex(FALSE);
+
+check('ORD-06 Clean View Render, Verbatim EX 006 / C-HEADT 007, RBAC Gate & XSS Neutralization in orders/index.php',
+    empty($ordWarnings)
+    && strpos($ordSupHtml, 'id="ordNewBtn"') !== FALSE
+    && strpos($ordMgrHtml, 'id="ordNewBtn"') === FALSE
+    && strpos($ordSupHtml, 'EX 006') !== FALSE
+    && strpos($ordSupHtml, 'C-HEADT 007') !== FALSE
+    && strpos($ordSupHtml, 'DHL-8841209') !== FALSE
+    && strpos($ordSupHtml, 'USD 24,500.00 · TZS 61,250,000.00') !== FALSE
+    && strpos($ordSupHtml, '<script>alert(7)</script>') === FALSE
+    && strpos($ordSupHtml, 'id="ordDrawer" role="dialog" aria-modal="true"') !== FALSE,
+    implode('; ', $ordWarnings));
+
+/* ─────────────────────────────────────────────────────────────────────────
    Result
    ───────────────────────────────────────────────────────────────────────── */
 

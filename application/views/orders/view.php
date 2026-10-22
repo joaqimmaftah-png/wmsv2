@@ -9,7 +9,9 @@ $curIdx = array_search($order->status, $pipeline);
 // outstanding balance on their item rows and have no receipt documents).
 $outstanding_total = 0;
 foreach ($items as $it) { $outstanding_total += (float)$it->qty_outstanding; }
-$can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('Cancelled','Verified & Closed'));
+$can_write         = !empty($can_write);
+$can_update_status = isset($can_update_status) ? (bool)$can_update_status : $can_write;
+$can_receive       = $can_write && $outstanding_total > 0.0001 && !in_array($order->status, array('Cancelled','Verified & Closed'));
 ?>
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
@@ -130,6 +132,7 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
       </div>
       <?php endforeach; endif; ?>
 
+      <?php if ($can_write): ?>
       <?= form_open_multipart('orders/upload_document/'.$order->id) ?>
       <div class="flex ai-c gap-10" style="margin-top:12px;flex-wrap:wrap;">
         <select name="doc_type" class="form-select" style="width:140px;">
@@ -139,11 +142,13 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
         <button type="submit" class="btn btn-ghost btn-sm">Upload</button>
       </div>
       <?= form_close() ?>
+      <?php endif; ?>
     </div>
   </div>
 </div>
 
 <div>
+  <?php if ($can_update_status): ?>
   <!-- Status update -->
   <div class="card mb-4">
     <div class="ch"><div><div class="ct">Update Status</div></div></div>
@@ -164,7 +169,9 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
         <div style="color:var(--t3);font-size:12px;">This order is <?= strtolower((string)($order->status)) ?>.</div>
         <?php endif; ?>
       <?php elseif ($order->status === 'Customs Clearance' || $order->status === 'In Transit'): ?>
+        <?php if ($can_receive): ?>
         <a href="<?= base_url('orders/receive/'.$order->id) ?>" class="btn btn-primary btn-sm" style="width:100%;display:block;text-align:center;margin-bottom:10px;">Receive Items at Store</a>
+        <?php endif; ?>
         <?= form_open('orders/update_status/'.$order->id) ?>
         <?php /* Guided pipeline (Wave 3): only the statuses the process allows next.
                  "Received at Store" is reached by booking a delivery in, above. */ ?>
@@ -197,6 +204,7 @@ $can_receive = $outstanding_total > 0.0001 && !in_array($order->status, array('C
       <?php endif; ?>
     </div>
   </div>
+  <?php endif; ?>
 
   <!-- History -->
   <div class="card">
