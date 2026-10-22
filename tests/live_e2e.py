@@ -389,15 +389,16 @@ try:
     assert st_m_ixls == 200 and m_ixls_b[:4] == b'PK\x03\x04'
 
     # Stock Transactions Ledger TXN-01..TXN-05 Live RBAC & Binary CSV/XLSX Verification
-    st_m_txn, _, m_txn_b = get_bytes('/materials/transactions?tab=equipment', mgr_op)
+    st_m_txn, _, m_txn_b = get_bytes('/materials/transactions?tab=equipment&date_from=2026-02-01&date_to=2026-02-28', mgr_op)
     m_txn_html = m_txn_b.decode('utf-8', 'replace')
     assert (
         st_m_txn == 200
         and 'Stock Transaction Ledger' in m_txn_html
         and 'Export CSV' in m_txn_html
         and 'Export Excel' in m_txn_html
+        and 'Feb 2026' in m_txn_html
         and '06 Oct 2026' not in m_txn_html
-    ), 'Transactions ledger failed or leaked migration timestamp 06 Oct 2026!'
+    ), 'Transactions ledger failed or leaked migration timestamp 06 Oct 2026 on Feb 2026 window!'
     st_m_tcsv, _, m_tcsv_b = get_bytes('/materials/transactions_csv?tab=equipment&date_from=2026-09-01', mgr_op)
     assert st_m_tcsv == 200 and m_tcsv_b.startswith(b'\xef\xbb\xbf') and b'Reference / MRN / R.non' in m_tcsv_b
     st_m_txls, _, m_txls_b = get_bytes('/materials/transactions_xlsx?tab=valued&date_from=2026-09-01', mgr_op)
