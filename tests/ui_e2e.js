@@ -885,7 +885,7 @@ for (const rawLine of cookieLines) {
 
     await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/materials/transactions?q=CI-' });
     for (let i = 0; i < 40; i++) {
-      if (await evalJs('document.readyState === "complete" && Boolean(document.querySelector(\'[data-txn-open="29902"]\'))')) break;
+      if (await evalJs('document.readyState === "complete" && Boolean(document.querySelector(\'[data-txn-open="59902"]\'))')) break;
       await sleep(200);
     }
     const txnDesktop = await evalJs(`(async () => {
@@ -907,8 +907,8 @@ for (const rawLine of cookieLines) {
       const batchCsvHref = document.getElementById('txnBatchExportBtn').getAttribute('href') || '';
       const batchXlsHref = document.getElementById('txnBatchXlsxBtn').getAttribute('href') || '';
 
-      // Open Slide-Over Voucher Drawer (TXN-29902 -> REQ-9902 + 295-5609)
-      const trigger = document.querySelector('[data-txn-open="29902"]');
+      // Open Slide-Over Voucher Drawer (TXN-59902 -> REQ-9902 + 295-5609)
+      const trigger = document.querySelector('[data-txn-open="59902"]');
       trigger.focus();
       trigger.click();
       for (let w = 0; w < 25; w++) {
