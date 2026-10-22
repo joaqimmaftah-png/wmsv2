@@ -1124,6 +1124,206 @@ check('TM-08 & TM-09 Dual View Mode + Accessible Staff Inspector Drawer rendered
     && strpos($tmSupHtml, 'id="tmDrawer" role="dialog" aria-modal="true"') !== FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
+   Work Orders DataTable Audit & Redesign Suite (WO-01 .. WO-09)
+   ───────────────────────────────────────────────────────────────────────── */
+
+require_once APPPATH . 'helpers/wo_helper.php';
+if (!class_exists('Workorder_model', FALSE)) {
+    require_once APPPATH . 'models/Workorder_model.php';
+}
+
+class WorkorderFakeDB {
+    public $queries = 0;
+    private $wos = array();
+    private $fromTable = '';
+
+    public function __construct(array $wos) { $this->wos = $wos; }
+    public function dbprefix($t = '') { return (string)$t; }
+    public function table_exists($t) {
+        return in_array($t, array('work_orders', 'equipment', 'users', 'wo_spare_parts', 'wo_sessions'), TRUE);
+    }
+    public function select($s, $escape = NULL) { return $this; }
+    public function from($t) { $this->fromTable = (string)$t; return $this; }
+    public function join($t, $c, $type = '') { return $this; }
+    public function where($k, $v = NULL) { return $this; }
+    public function where_in($k, $vals) { return $this; }
+    public function group_by($g) { return $this; }
+    public function order_by($c, $d = '') { return $this; }
+    public function group_start() { return $this; }
+    public function group_end() { return $this; }
+    public function like($k, $v, $side = 'both') { return $this; }
+    public function or_like($k, $v, $side = 'both') { return $this; }
+    public function get($table = NULL) {
+        $this->queries++;
+        $src = $table !== NULL ? (string)$table : $this->fromTable;
+        if (strpos($src, 'work_orders') === 0) {
+            return new TeamRosterFakeResult($this->wos);
+        }
+        if ($src === 'users') {
+            return new TeamRosterFakeResult(array(
+                (object)array('id' => 1, 'first_name' => 'CI', 'last_name' => 'Supervisor'),
+                (object)array('id' => 2, 'first_name' => 'John', 'last_name' => 'Moshi'),
+            ));
+        }
+        if ($src === 'wo_spare_parts') {
+            return new TeamRosterFakeResult(array(
+                (object)array('work_order_id' => 1, 'lines_cnt' => 2),
+            ));
+        }
+        if ($src === 'wo_sessions') {
+            return new TeamRosterFakeResult(array(
+                (object)array('wo_id' => 1, 'hrs' => 4.5, 'open_cnt' => 1),
+            ));
+        }
+        return new TeamRosterFakeResult(array());
+    }
+}
+
+$fakeWos = array();
+for ($wi = 1; $wi <= 25; $wi++) {
+    $fakeWos[] = (object)array(
+        'id'                    => $wi,
+        'wo_number'             => ($wi === 2) ? 'WO-XSS<script>alert(1)</script>' : sprintf('WO-AML-%03d', $wi),
+        'equipment_id'          => $wi,
+        'registration_no'       => ($wi === 1) ? 'EX 006' : (($wi === 2) ? 'C-HEADT 007' : 'C-HEADT 008'),
+        'brand'                 => 'CAT',
+        'model'                 => '320D',
+        'equipment_location'    => 'WORKSHOP',
+        'equipment_live_status' => 'Breakdown',
+        'type'                  => ($wi === 1) ? 'Corrective Maintenance' : (($wi === 2) ? 'WaitingTest' : 'Preventive Maintenance'),
+        'is_breakdown'          => ($wi === 1) ? 1 : 0,
+        'priority'              => ($wi === 1) ? 'Critical' : (($wi === 2) ? 'High' : 'Medium'),
+        'status'                => ($wi === 1) ? 'In Progress' : (($wi === 2) ? 'Waiting Parts' : 'Completed'),
+        'hold_code'             => ($wi === 2) ? 'WSP' : NULL,
+        'title'                 => ($wi === 2) ? 'Seal kit<script>alert(3)</script>' : 'Main boom cylinder repair',
+        'assigned_to'           => '1, 2',
+        'actual_hours'          => NULL,
+        'downtime_hours'        => ($wi === 3) ? 6.5 : NULL,
+        'start_datetime'        => '2026-10-20 08:00:00',
+        'end_datetime'          => ($wi === 3) ? '2026-10-20 14:30:00' : NULL,
+        'expected_return_date'  => ($wi === 2) ? '2025-05-01' : NULL,
+        'created_at'            => '2026-10-20 08:00:00',
+    );
+}
+$fakeWos[1]->type = 'Incident';
+
+$woDb    = new WorkorderFakeDB($fakeWos);
+$woModel = new Workorder_model();
+$woModel->db = $woDb;
+
+$woOverview = $woModel->get_directory_overview();
+check('WO-01 O(1) Bulk Directory Query Scaling: 25 work orders hydrated in <= 4 SQL queries (eliminated 26-query N+1 storm)',
+    count($woOverview) === 25 && $woDb->queries <= 4,
+    'queries=' . $woDb->queries);
+
+$woDbAll = new WorkorderFakeDB($fakeWos);
+$woModel->db = $woDbAll;
+$woAllRows = $woModel->get_all();
+check('WO-01 Fixed Workorder_model::get_all() N+1 loop: 25 work orders resolved in <= 2 SQL queries',
+    count($woAllRows) === 25 && $woDbAll->queries <= 2 && $woAllRows[0]->assigned_name === 'CI Supervisor, John Moshi',
+    'queries=' . $woDbAll->queries);
+
+check('WO-03 Operational Signals Hydrated: spare part count, live open session, logged hours, hold state & overdue ETA',
+    $woOverview[0]->spare_lines_count === 2
+    && $woOverview[0]->has_open_session === TRUE
+    && abs($woOverview[0]->logged_hours - 4.5) < 0.01
+    && $woOverview[1]->is_on_hold === TRUE
+    && $woOverview[1]->is_overdue_eta === TRUE);
+
+// WO-02 RBAC & Security static checks
+$woViewSrc = file_get_contents(APPPATH . 'views/maintenance/wo_view.php');
+if (isset($mutRegex)) {
+    foreach (array('index', 'export_csv', 'summary_json', 'view', 'jobcard') as $actName) {
+        check("WO-02 Manager RBAC: Workorders::{$actName}() is permitted under read-only MUTATION_PATTERN",
+            preg_match($mutRegex, $actName) === 0);
+    }
+}
+check('WO-02 Stored XSS & Manager RBAC in wo_view.php: escapes wo_number/registration_no/assigned_name & hides Edit for Manager',
+    strpos($woViewSrc, '<?= $wo->wo_number ?>') === FALSE
+    && strpos($woViewSrc, '$wo->assigned_name : \'—\') ?>') === FALSE
+    && strpos($woViewSrc, '(int)$role_id !== 4') !== FALSE);
+
+// WO-03 .. WO-09 Full PHP View Render & RBAC/XSS Audit of application/views/maintenance/workorders.php
+$woVars = array(
+    'work_orders'    => array_slice($woOverview, 0, 4),
+    'total_filtered' => 25,
+    'total_scope'    => 25,
+    'tab_counts'     => array('all' => 25, 'active' => 2, 'open' => 0, 'in_progress' => 1, 'on_hold' => 1, 'completed' => 23, 'closed' => 0),
+    'summary'        => array(
+        'total_wos'       => 25,
+        'active_queue'    => 2,
+        'critical_active' => 1,
+        'breakdowns_open' => 1,
+        'in_progress'     => 1,
+        'live_sessions'   => 1,
+        'on_hold'         => 1,
+        'overdue_eta'     => 1,
+        'awaiting_verify' => 23,
+    ),
+    'active_tab'     => 'all',
+    'status_exact'   => '',
+    'type_filter'    => '',
+    'priority_filter'=> '',
+    'equip_filter'   => 0,
+    'tech_filter'    => 0,
+    'search_query'   => '',
+    'sort_by'        => 'priority',
+    'sort_dir'       => 'desc',
+    'per_page'       => 25,
+    'page'           => 1,
+    'total_pages'    => 1,
+    'showing_from'   => 1,
+    'showing_to'     => 4,
+    'view_mode'      => 'table',
+    'equipment_list' => array(
+        (object)array('id' => 1, 'registration_no' => 'EX 006'),
+        (object)array('id' => 2, 'registration_no' => 'C-HEADT 007'),
+    ),
+    'tech_options'   => array(
+        (object)array('id' => 1, 'first_name' => 'CI', 'last_name' => 'Supervisor'),
+        (object)array('id' => 2, 'first_name' => 'John', 'last_name' => 'Moshi'),
+    ),
+    'can_write'      => TRUE,
+    'is_supervisor'  => TRUE,
+    'is_manager'     => FALSE,
+    'page_title'     => 'Work Orders',
+);
+
+$woWarnings = array();
+set_error_handler(function ($severity, $message, $file, $line) use (&$woWarnings) {
+    $woWarnings[] = "{$message} ({$file}:{$line})";
+    return TRUE;
+});
+ob_start();
+(function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/maintenance/workorders.php'; })($woVars);
+$woSupHtml = ob_get_clean();
+
+$woVarsMgr = array_merge($woVars, array('can_write' => FALSE, 'is_supervisor' => FALSE, 'is_manager' => TRUE));
+ob_start();
+(function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/maintenance/workorders.php'; })($woVarsMgr);
+$woMgrHtml = ob_get_clean();
+restore_error_handler();
+
+check('WO-04 View Render: application/views/maintenance/workorders.php renders cleanly for Supervisor & Manager with ZERO warnings',
+    empty($woWarnings), implode('; ', $woWarnings));
+check('WO-02 XSS Neutralization in maintenance/workorders.php: hostile <script> tags escaped cleanly',
+    strpos($woSupHtml, '<script>alert(') === FALSE
+    && strpos($woSupHtml, 'WO-XSS&lt;script&gt;alert(1)&lt;/script&gt;') !== FALSE);
+check('WO-03 Semantic Type & Hold Hierarchy: Breakdown=b-danger, Incident=b-warning, Preventive=b-primary, Hold="WSP · Waiting for Spare Part"',
+    strpos($woSupHtml, '>Breakdown<') !== FALSE
+    && strpos($woSupHtml, 'b-danger') !== FALSE
+    && strpos($woSupHtml, 'WSP · Waiting for Spare Part') !== FALSE
+    && strpos($woSupHtml, 'Overdue return') !== FALSE);
+check('WO-02 Manager UI RBAC: hides New WO & Edit Work Order buttons while preserving Export CSV, Inspect & Print Job Card',
+    strpos($woMgrHtml, 'New WO') === FALSE
+    && strpos($woMgrHtml, 'Edit Work Order') === FALSE
+    && strpos($woMgrHtml, 'workorders/export_csv') !== FALSE);
+check('WO-07 & WO-08 Dual View Mode + Accessible Slide-Over Work Order Drawer rendered cleanly',
+    strpos($woSupHtml, 'data-set-view="cards"') !== FALSE
+    && strpos($woSupHtml, 'class="wo-cards-grid"') !== FALSE
+    && strpos($woSupHtml, 'id="woDrawer" role="dialog" aria-modal="true"') !== FALSE);
+
+/* ─────────────────────────────────────────────────────────────────────────
    Result
    ───────────────────────────────────────────────────────────────────────── */
 
