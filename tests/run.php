@@ -1324,6 +1324,188 @@ check('WO-07 & WO-08 Dual View Mode + Accessible Slide-Over Work Order Drawer re
     && strpos($woSupHtml, 'id="woDrawer" role="dialog" aria-modal="true"') !== FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
+   14. Equipment Fleet DataTable, O(1) Telemetry Hydration, RBAC & XSS Audit
+   ───────────────────────────────────────────────────────────────────────── */
+
+require_once APPPATH . 'models/Equipment_model.php';
+
+$eqDb = new Stub_db();
+$eqModel = new Equipment_model();
+$eqModel->db = $eqDb;
+
+$fleetMachines = array();
+for ($m = 1; $m <= 18; $m++) {
+    $reg = ($m === 1) ? 'EX 006' : (($m === 2) ? 'C-HEADT 007' : sprintf('C-HV-EX %03d', $m));
+    $fleetMachines[] = (object)array(
+        'id'                       => $m,
+        'equipment_type_id'        => ($m % 2) + 1,
+        'registration_no'          => $reg,
+        'type_name'                => ($m % 2 === 1) ? 'Excavator' : 'Horse Truck',
+        'category'                 => ($m % 2 === 1) ? 'Mobile Equipment' : 'Heavy Truck',
+        'brand'                    => ($m === 1) ? 'CATERPILLAR' : 'SHACMAN',
+        'model'                    => ($m === 1) ? '336D2L' : 'F3000<script>alert(7)</script>',
+        'year_manufacture'         => 2020 + ($m % 5),
+        'serial_number'            => 'SN-EQ-' . $m,
+        'engine_model'             => 'C9-ACERT-' . $m,
+        'current_hours'            => 1250.5 + ($m * 40),
+        'current_km'               => ($m === 2) ? 98420.5 : 0.0,
+        'status'                   => ($m === 1) ? 'Breakdown' : (($m === 2) ? 'In Maintenance' : (($m === 18) ? 'Retired' : 'Available')),
+        'location'                 => ($m === 3) ? 'UNMAPPED CAMP' : 'MET PLANT',
+        'report_group'             => ($m === 4) ? NULL : 'EXCAVATOR',
+        'report_sort'              => 10000 + $m,
+        'include_in_weekly_report' => ($m === 18) ? 0 : 1,
+        'purchase_date'            => '2021-04-10',
+        'warranty_expiry'          => '2026-12-31',
+    );
+}
+
+$eqDb->queue = array(
+    new Stub_result($fleetMachines),
+    new Stub_result(array(
+        (object)array('code' => 'MET_PLANT', 'name' => 'MET PLANT'),
+        (object)array('code' => 'WORKSHOP',  'name' => 'WORKSHOP'),
+    )),
+    new Stub_result(array(
+        (object)array('equipment_id' => 1, 'open_cnt' => 2, 'crit_cnt' => 1),
+        (object)array('equipment_id' => 2, 'open_cnt' => 1, 'crit_cnt' => 0),
+    )),
+    new Stub_result(array(
+        (object)array('equipment_id' => 1, 'interval_type' => 'Hours', 'next_due_date' => '2026-10-01', 'next_due_hours' => 1200),
+        (object)array('equipment_id' => 2, 'interval_type' => 'Days',  'next_due_date' => '2026-12-15', 'next_due_hours' => NULL),
+    )),
+    new Stub_result(array(
+        (object)array('equipment_id' => 1, 'cnt' => 6),
+        (object)array('equipment_id' => 2, 'cnt' => 4),
+    )),
+);
+
+$qStartEq = count($eqDb->queries);
+$fleetOverview = $eqModel->get_fleet_overview('2026-10-22');
+$qTotalEq = count($eqDb->queries) - $qStartEq;
+
+check('EQ-03 O(1) Fleet Telemetry Scaling: get_fleet_overview() hydrates 18 machines + WOs + PMs + specs in <= 5 SQL queries',
+    $qTotalEq <= 5 && count($fleetOverview['rows']) === 18,
+    "Executed {$qTotalEq} queries");
+check('EQ-03 Verbatim Asset Register & Live Telemetry Hydration: preserves registration_no, open_wo_count, pm_overdue_count, spec_count & data alerts',
+    $fleetOverview['rows'][0]->registration_no === 'EX 006'
+    && $fleetOverview['rows'][0]->open_wo_count === 2
+    && $fleetOverview['rows'][0]->crit_wo_count === 1
+    && $fleetOverview['rows'][0]->pm_overdue_count === 1
+    && $fleetOverview['rows'][0]->spec_count === 6
+    && $fleetOverview['rows'][2]->loc_approved === FALSE
+    && $fleetOverview['rows'][2]->has_data_alert === TRUE
+    && in_array('UNMAPPED CAMP', $fleetOverview['locations'], TRUE));
+
+// EQ-02 Workorder_model::get_by_equipment() zero-N+1 verification
+$woEqDb = new Stub_db();
+$woEqModel = new Workorder_model();
+$woEqModel->db = $woEqDb;
+$woEqDb->queue = array(
+    new Stub_result(array(
+        (object)array('id' => 11, 'wo_number' => 'WO-EQ-01', 'assigned_to' => '2,5'),
+        (object)array('id' => 12, 'wo_number' => 'WO-EQ-02', 'assigned_to' => '5'),
+        (object)array('id' => 13, 'wo_number' => 'WO-EQ-03', 'assigned_to' => '2'),
+    )),
+    new Stub_result(array(
+        (object)array('id' => 2, 'first_name' => 'John', 'last_name' => 'Moshi'),
+        (object)array('id' => 5, 'first_name' => 'Asha', 'last_name' => 'Kileo'),
+    )),
+);
+$qStartWoEq = count($woEqDb->queries);
+$eqHistRows = $woEqModel->get_by_equipment(1, 20);
+$qTotalWoEq = count($woEqDb->queries) - $qStartWoEq;
+check('EQ-02 Zero N+1 on Equipment::view(): Workorder_model::get_by_equipment() resolves all rows in 2 constant queries',
+    $qTotalWoEq === 2 && $eqHistRows[0]->assigned_name === 'John Moshi, Asha Kileo',
+    "Executed {$qTotalWoEq} queries");
+
+// EQ-02 RBAC & Stored XSS checks on Equipment controller + equipment_view.php
+$eqCtrlSrc = file_get_contents(APPPATH . 'controllers/Equipment.php');
+$eqDetSrc  = file_get_contents(APPPATH . 'views/maintenance/equipment_view.php');
+if (isset($mutRegex)) {
+    foreach (array('index', 'export_csv', 'summary_json', 'view') as $eqAct) {
+        check("EQ-02 Manager RBAC: Equipment::{$eqAct}() is permitted under read-only MUTATION_PATTERN",
+            preg_match($mutRegex, $eqAct) === 0);
+    }
+}
+check('EQ-02 Stored XSS & Manager RBAC Hardening in maintenance/equipment_view.php',
+    strpos($eqDetSrc, '<?= $pm->schedule_name ?>') === FALSE
+    && strpos($eqDetSrc, '<?= $wo->wo_number ?>') === FALSE
+    && strpos($eqDetSrc, '<?= $wo->type ?>') === FALSE
+    && strpos($eqDetSrc, '<?= $wo->status ?>') === FALSE
+    && substr_count($eqDetSrc, '(int)$role_id !== 4') >= 2);
+
+// EQ-01 .. EQ-08 Full PHP Render Audit of application/views/maintenance/equipment.php (Supervisor & Non-Supervisor)
+$eqVars = array(
+    'equipment_list' => array_slice($fleetOverview['rows'], 0, 6),
+    'types'          => array((object)array('id' => 1, 'name' => 'Excavator'), (object)array('id' => 2, 'name' => 'Horse Truck')),
+    'categories'     => array('Heavy Truck', 'Mobile Equipment'),
+    'locations'      => $fleetOverview['locations'],
+    'report_sites'   => $fleetOverview['report_sites'],
+    'report_groups'  => array('EXCAVATOR', 'TIPPER'),
+    'reportability'  => $fleetOverview['reportability'],
+    'site_summary'   => $fleetOverview['site_summary'],
+    'kpi'            => array(
+        'total' => 116, 'operational' => 98, 'down' => 6, 'breakdown' => 2,
+        'in_maintenance' => 4, 'open_wo_total' => 9, 'open_wo_machines' => 6,
+        'pm_overdue_total' => 3, 'pm_overdue_machines' => 3, 'avail_pct' => 94.2,
+    ),
+    'tab_counts'     => array(
+        'all' => 116, 'available' => 92, 'maintenance' => 4, 'breakdown' => 2,
+        'standby' => 6, 'pm_overdue' => 3, 'data_alert' => 2, 'retired' => 12,
+    ),
+    'tab'            => 'all',
+    'q'              => 'EX',
+    'f_category'     => 'Mobile Equipment',
+    'f_type'         => 1,
+    'f_location'     => 'MET PLANT',
+    'f_group'        => 'EXCAVATOR',
+    'f_rep'          => 'yes',
+    'sort'           => 'hours',
+    'dir'            => 'desc',
+    'view_mode'      => 'table',
+    'per_page'       => 25,
+    'allowed_pp'     => array(10, 25, 50, 100, 150),
+    'current_page'   => 1,
+    'total_pages'    => 5,
+    'total_filtered' => 116,
+    'offset'         => 0,
+    'can_create_eq'  => TRUE,
+    'can_create_wo'  => TRUE,
+);
+
+$eqWarnings = array();
+set_error_handler(function ($severity, $message, $file, $line) use (&$eqWarnings) {
+    $eqWarnings[] = "{$message} ({$file}:{$line})";
+    return TRUE;
+});
+ob_start();
+(function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/maintenance/equipment.php'; })($eqVars);
+$eqSupHtml = ob_get_clean();
+
+$eqVarsNonSup = array_merge($eqVars, array('can_create_eq' => FALSE, 'can_create_wo' => FALSE));
+ob_start();
+(function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/maintenance/equipment.php'; })($eqVarsNonSup);
+$eqMgrHtml = ob_get_clean();
+restore_error_handler();
+
+check('EQ-01 View Render: application/views/maintenance/equipment.php renders Enterprise DataTable & Dual Cards with ZERO PHP warnings',
+    empty($eqWarnings)
+    && strpos($eqSupHtml, '<table class="eq-table"') !== FALSE
+    && strpos($eqSupHtml, 'class="eq-cards-grid"') !== FALSE,
+    implode('; ', $eqWarnings));
+check('EQ-02 XSS Neutralization in maintenance/equipment.php: hostile <script> tag in model escaped cleanly',
+    strpos($eqSupHtml, '<script>alert(7)</script>') === FALSE
+    && strpos($eqSupHtml, 'F3000&lt;script&gt;alert(7)&lt;/script&gt;') !== FALSE);
+check('EQ-02 Non-Supervisor UI RBAC: hides Add Equipment & Edit buttons while preserving Export CSV, Inspect & View',
+    strpos($eqSupHtml, 'equipment/create') !== FALSE
+    && strpos($eqMgrHtml, 'equipment/create') === FALSE
+    && strpos($eqMgrHtml, 'equipment/edit/') === FALSE
+    && strpos($eqMgrHtml, 'equipment/export_csv') !== FALSE);
+check('EQ-06 Accessible Slide-Over Machine Inspector Drawer rendered cleanly',
+    strpos($eqSupHtml, 'id="eqDrawer" role="dialog" aria-modal="true"') !== FALSE
+    && strpos($eqSupHtml, 'equipment/summary_json/') !== FALSE);
+
+/* ─────────────────────────────────────────────────────────────────────────
    Result
    ───────────────────────────────────────────────────────────────────────── */
 

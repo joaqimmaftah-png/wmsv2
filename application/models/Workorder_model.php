@@ -212,9 +212,7 @@ class Workorder_model extends CI_Model {
             ->order_by('wo.created_at','DESC')
             ->limit($limit)
             ->get()->result();
-        foreach ($results as &$wo) {
-            $wo->assigned_name = $this->_resolve_tech_names($wo->assigned_to);
-        }
+        $this->_attach_tech_names_batch($results);
         return $results;
     }
 
@@ -227,9 +225,7 @@ class Workorder_model extends CI_Model {
             ->where('DATE(wo.start_datetime) <=', $to)
             ->order_by('wo.start_datetime','DESC')
             ->get()->result();
-        foreach ($results as &$wo) {
-            $wo->assigned_name = $this->_resolve_tech_names($wo->assigned_to);
-        }
+        $this->_attach_tech_names_batch($results);
         return $results;
     }
 
@@ -241,9 +237,7 @@ class Workorder_model extends CI_Model {
             ->where('DATE(wo.start_datetime)', $date)
             ->order_by('wo.start_datetime','DESC')
             ->get()->result();
-        foreach ($results as &$wo) {
-            $wo->assigned_name = $this->_resolve_tech_names($wo->assigned_to);
-        }
+        $this->_attach_tech_names_batch($results);
         return $results;
     }
 
@@ -255,11 +249,7 @@ class Workorder_model extends CI_Model {
             ->order_by('wo.created_at','DESC')
             ->limit($limit)->get()->result();
 
-        // `assigned_to` is a CSV; resolve every technician through the same
-        // helper the list and detail screens use, never a JOIN on the column.
-        foreach ($rows as $wo) {
-            $wo->assigned_name = $this->_resolve_tech_names($wo->assigned_to);
-        }
+        $this->_attach_tech_names_batch($rows);
         return $rows;
     }
 

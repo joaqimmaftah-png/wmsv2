@@ -11,10 +11,12 @@
   </div>
   <div class="col-auto d-flex gap-2">
     <?php if ($role_id == 1): ?>
-    <a href="<?= base_url('equipment/edit/' . $equipment->id) ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-pencil me-1"></i>Edit</a>
+    <a href="<?= base_url('equipment/edit/' . $equipment->id) ?>" class="btn btn-outline-secondary btn-sm">Edit</a>
     <?php endif; ?>
-    <a href="<?= base_url('workorders/create') ?>" class="btn btn-success btn-sm"><i class="bi bi-plus-circle me-1"></i>New WO</a>
-    <a href="<?= base_url('equipment') ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+    <?php if ((int)$role_id !== 4): ?>
+    <a href="<?= base_url('workorders/create') ?>" class="btn btn-success btn-sm">New WO</a>
+    <?php endif; ?>
+    <a href="<?= base_url('equipment') ?>" class="btn btn-outline-primary btn-sm">&larr; Back</a>
   </div>
 </div>
 
@@ -154,8 +156,10 @@
     <!-- PM Schedules -->
     <div class="wms-card">
       <div class="card-head">
-        <i class="bi bi-calendar-check text-primary me-1"></i>PM Schedules
-        <a href="<?= base_url('pm/create') ?>" class="btn btn-sm btn-outline-primary ms-auto" style="font-size:11px;"><i class="bi bi-plus"></i> Add PM</a>
+        PM Schedules
+        <?php if ((int)$role_id !== 4): ?>
+        <a href="<?= base_url('pm/create') ?>" class="btn btn-sm btn-outline-primary ms-auto" style="font-size:11px;">+ Add PM</a>
+        <?php endif; ?>
       </div>
       <div class="card-body p-0">
         <?php if (empty($pm_list)): ?>
@@ -165,14 +169,14 @@
           <?php $overdue = $pm->next_due_date && strtotime($pm->next_due_date) < time(); ?>
           <div class="px-3 py-2 border-bottom <?= $overdue ? 'bg-danger bg-opacity-5' : '' ?>">
             <div class="d-flex justify-content-between">
-              <div style="font-size:13px;font-weight:600;"><?= $pm->schedule_name ?></div>
-              <span class="badge <?= $overdue ? 'bg-danger' : 'bg-primary' ?>" style="font-size:10px;">
-                <?= $pm->interval_value . ' ' . $pm->interval_type ?>
+              <div style="font-size:13px;font-weight:600;"><?= htmlspecialchars((string)$pm->schedule_name, ENT_QUOTES, 'UTF-8') ?></div>
+              <span class="badge <?= $overdue ? 'b-danger' : 'b-primary' ?>" style="font-size:10px;">
+                <?= htmlspecialchars((string)($pm->interval_value . ' ' . $pm->interval_type), ENT_QUOTES, 'UTF-8') ?>
               </span>
             </div>
             <div style="font-size:11px;color:<?= $overdue ? '#dc2626' : '#64748b' ?>;">
               Next: <?= $pm->next_due_date ? date('d M Y', strtotime($pm->next_due_date)) : '—' ?>
-              <?= $overdue ? ' ⚠ OVERDUE' : '' ?>
+              <?= $overdue ? ' · OVERDUE' : '' ?>
             </div>
           </div>
           <?php endforeach; ?>
@@ -184,17 +188,19 @@
   <!-- WO History -->
   <div class="col-lg-8">
     <div class="wms-card">
-      <div class="card-head"><i class="bi bi-clock-history text-primary me-1"></i>Work Order History</div>
+      <div class="card-head">Work Order History</div>
       <div class="card-body p-0">
         <div class="table-responsive">
           <table class="table wms-table mb-0">
             <thead><tr><th>WO Number</th><th>Type</th><th>Status</th><th>Title</th><th>Date</th><th>Downtime</th></tr></thead>
             <tbody>
-              <?php foreach ($wo_history as $wo): ?>
+              <?php foreach ($wo_history as $wo):
+                  $wo_bd_cls = (function_exists('wo_is_breakdown') && wo_is_breakdown($wo)) ? 'b-danger' : ($wo->type === 'Incident' ? 'b-warning' : 'b-primary');
+              ?>
               <tr>
-                <td><a href="<?= base_url('workorders/view/' . $wo->id) ?>" style="font-weight:600;color:#1a3c5e;"><?= $wo->wo_number ?></a></td>
-                <td><span class="badge bg-primary" style="font-size:11px;"><?= $wo->type ?></span></td>
-                <td><span class="status-badge badge-<?= str_replace(' ', '.', $wo->status) ?>"><?= $wo->status ?></span></td>
+                <td><a href="<?= base_url('workorders/view/' . $wo->id) ?>" style="font-weight:600;color:#1a3c5e;"><?= htmlspecialchars((string)$wo->wo_number, ENT_QUOTES, 'UTF-8') ?></a></td>
+                <td><span class="badge <?= $wo_bd_cls ?>" style="font-size:11px;"><?= htmlspecialchars((string)$wo->type, ENT_QUOTES, 'UTF-8') ?></span></td>
+                <td><span class="badge b-secondary"><?= htmlspecialchars((string)$wo->status, ENT_QUOTES, 'UTF-8') ?></span></td>
                 <td style="font-size:12px;"><?= htmlspecialchars((string)(strlen((string)($wo->title))>40 ? substr($wo->title,0,37).'...' : $wo->title), ENT_QUOTES, 'UTF-8') ?></td>
                 <td style="font-size:12px;white-space:nowrap;"><?= date('d M Y', strtotime($wo->created_at)) ?></td>
                 <td style="font-size:12px;"><?= $wo->downtime_hours ? number_format((float)($wo->downtime_hours),1).' hrs' : '—' ?></td>

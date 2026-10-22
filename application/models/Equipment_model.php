@@ -42,6 +42,170 @@ class Equipment_model extends CI_Model {
             ->get()->result();
     }
 
+    /**
+     * Hydrate the entire fleet directory in constant O(1) SQL queries (<= 5 total):
+     *   1. `equipment` + `equipment_types` (`type_name`, `category`)
+     *   2. `report_sites` approved site vocabulary map
+     *   3. `work_orders` grouped open & critical WO counts per `equipment_id`
+     *   4. `pm_schedules` active & overdue PM counts per `equipment_id`
+     *   5. `equipment_specs` manufacturer spec row counts per `equipment_id`
+     *
+     * Never modifies or reformats `registration_no` or any Asset Register field.
+     *
+     * @param  string|null $today optional YYYY-MM-DD override for deterministic testing
+     * @return array{rows:object[],report_sites:array,reportability:array,site_summary:array,locations:string[]}
+     */
+    public function get_fleet_overview($today = NULL) {
+        $today = ($today && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$today))
+            ? (string)$today
+            : date('Y-m-d');
+
+        $rows = $this->db->select('e.*, et.name as type_name, et.category')
+            ->from('equipment e')
+            ->join('equipment_types et', 'et.id = e.equipment_type_id', 'left')
+            ->order_by('e.registration_no', 'ASC')
+            ->get()->result();
+
+        $sites = $this->report_sites();
+
+        // Grouped open Work Orders per machine (1 SQL query)
+        $wo_map = array();
+        if ($this->db->table_exists('work_orders')) {
+            $w_rows = $this->db->select('equipment_id, COUNT(*) AS open_cnt, SUM(CASE WHEN priority = "Critical" THEN 1 ELSE 0 END) AS crit_cnt')
+                ->from('work_orders')
+                ->where_in('status', array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools'))
+                ->group_by('equipment_id')
+                ->get()->result();
+            foreach ($w_rows as $wr) {
+                $wo_map[(int)$wr->equipment_id] = array(
+                    'open' => (int)$wr->open_cnt,
+                    'crit' => (int)$wr->crit_cnt,
+                );
+            }
+        }
+
+        // Active PM schedules per machine to flag active & overdue PMs (1 SQL query)
+        $pm_raw_by_eq = array();
+        if ($this->db->table_exists('pm_schedules')) {
+            $p_rows = $this->db->select('equipment_id, interval_type, next_due_date, next_due_hours')
+                ->from('pm_schedules')
+                ->where('status', 'Active')
+                ->get()->result();
+            foreach ($p_rows as $pr) {
+                $eid = (int)$pr->equipment_id;
+                if (!isset($pm_raw_by_eq[$eid])) $pm_raw_by_eq[$eid] = array();
+                $pm_raw_by_eq[$eid][] = $pr;
+            }
+        }
+
+        // Recorded manufacturer specs per machine (1 SQL query)
+        $spec_map = array();
+        if ($this->db->table_exists('equipment_specs')) {
+            $sp_rows = $this->db->select('equipment_id, COUNT(*) AS cnt')
+                ->from('equipment_specs')
+                ->where('spec_value !=', '')
+                ->group_by('equipment_id')
+                ->get()->result();
+            foreach ($sp_rows as $sr) {
+                $spec_map[(int)$sr->equipment_id] = (int)$sr->cnt;
+            }
+        }
+
+        $reportability = array('total' => 0, 'reportable' => 0, 'not_reportable' => 0, 'unclassified' => 0);
+        $site_summary  = array('machines' => 0, 'per_site' => array(), 'unapproved' => array(), 'blank' => 0);
+        foreach (array_keys($sites) as $s_lbl) $site_summary['per_site'][$s_lbl] = 0;
+
+        $loc_set = array();
+        foreach (array_keys($sites) as $s_lbl) $loc_set[$s_lbl] = TRUE;
+
+        $stat_rank = array(
+            'Breakdown'      => 1,
+            'In Maintenance' => 2,
+            'Available'      => 3,
+            'Standby'        => 4,
+            'Retired'        => 5,
+        );
+
+        foreach ($rows as $eq) {
+            $eid = (int)$eq->id;
+            $reportability['total']++;
+
+            $is_rep = function_exists('equip_is_reportable')
+                ? equip_is_reportable($eq)
+                : (!empty($eq->include_in_weekly_report) && (string)$eq->status !== 'Retired');
+
+            $loc_raw = trim((string)(isset($eq->location) ? $eq->location : ''));
+            if ($loc_raw !== '') $loc_set[$loc_raw] = TRUE;
+
+            $loc_approved = TRUE;
+            $loc_display  = $loc_raw;
+            if ($loc_raw === '') {
+                $loc_approved = FALSE;
+            } elseif (!empty($sites) && function_exists('equip_is_approved_site')) {
+                $loc_approved = equip_is_approved_site($loc_raw, $sites);
+                if ($loc_approved && function_exists('equip_site_label')) {
+                    $loc_display = equip_site_label($loc_raw, $sites);
+                    $loc_set[$loc_display] = TRUE;
+                }
+            }
+
+            if ($is_rep) {
+                $reportability['reportable']++;
+                if (empty($eq->report_group)) $reportability['unclassified']++;
+
+                if ((string)$eq->status !== 'Retired') {
+                    $site_summary['machines']++;
+                    if ($loc_raw === '') {
+                        $site_summary['blank']++;
+                    } elseif ($loc_approved) {
+                        if (!isset($site_summary['per_site'][$loc_display])) $site_summary['per_site'][$loc_display] = 0;
+                        $site_summary['per_site'][$loc_display]++;
+                    } else {
+                        if (!isset($site_summary['unapproved'][$loc_raw])) $site_summary['unapproved'][$loc_raw] = 0;
+                        $site_summary['unapproved'][$loc_raw]++;
+                    }
+                }
+            } else {
+                $reportability['not_reportable']++;
+            }
+
+            $pm_list   = isset($pm_raw_by_eq[$eid]) ? $pm_raw_by_eq[$eid] : array();
+            $pm_over   = 0;
+            $cur_hours = (float)$eq->current_hours;
+            foreach ($pm_list as $pm_item) {
+                $by_date  = (!empty($pm_item->next_due_date) && (string)$pm_item->next_due_date < $today);
+                $by_hours = ($pm_item->next_due_hours !== NULL && (float)$pm_item->next_due_hours > 0 && $cur_hours >= (float)$pm_item->next_due_hours);
+                if ($by_date || $by_hours) $pm_over++;
+            }
+
+            $wo_info = isset($wo_map[$eid]) ? $wo_map[$eid] : array('open' => 0, 'crit' => 0);
+
+            $eq->open_wo_count    = (int)$wo_info['open'];
+            $eq->crit_wo_count    = (int)$wo_info['crit'];
+            $eq->pm_active_count  = count($pm_list);
+            $eq->pm_overdue_count = $pm_over;
+            $eq->spec_count       = isset($spec_map[$eid]) ? (int)$spec_map[$eid] : 0;
+            $eq->is_reportable    = (bool)$is_rep;
+            $eq->loc_display      = $loc_display;
+            $eq->loc_approved     = (bool)$loc_approved;
+            $eq->has_data_alert   = ($is_rep && (empty($eq->report_group) || $loc_raw === '' || !$loc_approved));
+            $eq->status_rank      = isset($stat_rank[$eq->status]) ? $stat_rank[$eq->status] : 99;
+        }
+
+        ksort($site_summary['per_site']);
+        arsort($site_summary['unapproved']);
+        $locations = array_keys($loc_set);
+        sort($locations, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return array(
+            'rows'          => $rows,
+            'report_sites'  => $sites,
+            'reportability' => $reportability,
+            'site_summary'  => $site_summary,
+            'locations'     => $locations,
+        );
+    }
+
     public function get_by_id($id) {
         return $this->db->select('e.*, et.name as type_name, et.category')
             ->from('equipment e')
