@@ -1042,12 +1042,12 @@ if ($q !== '') {
 <script>
 (function () {
   var shell       = document.getElementById('blShell');
-  var summaryBase = <?= json_encode(base_url('backlog/summary_json/'), JSON_UNESCAPED_SLASHES) ?>;
-  var editBase    = <?= json_encode(base_url('backlog/edit/'), JSON_UNESCAPED_SLASHES) ?>;
-  var closeBase   = <?= json_encode(base_url('backlog/close/'), JSON_UNESCAPED_SLASHES) ?>;
-  var equipBase   = <?= json_encode(base_url('equipment/view/'), JSON_UNESCAPED_SLASHES) ?>;
-  var woBase      = <?= json_encode(base_url('workorders/view/'), JSON_UNESCAPED_SLASHES) ?>;
-  var inspBase    = <?= json_encode(base_url('inspections/view/'), JSON_UNESCAPED_SLASHES) ?>;
+  var summaryBase = <?= json_encode(rtrim(base_url('backlog/summary_json'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
+  var editBase    = <?= json_encode(rtrim(base_url('backlog/edit'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
+  var closeBase   = <?= json_encode(rtrim(base_url('backlog/close'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
+  var equipBase   = <?= json_encode(rtrim(base_url('equipment/view'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
+  var woBase      = <?= json_encode(rtrim(base_url('workorders/view'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
+  var inspBase    = <?= json_encode(rtrim(base_url('inspections/view'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
   var baseExport  = <?= json_encode($csvExportUrl, JSON_UNESCAPED_SLASHES) ?>;
 
   function esc(s) {
