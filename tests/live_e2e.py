@@ -355,7 +355,40 @@ try:
     st_m_bl_xls, _, m_bl_xls = get_bytes('/backlog/export_xlsx', mgr_op)
     assert st_m_bl_xls == 200 and m_bl_xls[:4] == b'PK\x03\x04'
 
-    print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS, INSPECTIONS & AML TIMESHEET E2E CHECKS PASSED!')
+    # Inventory INV-01..INV-05 Live RBAC, Security & Export Governance Checks
+    st_t_ping, _, _ = get_bytes('/materials/ping', tech_op)
+    assert st_t_ping == 403, f'Expected HTTP 403 on non-supervisor /materials/ping, got {st_t_ping}'
+    st_s_ping, _, s_ping_b = get_bytes('/materials/ping', opener)
+    assert st_s_ping == 200 and b'PHP:' not in s_ping_b, 'Supervisor /materials/ping failed or leaked PHP version!'
+
+    store_op = session_opener('store@ci.local')
+    st_st_dash, _, st_dash_b = get_bytes('/materials', store_op)
+    st_dash_html = st_dash_b.decode('utf-8', 'replace')
+    assert st_st_dash == 200 and 'materials/create' in st_dash_html, 'Store role locked out on /materials dashboard!'
+    st_st_inv, _, st_inv_b = get_bytes('/materials/inventory', store_op)
+    st_inv_html = st_inv_b.decode('utf-8', 'replace')
+    assert (
+        st_st_inv == 200
+        and 'id="invAddManualBtn"' in st_inv_html
+        and 'id="invImportToggleBtn"' in st_inv_html
+        and 'data-inv-move="receive"' in st_inv_html
+    ), 'Store role (role_id=3) still locked out of inventory actions!'
+
+    st_m_inv, _, m_inv_b = get_bytes('/materials/inventory', mgr_op)
+    m_inv_html = m_inv_b.decode('utf-8', 'replace')
+    assert (
+        st_m_inv == 200
+        and 'Export CSV' in m_inv_html
+        and 'Export Excel' in m_inv_html
+        and 'id="invAddManualBtn"' not in m_inv_html
+        and 'data-inv-move="receive"' not in m_inv_html
+    ), 'Manager role RBAC mismatch on /materials/inventory!'
+    st_m_icsv, _, m_icsv_b = get_bytes('/materials/export_csv?stock=out', mgr_op)
+    assert st_m_icsv == 200 and m_icsv_b.startswith(b'\xef\xbb\xbf') and b'Qty To Order' in m_icsv_b
+    st_m_ixls, _, m_ixls_b = get_bytes('/materials/export_xlsx?stock=out', mgr_op)
+    assert st_m_ixls == 200 and m_ixls_b[:4] == b'PK\x03\x04'
+
+    print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS, INSPECTIONS, BACKLOG & INVENTORY E2E CHECKS PASSED!')
 except BaseException:
     tb = traceback.format_exc().replace('\n', '%0A')
     print(f'::error title=PythonE2E::{tb}', flush=True)

@@ -134,7 +134,7 @@ jobs:
             --data-urlencode "email=admin@ci.local" \
             --data-urlencode "password=AdminPass123!" >/dev/null
 
-          for ROUTE in dashboard equipment workorders pm inspections materials spareparts suppliers orders lubricants team team/report team/create attendance attendance/sites attendance/board attendance/print_qr attendance/log backlog reports forecast users users/create settings; do
+          for ROUTE in dashboard equipment workorders pm inspections materials materials/inventory spareparts suppliers orders lubricants team team/report team/create attendance attendance/sites attendance/board attendance/print_qr attendance/log backlog reports forecast users users/create settings; do
             if ! BODY=$(curl -fsSL -b "$COOKIES" -c "$COOKIES" "http://127.0.0.1:8000/$ROUTE"); then
               ERR_SNIP=$(curl -sSL -b "$COOKIES" -c "$COOKIES" "http://127.0.0.1:8000/$ROUTE" | tr '\r\n' ' ' | cut -c1-450)
               echo "::error title=RouteFail::Route /$ROUTE returned HTTP error: $ERR_SNIP"
@@ -152,11 +152,12 @@ jobs:
 
           # Live end-to-end verification of ATTENDANCE_WORKFLOW.md lifecycle + AML Timesheets
           php scripts/create-admin.php tech1@ci.local "AdminPass123!" "John" "Moshi" 2
+          php scripts/create-admin.php store@ci.local "AdminPass123!" "CI" "Storekeeper" 3
           php scripts/create-admin.php mgr@ci.local "AdminPass123!" "CI" "Manager" 4
           python3 tests/live_e2e.py
 
           # Headless Google Chrome Browser UI & Accessibility E2E Suite (1440x900 Desktop + 390x844 Mobile)
-          # Seed ephemeral PM schedules + Inspection records in CI DB (`wms_fresh`) using real existing IDs
+          # Seed ephemeral PM schedules + Inspection + Backlog + Inventory records in CI DB (`wms_fresh`)
           mysql -h 127.0.0.1 -uroot -p"${{ matrix.root_pass }}" wms_fresh -e "
             SET @eq1 = (SELECT MIN(id) FROM equipment);
             SET @eq2 = (SELECT MAX(id) FROM equipment);
@@ -178,6 +179,13 @@ jobs:
             VALUES
               (961, @eq1, 'EX 006', '336D2L', '1420 Hr', '2026-10-05', 'Hydraulic brake line seepage', 'Inspection', 'John Moshi', 'John Moshi', 'P1', '2026-10-15', 'BREAKDOWN', 'Open', 'insp_951_item_1'),
               (962, @eq2, 'C-HEADT 007', 'F3000', '98000 Km', '2026-10-10', 'Air dryer purge valve service', 'Checklist', 'Paul Kileo', 'Paul Kileo', 'P2', '2026-10-20', 'OPERATIONAL', 'Closed', NULL);
+            INSERT INTO materials (id, item_code, category, description, part_number_size, unit, initial_stock, qty_received, qty_sortie, final_qty, min_stock, max_stock, unit_price_usd, supplier_name, application, location)
+            VALUES
+              (9901, 'CI-FLT-9901', 'SPARE PART', 'Primary Fuel Filter Spin-On', '1R-0750', 'pcs', 4, 2, 3, 3, 5, 12, 34.50, 'Mantrac CAT', 'EX 006', 'BIN A-12'),
+              (9902, 'CI-HYD-9902', 'SPARE PART', 'Boom Cylinder Seal Kit', '295-5609', 'Set', 2, 0, 2, 0, 2, 6, 88.00, 'HydraForce TZ', 'C-HEADT 007', 'BIN B-04');
+            INSERT INTO material_transactions (material_id, type, txn_date, qty, stock_after, reference_no, notes)
+            VALUES
+              (9901, 'RECEIVE', '2026-10-20', 2, 3, 'MRN-9901', 'CI seed receipt');
           "
 
           node tests/ui_e2e.js

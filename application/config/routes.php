@@ -72,6 +72,7 @@ $route['users/(:any)'] = 'users/$1';
 // Inventory / Materials
 $route['materials']            = 'materials/index';
 $route['materials/(:any)']     = 'materials/$1';
+$route['materials/(:any)/(:any)'] = 'materials/$1/$2';
 $route['spareparts']           = 'spareparts/index';
 $route['spareparts/(:any)']    = 'spareparts/$1';
 $route['suppliers']            = 'suppliers/index';

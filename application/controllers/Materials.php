@@ -24,11 +24,15 @@ class Materials extends MY_Controller {
     /** Hard row limit per import (mirrors Inventory_importer::MAX_ROWS) */
     const IMPORT_MAX_ROWS = 5000;
 
-    /* ── Quick diagnostic — visit /materials/ping to test ── */
+    /* ── Quick diagnostic — Supervisor only, no server fingerprinting ── */
     public function ping() {
+        if (!$this->is_supervisor()) {
+            show_error('Forbidden.', 403);
+            return;
+        }
         $this->load->model('Materials_model');
-        $ok   = $this->db->table_exists('materials');
-        $count= $ok ? $this->db->count_all('materials') : 0;
+        $ok    = $this->db->table_exists('materials');
+        $count = $ok ? $this->db->count_all('materials') : 0;
         echo '<pre>';
         echo "Controller: OK\n";
         echo "DB connected: OK\n";
@@ -36,7 +40,6 @@ class Materials extends MY_Controller {
         echo "Row count: {$count}\n";
         echo "Has material_transactions: ".($this->db->table_exists('material_transactions')?'YES':'NO')."\n";
         echo "Has inventory_import_logs: ".($this->db->table_exists('inventory_import_logs')?'YES':'NO (optional)')."\n";
-        echo "PHP: ".PHP_VERSION."\n";
         echo '</pre>';
         exit;
     }
@@ -44,6 +47,248 @@ class Materials extends MY_Controller {
     public function __construct() {
         parent::__construct();
         $this->load->model('Materials_model');
+    }
+
+    private function _csv_guard($val) {
+        $s = (string)$val;
+        if ($s !== '' && in_array($s[0], array('=', '+', '-', '@', "\t", "\r"), TRUE)) {
+            return "'" . $s;
+        }
+        return $s;
+    }
+
+    private function _build_inventory_dataset($paginate = TRUE) {
+        $ov      = $this->Materials_model->get_catalogue_overview();
+        $allRows = $ov['rows'];
+
+        $tab = strtolower((string)trim((string)$this->input->get('tab', TRUE)));
+        $validTabs = array('all', 'in_stock', 'low', 'out', 'movers', 'valued');
+        if (!in_array($tab, $validTabs, TRUE)) {
+            $tab = 'all';
+        }
+
+        $q = trim((string)$this->input->get('q', TRUE));
+        if ($q === '') {
+            $q = trim((string)$this->input->get('search', TRUE));
+        }
+
+        $fCat = trim((string)$this->input->get('category', TRUE));
+        $fLoc = trim((string)$this->input->get('location', TRUE));
+        $fSup = trim((string)$this->input->get('supplier', TRUE));
+        $fStk = strtolower((string)trim((string)$this->input->get('stock', TRUE)));
+        if (!in_array($fStk, array('ok', 'low', 'out'), TRUE)) {
+            $fStk = '';
+        }
+
+        $sort = strtolower((string)trim((string)$this->input->get('sort', TRUE)));
+        $allowedSort = array(
+            'default', 'item_code', 'category', 'part_number',
+            'initial_stock', 'qty_received', 'qty_sortie', 'balance',
+            'location', 'last_movement',
+        );
+        if (!in_array($sort, $allowedSort, TRUE)) {
+            $sort = 'default';
+        }
+        $dir = strtolower((string)trim((string)$this->input->get('dir', TRUE)));
+        if (!in_array($dir, array('asc', 'desc'), TRUE)) {
+            $dir = in_array($sort, array('qty_received', 'qty_sortie', 'balance', 'last_movement'), TRUE) ? 'desc' : 'asc';
+        }
+
+        $viewMode = strtolower((string)trim((string)$this->input->get('view', TRUE)));
+        if (!in_array($viewMode, array('table', 'cards'), TRUE)) {
+            $viewMode = 'table';
+        }
+
+        // Global catalogue KPIs (computed across full warehouse catalogue)
+        $kpi = array(
+            'total_items'    => count($allRows),
+            'in_stock_items' => 0,
+            'low_stock'      => 0,
+            'out_of_stock'   => 0,
+            'total_units'    => 0,
+            'total_received' => 0,
+            'total_issued'   => 0,
+            'reorder_needed' => 0,
+        );
+        foreach ($allRows as $r) {
+            if ($r->stock_state === 'out') {
+                $kpi['out_of_stock']++;
+            } elseif ($r->stock_state === 'low') {
+                $kpi['low_stock']++;
+            } else {
+                $kpi['in_stock_items']++;
+            }
+            $kpi['total_units']    += max(0, (int)$r->balance);
+            $kpi['total_received'] += (int)$r->qty_received;
+            $kpi['total_issued']   += (int)$r->qty_sortie;
+            if ((int)$r->qty_to_order > 0 && $r->stock_state !== 'ok') {
+                $kpi['reorder_needed'] += (int)$r->qty_to_order;
+            }
+        }
+
+        // Stage 1: Facet filters
+        $faceted = array();
+        $qLower  = strtolower($q);
+        foreach ($allRows as $r) {
+            if ($fCat !== '' && strcasecmp((string)$r->category, $fCat) !== 0) continue;
+            if ($fLoc !== '' && strcasecmp((string)$r->location, $fLoc) !== 0) continue;
+            if ($fSup !== '' && strcasecmp((string)$r->supplier_display, $fSup) !== 0) continue;
+            if ($fStk !== '' && (string)$r->stock_state !== $fStk) continue;
+
+            if ($qLower !== '') {
+                $hay = strtolower(implode(' ', array(
+                    (string)$r->item_code,
+                    (string)$r->description,
+                    (string)$r->part_number_size,
+                    (string)$r->category,
+                    (string)$r->application,
+                    (string)$r->location,
+                    (string)$r->supplier_display,
+                )));
+                if (strpos($hay, $qLower) === FALSE) continue;
+            }
+            $faceted[] = $r;
+        }
+
+        // Stage 2: Tab badge counters across faceted slice
+        $tabCounts = array(
+            'all'      => count($faceted),
+            'in_stock' => 0,
+            'low'      => 0,
+            'out'      => 0,
+            'movers'   => 0,
+            'valued'   => 0,
+        );
+        foreach ($faceted as $r) {
+            if ($r->stock_state === 'ok')  $tabCounts['in_stock']++;
+            if ($r->stock_state === 'low') $tabCounts['low']++;
+            if ($r->stock_state === 'out') $tabCounts['out']++;
+            if ((int)$r->txn_count > 0)    $tabCounts['movers']++;
+            if (!empty($r->has_price))     $tabCounts['valued']++;
+        }
+
+        // Stage 3: Active governance tab slice
+        $filtered = array();
+        foreach ($faceted as $r) {
+            if ($tab === 'in_stock' && $r->stock_state !== 'ok') continue;
+            if ($tab === 'low' && $r->stock_state !== 'low') continue;
+            if ($tab === 'out' && $r->stock_state !== 'out') continue;
+            if ($tab === 'movers' && (int)$r->txn_count <= 0) continue;
+            if ($tab === 'valued' && empty($r->has_price)) continue;
+            $filtered[] = $r;
+        }
+
+        // Stage 4: Optional ?ids=1,2,3 subset for multi-select batch export
+        $idsRaw = trim((string)$this->input->get('ids', TRUE));
+        if (!$paginate && $idsRaw !== '') {
+            $idMap = array();
+            foreach (explode(',', $idsRaw) as $tok) {
+                $v = (int)trim($tok);
+                if ($v > 0) $idMap[$v] = TRUE;
+            }
+            if (!empty($idMap)) {
+                $sub = array();
+                foreach ($filtered as $r) {
+                    if (isset($idMap[(int)$r->id])) $sub[] = $r;
+                }
+                $filtered = $sub;
+            }
+        }
+
+        // Filtered-set totals across all matching items
+        $filteredTotals = array('initial' => 0, 'received' => 0, 'issued' => 0, 'balance' => 0);
+        foreach ($filtered as $r) {
+            $filteredTotals['initial']  += (int)$r->initial_stock;
+            $filteredTotals['received'] += (int)$r->qty_received;
+            $filteredTotals['issued']   += (int)$r->qty_sortie;
+            $filteredTotals['balance']  += (int)$r->balance;
+        }
+
+        // Stage 5: Deterministic multi-column sorting
+        $mult = ($dir === 'asc') ? 1 : -1;
+        usort($filtered, function ($a, $b) use ($sort, $mult) {
+            if ($sort === 'item_code') {
+                return strnatcasecmp((string)$a->item_code, (string)$b->item_code) * $mult;
+            }
+            if ($sort === 'category') {
+                $c = strcasecmp((string)$a->category, (string)$b->category);
+                return $c !== 0 ? ($c * $mult) : strnatcasecmp((string)$a->item_code, (string)$b->item_code);
+            }
+            if ($sort === 'part_number') {
+                $c = strnatcasecmp((string)$a->part_number_size, (string)$b->part_number_size);
+                return $c !== 0 ? ($c * $mult) : strnatcasecmp((string)$a->item_code, (string)$b->item_code);
+            }
+            if ($sort === 'initial_stock') {
+                $c = ((int)$a->initial_stock) <=> ((int)$b->initial_stock);
+                return $c !== 0 ? ($c * $mult) : strnatcasecmp((string)$a->item_code, (string)$b->item_code);
+            }
+            if ($sort === 'qty_received') {
+                $c = ((int)$a->qty_received) <=> ((int)$b->qty_received);
+                return $c !== 0 ? ($c * $mult) : strnatcasecmp((string)$a->item_code, (string)$b->item_code);
+            }
+            if ($sort === 'qty_sortie') {
+                $c = ((int)$a->qty_sortie) <=> ((int)$b->qty_sortie);
+                return $c !== 0 ? ($c * $mult) : strnatcasecmp((string)$a->item_code, (string)$b->item_code);
+            }
+            if ($sort === 'balance') {
+                $c = ((int)$a->balance) <=> ((int)$b->balance);
+                return $c !== 0 ? ($c * $mult) : strnatcasecmp((string)$a->item_code, (string)$b->item_code);
+            }
+            if ($sort === 'location') {
+                $c = strnatcasecmp((string)$a->location, (string)$b->location);
+                return $c !== 0 ? ($c * $mult) : strnatcasecmp((string)$a->item_code, (string)$b->item_code);
+            }
+            if ($sort === 'last_movement') {
+                $c = strcmp((string)$a->last_movement_date, (string)$b->last_movement_date);
+                return $c !== 0 ? ($c * $mult) : (((int)$a->txn_count <=> (int)$b->txn_count) * $mult);
+            }
+            // Default catalogue sort: Category ASC -> Item Code natural ASC
+            $c = strcasecmp((string)$a->category, (string)$b->category);
+            return $c !== 0 ? $c : strnatcasecmp((string)$a->item_code, (string)$b->item_code);
+        });
+
+        // Stage 6: Server-side pagination
+        $allowedPp     = array(10, 25, 50, 100, 150);
+        $perPage       = (int)$this->input->get('per_page', TRUE);
+        if (!in_array($perPage, $allowedPp, TRUE)) $perPage = 25;
+        $totalFiltered = count($filtered);
+        $totalPages    = max(1, (int)ceil($totalFiltered / $perPage));
+        $currentPage   = max(1, min($totalPages, (int)$this->input->get('page', TRUE) ?: 1));
+        $offset        = ($currentPage - 1) * $perPage;
+        $pagedRows     = $paginate ? array_slice($filtered, $offset, $perPage) : $filtered;
+
+        return array(
+            'materials'       => $pagedRows,
+            'kpi'             => $kpi,
+            'filtered_totals' => $filteredTotals,
+            'categories'      => $ov['categories'],
+            'locations'       => $ov['locations'],
+            'suppliers'       => $ov['suppliers'],
+            'available'       => $ov['available'],
+            'tab_counts'      => $tabCounts,
+            'tab'             => $tab,
+            'q'               => $q,
+            'filter'          => array(
+                'category' => $fCat,
+                'location' => $fLoc,
+                'supplier' => $fSup,
+                'stock'    => $fStk,
+                'search'   => $q,
+            ),
+            'sort'            => $sort,
+            'dir'             => $dir,
+            'view_mode'       => $viewMode,
+            'per_page'        => $perPage,
+            'allowed_pp'      => $allowedPp,
+            'current_page'    => $currentPage,
+            'total_pages'     => $totalPages,
+            'total_filtered'  => $totalFiltered,
+            'offset'          => $offset,
+            'can_write'       => $this->can_write(),
+            'can_import'      => $this->can_write(),
+            'is_supervisor'   => $this->is_supervisor(),
+            'role_id'         => $this->role_id,
+        );
     }
 
     /* ── DASHBOARD ─────────────────────────────────────── */
@@ -55,7 +300,6 @@ class Materials extends MY_Controller {
         $low_stock     = 0;
         $total_received= 0;
         $total_issued  = 0;
-        $categories    = array();
         $by_category   = array();
 
         foreach ($all as $m) {
@@ -73,48 +317,162 @@ class Materials extends MY_Controller {
             $by_category[$cat]['issued'] += $m->qty_sortie;
         }
 
-        // Recent movements (last updated items)
-        $recent = $this->Materials_model->get_recent_movements(10);
-
-        // Low stock items
+        $recent    = $this->Materials_model->get_recent_movements(10);
         $low_items = $this->Materials_model->get_low_stock(10);
 
         $data = array(
-            'all_materials' => $all,
-            'total_items'   => $total_items,
-            'out_of_stock'  => $out_of_stock,
-            'low_stock'     => $low_stock,
-            'total_received'=> $total_received,
-            'total_issued'  => $total_issued,
-            'by_category'   => $by_category,
-            'recent'        => $recent,
-            'low_items'     => $low_items,
-            'page_title'    => 'Inventory Dashboard',
-            'role_id'    => $this->role_id,
+            'all_materials'  => $all,
+            'total_items'    => $total_items,
+            'out_of_stock'   => $out_of_stock,
+            'low_stock'      => $low_stock,
+            'total_received' => $total_received,
+            'total_issued'   => $total_issued,
+            'by_category'    => $by_category,
+            'recent'         => $recent,
+            'low_items'      => $low_items,
+            'page_title'     => 'Inventory Dashboard',
+            'can_write'      => $this->can_write(),
+            'role_id'        => $this->role_id,
         );
         $this->render('materials/dashboard', $data);
     }
 
     /* ── INVENTORY LIST ────────────────────────────────── */
     public function inventory() {
-        $filter = array(
-            'category' => $this->input->get('category'),
-            'location' => $this->input->get('location'),
-            'search'   => $this->input->get('search'),
-            'stock'    => $this->input->get('stock'),
-        );
-        $data = array(
-            'materials'  => $this->Materials_model->get_all($filter),
-            'categories' => $this->Materials_model->get_categories(),
-            'locations'  => $this->Materials_model->get_locations(),
-            'filter'     => $filter,
-            'import_result'  => $this->_load_import_summary(),
-            'import_history' => $this->Materials_model->get_import_history(3),
-            'can_import'     => $this->can_write(),
-            'page_title' => 'Inventory',
-            'role_id'    => $this->role_id,
-        );
+        $data = $this->_build_inventory_dataset(TRUE);
+        $data['import_result']  = $this->_load_import_summary();
+        $data['import_history'] = $this->Materials_model->get_import_history(3);
+        $data['page_title']     = 'Inventory';
         $this->render('materials/inventory', $data);
+    }
+
+    /* ── UTF-8 BOM CSV EXPORT ──────────────────────────── */
+    public function export_csv() {
+        $data = $this->_build_inventory_dataset(FALSE);
+        $rows = $data['materials'];
+
+        $filename = 'inventory-catalogue-' . date('Y-m-d') . '.csv';
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
+
+        fputcsv($out, array(
+            'Item Code',
+            'Category',
+            'Description',
+            'Part No / Size',
+            'Application',
+            'Unit',
+            'Initial Stock',
+            'Total Received',
+            'Total Issued',
+            'Current Balance',
+            'Stock Status',
+            'Min Reorder',
+            'Max Target',
+            'Qty To Order',
+            'Warehouse Location',
+            'Preferred Supplier',
+            'Last Movement Date',
+        ));
+
+        foreach ($rows as $r) {
+            $stLabel = $r->stock_state === 'out' ? 'Out of Stock' : ($r->stock_state === 'low' ? 'Low Stock' : 'In Stock');
+            fputcsv($out, array(
+                $this->_csv_guard($r->item_code),
+                $this->_csv_guard($r->category),
+                $this->_csv_guard($r->description),
+                $this->_csv_guard($r->part_number_size),
+                $this->_csv_guard($r->application),
+                $this->_csv_guard($r->unit),
+                (int)$r->initial_stock,
+                (int)$r->qty_received,
+                (int)$r->qty_sortie,
+                (int)$r->balance,
+                $stLabel,
+                isset($r->min_stock) && $r->min_stock !== NULL ? (int)$r->min_stock : '',
+                isset($r->max_stock) && $r->max_stock !== NULL ? (int)$r->max_stock : '',
+                (int)$r->qty_to_order,
+                $this->_csv_guard($r->location),
+                $this->_csv_guard($r->supplier_display),
+                $this->_csv_guard($r->last_movement_date),
+            ));
+        }
+        fclose($out);
+        exit;
+    }
+
+    /* ── SLIDE-OVER ITEM & LEDGER SUMMARY JSON ─────────── */
+    public function summary_json($id = NULL) {
+        $id = (int)$id;
+        if ($id <= 0) {
+            $this->json(array('ok' => FALSE, 'error' => 'Invalid item ID.'), 404);
+            return;
+        }
+        $ov    = $this->Materials_model->get_catalogue_overview();
+        $found = NULL;
+        foreach ($ov['rows'] as $r) {
+            if ((int)$r->id === $id) {
+                $found = $r;
+                break;
+            }
+        }
+        if (!$found) {
+            $this->json(array('ok' => FALSE, 'error' => 'Inventory item not found.'), 404);
+            return;
+        }
+
+        $movesRaw = $this->Materials_model->get_item_recent_movements($id, 8);
+        $moves    = array();
+        foreach ($movesRaw as $mv) {
+            $moves[] = array(
+                'id'           => (int)$mv->id,
+                'date'         => (string)(isset($mv->movement_date) && $mv->movement_date ? $mv->movement_date : substr((string)$mv->created_at, 0, 10)),
+                'type'         => (string)$mv->type,
+                'qty'          => (float)$mv->qty,
+                'stock_before' => $mv->stock_before !== NULL ? (float)$mv->stock_before : NULL,
+                'stock_after'  => $mv->stock_after !== NULL ? (float)$mv->stock_after : NULL,
+                'reference_no' => (string)(isset($mv->reference_no) && $mv->reference_no ? $mv->reference_no : ''),
+                'allocation'   => (string)(!empty($mv->equipment_code) ? $mv->equipment_code : (isset($mv->allocation_label) ? $mv->allocation_label : '')),
+                'person'       => (string)(!empty($mv->person) ? $mv->person : (isset($mv->user_name) ? trim((string)$mv->user_name) : '')),
+                'notes'        => (string)(isset($mv->notes) ? $mv->notes : ''),
+            );
+        }
+
+        $this->json(array(
+            'ok'   => TRUE,
+            'item' => array(
+                'id'                 => (int)$found->id,
+                'item_code'          => (string)$found->item_code,
+                'category'           => (string)$found->category,
+                'description'        => (string)$found->description,
+                'part_number_size'   => (string)($found->part_number_size ?: '—'),
+                'application'        => (string)($found->application ?: '—'),
+                'unit'               => (string)($found->unit ?: 'pcs'),
+                'location'           => (string)($found->location ?: 'Unassigned'),
+                'supplier_display'   => (string)($found->supplier_display ?: '—'),
+                'initial_stock'      => (int)$found->initial_stock,
+                'qty_received'       => (int)$found->qty_received,
+                'qty_sortie'         => (int)$found->qty_sortie,
+                'balance'            => (int)$found->balance,
+                'stock_state'        => (string)$found->stock_state,
+                'min_stock'          => isset($found->min_stock) && $found->min_stock !== NULL ? (int)$found->min_stock : NULL,
+                'effective_min'      => (int)$found->effective_min,
+                'max_stock'          => isset($found->max_stock) && $found->max_stock !== NULL ? (int)$found->max_stock : NULL,
+                'qty_to_order'       => (int)$found->qty_to_order,
+                'unit_price_ugx'     => isset($found->unit_price_ugx) && $found->unit_price_ugx !== NULL ? (float)$found->unit_price_ugx : NULL,
+                'unit_price_usd'     => isset($found->unit_price_usd) && $found->unit_price_usd !== NULL ? (float)$found->unit_price_usd : NULL,
+                'txn_count'          => (int)$found->txn_count,
+                'last_movement_date' => (string)($found->last_movement_date ?: '—'),
+                'can_write'          => $this->can_write(),
+                'is_supervisor'      => $this->is_supervisor(),
+            ),
+            'movements' => $moves,
+        ));
     }
 
     /* ── CREATE ITEM (manual entry) ────────────────────── */
@@ -331,18 +689,21 @@ class Materials extends MY_Controller {
 
     /* ── EXPORT TO EXCEL ───────────────────────────────── */
     public function export_xlsx() {
-        $filter = array(
-            'category' => $this->input->get('category'),
-            'location' => $this->input->get('location'),
-            'search'   => $this->input->get('search'),
+        $data   = $this->_build_inventory_dataset(FALSE);
+        $rows   = $data['materials'];
+        $filter = $data['filter'];
+        $hasAnyFilter = (
+            !empty($filter['category']) || !empty($filter['location'])
+            || !empty($filter['supplier']) || !empty($filter['stock'])
+            || !empty($filter['search']) || $data['tab'] !== 'all'
+            || trim((string)$this->input->get('ids', TRUE)) !== ''
         );
-        $rows = $this->Materials_model->get_all($filter);
 
         // Safety net: never hand out a silently empty export because of a
-        // database problem (get_all() returns [] when the query fails).
+        // database problem when no filter was applied.
         $total = $this->Materials_model->count_items();
-        if (empty($rows) && $total > 0) {
-            log_message('error', 'Inventory export: get_all() returned 0 rows but count_items() = '.$total);
+        if (!$hasAnyFilter && empty($rows) && $total > 0) {
+            log_message('error', 'Inventory export: dataset returned 0 rows but count_items() = '.$total);
             show_error('The inventory export could not read the items ('.$total.' records exist in the database). '
                      . 'Please try again — if the problem continues, check the server log.', 500);
             return;
@@ -357,7 +718,7 @@ class Materials extends MY_Controller {
         $this->inventory_excel->export_inventory($rows, $suppliers, $tmp, array(
             'title'        => 'INVENTORY STOCK LIST',
             'generated_by' => wms_user_full_name($user),
-            'filter_note'  => $this->_filter_note($filter),
+            'filter_note'  => $this->_filter_note($filter + array('tab' => $data['tab'])),
         ));
         $this->_send_file($tmp, $fname);
     }
@@ -707,8 +1068,11 @@ class Materials extends MY_Controller {
     /** Human readable description of the export filter (used in the workbook). */
     private function _filter_note($filter) {
         $parts = array();
+        if (!empty($filter['tab']) && $filter['tab'] !== 'all') $parts[] = 'tab = '.$filter['tab'];
         if (!empty($filter['category'])) $parts[] = 'category = '.$filter['category'];
+        if (!empty($filter['stock']))    $parts[] = 'stock = '.$filter['stock'];
         if (!empty($filter['location'])) $parts[] = 'location = '.$filter['location'];
+        if (!empty($filter['supplier'])) $parts[] = 'supplier = '.$filter['supplier'];
         if (!empty($filter['search']))   $parts[] = 'search = '.$filter['search'];
         return implode(', ', $parts);
     }
