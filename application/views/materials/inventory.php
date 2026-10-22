@@ -656,6 +656,7 @@ $n = function ($k) use ($import_result) {
       <div><strong id="invSelectedCount">0</strong> SKU(s) selected</div>
       <div style="display:flex;align-items:center;gap:8px;">
         <a class="inv-btn inv-btn-primary inv-btn-sm" id="invBatchExportBtn" href="<?= $h($csvExportUrl) ?>">↓ Export Selected CSV</a>
+        <a class="inv-btn inv-btn-sm" id="invBatchXlsxBtn" href="<?= $h($xlsxExportUrl) ?>">↓ Export Selected Excel</a>
         <button type="button" class="inv-btn inv-btn-sm" id="invBatchClearBtn">Clear</button>
       </div>
     </div>
@@ -979,6 +980,7 @@ function invImportToggle() {
   var receiveBase = <?= json_encode(rtrim(base_url('materials/receive'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
   var issueBase   = <?= json_encode(rtrim(base_url('materials/issue'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
   var baseExport  = <?= json_encode($csvExportUrl, JSON_UNESCAPED_SLASHES) ?>;
+  var baseXlsx    = <?= json_encode($xlsxExportUrl, JSON_UNESCAPED_SLASHES) ?>;
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -1008,6 +1010,7 @@ function invImportToggle() {
   var batchBar  = document.getElementById('invBatchBar');
   var countEl   = document.getElementById('invSelectedCount');
   var exportBtn = document.getElementById('invBatchExportBtn');
+  var xlsxBtn   = document.getElementById('invBatchXlsxBtn');
   var clearBtn  = document.getElementById('invBatchClearBtn');
 
   function syncBatch() {
@@ -1018,6 +1021,10 @@ function invImportToggle() {
     if (exportBtn) {
       var sep = baseExport.indexOf('?') === -1 ? '?' : '&';
       exportBtn.setAttribute('href', ids.length ? (baseExport + sep + 'ids=' + encodeURIComponent(ids.join(','))) : baseExport);
+    }
+    if (xlsxBtn) {
+      var xsep = baseXlsx.indexOf('?') === -1 ? '?' : '&';
+      xlsxBtn.setAttribute('href', ids.length ? (baseXlsx + xsep + 'ids=' + encodeURIComponent(ids.join(','))) : baseXlsx);
     }
     if (checkAll && rowChecks.length) {
       checkAll.checked = (ids.length === rowChecks.length);

@@ -757,7 +757,7 @@ for (const rawLine of cookieLines) {
     const invPage1 = await evalJs(`(() => ({
       docOverflow: document.documentElement.scrollWidth - window.innerWidth,
       tblOverflow: document.querySelector('.inv-table-wrap').scrollWidth - document.querySelector('.inv-table-wrap').clientWidth,
-      rowCount: document.querySelectorAll('.inv-table tbody tr[data-inv-row]').length
+      rowCount: document.querySelectorAll('.inv-table tbody tr[data-inv-id]').length
     }))()`);
     assert(invPage1.docOverflow <= 0, '/materials/inventory Page 1 Desktop overflowed: ' + JSON.stringify(invPage1));
     assert(invPage1.tblOverflow <= 0, '/materials/inventory Page 1 Table overflowed: ' + JSON.stringify(invPage1));
@@ -792,7 +792,7 @@ for (const rawLine of cookieLines) {
       firstCb.checked = true;
       firstCb.dispatchEvent(new Event('change', { bubbles: true }));
       const batchVisible = document.getElementById('invBatchBar').classList.contains('is-open');
-      const batchCsvHref = document.getElementById('invBatchCsvBtn').getAttribute('href') || '';
+      const batchCsvHref = document.getElementById('invBatchExportBtn').getAttribute('href') || '';
       const batchXlsHref = document.getElementById('invBatchXlsxBtn').getAttribute('href') || '';
 
       // Open Slide-Over Inventory Drawer (SKU 9901 -> 1R-0750 + MRN-9901 ledger entry)
