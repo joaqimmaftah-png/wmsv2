@@ -1540,6 +1540,173 @@ check('EQ-06 Accessible Slide-Over Machine Inspector Drawer rendered cleanly',
     && strpos($eqSupHtml, 'equipment/summary_json/') !== FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
+   15. PM Planner DataTable, O(1) Telemetry Hydration, RBAC & XSS Audit
+   ───────────────────────────────────────────────────────────────────────── */
+
+if (!class_exists('Pm_model', FALSE)) {
+    require_once APPPATH . 'models/Pm_model.php';
+}
+
+class PmPlannerFakeDB {
+    public $queries = array();
+    public $queue   = array();
+
+    public function dbprefix($t = '') { return (string)$t; }
+    public function table_exists($t) {
+        return in_array($t, array('pm_schedules', 'equipment', 'equipment_types', 'pm_part_requirements', 'materials', 'pm_completions'), TRUE);
+    }
+    public function select($s, $escape = NULL) { return $this; }
+    public function from($t) { return $this; }
+    public function join($t, $c, $type = '') { return $this; }
+    public function where($k, $v = NULL) { return $this; }
+    public function where_in($k, $vals) { return $this; }
+    public function group_by($g) { return $this; }
+    public function order_by($c, $d = '') { return $this; }
+    public function limit($n, $off = 0) { return $this; }
+    public function get($table = NULL) {
+        $this->queries[] = (string)$table;
+        $next = array_shift($this->queue);
+        return $next ? $next : new EquipFleetFakeResult(array());
+    }
+}
+
+$pmDb = new PmPlannerFakeDB();
+$pmModel = new Pm_model();
+$pmModel->db = $pmDb;
+
+$pmSeedRows = array(
+    // 1. Meter-overdue on EX 006 (date still in future, but current_hours 1420 >= next_due_hours 1250!)
+    (object)array(
+        'id' => 1, 'equipment_id' => 1, 'registration_no' => 'EX 006', 'brand' => 'CATERPILLAR', 'model' => '336D2L',
+        'type_name' => 'Excavator', 'category' => 'Mobile Equipment', 'location' => 'MET PLANT', 'equip_status' => 'Available',
+        'current_hours' => 1420.0, 'current_km' => 0.0, 'schedule_name' => '250-Hour Service<script>alert(3)</script>',
+        'description' => 'Engine oil & primary fuel filters', 'interval_type' => 'Hours', 'interval_value' => 250,
+        'standard_hours' => 8.0, 'last_done_date' => '2026-09-25', 'last_done_hours' => 1000.0,
+        'next_due_date' => '2026-11-10', 'next_due_hours' => 1250.0, 'status' => 'Active', 'tasks_checklist' => "Drain engine oil\nReplace filters",
+    ),
+    // 2. Date due-soon within 7 days on C-HEADT 007 + missing standard_hours (F4 alert)
+    (object)array(
+        'id' => 2, 'equipment_id' => 2, 'registration_no' => 'C-HEADT 007', 'brand' => 'SHACMAN', 'model' => 'F3000',
+        'type_name' => 'Horse Truck', 'category' => 'Heavy Truck', 'location' => 'WORKSHOP', 'equip_status' => 'Available',
+        'current_hours' => 300.0, 'current_km' => 98200.0, 'schedule_name' => '10,000 KM Service',
+        'description' => 'Driveline grease & brake inspection', 'interval_type' => 'Km', 'interval_value' => 10000,
+        'standard_hours' => NULL, 'last_done_date' => '2026-09-20', 'last_done_hours' => 90000.0,
+        'next_due_date' => '2026-10-25', 'next_due_hours' => 100000.0, 'status' => 'Active', 'tasks_checklist' => '',
+    ),
+    // 3. Paused / Inactive schedule (previously vanished into a black hole!)
+    (object)array(
+        'id' => 3, 'equipment_id' => 1, 'registration_no' => 'EX 006', 'brand' => 'CATERPILLAR', 'model' => '336D2L',
+        'type_name' => 'Excavator', 'category' => 'Mobile Equipment', 'location' => 'MET PLANT', 'equip_status' => 'Available',
+        'current_hours' => 1420.0, 'current_km' => 0.0, 'schedule_name' => '2000-Hour Hydraulic Overhaul',
+        'description' => 'Seasonal overhaul', 'interval_type' => 'Hours', 'interval_value' => 2000,
+        'standard_hours' => 24.0, 'last_done_date' => '2026-01-10', 'last_done_hours' => 500.0,
+        'next_due_date' => '2027-01-10', 'next_due_hours' => 2500.0, 'status' => 'Inactive', 'tasks_checklist' => '',
+    ),
+);
+
+$pmDb->queue = array(
+    new EquipFleetFakeResult($pmSeedRows),
+    new EquipFleetFakeResult(array(
+        (object)array('pm_schedule_id' => 1, 'parts_cnt' => 4, 'short_cnt' => 1),
+        (object)array('pm_schedule_id' => 2, 'parts_cnt' => 2, 'short_cnt' => 0),
+    )),
+    new EquipFleetFakeResult(array(
+        (object)array('pm_schedule_id' => 1, 'comp_cnt' => 3),
+    )),
+);
+
+$qStartPm = count($pmDb->queries);
+$pmOverview = $pmModel->get_planner_overview('2026-10-22');
+$qTotalPm = count($pmDb->queries) - $qStartPm;
+
+check('PM-05 O(1) PM Telemetry Scaling: get_planner_overview() hydrates schedules + BOM shortages + completions in <= 4 SQL queries',
+    $qTotalPm <= 4 && count($pmOverview['rows']) === 3,
+    "Executed {$qTotalPm} queries");
+check('PM-02 & PM-03 Meter Overdue, Due-Soon, F4 Forecast Alert & Inactive Schedule Recovery',
+    $pmOverview['rows'][0]->compliance_state === 'overdue'
+    && $pmOverview['rows'][0]->compliance_label === 'Overdue (170h)'
+    && $pmOverview['rows'][0]->shortage_count === 1
+    && $pmOverview['rows'][0]->completion_count === 3
+    && $pmOverview['rows'][1]->compliance_state === 'due_soon'
+    && $pmOverview['rows'][1]->has_forecast_alert === TRUE
+    && $pmOverview['rows'][2]->compliance_state === 'inactive');
+
+// PM-04 RBAC & Stored XSS checks across Pm controller, pm_planner.php & pm_calendar.php
+$pmCalSrc = file_get_contents(APPPATH . 'views/maintenance/pm_calendar.php');
+if (isset($mutRegex)) {
+    foreach (array('index', 'export_csv', 'summary_json', 'calendar') as $pmAct) {
+        check("PM-04 Manager RBAC: Pm::{$pmAct}() is permitted under read-only MUTATION_PATTERN",
+            preg_match($mutRegex, $pmAct) === 0);
+    }
+}
+check('PM-04 Stored XSS Hardening in maintenance/pm_calendar.php: escapes registration_no, brand/model & schedule_name',
+    strpos($pmCalSrc, '<?= $pm->registration_no ?>') === FALSE
+    && strpos($pmCalSrc, '<?= $pm->schedule_name ?>') === FALSE);
+
+$pmVars = array(
+    'pm_schedules'   => $pmOverview['rows'],
+    'equipment'      => array((object)array('id' => 1, 'registration_no' => 'EX 006'), (object)array('id' => 2, 'registration_no' => 'C-HEADT 007')),
+    'locations'      => $pmOverview['locations'],
+    'categories'     => $pmOverview['categories'],
+    'open_wos'       => array((object)array('id' => 5, 'wo_number' => 'WO-2026-005', 'title' => '250h service', 'equipment_id' => 1, 'registration_no' => 'EX 006')),
+    'kpi'            => array(
+        'active_total' => 2, 'inactive_total' => 1, 'overdue' => 1, 'due_soon' => 1,
+        'due_today' => 0, 'planned_std_hrs' => 8.0, 'missing_std_hrs' => 1, 'parts_ready' => 1, 'parts_short' => 1,
+    ),
+    'tab_counts'     => array('active' => 2, 'overdue' => 1, 'due_soon' => 1, 'ok' => 0, 'parts_short' => 1, 'forecast_alert' => 1, 'inactive' => 1),
+    'tab'            => 'active',
+    'q'              => '',
+    'f_equip'        => 0,
+    'f_interval'     => '',
+    'f_category'     => '',
+    'f_location'     => '',
+    'sort'           => 'urgency',
+    'dir'            => 'asc',
+    'view_mode'      => 'table',
+    'per_page'       => 25,
+    'allowed_pp'     => array(10, 25, 50, 100, 150),
+    'current_page'   => 1,
+    'total_pages'    => 1,
+    'total_filtered' => 3,
+    'offset'         => 0,
+    'can_manage_pm'  => TRUE,
+    'can_complete_pm'=> TRUE,
+);
+
+$pmWarnings = array();
+set_error_handler(function ($severity, $message, $file, $line) use (&$pmWarnings) {
+    $pmWarnings[] = "{$message} ({$file}:{$line})";
+    return TRUE;
+});
+ob_start();
+(function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/maintenance/pm_planner.php'; })($pmVars);
+$pmSupHtml = ob_get_clean();
+
+$pmVarsMgr = array_merge($pmVars, array('can_manage_pm' => FALSE, 'can_complete_pm' => FALSE));
+ob_start();
+(function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/maintenance/pm_planner.php'; })($pmVarsMgr);
+$pmMgrHtml = ob_get_clean();
+restore_error_handler();
+
+check('PM-01 View Render: application/views/maintenance/pm_planner.php renders Enterprise DataTable & Dual Cards with ZERO PHP warnings',
+    empty($pmWarnings)
+    && strpos($pmSupHtml, '<table class="pm-table"') !== FALSE
+    && strpos($pmSupHtml, 'class="pm-cards-grid"') !== FALSE,
+    implode('; ', $pmWarnings));
+check('PM-04 XSS Neutralization in maintenance/pm_planner.php: hostile <script> tag escaped cleanly',
+    strpos($pmSupHtml, '<script>alert(3)</script>') === FALSE
+    && strpos($pmSupHtml, '250-Hour Service&lt;script&gt;alert(3)&lt;/script&gt;') !== FALSE);
+check('PM-04 Manager UI RBAC: hides New PM, Edit & Done mutation buttons while preserving Export CSV, 12-Month Calendar & Inspect',
+    strpos($pmSupHtml, 'pm/create') !== FALSE
+    && strpos($pmMgrHtml, 'pm/create') === FALSE
+    && strpos($pmMgrHtml, 'pm/edit/') === FALSE
+    && strpos($pmMgrHtml, '>Done<') === FALSE
+    && strpos($pmMgrHtml, 'pm/export_csv') !== FALSE);
+check('PM-06 Accessible Slide-Over PM Inspector Drawer rendered cleanly',
+    strpos($pmSupHtml, 'id="pmDrawer" role="dialog" aria-modal="true"') !== FALSE
+    && strpos($pmSupHtml, 'pm/summary_json/') !== FALSE);
+
+/* ─────────────────────────────────────────────────────────────────────────
    Result
    ───────────────────────────────────────────────────────────────────────── */
 
