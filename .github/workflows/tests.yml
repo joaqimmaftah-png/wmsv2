@@ -151,14 +151,24 @@ jobs:
           python3 tests/live_e2e.py
 
           # Headless Google Chrome Browser UI & Accessibility E2E Suite (1440x900 Desktop + 390x844 Mobile)
-          # Seed 2 ephemeral PM schedules in CI DB (`wms_fresh`) using real existing equipment IDs
+          # Seed ephemeral PM schedules + Inspection records in CI DB (`wms_fresh`) using real existing IDs
           mysql -h 127.0.0.1 -uroot -p"${{ matrix.root_pass }}" wms_fresh -e "
             SET @eq1 = (SELECT MIN(id) FROM equipment);
             SET @eq2 = (SELECT MAX(id) FROM equipment);
+            SET @tpl1 = (SELECT id FROM inspection_templates WHERE code = 'excavator' LIMIT 1);
+            SET @it1 = (SELECT id FROM inspection_items WHERE template_id = @tpl1 AND row_type = 'item' ORDER BY sort_order ASC LIMIT 1);
             INSERT INTO pm_schedules (id, equipment_id, schedule_name, description, interval_type, interval_value, standard_hours, last_done_date, last_done_hours, next_due_date, next_due_hours, status, tasks_checklist)
             VALUES
               (901, @eq1, '250-Hour Engine Service', 'Oil & primary fuel filters', 'Hours', 250, 8.0, '2026-09-15', 1000, '2026-10-15', 1250, 'Active', 'Drain oil\nReplace filters'),
               (902, @eq2, '500-Hour Hydraulic Service', 'Return filters & breathers', 'Hours', 500, 12.0, '2026-10-01', 1000, '2026-11-25', 1500, 'Active', 'Inspect hoses');
+            INSERT INTO inspection_records (id, template_id, language, inspection_date, fleet_number, equipment_type, smr, model, equipment_id, general_comments, mechanic_name, supervisor_name, status)
+            VALUES
+              (951, @tpl1, 'en', '2026-10-22', 'EX 006', 'Excavator', '1420', '336D2L', @eq1, 'Service brake leak check', 'John Moshi', '', 'submitted'),
+              (952, @tpl1, 'fr', '2026-10-21', 'C-HEADT 007', 'Horse Truck', '98200', 'F3000', @eq2, 'Conforme', 'Paul Kileo', 'Chief Sup', 'submitted');
+            INSERT INTO inspection_record_items (record_id, item_id, value_json, comment)
+            VALUES
+              (951, @it1, '{\"result\":\"No\"}', 'Hydraulic brake line seepage'),
+              (952, @it1, '{\"result\":\"Yes\"}', '');
           "
 
           node tests/ui_e2e.js

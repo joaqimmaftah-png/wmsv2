@@ -521,6 +521,110 @@ for (const rawLine of cookieLines) {
     assert(pmMobile.docOverflow <= 0, '/pm Mobile 390px overflowed: ' + pmMobile.docOverflow);
     assert(pmMobile.tableDisplay === 'none' && pmMobile.cardsDisplay === 'block', '/pm Mobile Card View failed: ' + JSON.stringify(pmMobile));
 
+    // ---------------------------------------------------------------
+    // /inspections Enterprise Register & Bilingual Form Hub E2E
+    // ---------------------------------------------------------------
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/inspections' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("inShell"))')) break;
+      await sleep(200);
+    }
+    const inDesktop = await evalJs(`(async () => {
+      const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+      const tblWrap = document.querySelector('.in-table-wrap');
+      const tblOverflow = tblWrap ? (tblWrap.scrollWidth - tblWrap.clientWidth) : -1;
+
+      // Slash shortcut focuses #inSearchInput
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+      const slashFocused = (document.activeElement === document.getElementById('inSearchInput'));
+      document.activeElement.blur();
+
+      // Quick + New Inspection launcher modal opens & Escape restores focus
+      const launchBtn = document.getElementById('inOpenLauncherBtn');
+      launchBtn.click();
+      const modalOpened = document.getElementById('inNewModal').classList.contains('is-open')
+        && document.querySelectorAll('.in-modal-item').length >= 14;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const modalClosed = !document.getElementById('inNewModal').classList.contains('is-open')
+        && (document.activeElement === launchBtn);
+
+      // Select first row checkbox -> opens sticky batch bar with ?ids=
+      const firstCb = document.querySelector('.in-row-check');
+      firstCb.checked = true;
+      firstCb.dispatchEvent(new Event('change', { bubbles: true }));
+      const batchVisible = document.getElementById('inBatchBar').classList.contains('is-open');
+      const batchCsvHref = document.getElementById('inBatchExportBtn').getAttribute('href') || '';
+
+      // Open Slide-Over Inspection Summary Drawer
+      const trigger = document.querySelector('.in-inspect-trigger');
+      trigger.focus();
+      trigger.click();
+      for (let w = 0; w < 25; w++) {
+        if (document.getElementById('inDrawerBody').textContent.includes('Inspection Parameters')) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const drawerOpen = document.getElementById('inDrawer').classList.contains('is-open');
+      const hasFailedSection = document.getElementById('inDrawerBody').textContent.includes('Hydraulic brake line seepage');
+      const firstHeader = document.getElementById('inDrawerTitle').textContent;
+
+      // ArrowRight steps drawer to second record (INSP-0952)
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      const secondHeader = document.getElementById('inDrawerTitle').textContent;
+
+      // Escape closes drawer and restores focus to trigger button
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const drawerClosed = !document.getElementById('inDrawer').classList.contains('is-open');
+      const focusRestored = (document.activeElement === trigger);
+
+      // Toggle Cards <-> Table view smoothly
+      document.querySelector('[data-in-view="cards"]').click();
+      const cardsShown = getComputedStyle(document.querySelector('.in-cards-container')).display !== 'none'
+        && getComputedStyle(document.querySelector('.in-table-wrap')).display === 'none';
+      document.querySelector('[data-in-view="table"]').click();
+
+      // Verify live UTF-8 BOM CSV export endpoint returns 200 + verdict columns
+      const csvRes = await fetch('/inspections/export_csv?per_page=10', { credentials: 'same-origin' });
+      const csvText = await csvRes.text();
+      const csvOk = csvRes.status === 200
+        && csvText.includes('Record ID')
+        && csvText.includes('INSP-951')
+        && csvText.includes('INSP-952');
+
+      return {
+        docOverflow, tblOverflow, slashFocused, modalOpened, modalClosed,
+        batchVisible, batchCsvHref, drawerOpen, hasFailedSection,
+        stepped: firstHeader !== secondHeader, drawerClosed, focusRestored,
+        cardsShown, csvOk
+      };
+    })()`);
+
+    assert(inDesktop.docOverflow <= 0, '/inspections Desktop overflowed: ' + inDesktop.docOverflow);
+    assert(inDesktop.tblOverflow <= 0, '/inspections Table wrapper overflowed: ' + inDesktop.tblOverflow);
+    assert(inDesktop.slashFocused === true, '/inspections Slash shortcut failed');
+    assert(inDesktop.modalOpened && inDesktop.modalClosed, '/inspections New Inspection launcher modal failed');
+    assert(inDesktop.batchVisible && inDesktop.batchCsvHref.includes('ids='), '/inspections Batch bar failed');
+    assert(inDesktop.drawerOpen && inDesktop.hasFailedSection, '/inspections Drawer missed failed item');
+    assert(inDesktop.stepped === true, '/inspections ArrowRight navigation failed');
+    assert(inDesktop.drawerClosed && inDesktop.focusRestored, '/inspections Escape close/focus failed');
+    assert(inDesktop.cardsShown === true, '/inspections Cards switcher failed');
+    assert(inDesktop.csvOk === true, '/inspections CSV export failed');
+
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/inspections' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("inShell"))')) break;
+      await sleep(200);
+    }
+    const inMobile = await evalJs(`(() => ({
+      docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      tableDisplay: getComputedStyle(document.querySelector('.in-table-wrap')).display,
+      cardsDisplay: getComputedStyle(document.querySelector('.in-cards-container')).display
+    }))()`);
+    assert(inMobile.docOverflow <= 0, '/inspections Mobile 390px overflowed: ' + inMobile.docOverflow);
+    assert(inMobile.tableDisplay === 'none' && inMobile.cardsDisplay === 'block', '/inspections Mobile Card View failed: ' + JSON.stringify(inMobile));
+
     ws.close();
     console.log('ALL HEADLESS CHROME DESKTOP (1440x900) & MOBILE (390x844) UI E2E ASSERTIONS PASSED!');
   } catch (err) {

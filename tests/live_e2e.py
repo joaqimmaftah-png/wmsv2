@@ -317,7 +317,20 @@ try:
     m_wo_html = m_wo_b.decode('utf-8', 'replace')
     assert st_m_wo == 200 and 'Export CSV' in m_wo_html and 'New WO' not in m_wo_html and 'Edit Work Order' not in m_wo_html
 
-    print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS & AML TIMESHEET E2E CHECKS PASSED!')
+    # Manager (role_id = 4) read-only access succeeds on BOTH /inspections AND /inspections/records/excavator!
+    st_m_in, url_m_in, m_in_b = get_bytes('/inspections/records/excavator', mgr_op)
+    m_in_html = m_in_b.decode('utf-8', 'replace')
+    assert st_m_in == 200 and '/inspections/records/excavator' in url_m_in, f'Manager blocked on /inspections/records/excavator: {url_m_in}'
+    assert 'Export CSV' in m_in_html and 'inOpenLauncherBtn' not in m_in_html
+
+    # GET /inspections/save must reject non-POST requests with HTTP 405 Method Not Allowed
+    try:
+        sup_op.open(f'{BASE}/inspections/save')
+        raise AssertionError('Expected HTTP 405 on GET /inspections/save')
+    except urllib.error.HTTPError as e405:
+        assert e405.code == 405, f'Expected 405 on GET /inspections/save, got {e405.code}'
+
+    print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS, INSPECTIONS & AML TIMESHEET E2E CHECKS PASSED!')
 except BaseException:
     tb = traceback.format_exc().replace('\n', '%0A')
     print(f'::error title=PythonE2E::{tb}', flush=True)

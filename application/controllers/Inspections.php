@@ -12,9 +12,9 @@ class Inspections extends MY_Controller {
     }
 
     /* ─────────────────────────────────────────────────────
-       INDEX — list available inspection form templates
+       SHARED REGISTER DATASET — powers index(), records(), & export_csv()
     ───────────────────────────────────────────────────── */
-    public function index() {
+    private function _resolve_lang() {
         $lang = $this->input->get('lang', TRUE);
         if (!$lang) {
             $lang = $this->session->userdata('inspection_lang') ?: 'en';
@@ -22,13 +22,494 @@ class Inspections extends MY_Controller {
             $lang = ($lang === 'fr') ? 'fr' : 'en';
             $this->session->set_userdata('inspection_lang', $lang);
         }
+        return ($lang === 'fr') ? 'fr' : 'en';
+    }
 
-        $data['templates']     = $this->Inspection_model->get_templates();
-        $data['record_counts'] = $this->Inspection_model->get_record_counts();
-        $data['lang']          = $lang;
-        $data['can_manage']    = $this->is_supervisor();
-        $data['page_title']    = ($lang === 'fr' ? 'Formulaires d’inspection' : 'Inspection Forms');
+    private function _build_register_dataset($forced_code = NULL, $paginate = TRUE) {
+        $lang     = $this->_resolve_lang();
+        $overview = $this->Inspection_model->get_register_overview();
+        $allRows  = $overview['rows'];
+        $todayStr = $overview['today'];
+
+        $tab = strtolower((string)trim((string)$this->input->get('tab', TRUE)));
+        $validTabs = array('all', 'p1_nogo', 'failed', 'passed', 'unsigned', 'draft', 'forms');
+        if (!in_array($tab, $validTabs, TRUE)) {
+            $tab = 'all';
+        }
+
+        $q       = trim((string)$this->input->get('q', TRUE));
+        if ($q === '') {
+            $q = trim((string)$this->input->get('search', TRUE));
+        }
+        $fTpl    = $forced_code !== NULL && $forced_code !== ''
+            ? strtolower((string)trim((string)$forced_code))
+            : strtolower((string)trim((string)$this->input->get('template', TRUE)));
+        if (isset(Inspection_model::CODE_ALIASES[$fTpl])) {
+            $fTpl = Inspection_model::CODE_ALIASES[$fTpl];
+        }
+        $fEquip  = (int)$this->input->get('equipment_id', TRUE);
+        $fLang   = strtolower((string)trim((string)$this->input->get('rec_lang', TRUE)));
+        if (!in_array($fLang, array('en', 'fr'), TRUE)) {
+            $fLang = '';
+        }
+        $fFrom   = trim((string)$this->input->get('date_from', TRUE));
+        $fTo     = trim((string)$this->input->get('date_to', TRUE));
+
+        $sort = strtolower((string)trim((string)$this->input->get('sort', TRUE)));
+        $allowedSort = array('inspection_date', 'id', 'machine', 'template', 'smr', 'verdict', 'inspector');
+        if (!in_array($sort, $allowedSort, TRUE)) {
+            $sort = 'inspection_date';
+        }
+        $dir = strtolower((string)trim((string)$this->input->get('dir', TRUE)));
+        if (!in_array($dir, array('asc', 'desc'), TRUE)) {
+            $dir = ($sort === 'machine' || $sort === 'template' || $sort === 'inspector' || $sort === 'verdict') ? 'asc' : 'desc';
+        }
+
+        $viewMode = strtolower((string)trim((string)$this->input->get('view', TRUE)));
+        if (!in_array($viewMode, array('table', 'cards'), TRUE)) {
+            $viewMode = 'table';
+        }
+
+        // Resolve optional focused template object (e.g. /inspections/records/{code})
+        $focusedTemplate = NULL;
+        if ($fTpl !== '') {
+            foreach ($overview['templates'] as $tObj) {
+                if (strtolower((string)$tObj->code) === $fTpl) {
+                    $focusedTemplate = $tObj;
+                    break;
+                }
+            }
+            if ($forced_code !== NULL && !$focusedTemplate) {
+                return NULL;
+            }
+        }
+
+        // Global KPI telemetry computed across full register before slicing tabs
+        $kpi = array(
+            'total_records'      => count($allRows),
+            'today_records'      => 0,
+            'p1_nogo'            => 0,
+            'failed_records'     => 0,
+            'total_failed_items' => 0,
+            'clean_pass'         => 0,
+            'pass_rate'          => 100,
+            'unsigned'           => 0,
+            'drafts'             => 0,
+            'active_templates'   => count($overview['active_templates']),
+            'total_items'        => (int)$overview['total_items'],
+        );
+
+        foreach ($allRows as $r) {
+            if ((string)$r->inspection_date === $todayStr) {
+                $kpi['today_records']++;
+            }
+            $kpi['total_failed_items'] += (int)$r->fail_count;
+            if ($r->verdict_state === 'draft') {
+                $kpi['drafts']++;
+            } elseif ($r->verdict_state === 'p1_nogo') {
+                $kpi['p1_nogo']++;
+                $kpi['failed_records']++;
+            } elseif ($r->verdict_state === 'failed') {
+                $kpi['failed_records']++;
+            } else {
+                $kpi['clean_pass']++;
+            }
+            if (!empty($r->is_unsigned)) {
+                $kpi['unsigned']++;
+            }
+        }
+        $submittedTotal = max(0, $kpi['total_records'] - $kpi['drafts']);
+        if ($submittedTotal > 0) {
+            $kpi['pass_rate'] = (int)round(($kpi['clean_pass'] / $submittedTotal) * 100);
+        }
+
+        // Stage 1: Apply facet filters (search, template, equipment, record language, date range)
+        $faceted = array();
+        $qLower  = strtolower($q);
+        foreach ($allRows as $r) {
+            if ($fTpl !== '' && strtolower((string)$r->template_code) !== $fTpl) {
+                continue;
+            }
+            if ($fEquip > 0 && (int)$r->equipment_id !== $fEquip) {
+                continue;
+            }
+            if ($fLang !== '' && strtolower((string)$r->language) !== $fLang) {
+                continue;
+            }
+            if ($fFrom !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fFrom) && (string)$r->inspection_date < $fFrom) {
+                continue;
+            }
+            if ($fTo !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fTo) && (string)$r->inspection_date > $fTo) {
+                continue;
+            }
+            if ($qLower !== '') {
+                $hay = strtolower(implode(' ', array(
+                    'insp-' . (int)$r->id,
+                    '#' . (int)$r->id,
+                    (string)$r->machine_label,
+                    (string)$r->fleet_number,
+                    (string)$r->equipment_type,
+                    (string)$r->model,
+                    (string)$r->serial_number,
+                    (string)$r->template_code,
+                    (string)$r->template_name_en,
+                    (string)$r->template_name_fr,
+                    (string)$r->mechanic_name,
+                    (string)$r->operator_name,
+                    (string)$r->supervisor_name,
+                    (string)$r->general_comments,
+                )));
+                if (strpos($hay, $qLower) === FALSE) {
+                    continue;
+                }
+            }
+            $faceted[] = $r;
+        }
+
+        // Stage 2: Tab badge counts across active facet filter context
+        $tabCounts = array(
+            'all'      => count($faceted),
+            'p1_nogo'  => 0,
+            'failed'   => 0,
+            'passed'   => 0,
+            'unsigned' => 0,
+            'draft'    => 0,
+            'forms'    => count($overview['active_templates']),
+        );
+        foreach ($faceted as $r) {
+            if ($r->verdict_state === 'p1_nogo') {
+                $tabCounts['p1_nogo']++;
+                $tabCounts['failed']++;
+            } elseif ($r->verdict_state === 'failed') {
+                $tabCounts['failed']++;
+            } elseif ($r->verdict_state === 'passed') {
+                $tabCounts['passed']++;
+            } elseif ($r->verdict_state === 'draft') {
+                $tabCounts['draft']++;
+            }
+            if (!empty($r->is_unsigned)) {
+                $tabCounts['unsigned']++;
+            }
+        }
+
+        // Stage 3: Slice active tab
+        $filtered = array();
+        foreach ($faceted as $r) {
+            if ($tab === 'p1_nogo' && $r->verdict_state !== 'p1_nogo') continue;
+            if ($tab === 'failed' && !in_array($r->verdict_state, array('p1_nogo', 'failed'), TRUE)) continue;
+            if ($tab === 'passed' && $r->verdict_state !== 'passed') continue;
+            if ($tab === 'unsigned' && empty($r->is_unsigned)) continue;
+            if ($tab === 'draft' && $r->verdict_state !== 'draft') continue;
+            $filtered[] = $r;
+        }
+
+        // Stage 4: Optional ?ids=1,2,3 subset for multi-select batch CSV export
+        $idsRaw = trim((string)$this->input->get('ids', TRUE));
+        if (!$paginate && $idsRaw !== '') {
+            $idMap = array();
+            foreach (explode(',', $idsRaw) as $tok) {
+                $v = (int)trim($tok);
+                if ($v > 0) $idMap[$v] = TRUE;
+            }
+            if (!empty($idMap)) {
+                $sub = array();
+                foreach ($filtered as $r) {
+                    if (isset($idMap[(int)$r->id])) $sub[] = $r;
+                }
+                $filtered = $sub;
+            }
+        }
+
+        // Stage 5: Deterministic multi-column sorting
+        $mult = ($dir === 'asc') ? 1 : -1;
+        usort($filtered, function ($a, $b) use ($sort, $mult, $lang) {
+            if ($sort === 'id') {
+                return (((int)$a->id) <=> ((int)$b->id)) * $mult;
+            }
+            if ($sort === 'machine') {
+                $cmp = strcasecmp((string)$a->machine_label, (string)$b->machine_label);
+                return $cmp !== 0 ? ($cmp * $mult) : (((int)$b->id) <=> ((int)$a->id));
+            }
+            if ($sort === 'template') {
+                $ta = $lang === 'fr' ? (string)$a->template_name_fr : (string)$a->template_name_en;
+                $tb = $lang === 'fr' ? (string)$b->template_name_fr : (string)$b->template_name_en;
+                $cmp = strcasecmp($ta, $tb);
+                return $cmp !== 0 ? ($cmp * $mult) : (((int)$b->id) <=> ((int)$a->id));
+            }
+            if ($sort === 'smr') {
+                $sa = is_numeric($a->smr) ? (float)$a->smr : -1.0;
+                $sb = is_numeric($b->smr) ? (float)$b->smr : -1.0;
+                $cmp = $sa <=> $sb;
+                return $cmp !== 0 ? ($cmp * $mult) : (((int)$b->id) <=> ((int)$a->id));
+            }
+            if ($sort === 'verdict') {
+                $cmp = ((int)$a->severity_rank) <=> ((int)$b->severity_rank);
+                if ($cmp !== 0) return $cmp * $mult;
+                $cmpFail = ((int)$b->fail_count) <=> ((int)$a->fail_count);
+                return $cmpFail !== 0 ? ($cmpFail * $mult) : (((int)$b->id) <=> ((int)$a->id));
+            }
+            if ($sort === 'inspector') {
+                $cmp = strcasecmp((string)$a->inspector_label, (string)$b->inspector_label);
+                return $cmp !== 0 ? ($cmp * $mult) : (((int)$b->id) <=> ((int)$a->id));
+            }
+            // Default: inspection_date then id
+            $cmp = strcmp((string)$a->inspection_date, (string)$b->inspection_date);
+            if ($cmp !== 0) return $cmp * $mult;
+            return (((int)$a->id) <=> ((int)$b->id)) * $mult;
+        });
+
+        // Stage 6: Server-side pagination
+        $allowedPp     = array(10, 25, 50, 100, 150);
+        $perPage       = (int)$this->input->get('per_page', TRUE);
+        if (!in_array($perPage, $allowedPp, TRUE)) $perPage = 25;
+        $totalFiltered = count($filtered);
+        $totalPages    = max(1, (int)ceil($totalFiltered / $perPage));
+        $currentPage   = max(1, min($totalPages, (int)$this->input->get('page', TRUE) ?: 1));
+        $offset        = ($currentPage - 1) * $perPage;
+        $pagedRows     = $paginate ? array_slice($filtered, $offset, $perPage) : $filtered;
+
+        return array(
+            'records'          => $pagedRows,
+            'templates'        => $overview['active_templates'],
+            'all_templates'    => $overview['templates'],
+            'record_counts'    => $overview['record_counts'],
+            'equipment_list'   => $this->Equipment_model->get_all_active(),
+            'focused_template' => $focusedTemplate,
+            'forced_code'      => $forced_code,
+            'kpi'              => $kpi,
+            'tab_counts'       => $tabCounts,
+            'tab'              => $tab,
+            'q'                => $q,
+            'f_template'       => $fTpl,
+            'f_equip'          => $fEquip,
+            'f_rec_lang'       => $fLang,
+            'f_from'           => $fFrom,
+            'f_to'             => $fTo,
+            'sort'             => $sort,
+            'dir'              => $dir,
+            'view_mode'        => $viewMode,
+            'per_page'         => $perPage,
+            'allowed_pp'       => $allowedPp,
+            'current_page'     => $currentPage,
+            'total_pages'      => $totalPages,
+            'total_filtered'   => $totalFiltered,
+            'offset'           => $offset,
+            'lang'             => $lang,
+            'can_manage'       => $this->is_supervisor(),
+            'can_submit'       => $this->can_write(),
+        );
+    }
+
+    private function _csv_guard($val) {
+        $s = (string)$val;
+        if ($s !== '' && in_array($s[0], array('=', '+', '-', '@', "\t", "\r"), TRUE)) {
+            return "'" . $s;
+        }
+        return $s;
+    }
+
+    /* ─────────────────────────────────────────────────────
+       INDEX — Unified Fleet Inspection Register & Bilingual Form Hub
+    ───────────────────────────────────────────────────── */
+    public function index() {
+        $data = $this->_build_register_dataset(NULL, TRUE);
+        $data['page_title'] = ($data['lang'] === 'fr' ? 'Inspections & Formulaires' : 'Inspections & Safety Checklists');
         $this->render('inspections/index', $data);
+    }
+
+    /* ─────────────────────────────────────────────────────
+       EXPORT CSV — Filtered / Multi-Select UTF-8 BOM CSV
+    ───────────────────────────────────────────────────── */
+    public function export_csv() {
+        $data = $this->_build_register_dataset(NULL, FALSE);
+        $rows = $data['records'];
+        $lang = $data['lang'];
+
+        $filename = 'inspections-register-' . date('Y-m-d') . '.csv';
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
+
+        fputcsv($out, array(
+            'Record ID',
+            'Inspection Date',
+            'Status',
+            'Verdict',
+            'P1 No-Go Count',
+            'Failed Items',
+            'Checked Items',
+            'Machine / Fleet ID',
+            'Equipment Type',
+            'Model',
+            'Serial No',
+            'Meter (SMR)',
+            'Checklist Code',
+            'Checklist Name',
+            'Language',
+            'Inspector / Mechanic',
+            'Operator',
+            'Supervisor Sign-Off',
+            'General Comments',
+        ));
+
+        foreach ($rows as $r) {
+            if ($r->verdict_state === 'p1_nogo') {
+                $verdictTxt = 'No-Go (P1 Breakdown)';
+            } elseif ($r->verdict_state === 'failed') {
+                $verdictTxt = 'Defects Found';
+            } elseif ($r->verdict_state === 'draft') {
+                $verdictTxt = 'Draft';
+            } else {
+                $verdictTxt = 'Clean Pass';
+            }
+            $tplName = ($lang === 'fr') ? $r->template_name_fr : $r->template_name_en;
+            $supTxt  = !empty($r->is_signed)
+                ? ('Signed' . (trim((string)$r->supervisor_name) !== '' ? ' (' . trim((string)$r->supervisor_name) . ')' : ''))
+                : 'Unsigned';
+
+            fputcsv($out, array(
+                'INSP-' . (int)$r->id,
+                $this->_csv_guard($r->inspection_date),
+                ucfirst((string)$r->status),
+                $verdictTxt,
+                (int)$r->p1_count,
+                (int)$r->fail_count,
+                (int)$r->checked_count,
+                $this->_csv_guard($r->machine_label),
+                $this->_csv_guard($r->equipment_type),
+                $this->_csv_guard($r->model),
+                $this->_csv_guard($r->serial_number),
+                $this->_csv_guard($r->smr),
+                strtoupper((string)$r->template_code),
+                $this->_csv_guard($tplName),
+                strtoupper((string)$r->language),
+                $this->_csv_guard($r->mechanic_name),
+                $this->_csv_guard($r->operator_name),
+                $this->_csv_guard($supTxt),
+                $this->_csv_guard($r->general_comments),
+            ));
+        }
+
+        fclose($out);
+        exit;
+    }
+
+    /* ─────────────────────────────────────────────────────
+       SUMMARY JSON — Slide-Over Checklist & Defect Drawer
+    ───────────────────────────────────────────────────── */
+    public function summary_json($id = NULL) {
+        $rid = (int)$id;
+        if ($rid <= 0) {
+            return $this->json(array('ok' => FALSE, 'error' => 'Invalid inspection record ID.'), 404);
+        }
+        $record = $this->Inspection_model->get_record($rid);
+        if (!$record) {
+            return $this->json(array('ok' => FALSE, 'error' => 'Inspection record not found.'), 404);
+        }
+
+        $template = $this->Inspection_model->get_template($record->template_id);
+        $rawItems = $this->Inspection_model->get_record_items($rid);
+        $backlogs = $this->Inspection_model->get_record_backlogs($rid);
+        $equip    = !empty($record->equipment_id) ? $this->Equipment_model->get_by_id((int)$record->equipment_id) : NULL;
+
+        $failedItems = array();
+        $passedCount = 0;
+        $checkedCount = 0;
+        $p1Count = 0;
+        foreach ($rawItems as $ri) {
+            if (isset($ri->row_type) && $ri->row_type === 'section') continue;
+            if (!empty($ri->value_json) && $ri->value_json !== '[]' && $ri->value_json !== '{}') {
+                $checkedCount++;
+            }
+            $verdict = $this->Inspection_model->evaluate_item_verdict($ri);
+            if (!empty($verdict['failed'])) {
+                if ($verdict['priority'] === 'P1') $p1Count++;
+                $failedItems[] = array(
+                    'item_no'  => $ri->item_no !== NULL ? (string)$ri->item_no : '—',
+                    'priority' => (string)$verdict['priority'],
+                    'label'    => (string)$verdict['label'],
+                    'text_en'  => (string)$ri->text_en,
+                    'text_fr'  => (string)$ri->text_fr,
+                    'comment'  => (string)$ri->comment,
+                );
+            } else {
+                $passedCount++;
+            }
+        }
+
+        // Sort failed items P1 -> P2 -> P3 so critical safety items always appear first
+        usort($failedItems, function ($a, $b) {
+            $rk = array('P1' => 1, 'P2' => 2, 'P3' => 3);
+            return ($rk[$a['priority']] ?? 4) <=> ($rk[$b['priority']] ?? 4);
+        });
+
+        $signatures = array();
+        $roleMeta = array(
+            'mechanic'        => 'Mechanic / Inspector',
+            'operator'        => 'Machine Operator',
+            'supervisor'      => 'Workshop Supervisor',
+            'prod_supervisor' => 'Production Supervisor',
+        );
+        foreach ($roleMeta as $rk => $rLabel) {
+            $nm  = trim((string)$record->{$rk . '_name'});
+            $dt  = trim((string)$record->{$rk . '_date'});
+            $sig = !empty($record->{$rk . '_signature'});
+            $signatures[] = array(
+                'role'   => $rLabel,
+                'name'   => $nm !== '' ? $nm : '—',
+                'date'   => $dt !== '' ? $dt : '—',
+                'signed' => ($sig || $nm !== ''),
+            );
+        }
+
+        $backlogRows = array();
+        foreach ($backlogs as $bl) {
+            $backlogRows[] = array(
+                'id'             => (int)$bl->id,
+                'priority'       => (string)$bl->priority,
+                'status'         => (string)$bl->status,
+                'machine_status' => (string)$bl->machine_status,
+                'description'    => (string)$bl->description,
+            );
+        }
+
+        $verdictState = ($record->status === 'draft')
+            ? 'draft'
+            : ($p1Count > 0 ? 'p1_nogo' : (count($failedItems) > 0 ? 'failed' : 'passed'));
+
+        return $this->json(array(
+            'ok' => TRUE,
+            'record' => array(
+                'id'               => (int)$record->id,
+                'inspection_date'  => (string)$record->inspection_date,
+                'status'           => (string)$record->status,
+                'verdict_state'    => $verdictState,
+                'language'         => strtoupper((string)$record->language),
+                'machine_label'    => $equip ? (string)$equip->registration_no : ((string)$record->fleet_number ?: '—'),
+                'equipment_id'     => $equip ? (int)$equip->id : 0,
+                'equipment_type'   => (string)$record->equipment_type ?: '—',
+                'model'            => (string)$record->model ?: '—',
+                'serial_number'    => (string)$record->serial_number ?: '—',
+                'smr'              => (string)$record->smr ?: '—',
+                'meter_label'      => $template ? (string)$template->meter_label_en : 'SMR',
+                'template_code'    => $template ? strtoupper((string)$template->code) : 'GENERAL',
+                'template_name_en' => $template ? (string)$template->name_en : '',
+                'template_name_fr' => $template ? (string)$template->name_fr : '',
+                'general_comments' => (string)$record->general_comments,
+                'checked_count'    => $checkedCount,
+                'passed_count'     => $passedCount,
+                'fail_count'       => count($failedItems),
+                'p1_count'         => $p1Count,
+                'can_edit'         => (bool)$this->can_write(),
+            ),
+            'failed_items' => $failedItems,
+            'signatures'   => $signatures,
+            'backlogs'     => $backlogRows,
+        ));
     }
 
     /* ─────────────────────────────────────────────────────
@@ -283,6 +764,11 @@ class Inspections extends MY_Controller {
        /inspections/fill/<code>/<en|fr>
     ───────────────────────────────────────────────────── */
     public function fill($code = NULL, $lang = 'en') {
+        if (!$this->can_write()) {
+            $this->session->set_flashdata('error', 'Your role has view-only access — creating inspections is not permitted.');
+            redirect('inspections');
+            return;
+        }
         $template = $this->Inspection_model->get_template($code);
         if (!$template) show_404();
 
@@ -304,6 +790,11 @@ class Inspections extends MY_Controller {
        EDIT — pull up an existing record in editable form
     ───────────────────────────────────────────────────── */
     public function edit($id = NULL) {
+        if (!$this->can_write()) {
+            $this->session->set_flashdata('error', 'Your role has view-only access — editing inspections is not permitted.');
+            redirect('inspections');
+            return;
+        }
         $record = $this->Inspection_model->get_record($id);
         if (!$record) show_404();
 
@@ -337,7 +828,12 @@ class Inspections extends MY_Controller {
        (a hidden record_id field on the form decides which)
     ───────────────────────────────────────────────────── */
     public function save() {
-        if ($this->input->method() !== 'post') redirect('inspections');
+        if (!$this->require_post()) return;
+        if (!$this->can_write()) {
+            $this->session->set_flashdata('error', 'Your role has view-only access — saving inspections is not permitted.');
+            redirect('inspections');
+            return;
+        }
 
         $template_id = (int) $this->input->post('template_id', TRUE);
         $template    = $this->Inspection_model->get_template($template_id);
@@ -466,23 +962,22 @@ class Inspections extends MY_Controller {
     }
 
     /* ─────────────────────────────────────────────────────
-       RECORDS — list submitted inspections for a template
+       RECORDS — list submitted inspections (all or per template)
     ───────────────────────────────────────────────────── */
     public function records($code = NULL) {
-        if ($code === NULL || $code === '') {
-            redirect('inspections');
+        $forced = ($code !== NULL && trim((string)$code) !== '') ? trim((string)$code) : NULL;
+        $data   = $this->_build_register_dataset($forced, TRUE);
+        if ($forced !== NULL && $data === NULL) {
+            show_404();
             return;
         }
-        $template = $this->Inspection_model->get_template($code);
-        if (!$template) show_404();
-
-        $lang = $this->input->get('lang', TRUE) ?: ($this->session->userdata('inspection_lang') ?: 'en');
-        $lang = ($lang === 'fr') ? 'fr' : 'en';
-
-        $data['template']   = $template;
-        $data['records']    = $this->Inspection_model->get_records($template->id);
-        $data['lang']       = $lang;
-        $data['page_title'] = ($lang === 'fr' ? $template->name_fr : $template->name_en) . ' — ' . ($lang === 'fr' ? 'Enregistrements' : 'Records');
+        $lang = $data['lang'];
+        if (!empty($data['focused_template'])) {
+            $tpl = $data['focused_template'];
+            $data['page_title'] = ($lang === 'fr' ? $tpl->name_fr : $tpl->name_en) . ' — ' . ($lang === 'fr' ? 'Enregistrements' : 'Records');
+        } else {
+            $data['page_title'] = ($lang === 'fr' ? 'Registre des inspections' : 'Inspection Register');
+        }
         $this->render('inspections/records', $data);
     }
 
