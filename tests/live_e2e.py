@@ -542,9 +542,14 @@ try:
         and 'orders/upload_document/' not in m_ovw_html
     ), 'Manager /orders/view RBAC mismatch!'
 
-    st_m_forb1, _, _ = get_bytes('/orders/create', mgr_op)
-    st_m_forb2, _, _ = get_bytes(f'/orders/receive/{po1_id}', mgr_op)
-    assert st_m_forb1 == 403 and st_m_forb2 == 403, f'Expected 403 on Manager order mutations, got {st_m_forb1}, {st_m_forb2}'
+    r_forb1 = mgr_op.open(f'{BASE}/orders/create')
+    forb1_url, forb1_html = r_forb1.geturl(), r_forb1.read().decode('utf-8', 'replace')
+    r_forb2 = mgr_op.open(f'{BASE}/orders/receive/{po1_id}')
+    forb2_url, forb2_html = r_forb2.geturl(), r_forb2.read().decode('utf-8', 'replace')
+    assert (
+        '/dashboard' in forb1_url and 'view-only access' in forb1_html
+        and '/dashboard' in forb2_url and 'view-only access' in forb2_html
+    ), f'Expected Manager redirect to /dashboard with view-only error, got {forb1_url}, {forb2_url}'
 
     # Slide-Over Drawer JSON + CSV (UTF-8 BOM + formula guard) + Styled XLSX (PK\x03\x04)
     st_m_oj, _, m_oj_b = get_bytes(f'/orders/summary_json/{po1_id}', mgr_op)
