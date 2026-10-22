@@ -7,7 +7,7 @@ on:
 jobs:
   php-lint-and-unit:
     name: PHP ${{ matrix.php }} Lint & Unit Suite
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -28,7 +28,7 @@ jobs:
 
   database-and-e2e:
     name: DB Schema, Migrations & HTTP E2E (${{ matrix.db_label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:

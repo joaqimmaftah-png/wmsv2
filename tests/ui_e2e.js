@@ -646,6 +646,7 @@ for (const rawLine of cookieLines) {
 
       // Supervisor Verify modal opens with target action & Escape restores focus
       const verifyBtn = document.querySelector('[data-bl-close-id]');
+      verifyBtn.focus();
       verifyBtn.click();
       const closeModalOpen = document.getElementById('blCloseModal').classList.contains('is-open')
         && document.getElementById('blCloseForm').getAttribute('action').includes('backlog/close/961');
