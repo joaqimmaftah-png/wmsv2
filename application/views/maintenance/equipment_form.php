@@ -1,7 +1,7 @@
 <div style="max-width:760px;margin:0 auto;">
   <div class="card">
     <div class="ch">
-      <div><div class="ct"><?= isset($equipment) ? 'Edit Equipment: '.$equipment->registration_no : 'Add New Equipment' ?></div><div class="cs">Asset register</div></div>
+      <div><div class="ct"><?= isset($equipment) ? 'Edit Equipment: ' . htmlspecialchars((string)$equipment->registration_no, ENT_QUOTES, 'UTF-8') : 'Add New Equipment' ?></div><div class="cs">Asset register</div></div>
       <a href="<?= base_url('equipment') ?>" class="ca">← Back</a>
     </div>
     <div style="padding:24px;">
@@ -30,11 +30,11 @@
         </div>
         <div>
           <label class="form-label">Brand <span class="req">*</span></label>
-          <input type="text" name="brand" class="form-control" required value="<?= isset($equipment)?$equipment->brand:'' ?>" placeholder="e.g. Caterpillar">
+          <input type="text" name="brand" class="form-control" required value="<?= htmlspecialchars((string)(isset($equipment) ? $equipment->brand : ''), ENT_QUOTES, 'UTF-8') ?>" placeholder="e.g. Caterpillar">
         </div>
         <div>
           <label class="form-label">Model <span class="req">*</span></label>
-          <input type="text" name="model" class="form-control" required value="<?= isset($equipment)?$equipment->model:'' ?>" placeholder="e.g. 320D">
+          <input type="text" name="model" class="form-control" required value="<?= htmlspecialchars((string)(isset($equipment) ? $equipment->model : ''), ENT_QUOTES, 'UTF-8') ?>" placeholder="e.g. 320D">
         </div>
         <div>
           <label class="form-label">Year</label>
