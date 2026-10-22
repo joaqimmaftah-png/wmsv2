@@ -49,3 +49,14 @@ Dependency-free source checks for the Suppliers, Lubricants and Lube Budget
 surfaces, grouped-page calculation and the actual inline budget draft calculator.
 These do not substitute for PHP/MySQL or browser/assistive-technology tests.
 See `docs/table-ux-audit.md` for the staging acceptance checklist.
+
+## Lubricant planning master audit regressions (Node)
+
+```bash
+node tests/lubricant_masters_ux.js
+```
+
+Dependency-free source checks plus a minimal DOM simulation of the real OEM
+specification editor. Covers the budget, specifications, types and two-month
+forecast. PHP, database, authenticated-browser and month-end fixtures remain
+required; see `docs/lubricant-planning-table-audit.md`.

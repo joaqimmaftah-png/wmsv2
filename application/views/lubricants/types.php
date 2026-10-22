@@ -16,11 +16,13 @@ $cats             = isset($categories) && is_array($categories) ? $categories : 
 }
 .lub-subnav a {
   padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600;
-  text-decoration: none; color: var(--t2); background: var(--card, #111827);
+  text-decoration: none; color: var(--t2); background: var(--surface);
   border: 1px solid var(--sep, rgba(148,163,184,0.16));
 }
 .lub-subnav a.is-active { background: var(--blue); color: #ffffff; border-color: var(--blue); }
 .lub-types-split { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: start; }
+.lub-types-table { min-width: 680px; }
+.lub-types-split :focus-visible, .lub-subnav :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 @media (max-width: 900px) {
   .lub-types-split { grid-template-columns: minmax(0, 1fr); }
 }
@@ -48,12 +50,12 @@ $cats             = isset($categories) && is_array($categories) ? $categories : 
     <div style="padding:18px 20px 22px;">
       <?= form_open('lubricants/types') ?>
       <div style="margin-bottom:12px;">
-        <label class="form-label">Name <span class="req">*</span></label>
-        <input type="text" name="name" class="form-control" required placeholder="e.g. Heavy Duty Engine Oil">
+        <label class="form-label" for="lubeName">Name <span class="req">*</span></label>
+        <input type="text" id="lubeName" name="name" class="form-control" maxlength="100" required placeholder="e.g. Heavy Duty Engine Oil">
       </div>
       <div style="margin-bottom:12px;">
-        <label class="form-label">Category <span class="req">*</span></label>
-        <select name="category" class="form-select" required>
+        <label class="form-label" for="lubeCategory">Category <span class="req">*</span></label>
+        <select id="lubeCategory" name="category" class="form-select" required>
           <?php foreach ($cats as $cat): ?>
           <option value="<?= $lub_esc($cat) ?>"><?= $lub_esc($cat) ?></option>
           <?php endforeach; ?>
@@ -61,12 +63,12 @@ $cats             = isset($categories) && is_array($categories) ? $categories : 
       </div>
       <div class="form-grid cols-2" style="margin-bottom:12px;">
         <div>
-          <label class="form-label">Viscosity / Grade</label>
-          <input type="text" name="grade" class="form-control" placeholder="e.g. 15W-40, ISO 46">
+          <label class="form-label" for="lubeGrade">Viscosity / Grade</label>
+          <input type="text" id="lubeGrade" name="grade" class="form-control" maxlength="50" placeholder="e.g. 15W-40, ISO 46">
         </div>
         <div>
-          <label class="form-label">Unit</label>
-          <select name="unit" class="form-select">
+          <label class="form-label" for="lubeUnit">Unit</label>
+          <select id="lubeUnit" name="unit" class="form-select">
             <option value="L">L</option>
             <option value="Kg">Kg</option>
             <option value="Pcs">Pcs</option>
@@ -74,12 +76,12 @@ $cats             = isset($categories) && is_array($categories) ? $categories : 
         </div>
       </div>
       <div style="margin-bottom:12px;">
-        <label class="form-label">Default Unit Cost (<?= $lub_esc($ccy) ?>)</label>
-        <input type="number" name="unit_cost" class="form-control" step="0.01" min="0" placeholder="0.00">
+        <label class="form-label" for="lubeCost">Default Unit Cost (<?= $lub_esc($ccy) ?>)</label>
+        <input type="number" id="lubeCost" name="unit_cost" class="form-control" step="0.01" min="0" max="99999999.99" placeholder="0.00">
       </div>
       <div style="margin-bottom:16px;">
-        <label class="form-label">Description</label>
-        <input type="text" name="description" class="form-control" placeholder="Optional specification note…">
+        <label class="form-label" for="lubeDescription">Description</label>
+        <input type="text" id="lubeDescription" name="description" class="form-control" maxlength="300" placeholder="Optional specification note…">
       </div>
       <button type="submit" class="btn btn-primary" style="width:100%;">+ Add Lube Type</button>
       <?= form_close() ?>
@@ -95,7 +97,7 @@ $cats             = isset($categories) && is_array($categories) ? $categories : 
       </div>
     </div>
     <div style="overflow-x:auto;">
-      <table class="tbl">
+      <table class="tbl lub-types-table">
         <thead>
           <tr>
             <th>Name</th>
@@ -107,16 +109,18 @@ $cats             = isset($categories) && is_array($categories) ? $categories : 
           </tr>
         </thead>
         <tbody>
-          <?php foreach ($lube_types as $lt): ?>
+          <?php if (empty($lube_types)): ?>
+          <tr><td colspan="6" style="text-align:center;padding:36px;color:var(--t2);">No active lubricant types found. <?= $can_manage_types ? 'Use the form to add a fluid grade.' : 'Ask a supervisor to add a fluid grade.' ?></td></tr>
+          <?php else: foreach ($lube_types as $lt): ?>
           <tr>
             <td style="font-weight:700;color:var(--t1);"><?= $lub_esc($lt->name) ?></td>
             <td class="mono" style="color:var(--t2);"><?= $lub_esc($lt->grade ?: '—') ?></td>
             <td><?= $lub_esc($lt->category) ?></td>
             <td class="mono" style="text-align:center;"><?= $lub_esc($lt->unit) ?></td>
             <td class="mono" style="text-align:right;"><?= number_format((float)($lt->unit_cost ?? 0), 2) ?></td>
-            <td style="font-size:12px;color:var(--t3);"><?= $lub_esc($lt->description ?: '—') ?></td>
+            <td style="font-size:12px;color:var(--t2);" title="<?= $lub_esc($lt->description ?: '') ?>"><?= $lub_esc($lt->description ?: '—') ?></td>
           </tr>
-          <?php endforeach; ?>
+          <?php endforeach; endif; ?>
         </tbody>
       </table>
     </div>

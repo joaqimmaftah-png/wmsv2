@@ -38,6 +38,14 @@ $totals = isset($totals) && is_array($totals) ? $totals : array(
     'budget_qty' => 0.0, 'budget_cost' => 0.0, 'pm_req_qty' => 0.0,
     'actual_qty' => 0.0, 'actual_cost' => 0.0, 'remaining_cost' => 0.0, 'utilization_pct' => NULL,
 );
+$allocated_grades = 0;
+$pm_grades = 0;
+$issue_records = 0;
+foreach ($lines as $line) {
+    if ((float)$line->budget_qty > 0) $allocated_grades++;
+    if ((float)$line->pm_req_qty > 0) $pm_grades++;
+    $issue_records += (int)($line->actual_records ?? 0);
+}
 $exportQs = '?year=' . $year_i . '&month=' . $month_i;
 ?>
 <style>
@@ -112,16 +120,13 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
   <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:12px;">
     <div>
       <h1 style="margin:0;font-size:18px;font-weight:700;color:var(--t1);">Lubricant Budget — <?= $lub_esc($month_name) ?></h1>
-      <div class="cs">Monthly volume &amp; cost allocation compared against scheduled PM demand and recorded store issues</div>
+      <div class="cs">Monthly allocations versus PM demand and recorded issues, with quantities shown per fluid unit</div>
     </div>
 
     <div class="flex ai-c gap-10" style="flex-wrap:wrap;">
       <form method="get" action="<?= base_url('lubricants/budget') ?>" class="flex ai-c gap-10" style="flex-wrap:wrap;">
-        <select name="year" class="form-select" style="width:96px;" aria-label="Budget year">
-          <?php for ($y = (int)date('Y') + 1; $y >= (int)date('Y') - 2; $y--): ?>
-          <option value="<?= (int)$y ?>" <?= $year_i === $y ? 'selected' : '' ?>><?= (int)$y ?></option>
-          <?php endfor; ?>
-        </select>
+        <input type="number" name="year" class="form-control" style="width:100px;" min="2000" max="2100" step="1"
+               value="<?= (int)$year_i ?>" aria-label="Budget year" required>
         <select name="month" class="form-select" style="width:132px;" aria-label="Budget month">
           <?php for ($m = 1; $m <= 12; $m++): ?>
           <option value="<?= (int)$m ?>" <?= $month_i === $m ? 'selected' : '' ?>><?= $lub_esc(date('F', mktime(0, 0, 0, $m, 1))) ?></option>
@@ -139,12 +144,12 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
     <div class="bgt-kpi">
       <div class="bgt-kpi-k">Planned Budget</div>
       <div class="bgt-kpi-v" id="kpiPlannedTotal"><?= $lub_esc($ccy) ?> <?= number_format((float)$totals['budget_cost'], 2) ?></div>
-      <div class="bgt-kpi-s"><?= number_format((float)$totals['budget_qty'], 1) ?> units allocated</div>
+      <div class="bgt-kpi-s"><?= (int)$allocated_grades ?> fluid grade(s) allocated; quantities by unit below</div>
     </div>
     <div class="bgt-kpi">
       <div class="bgt-kpi-k">Estimated Issue Value</div>
       <div class="bgt-kpi-v" id="budgetIssueValue"><?= $lub_esc($ccy) ?> <?= number_format((float)$totals['actual_cost'], 2) ?></div>
-      <div class="bgt-kpi-s"><?= number_format((float)$totals['actual_qty'], 1) ?> units dispensed in selected month</div>
+      <div class="bgt-kpi-s"><?= (int)$issue_records ?> issue(s) recorded in selected month</div>
     </div>
     <div class="bgt-kpi">
       <div class="bgt-kpi-k">Estimated Balance</div>
@@ -156,9 +161,9 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
       </div>
     </div>
     <div class="bgt-kpi">
-      <div class="bgt-kpi-k">PM Plan Demand</div>
-      <div class="bgt-kpi-v"><?= number_format((float)$totals['pm_req_qty'], 1) ?></div>
-      <div class="bgt-kpi-s">Projected scheduled service volume</div>
+      <div class="bgt-kpi-k">PM Plan Coverage</div>
+      <div class="bgt-kpi-v"><?= (int)$pm_grades ?></div>
+      <div class="bgt-kpi-s">Fluid grade(s) with PM demand; quantities by unit below</div>
     </div>
   </div>
 
@@ -166,7 +171,7 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
     <div class="ch">
       <div>
         <div class="ct">Monthly Fluid Allocation Matrix (<?= $lub_esc($ccy) ?>)</div>
-        <div class="cs">Enter monthly quantities and unit rates; budget totals calculate live. Issue value uses the selected month’s budget rate (or the fluid’s current rate if none is saved), not historical purchase cost.</div>
+        <div class="cs">Enter monthly quantities and unit rates; budget totals calculate live. PM demand includes dated and projected hour-based schedules (assuming 20 running hours/day); issue value uses this month’s budget rate (or current fluid rate when unset), not historical purchase cost.</div>
       </div>
       <?php if ($can_write): ?>
       <button type="button" id="bgtFillPmBtn" class="btn btn-ghost btn-sm">Copy PM Demand to Empty Rows</button>
@@ -209,13 +214,13 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
                 <span style="font-size:11.5px;color:var(--t2);"><?= $lub_esc($ln->category) ?></span>
               </td>
               <td data-label="PM Demand" class="mono" style="text-align:right;font-size:12px;color:var(--t2);">
-                <?= number_format((float)$ln->pm_req_qty, 1) ?> <?= $lub_esc($ln->unit) ?>
+                <?= number_format((float)$ln->pm_req_qty, 2) ?> <?= $lub_esc($ln->unit) ?>
               </td>
               <td data-label="Budget Qty (<?= $lub_esc($ln->unit) ?>)">
                 <input type="number" name="budget[<?= $lid ?>][qty]"
                        class="form-control bgt-input budget-qty"
                        <?= !$can_write ? 'readonly' : '' ?>
-                       step="0.1" min="0"
+                       step="0.01" min="0"
                        data-id="<?= $lid ?>"
                        data-pm="<?= number_format((float)$ln->pm_req_qty, 2, '.', '') ?>"
                        value="<?= $lub_esc($qtyVal) ?>"
@@ -238,7 +243,7 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
                 </span>
               </td>
               <td data-label="Period Issues" class="mono" style="text-align:right;font-size:12px;color:var(--t2);">
-                <?= number_format((float)$ln->actual_qty, 1) ?> <?= $lub_esc($ln->unit) ?>
+                <?= number_format((float)$ln->actual_qty, 2) ?> <?= $lub_esc($ln->unit) ?>
                 <div style="font-size:10.5px;color:var(--t3);" id="issue-value-<?= $lid ?>"><?= $lub_esc($ccy) ?> <?= number_format((float)$ln->actual_cost, 2) ?></div>
               </td>
             </tr>
@@ -324,7 +329,7 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
       qtyInputs.forEach(function (qEl) {
         var pm = parseFloat(qEl.getAttribute('data-pm')) || 0;
         if ((!qEl.value || parseFloat(qEl.value) <= 0) && pm > 0) {
-          qEl.value = pm.toFixed(1);
+          qEl.value = pm.toFixed(2);
         }
       });
       recalc();

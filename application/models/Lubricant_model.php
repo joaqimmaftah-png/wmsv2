@@ -35,7 +35,7 @@ class Lubricant_model extends CI_Model {
     }
 
     public function get_all_types() {
-        return $this->db->where('status', 'Active')->order_by('category')->get('lube_types')->result();
+        return $this->db->where('status', 'Active')->order_by('category')->order_by('name')->get('lube_types')->result();
     }
 
     public function get_type_by_id($id) {
@@ -43,11 +43,11 @@ class Lubricant_model extends CI_Model {
     }
 
     public function get_all_specs() {
-        return $this->db->select('ls.*, et.name as type_name, lt.name as lube_name, lt.grade as lube_grade, lt.unit')
+        return $this->db->select('ls.*, et.name as type_name, lt.name as lube_name, lt.grade as lube_grade, lt.unit, lt.status as lube_status')
             ->from('lube_specifications ls')
             ->join('equipment_types et', 'et.id = ls.equipment_type_id')
             ->join('lube_types lt', 'lt.id = ls.lube_type_id')
-            ->order_by('et.name')->get()->result();
+            ->order_by('et.name')->order_by('lt.name')->get()->result();
     }
 
     public function get_spec($equipment_type_id, $lube_type_id) {
@@ -361,7 +361,8 @@ class Lubricant_model extends CI_Model {
      */
     public function get_monthly_forecast() {
         $m0 = date('Y-m');
-        $m1 = date('Y-m', strtotime('+1 month'));
+        // Anchor to the first day: '+1 month' from Jan 31 can skip February.
+        $m1 = date('Y-m', strtotime($m0 . '-01 +1 month'));
         $globalFrom = $m0 . '-01';
         $globalTo   = date('Y-m-t', strtotime($m1 . '-01'));
 
