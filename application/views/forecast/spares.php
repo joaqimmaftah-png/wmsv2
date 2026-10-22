@@ -48,21 +48,21 @@ $num = function ($v) { return rtrim((string)(rtrim((string)(number_format((float
 <?php else: ?>
 
 <div class="grid g-4 mb-4">
-  <div class="kpi"><div class="kpi-glow" style="background:var(--blue)"></div>
+  <div class="kpi">
     <span class="kpi-tag">PM services in the window</span>
     <div class="kpi-num"><?=$schedules?></div>
     <div class="cs" style="font-size:10px;margin-top:3px;"><?=date('d M', strtotime($from))?> – <?=date('d M', strtotime($to))?></div>
   </div>
-  <div class="kpi"><div class="kpi-glow" style="background:var(--purple,var(--blue))"></div>
+  <div class="kpi">
     <span class="kpi-tag">Distinct parts required</span>
     <div class="kpi-num"><?=count($rows)?></div>
   </div>
-  <div class="kpi"><div class="kpi-glow" style="background:<?= $shortage_count > 0 ? 'var(--red)' : 'var(--green)' ?>"></div>
+  <div class="kpi">
     <span class="kpi-tag">Short of stock</span>
     <div class="kpi-num" style="color:<?= $shortage_count > 0 ? 'var(--red)' : 'var(--green)' ?>;"><?=$shortage_count?></div>
     <div class="cs" style="font-size:10px;margin-top:3px;">after on-hand and on-order</div>
   </div>
-  <div class="kpi"><div class="kpi-glow" style="background:var(--amber)"></div>
+  <div class="kpi">
     <span class="kpi-tag">PM services with no parts list</span>
     <div class="kpi-num"><?=$no_requirements?></div>
     <div class="cs" style="font-size:10px;margin-top:3px;">their parts are not forecast</div>
@@ -127,7 +127,7 @@ $num = function ($v) { return rtrim((string)(rtrim((string)(number_format((float
         <td class="mono" style="font-weight:600;color:var(--blue);">
           <?=htmlspecialchars((string)$r['item_code'])?>
           <?php if ($r['is_critical']): ?>
-            <span style="margin-left:6px;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;color:var(--red);background:var(--red-d);">CRITICAL</span>
+            <span class="badge b-critical" style="margin-left:6px;font-size:9px;">CRITICAL</span>
           <?php endif; ?>
         </td>
         <td style="color:var(--t2);font-size:11px;"><?=htmlspecialchars((string)$r['description'])?></td>
@@ -144,9 +144,9 @@ $num = function ($v) { return rtrim((string)(rtrim((string)(number_format((float
         </td>
         <td style="text-align:center;">
           <?php if ($r['covered']): ?>
-            <span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;color:var(--green);background:var(--green-d);">COVERED</span>
+            <span class="badge b-completed">COVERED</span>
           <?php else: ?>
-            <span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;color:var(--red);background:var(--red-d);">ORDER</span>
+            <span class="badge b-danger">ORDER</span>
           <?php endif; ?>
         </td>
       </tr>

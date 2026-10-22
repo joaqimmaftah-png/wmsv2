@@ -12,6 +12,13 @@ $hrs = function ($v) {
     return $v === null ? '—' : rtrim((string)(rtrim((string)(number_format((float)$v, 2, '.', '')), '0')), '.');
 };
 $h = function ($s) { return htmlspecialchars((string)$s); };
+$job_status_badge = array(
+  'Planned'   => 'b-primary',
+  'Issued'    => 'b-progress',
+  'Done'      => 'b-completed',
+  'Missed'    => 'b-danger',
+  'Cancelled' => 'b-secondary',
+);
 
 $cell       = ($machine && isset($machine['daily'][$date])) ? $machine['daily'][$date] : null;
 $day_jobs   = $cell ? $cell['jobs'] : array();
@@ -114,7 +121,7 @@ $back = base_url('forecast?week=' . urlencode($iso_label));
         <td><?=$h($j['category'])?></td>
         <td><?=$h($j['hold_code'] ?: '—')?></td>
         <td><?=$h($j['expected_return'] ?: '—')?></td>
-        <td><?=$h($j['status'])?></td>
+        <td style="text-align:center;"><span class="badge <?=isset($job_status_badge[$j['status']]) ? $job_status_badge[$j['status']] : 'b-secondary'?>" title="<?=$h($j['status'])?>"><?=$h($j['status'])?></span></td>
         <td style="white-space:nowrap;">
           <?php if ($editable): ?>
           <a class="btn btn-sm" href="<?=base_url('forecast/jobs?week=' . urlencode($iso_label) . '&equipment_id=' . $machine['equipment_id'] . '&date=' . $date . '&edit=' . $j['id'])?>">Edit</a>

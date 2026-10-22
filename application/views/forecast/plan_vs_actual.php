@@ -69,15 +69,15 @@ $signed = function ($v) {
 
 <!-- ── fleet headline ────────────────────────────────────────────────── -->
 <div class="grid g-4 mb-4">
-  <div class="kpi"><div class="kpi-glow" style="background:var(--blue)"></div>
+  <div class="kpi">
     <span class="kpi-tag">Planned fleet availability</span>
     <div class="kpi-num"><?=$pct($fleet['planned'])?></div>
   </div>
-  <div class="kpi"><div class="kpi-glow" style="background:<?=$col($fleet['actual'])?>"></div>
+  <div class="kpi">
     <span class="kpi-tag">Actual fleet availability</span>
     <div class="kpi-num" style="color:<?=$col($fleet['actual'])?>;"><?=$pct($fleet['actual'])?></div>
   </div>
-  <div class="kpi"><div class="kpi-glow" style="background:<?=$vcol($fleet['variance_pp'])?>"></div>
+  <div class="kpi">
     <span class="kpi-tag">Variance</span>
     <div class="kpi-num" style="color:<?=$vcol($fleet['variance_pp'])?>;"><?=$signed($fleet['variance_pp'])?><sup>pp</sup></div>
     <div class="cs" style="font-size:10px;margin-top:3px;">
@@ -85,7 +85,7 @@ $signed = function ($v) {
         : ($fleet['variance_pp'] >= 0 ? 'better than planned' : 'worse than planned')?>
     </div>
   </div>
-  <div class="kpi"><div class="kpi-glow" style="background:var(--amber)"></div>
+  <div class="kpi">
     <span class="kpi-tag">Fleet available to production</span>
     <div class="kpi-num"><?=$unit['available']?><sup>/<?=$unit['total']?> units</sup></div>
     <div class="cs" style="font-size:10px;margin-top:3px;"><?=$unit['out_of_service']?> planned out of service</div>

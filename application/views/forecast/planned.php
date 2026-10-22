@@ -44,23 +44,68 @@ $jobs_ready = !empty($jobs_ready);
 $can_plan   = isset($can_plan) ? (bool)$can_plan : $is_supervisor;
 $overbooked = array();
 foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $w;
+
+/* Status distribution of the fleet for this week — drives the filter tabs.
+   Counts cover every machine in the week, not just the filtered list; the
+   caption under the tabs says so explicitly. */
+$status_counts = array('all' => count($rows), 'planned' => 0, 'out_of_service' => 0, 'standby' => 0, 'no_plan' => 0);
+foreach ($rows as $r) {
+  if ($r['out_of_service'])             $s = 'out_of_service';
+  elseif (!empty($r['standby']))        $s = 'standby';
+  elseif (!$r['has_plan'])              $s = 'no_plan';
+  else                                  $s = 'planned';
+  $status_counts[$s]++;
+}
 ?>
+
+<style>
+  /* Status filter tabs — forecast planned view */
+  .tab-btn { padding:4px 11px;font-size:12px;border-radius:8px;border:none;background:transparent;color:var(--t2);cursor:pointer; }
+  .tab-btn[aria-pressed="true"] { background:var(--blue-d);color:var(--blue);font-weight:600; }
+  .tab-btn:focus-visible { outline:2px solid var(--blue);outline-offset:2px; }
+  /* Pin the machine column of wide matrix tables */
+  .tbl-sticky-first th:first-child,
+  .tbl-sticky-first td:first-child { position:sticky;left:0;z-index:2;background:var(--surface);box-shadow:2px 0 6px -3px rgba(0,0,0,0.35); }
+  .tbl-sticky-first td:first-child { border-right:1px solid var(--sep); }
+</style>
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
     <div class="page-heading" style="font-size:16px;">Planned Availability — <?=htmlspecialchars((string)($iso_label))?></div>
     <div class="cs"><?=date('d M Y', strtotime($week_start))?> – <?=date('d M Y', strtotime($week_end))?></div>
   </div>
-  <div class="flex ai-c gap-10">
+  <div class="flex ai-c gap-10" style="flex-wrap:wrap;">
     <form method="get" class="flex ai-c gap-10">
       <label style="font-size:11px;color:var(--t3);">Week</label>
       <input type="week" name="week" class="form-control" style="width:170px;"
              value="<?=htmlspecialchars((string)($iso_label))?>">
       <button class="btn btn-sm btn-primary" type="submit">Open</button>
     </form>
+    <form role="search" onsubmit="return false" class="flex ai-c gap-10" style="flex-wrap:wrap;">
+      <label for="forecast-search" style="font-size:11px;color:var(--t3);margin-bottom:0;">Search</label>
+      <input type="search" id="forecast-search" name="q" class="form-control" style="width:260px;"
+             placeholder="Machine or location…" aria-label="Search machines by registration number or location" autocomplete="off">
+    </form>
     <a class="btn btn-sm" href="<?= base_url('forecast/export?week=' . urlencode($iso_label)) ?>">
       Export XLSX
     </a>
+    <div role="tablist" aria-label="Filter machines by plan status" class="flex gap-6 ai-c" style="border:1px solid var(--sep);background:var(--surface);border-radius:10px;padding:3px;">
+      <button role="tab" aria-pressed="true" data-status="all" class="tab-btn tab-active" style="padding:4px 11px;font-size:12px;border-radius:8px;border:none;background:var(--blue-d);color:var(--blue);font-weight:600;cursor:pointer;">
+        All <span class="tab-count" data-count-for="all" style="font-weight:400;opacity:.75;"><?=$status_counts['all']?></span>
+      </button>
+      <button role="tab" aria-pressed="false" data-status="planned" class="tab-btn" style="padding:4px 11px;font-size:12px;border-radius:8px;border:none;background:transparent;color:var(--t2);cursor:pointer;">
+        Planned <span class="tab-count" data-count-for="planned" style="font-weight:400;opacity:.75;"><?=$status_counts['planned']?></span>
+      </button>
+      <button role="tab" aria-pressed="false" data-status="out_of_service" class="tab-btn" style="padding:4px 11px;font-size:12px;border-radius:8px;border:none;background:transparent;color:var(--t2);cursor:pointer;">
+        Out of service <span class="tab-count" data-count-for="out_of_service" style="font-weight:400;opacity:.75;"><?=$status_counts['out_of_service']?></span>
+      </button>
+      <button role="tab" aria-pressed="false" data-status="standby" class="tab-btn" style="padding:4px 11px;font-size:12px;border-radius:8px;border:none;background:transparent;color:var(--t2);cursor:pointer;">
+        Stand-by <span class="tab-count" data-count-for="standby" style="font-weight:400;opacity:.75;"><?=$status_counts['standby']?></span>
+      </button>
+      <button role="tab" aria-pressed="false" data-status="no_plan" class="tab-btn" style="padding:4px 11px;font-size:12px;border-radius:8px;border:none;background:transparent;color:var(--t2);cursor:pointer;">
+        No plan yet <span class="tab-count" data-count-for="no_plan" style="font-weight:400;opacity:.75;"><?=$status_counts['no_plan']?></span>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -76,22 +121,22 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
 
 <!-- ── KPI strip ─────────────────────────────────────────────────────── -->
 <div class="grid g-4 mb-4">
-  <div class="kpi"><div class="kpi-glow" style="background:<?=$col($fleet['availability'])?>"></div>
+  <div class="kpi">
     <span class="kpi-tag">Planned fleet availability</span>
     <div class="kpi-num" style="color:<?=$col($fleet['availability'])?>;"><?=$pct($fleet['availability'])?></div>
     <div class="cs" style="font-size:10px;margin-top:3px;">capacity-weighted (D30)</div>
   </div>
-  <div class="kpi"><div class="kpi-glow" style="background:var(--green)"></div>
+  <div class="kpi">
     <span class="kpi-tag">Available to production</span>
     <div class="kpi-num"><?=$unit['available']?><sup>/<?=$unit['total']?> units</sup></div>
     <div class="cs" style="font-size:10px;margin-top:3px;"><?=$unit['out_of_service']?> planned out of service · <?=$unit['stand_by']?> stand-by reserve (not in the %)</div>
   </div>
-  <div class="kpi"><div class="kpi-glow" style="background:var(--blue)"></div>
+  <div class="kpi">
     <span class="kpi-tag">Planned PM</span>
     <div class="kpi-num"><?=$hrs($fleet['pm_hours'])?><sup>h</sup></div>
     <div class="cs" style="font-size:10px;margin-top:3px;"><?=$machines_with_plan?> machines carry a plan</div>
   </div>
-  <div class="kpi"><div class="kpi-glow" style="background:var(--amber)"></div>
+  <div class="kpi">
     <span class="kpi-tag">Planned downtime</span>
     <div class="kpi-num"><?=$hrs($fleet['downtime_hours'])?><sup>h</sup></div>
     <div class="cs" style="font-size:10px;margin-top:3px;">standing + unplanned</div>
@@ -358,13 +403,15 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
 <?php endif; ?>
 
 <!-- ── The machine grid — the workbook's own shape ───────────────────── -->
+<div id="forecast-machines" data-week="<?=htmlspecialchars((string)$iso_label)?>"
+     data-counts='<?=htmlspecialchars(json_encode($status_counts), ENT_QUOTES)?>'>
 <?php foreach ($group_order as $gname): if (empty($by_group[$gname])) continue; ?>
-<div class="card mb-3" style="overflow-x:auto;">
+<div class="card mb-3 forecast-group-card" style="overflow-x:auto;">
   <div class="ch" style="padding:12px 18px 10px;">
     <div class="ct" style="font-size:12px;"><?=htmlspecialchars((string)($gname))?> — <?=count($by_group[$gname])?> machines</div>
     <div class="cs">Planned hours per day<?= $jobs_ready ? ', with the job codes. Click a cell to see or edit its jobs' : '' ?><?= ($jobs_ready && !$frozen) ? ' (draft only)' : '' ?>.</div>
   </div>
-  <table class="tbl">
+  <table class="tbl tbl-sticky-first">
     <thead>
       <tr>
         <th>MACHINE</th><th>LOCATION</th>
@@ -379,7 +426,13 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
     </thead>
     <tbody>
     <?php foreach ($by_group[$gname] as $r): ?>
-      <tr<?= $r['out_of_service'] ? ' style="background:rgba(180,83,9,0.05);"' : '' ?>>
+      <?php
+        if ($r['out_of_service'])             $_s = 'out_of_service';
+        elseif (!empty($r['standby']))        $_s = 'standby';
+        elseif (!$r['has_plan'])              $_s = 'no_plan';
+        else                                  $_s = 'planned';
+      ?>
+      <tr data-status="<?=htmlspecialchars($_s)?>" data-registration="<?=htmlspecialchars((string)$r['registration_no'])?>" data-location="<?=htmlspecialchars((string)$r['location'])?>">
         <td class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars((string)($r['registration_no']))?></td>
         <td style="color:var(--t3);font-size:10.5px;"><?=htmlspecialchars((string)$r['location'])?></td>
         <?php foreach ($days as $d):
@@ -418,15 +471,15 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
         <td style="text-align:right;font-weight:700;color:<?=$col($r['availability'])?>;"><?=$pct($r['availability'])?></td>
         <td style="text-align:center;">
           <?php if ($r['out_of_service']): ?>
-            <span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;color:var(--amber);background:var(--amber-d);">OUT OF SERVICE</span>
-          <?php elseif (!empty($r['standby'])): ?>
-            <span class="badge-standby" style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;color:var(--blue);background:var(--g2);" title="Reserve capacity — no standing allowance, and not in the availability %">STAND-BY</span>
+            <span class="badge b-high" title="Planned out of service this week — excluded from availability, counted in the unit view">OUT OF SERVICE</span>
           <?php elseif (!empty($r['out_days'])): ?>
-            <span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;color:var(--amber);background:var(--amber-d);">OUT <?=(int)$r['out_days']?> DAY<?=$r['out_days'] == 1 ? '' : 'S'?></span>
+            <span class="badge b-high" title="<?= (int)$r['out_days'] ?> planned out-of-service day<?= (int)$r['out_days'] === 1 ? '' : 's' ?> this week">OUT <?= (int)$r['out_days'] ?> DAY<?= (int)$r['out_days'] === 1 ? '' : 'S' ?></span>
+          <?php elseif (!empty($r['standby'])): ?>
+            <span class="badge b-standby" title="Reserve capacity — no standing allowance, and not in the availability %">STAND-BY</span>
           <?php elseif (!$r['has_plan']): ?>
-            <span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:600;color:var(--t3);background:var(--g2);">NO PLAN</span>
+            <span class="badge b-secondary">NO PLAN</span>
           <?php else: ?>
-            <span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;color:var(--green);background:var(--green-d);">PLANNED</span>
+            <span class="badge b-completed">PLANNED</span>
           <?php endif; ?>
         </td>
       </tr>
@@ -435,6 +488,23 @@ foreach ($warnings as $w) $overbooked[$w['equipment_id'] . '|' . $w['date']] = $
   </table>
 </div>
 <?php endforeach; ?>
+</div>
+
+<!-- Empty state shown when a status tab or search leaves no matching machine -->
+<div id="forecast-empty" style="display:none;margin-top:14px;">
+  <div class="card" style="padding:26px;text-align:center;">
+    <div style="font-weight:600;color:var(--t1);">No machines match</div>
+    <div class="cs" style="margin-top:6px;">Try a different status tab, or clear the search box.</div>
+    <a id="forecast-reset" href="#" class="ca" style="margin-top:10px;">Show all machines</a>
+  </div>
+</div>
+<div class="cs" style="font-size:11px;max-width:640px;line-height:1.7;">
+  <strong>Filter tabs.</strong> The number on each tab is every machine in that status for
+  <strong><?=htmlspecialchars((string)$iso_label)?></strong> — the tab narrows the machine list below;
+  group roll-ups and the unit view stay fleet-wide. Cell colour shows how much of the open day is
+  booked (darker = more booked); a red outline marks an overbooked day.
+</div>
+<script src="<?= base_url('assets/js/wms-tables.js') ?>" defer></script>
 
 <?php if ($is_supervisor && !$frozen): ?>
 <!-- ── Manual override ───────────────────────────────────────────────── -->
