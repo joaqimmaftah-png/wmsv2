@@ -916,7 +916,7 @@ try:
         and 'C-HEADT 007' in t_lub_html
         and 'id="lubRecordBtn"' not in t_lub_html
         and '+ Record Consumption' not in t_lub_html
-        and 'Lube Budget' not in t_lub_html
+        and '/lubricants/budget' not in t_lub_html
     )
 
     # Verify summary_json, direct Storekeeper/Technician CSV & XLSX exports, and Budget CSV/XLSX exports
