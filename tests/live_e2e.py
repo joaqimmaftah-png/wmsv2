@@ -826,18 +826,18 @@ try:
         'unit': 'L',
         'unit_cost': '950.00',
     })
-    assert st_lt_bad == 200 and b'Type not saved' in lt_bad_b and b'PAO Synthetic Oil</td>' not in lt_bad_b
+    assert st_lt_bad == 200 and 'Type not saved' in lt_bad_b and 'PAO Synthetic Oil</td>' not in lt_bad_b
 
     # A valid existing enum category saves with its original value.
     st_lt_c, _, lt_good_b = post_op(opener, '/lubricants/types', {
-        'csrf_token_wms': csrf_from(lt_bad_b.decode('utf-8', 'replace')),
+        'csrf_token_wms': csrf_from(lt_bad_b),
         'name': 'PAO Synthetic Oil',
         'category': 'Other',
         'grade': 'PAO 68',
         'unit': 'L',
         'unit_cost': '950.00',
     })
-    assert st_lt_c == 200 and b'PAO Synthetic Oil' in lt_good_b
+    assert st_lt_c == 200 and 'PAO Synthetic Oil' in lt_good_b
 
     # Storekeeper defines OEM spec (28L Engine Oil), saves monthly budget, and logs 2 consumption issues (EX 006 & C-HEADT 007)
     _, _, st_spec_b = get_bytes('/lubricants/specifications', store_op)
