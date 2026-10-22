@@ -270,7 +270,7 @@ jobs:
               sorted_html = get('/team/report?sort=hours&dir=desc&tab=recorded&per_page=10&page=1')
               assert 'aria-sort="descending"' in sorted_html and 'CI Supervisor' in sorted_html
               search_html = get('/team/report?q=Moshi&view=cards')
-              assert 'John Moshi' in search_html and 'CI Supervisor' not in search_html and 'ts-mode-cards' in search_html
+              assert 'John Moshi' in search_html and 'data-worker-name="CI Supervisor"' not in search_html and 'ts-mode-cards' in search_html
 
               # Verify JSON Drawer endpoint for live weekly AML sheet inspection
               st_js, _, js_raw = get_bytes(f'/team/sheet_json/{sup_id}?period=full')
