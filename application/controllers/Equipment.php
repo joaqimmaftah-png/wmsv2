@@ -247,7 +247,12 @@ class Equipment extends MY_Controller {
 
         $categories = array_keys($categories_map);
         sort($categories, SORT_NATURAL | SORT_FLAG_CASE);
-        $report_groups = $this->Equipment_model->report_groups();
+        $raw_groups = $this->Equipment_model->report_groups();
+        $report_groups = array();
+        foreach ($raw_groups as $gk => $gv) {
+            $code = is_int($gk) ? (string)$gv : (string)$gk;
+            if ($code !== '' && !in_array($code, $report_groups, TRUE)) $report_groups[] = $code;
+        }
         foreach (array_keys($groups_seen) as $gs) {
             if (!in_array($gs, $report_groups, TRUE)) $report_groups[] = $gs;
         }
@@ -335,7 +340,7 @@ class Equipment extends MY_Controller {
                 $guard($eq->category),
                 $guard($eq->brand),
                 $guard($eq->model),
-                $eq->year_manufacture ? (string)$eq->year_manufacture : '',
+                (!empty($eq->year) ? (string)$eq->year : (!empty($eq->year_manufacture) ? (string)$eq->year_manufacture : '')),
                 $guard($eq->serial_number),
                 $guard($eq->engine_model),
                 number_format((float)$eq->current_hours, 1, '.', ''),
@@ -384,7 +389,7 @@ class Equipment extends MY_Controller {
         $spec_items = array();
         foreach ($specs as $sp) {
             $spec_items[] = array(
-                'key'   => (string)$sp->spec_key,
+                'key'   => (string)(isset($sp->spec_label) && $sp->spec_label !== '' ? $sp->spec_label : $sp->spec_key),
                 'value' => (string)$sp->spec_value,
             );
         }
@@ -434,7 +439,7 @@ class Equipment extends MY_Controller {
                 'category'        => (string)(isset($eq->category) ? $eq->category : '—'),
                 'brand'           => (string)(isset($eq->brand) ? $eq->brand : '—'),
                 'model'           => (string)(isset($eq->model) ? $eq->model : '—'),
-                'year'            => $eq->year_manufacture ? (string)$eq->year_manufacture : '—',
+                'year'            => (!empty($eq->year) ? (string)$eq->year : (!empty($eq->year_manufacture) ? (string)$eq->year_manufacture : '—')),
                 'serial_number'   => $eq->serial_number ? (string)$eq->serial_number : '—',
                 'engine_model'    => $eq->engine_model ? (string)$eq->engine_model : '—',
                 'current_hours'   => number_format((float)$eq->current_hours, 1) . ' hrs',
@@ -474,6 +479,7 @@ class Equipment extends MY_Controller {
         }
         $data['page_title']    = 'Add Equipment';
         $data['types']         = $this->Equipment_model->get_types();
+        $data['eq_types']      = $data['types'];
         $data['report_groups'] = $this->Equipment_model->report_groups();
         $data['report_sites']  = $this->Equipment_model->report_sites();
         $data['equipment']     = null;
@@ -485,12 +491,13 @@ class Equipment extends MY_Controller {
             $this->form_validation->set_rules('model', 'Model', 'required');
 
             if ($this->form_validation->run()) {
+                $yr_in = $this->input->post('year') ?: $this->input->post('year_manufacture');
                 $insert = [
                     'registration_no'   => strtoupper($this->input->post('registration_no', TRUE)),
                     'equipment_type_id' => $this->input->post('equipment_type_id'),
                     'brand'             => $this->input->post('brand', TRUE),
                     'model'             => $this->input->post('model', TRUE),
-                    'year_manufacture'  => $this->input->post('year_manufacture') ?: null,
+                    'year'              => $yr_in ? (int)$yr_in : null,
                     'serial_number'     => $this->input->post('serial_number', TRUE),
                     'engine_model'      => $this->input->post('engine_model', TRUE),
                     'current_hours'     => (float)$this->input->post('current_hours'),
@@ -537,6 +544,7 @@ class Equipment extends MY_Controller {
         $data['page_title']    = 'Edit: ' . $eq->registration_no;
         $data['equipment']     = $eq;
         $data['types']         = $this->Equipment_model->get_types();
+        $data['eq_types']      = $data['types'];
         $data['report_groups'] = $this->Equipment_model->report_groups();
         $data['report_sites']  = $this->Equipment_model->report_sites();
 
@@ -546,11 +554,12 @@ class Equipment extends MY_Controller {
             $this->form_validation->set_rules('model', 'Model', 'required');
 
             if ($this->form_validation->run()) {
+                $yr_in = $this->input->post('year') ?: $this->input->post('year_manufacture');
                 $update = [
                     'equipment_type_id' => $this->input->post('equipment_type_id'),
                     'brand'             => $this->input->post('brand', TRUE),
                     'model'             => $this->input->post('model', TRUE),
-                    'year_manufacture'  => $this->input->post('year_manufacture') ?: null,
+                    'year'              => $yr_in ? (int)$yr_in : null,
                     'serial_number'     => $this->input->post('serial_number', TRUE),
                     'engine_model'      => $this->input->post('engine_model', TRUE),
                     'current_hours'     => (float)$this->input->post('current_hours'),

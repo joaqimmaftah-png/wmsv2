@@ -1327,9 +1327,43 @@ check('WO-07 & WO-08 Dual View Mode + Accessible Slide-Over Work Order Drawer re
    14. Equipment Fleet DataTable, O(1) Telemetry Hydration, RBAC & XSS Audit
    ───────────────────────────────────────────────────────────────────────── */
 
-require_once APPPATH . 'models/Equipment_model.php';
+require_once APPPATH . 'helpers/equip_helper.php';
+if (!class_exists('Equipment_model', FALSE)) {
+    require_once APPPATH . 'models/Equipment_model.php';
+}
 
-$eqDb = new Stub_db();
+class EquipFleetFakeResult {
+    private $rows;
+    public function __construct(array $rows) { $this->rows = $rows; }
+    public function result() { return $this->rows; }
+    public function row() { return isset($this->rows[0]) ? $this->rows[0] : NULL; }
+    public function num_rows() { return count($this->rows); }
+}
+
+class EquipFleetFakeDB {
+    public $queries = array();
+    public $queue   = array();
+
+    public function dbprefix($t = '') { return (string)$t; }
+    public function table_exists($t) {
+        return in_array($t, array('equipment', 'equipment_types', 'report_sites', 'report_groups', 'work_orders', 'pm_schedules', 'equipment_specs', 'users'), TRUE);
+    }
+    public function select($s, $escape = NULL) { return $this; }
+    public function from($t) { return $this; }
+    public function join($t, $c, $type = '') { return $this; }
+    public function where($k, $v = NULL) { return $this; }
+    public function where_in($k, $vals) { return $this; }
+    public function group_by($g) { return $this; }
+    public function order_by($c, $d = '') { return $this; }
+    public function limit($n, $off = 0) { return $this; }
+    public function get($table = NULL) {
+        $this->queries[] = (string)$table;
+        $next = array_shift($this->queue);
+        return $next ? $next : new EquipFleetFakeResult(array());
+    }
+}
+
+$eqDb = new EquipFleetFakeDB();
 $eqModel = new Equipment_model();
 $eqModel->db = $eqDb;
 
@@ -1344,7 +1378,7 @@ for ($m = 1; $m <= 18; $m++) {
         'category'                 => ($m % 2 === 1) ? 'Mobile Equipment' : 'Heavy Truck',
         'brand'                    => ($m === 1) ? 'CATERPILLAR' : 'SHACMAN',
         'model'                    => ($m === 1) ? '336D2L' : 'F3000<script>alert(7)</script>',
-        'year_manufacture'         => 2020 + ($m % 5),
+        'year'                     => 2020 + ($m % 5),
         'serial_number'            => 'SN-EQ-' . $m,
         'engine_model'             => 'C9-ACERT-' . $m,
         'current_hours'            => 1250.5 + ($m * 40),
@@ -1360,20 +1394,20 @@ for ($m = 1; $m <= 18; $m++) {
 }
 
 $eqDb->queue = array(
-    new Stub_result($fleetMachines),
-    new Stub_result(array(
-        (object)array('code' => 'MET_PLANT', 'name' => 'MET PLANT'),
-        (object)array('code' => 'WORKSHOP',  'name' => 'WORKSHOP'),
+    new EquipFleetFakeResult($fleetMachines),
+    new EquipFleetFakeResult(array(
+        (object)array('code' => 'MET_PLANT', 'label' => 'MET PLANT'),
+        (object)array('code' => 'WORKSHOP',  'label' => 'WORKSHOP'),
     )),
-    new Stub_result(array(
+    new EquipFleetFakeResult(array(
         (object)array('equipment_id' => 1, 'open_cnt' => 2, 'crit_cnt' => 1),
         (object)array('equipment_id' => 2, 'open_cnt' => 1, 'crit_cnt' => 0),
     )),
-    new Stub_result(array(
+    new EquipFleetFakeResult(array(
         (object)array('equipment_id' => 1, 'interval_type' => 'Hours', 'next_due_date' => '2026-10-01', 'next_due_hours' => 1200),
         (object)array('equipment_id' => 2, 'interval_type' => 'Days',  'next_due_date' => '2026-12-15', 'next_due_hours' => NULL),
     )),
-    new Stub_result(array(
+    new EquipFleetFakeResult(array(
         (object)array('equipment_id' => 1, 'cnt' => 6),
         (object)array('equipment_id' => 2, 'cnt' => 4),
     )),
@@ -1397,16 +1431,16 @@ check('EQ-03 Verbatim Asset Register & Live Telemetry Hydration: preserves regis
     && in_array('UNMAPPED CAMP', $fleetOverview['locations'], TRUE));
 
 // EQ-02 Workorder_model::get_by_equipment() zero-N+1 verification
-$woEqDb = new Stub_db();
+$woEqDb = new EquipFleetFakeDB();
 $woEqModel = new Workorder_model();
 $woEqModel->db = $woEqDb;
 $woEqDb->queue = array(
-    new Stub_result(array(
+    new EquipFleetFakeResult(array(
         (object)array('id' => 11, 'wo_number' => 'WO-EQ-01', 'assigned_to' => '2,5'),
         (object)array('id' => 12, 'wo_number' => 'WO-EQ-02', 'assigned_to' => '5'),
         (object)array('id' => 13, 'wo_number' => 'WO-EQ-03', 'assigned_to' => '2'),
     )),
-    new Stub_result(array(
+    new EquipFleetFakeResult(array(
         (object)array('id' => 2, 'first_name' => 'John', 'last_name' => 'Moshi'),
         (object)array('id' => 5, 'first_name' => 'Asha', 'last_name' => 'Kileo'),
     )),

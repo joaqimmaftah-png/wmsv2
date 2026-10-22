@@ -71,7 +71,7 @@ class Equipment_model extends CI_Model {
         // Grouped open Work Orders per machine (1 SQL query)
         $wo_map = array();
         if ($this->db->table_exists('work_orders')) {
-            $w_rows = $this->db->select('equipment_id, COUNT(*) AS open_cnt, SUM(CASE WHEN priority = "Critical" THEN 1 ELSE 0 END) AS crit_cnt')
+            $w_rows = $this->db->select("equipment_id, COUNT(*) AS open_cnt, SUM(CASE WHEN priority = 'Critical' THEN 1 ELSE 0 END) AS crit_cnt", FALSE)
                 ->from('work_orders')
                 ->where_in('status', array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools'))
                 ->group_by('equipment_id')
@@ -101,7 +101,7 @@ class Equipment_model extends CI_Model {
         // Recorded manufacturer specs per machine (1 SQL query)
         $spec_map = array();
         if ($this->db->table_exists('equipment_specs')) {
-            $sp_rows = $this->db->select('equipment_id, COUNT(*) AS cnt')
+            $sp_rows = $this->db->select('equipment_id, COUNT(*) AS cnt', FALSE)
                 ->from('equipment_specs')
                 ->where('spec_value !=', '')
                 ->group_by('equipment_id')
@@ -179,6 +179,10 @@ class Equipment_model extends CI_Model {
             }
 
             $wo_info = isset($wo_map[$eid]) ? $wo_map[$eid] : array('open' => 0, 'crit' => 0);
+
+            if (!isset($eq->year_manufacture) || !$eq->year_manufacture) {
+                $eq->year_manufacture = isset($eq->year) ? $eq->year : NULL;
+            }
 
             $eq->open_wo_count    = (int)$wo_info['open'];
             $eq->crit_wo_count    = (int)$wo_info['crit'];
