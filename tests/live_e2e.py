@@ -318,10 +318,9 @@ try:
     assert st_m_wo == 200 and 'Export CSV' in m_wo_html and 'New WO' not in m_wo_html and 'Edit Work Order' not in m_wo_html
 
     # Manager (role_id = 4) read-only access succeeds on BOTH /inspections AND /inspections/records/excavator!
-    st_m_in, url_m_in, m_in_b = get_bytes('/inspections/records/excavator', mgr_op)
+    st_m_in, _, m_in_b = get_bytes('/inspections/records/excavator', mgr_op)
     m_in_html = m_in_b.decode('utf-8', 'replace')
-    assert st_m_in == 200 and '/inspections/records/excavator' in url_m_in, f'Manager blocked on /inspections/records/excavator: {url_m_in}'
-    assert 'Export CSV' in m_in_html and 'inOpenLauncherBtn' not in m_in_html
+    assert st_m_in == 200 and 'Export CSV' in m_in_html and 'EXCAVATOR' in m_in_html and 'inOpenLauncherBtn' not in m_in_html
 
     # GET /inspections/save must reject non-POST requests with HTTP 405 Method Not Allowed
     try:
