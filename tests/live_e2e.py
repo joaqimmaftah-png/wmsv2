@@ -854,6 +854,17 @@ try:
     })
     assert st_sp_save == 200
 
+    # Invalid negative specification cannot silently zero an already-saved OEM standard.
+    _, _, spec_before_b = get_bytes('/lubricants/specifications', store_op)
+    st_sp_bad, _, sp_bad_html = post_op(store_op, '/lubricants/specifications', {
+        'csrf_token_wms': csrf_from(spec_before_b.decode('utf-8', 'replace')),
+        'equipment_type_id': et_m.group(1),
+        'lube_type_id': '1',
+        'recommended_qty': '-10',
+        'service_interval_hours': '250',
+    })
+    assert st_sp_bad == 200 and 'Specification not saved' in sp_bad_html and '28.00 L' in sp_bad_html
+
     _, _, st_bgt_b = get_bytes(f'/lubricants/budget?year={cur_yr}&month={cur_mo}', store_op)
     st_bgt_save, _, st_bgt_after = post_op(store_op, '/lubricants/budget', {
         'csrf_token_wms': csrf_from(st_bgt_b.decode('utf-8', 'replace')),
