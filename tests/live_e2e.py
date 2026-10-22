@@ -437,7 +437,7 @@ try:
         'currency': 'USD',
         'total_cost': '1450.00',
         'linked_wo_id': str(wo1_id),
-        'notes': '=CMD("urgent boom seal kit")',
+        'notes': '=SUM(1,2)',
         'item_description[]': ['Main Boom Seal Kit'],
         'item_part_number[]': ['295-5609'],
         'item_unit[]': ['Set'],
@@ -567,10 +567,10 @@ try:
     assert (
         st_m_ocsv == 200
         and m_ocsv_b.startswith(b'\xef\xbb\xbf')
-        and "'=CMD(" in m_ocsv_txt
+        and "'=SUM(1,2)" in m_ocsv_txt
         and 'EX 006' in m_ocsv_txt
         and 'C-HEADT 007' in m_ocsv_txt
-    )
+    ), f'CSV check failed: status={st_m_ocsv} body={m_ocsv_txt[:400]!r}'
     st_m_oxls, _, m_oxls_b = get_bytes('/orders/export_xlsx', mgr_op)
     assert st_m_oxls == 200 and m_oxls_b[:4] == b'PK\x03\x04'
 
