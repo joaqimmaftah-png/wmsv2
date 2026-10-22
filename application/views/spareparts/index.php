@@ -929,6 +929,7 @@ if ($g('wo_status') !== '') $chips[] = array('WO State: ' . $g('wo_status'), arr
           + '<div class="sp-kv-box"><div class="sp-kv-lbl">Stock On Hand / Free / On PO</div><div class="sp-kv-val">' + esc(l.stock_qty) + ' / ' + esc(l.free_qty) + ' / +' + esc(l.on_order_qty) + '</div></div>'
           + '</div>';
 
+        <?php if ($can_write): ?>
         if (l.can_write && l.max_alloc_qty > 0) {
           html += '<div style="padding:12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;margin-bottom:14px;">'
             + '<div style="font-size:12px;font-weight:700;color:#1E3A8A;margin-bottom:6px;">Reserve Free Stock for ' + esc(l.wo_number) + '</div>'
@@ -938,6 +939,7 @@ if ($g('wo_status') !== '') $chips[] = array('WO State: ' . $g('wo_status'), arr
             + '<button type="submit" class="sp-btn sp-btn-primary sp-btn-sm">Allocate Stock</button>'
             + '</form></div>';
         }
+        <?php endif; ?>
 
         html += '<div style="font-size:11.5px;font-weight:700;text-transform:uppercase;color:#64748B;margin:10px 0 6px;">Stock Reservations (' + allocs.length + ')</div>';
         if (!allocs.length) {
@@ -947,12 +949,14 @@ if ($g('wo_status') !== '') $chips[] = array('WO State: ' . $g('wo_status'), arr
           allocs.forEach(function (a, idx) {
             html += '<div style="padding:9px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;' + (idx > 0 ? 'border-top:1px solid #E2E8F0;' : '') + '">'
               + '<div><strong>' + esc(a.qty_allocated) + ' ' + esc(l.unit) + '</strong> · ' + esc(a.status) + '<div style="font-size:11px;color:#64748B;">' + esc(a.allocated_at) + '</div></div>';
+            <?php if ($can_write): ?>
             if (l.can_write && a.status === 'Allocated') {
               html += '<div style="display:flex;gap:6px;">'
                 + '<form method="post" action="' + esc(issueBase + a.id) + '" style="margin:0;">' + csrfHidden() + '<button type="submit" class="sp-btn sp-btn-primary sp-btn-sm">Issue</button></form>'
                 + '<form method="post" action="' + esc(releaseBase + a.id) + '" style="margin:0;">' + csrfHidden() + '<button type="submit" class="sp-btn sp-btn-sm">Release</button></form>'
                 + '</div>';
             }
+            <?php endif; ?>
             html += '</div>';
           });
           html += '</div>';
