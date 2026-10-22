@@ -76,7 +76,7 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
 }
 .lub-subnav a {
   padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600;
-  text-decoration: none; color: var(--t2); background: var(--card, #111827);
+  text-decoration: none; color: var(--t2); background: var(--surface);
   border: 1px solid var(--sep, rgba(148,163,184,0.16));
 }
 .lub-subnav a.is-active { background: var(--blue); color: #ffffff; border-color: var(--blue); }
@@ -97,7 +97,7 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
   display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px;
 }
 .lub-kpi {
-  padding: 12px 14px; border-radius: 12px; background: var(--card, #111827);
+  padding: 12px 14px; border-radius: 12px; background: var(--surface);
   border: 1px solid var(--sep, rgba(148,163,184,0.16)); min-width: 0;
 }
 .lub-kpi-k { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--t3); }
@@ -108,7 +108,7 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
 .lub-tab {
   display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 8px;
   font-size: 12px; font-weight: 600; color: var(--t2); text-decoration: none;
-  background: var(--card, #111827); border: 1px solid var(--sep, rgba(148,163,184,0.16));
+  background: var(--surface); border: 1px solid var(--sep, rgba(148,163,184,0.16));
 }
 .lub-tab.is-active { background: var(--blue); color: #ffffff; border-color: var(--blue); }
 .lub-tab-cnt {
@@ -120,7 +120,7 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
 .lub-toolbar {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
   padding: 10px 12px; margin-bottom: 12px; border-radius: 12px;
-  background: var(--card, #111827); border: 1px solid var(--sep, rgba(148,163,184,0.16));
+  background: var(--surface); border: 1px solid var(--sep, rgba(148,163,184,0.16));
 }
 .lub-filter-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
 .lub-search-wrap { position: relative; flex: 1 1 200px; min-width: 165px; max-width: 280px; }
@@ -147,8 +147,8 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
 }
 .lub-batch-bar.is-open { display: flex; }
 
-.lub-table-wrap { width: 100%; overflow-x: hidden; }
-.lub-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.lub-table-wrap { width: 100%; overflow-x: auto; }
+.lub-table { width: 100%; min-width: 950px; table-layout: fixed; border-collapse: collapse; }
 .lub-table th, .lub-table td {
   padding: 10px 8px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis;
   border-bottom: 1px solid var(--g2, rgba(148,163,184,0.12));
@@ -183,15 +183,15 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
 .lub-badge {
   display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700;
 }
-.lub-b-ok   { background: rgba(22,163,74,0.16); color: #4ade80; border: 1px solid rgba(74,222,128,0.32); }
-.lub-b-over { background: rgba(220,38,38,0.18); color: #fca5a5; border: 1px solid rgba(252,165,165,0.35); }
-.lub-b-warn { background: rgba(245,158,11,0.16); color: #fcd34d; border: 1px solid rgba(252,211,77,0.32); }
-.lub-b-info { background: rgba(56,189,248,0.14); color: #7dd3fc; border: 1px solid rgba(125,211,252,0.3); }
+.lub-b-ok   { background: var(--green-d); color: var(--green); border: 1px solid var(--sep); }
+.lub-b-over { background: var(--red-d); color: var(--red); border: 1px solid var(--sep); }
+.lub-b-warn { background: var(--amber-d); color: var(--amber); border: 1px solid var(--sep); }
+.lub-b-info { background: var(--blue-d); color: var(--blue); border: 1px solid var(--sep); }
 
 .lub-groups-container { display: none; }
 .lub-group-card {
   margin-bottom: 12px; border-radius: 12px; overflow: hidden;
-  background: var(--card, #111827); border: 1px solid var(--sep, rgba(148,163,184,0.16));
+  background: var(--surface); border: 1px solid var(--sep, rgba(148,163,184,0.16));
 }
 .lub-group-hdr {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
@@ -206,7 +206,7 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
 .lub-cards-container { display: none; }
 .lub-cards-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .lub-card {
-  padding: 14px; border-radius: 12px; background: var(--card, #111827);
+  padding: 14px; border-radius: 12px; background: var(--surface);
   border: 1px solid var(--sep, rgba(148,163,184,0.16)); display: flex; flex-direction: column; gap: 10px; min-width: 0;
 }
 .lub-card-metrics {
@@ -235,11 +235,12 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
 .lub-drawer-backdrop.is-open { opacity: 1; pointer-events: auto; }
 .lub-drawer {
   position: fixed; top: 0; right: 0; bottom: 0; width: min(500px, 100vw); z-index: 1050;
-  background: var(--card, #0f172a); border-left: 1px solid var(--sep, rgba(148,163,184,0.22));
+  background: var(--surface); border-left: 1px solid var(--sep, rgba(148,163,184,0.22));
   box-shadow: -16px 0 40px rgba(0,0,0,0.45); display: flex; flex-direction: column;
   transform: translateX(100%); visibility: hidden; transition: transform .2s ease, visibility .2s;
 }
 .lub-drawer.is-open { transform: translateX(0); visibility: visible; }
+.lub-drawer :focus-visible, #lubShell :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .lub-drawer-hdr {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
   padding: 16px 18px; border-bottom: 1px solid var(--g2);
@@ -261,11 +262,12 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
 @media (max-width: 900px) {
   .lub-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lub-table-wrap { display: none !important; }
-  .lub-cards-container { display: block !important; }
+  #lubShell:not([data-view="groups"]) .lub-cards-container { display: block !important; }
   .lub-cards-grid { grid-template-columns: minmax(0, 1fr); }
   .lub-group-grid { grid-template-columns: minmax(0, 1fr); }
   .lub-search-wrap { max-width: 100%; flex: 1 1 100%; }
   .lub-kv-grid { grid-template-columns: minmax(0, 1fr); }
+  .lub-view-btn[data-lub-view="table"] { display: none; }
 }
 </style>
 
@@ -303,7 +305,7 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
   <!-- 5-Card KPI Strip -->
   <div class="lub-kpi-grid">
     <div class="lub-kpi">
-      <div class="lub-kpi-k">MTD Issues</div>
+      <div class="lub-kpi-k">Period Issues</div>
       <div class="lub-kpi-v"><?= (int)$kpi['records'] ?></div>
       <div class="lub-kpi-s"><?= (int)$kpi['linked_wo_count'] ?> linked to Work Orders</div>
     </div>
@@ -313,9 +315,9 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
       <div class="lub-kpi-s">Across <?= count($summary) ?> active fluid grade(s)</div>
     </div>
     <div class="lub-kpi">
-      <div class="lub-kpi-k">MTD Actual Spend</div>
+      <div class="lub-kpi-k">Estimated Issue Value</div>
       <div class="lub-kpi-v"><?= $lub_esc($ccy) ?> <?= number_format((float)$kpi['actual_cost'], 0) ?></div>
-      <div class="lub-kpi-s">Budget: <?= $lub_esc($ccy) ?> <?= number_format((float)$kpi['budget_cost'], 0) ?></div>
+      <div class="lub-kpi-s">Valued at month budget rate or current fluid rate; not historical purchase cost. Budget: <?= $lub_esc($ccy) ?> <?= number_format((float)$kpi['budget_cost'], 0) ?></div>
     </div>
     <div class="lub-kpi">
       <div class="lub-kpi-k">Machines Serviced</div>
@@ -362,25 +364,27 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
   <?php endif; ?>
 
   <!-- Segment Filter Tabs -->
-  <div class="lub-tabs" role="tablist" aria-label="Consumption segments">
+  <div class="lub-tabs" aria-label="Consumption segments">
     <?php
     $tabDefs = array(
         'all'           => array('All Records', $tab_counts['all']),
         'over_variance' => array('Over-Spec Variance', $tab_counts['over_variance']),
         'linked_wo'     => array('Linked to WO', $tab_counts['linked_wo']),
         'engine_hyd'    => array('Engine & Hydraulic', $tab_counts['engine_hyd']),
-        'unlinked'      => array('Top-Ups (No WO)', $tab_counts['unlinked']),
+        'unlinked'      => array('No WO Link', $tab_counts['unlinked']),
     );
     foreach ($tabDefs as $tk => $meta):
     ?>
     <a href="<?= $lub_esc($lub_url('lubricants', array('tab' => $tk === 'all' ? '' : $tk, 'page' => 1))) ?>"
        class="lub-tab <?= $tab === $tk ? 'is-active' : '' ?>"
-       role="tab" aria-selected="<?= $tab === $tk ? 'true' : 'false' ?>">
+       aria-current="<?= $tab === $tk ? 'page' : 'false' ?>">
       <span><?= $lub_esc($meta[0]) ?></span>
       <span class="lub-tab-cnt"><?= (int)$meta[1] ?></span>
     </a>
     <?php endforeach; ?>
   </div>
+
+  <p class="cs" style="margin:-5px 0 12px;">Segment counts include the selected month, before search and other filters.</p>
 
   <!-- Search, Filters & 3-Way Layout Switcher -->
   <div class="lub-toolbar">
@@ -430,9 +434,9 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
     </form>
 
     <div class="lub-view-switch" role="group" aria-label="Ledger layout">
-      <button type="button" class="lub-view-btn <?= $view_mode === 'table' ? 'is-active' : '' ?>" data-lub-view="table">Table</button>
-      <button type="button" class="lub-view-btn <?= $view_mode === 'groups' ? 'is-active' : '' ?>" data-lub-view="groups">By Machine</button>
-      <button type="button" class="lub-view-btn <?= $view_mode === 'cards' ? 'is-active' : '' ?>" data-lub-view="cards">Cards</button>
+      <button type="button" class="lub-view-btn <?= $view_mode === 'table' ? 'is-active' : '' ?>" aria-pressed="<?= $view_mode === 'table' ? 'true' : 'false' ?>" data-lub-view="table">Table</button>
+      <button type="button" class="lub-view-btn <?= $view_mode === 'groups' ? 'is-active' : '' ?>" aria-pressed="<?= $view_mode === 'groups' ? 'true' : 'false' ?>" data-lub-view="groups">By Machine</button>
+      <button type="button" class="lub-view-btn <?= $view_mode === 'cards' ? 'is-active' : '' ?>" aria-pressed="<?= $view_mode === 'cards' ? 'true' : 'false' ?>" data-lub-view="cards">Cards</button>
     </div>
   </div>
 
@@ -491,7 +495,7 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
         <?php else: foreach ($consumption as $c):
           $varVal = $c->variance !== NULL ? (float)$c->variance : NULL;
           $varCls = $varVal === NULL ? 'lub-b-info' : ($varVal > 0.0001 ? 'lub-b-over' : ($varVal < -0.0001 ? 'lub-b-warn' : 'lub-b-ok'));
-          $varTxt = $varVal === NULL ? 'Top-Up' : (($varVal > 0 ? '+' : '') . number_format($varVal, 1) . ' ' . $c->unit);
+          $varTxt = $varVal === NULL ? 'No OEM Std' : (($varVal > 0 ? '+' : '') . number_format($varVal, 1) . ' ' . $c->unit);
         ?>
           <tr data-lub-row="<?= (int)$c->id ?>">
             <td class="lub-c-chk">
@@ -560,7 +564,7 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
             <?php endif; ?>
           </div>
           <div style="font-size:11.5px;color:var(--t3);" class="mono">
-            <?= count($grp->records) ?> issue(s) &middot; <?= number_format((float)$grp->total_qty, 1) ?> units &middot; <?= $lub_esc($ccy) ?> <?= number_format((float)$grp->total_cost, 2) ?>
+            <?= count($grp->records) ?> issue(s) on this page &middot; estimated value <?= $lub_esc($ccy) ?> <?= number_format((float)$grp->total_cost, 2) ?>
           </div>
         </div>
         <div class="lub-group-grid">
@@ -588,8 +592,8 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
       <div class="lub-cards-grid">
         <?php foreach ($consumption as $cc):
           $cVar = $cc->variance !== NULL ? (float)$cc->variance : NULL;
-          $cCls = $cVar === NULL ? 'lub-b-info' : ($cVar > 0.0001 ? 'lub-b-over' : 'lub-b-ok');
-          $cTxt = $cVar === NULL ? 'Top-Up' : (($cVar > 0 ? '+' : '') . number_format($cVar, 1) . ' ' . $cc->unit);
+          $cCls = $cVar === NULL ? 'lub-b-info' : ($cVar > 0.0001 ? 'lub-b-over' : ($cVar < -0.0001 ? 'lub-b-warn' : 'lub-b-ok'));
+          $cTxt = $cVar === NULL ? 'No OEM Std' : (($cVar > 0 ? '+' : '') . number_format($cVar, 1) . ' ' . $cc->unit);
         ?>
         <div class="lub-card">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
@@ -673,6 +677,14 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
 (function () {
   var shell = document.getElementById('lubShell');
   if (!shell) return;
+  // At mobile widths the dense table becomes cards; reflect the actual view in the control.
+  if (window.matchMedia('(max-width: 900px)').matches && shell.getAttribute('data-view') === 'table') {
+    shell.setAttribute('data-view', 'cards');
+    var tableButton = document.querySelector('[data-lub-view="table"]');
+    var cardsButton = document.querySelector('[data-lub-view="cards"]');
+    if (tableButton) { tableButton.classList.remove('is-active'); tableButton.setAttribute('aria-pressed', 'false'); }
+    if (cardsButton) { cardsButton.classList.add('is-active'); cardsButton.setAttribute('aria-pressed', 'true'); }
+  }
 
   var summaryBase    = <?= json_encode(rtrim(base_url('lubricants/summary_json'), '/') . '/') ?>;
   var woViewBase     = <?= json_encode(rtrim(base_url('workorders/view'), '/') . '/') ?>;
@@ -691,14 +703,28 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
   }
 
   // 3-Way View Switcher
-  var viewInput = document.getElementById('lubViewInput');
   Array.prototype.forEach.call(document.querySelectorAll('[data-lub-view]'), function (btn) {
     btn.addEventListener('click', function () {
       var mode = btn.getAttribute('data-lub-view') || 'table';
+      // Switch immediately without losing row selection or drawer context.
+      // Persist the mode in the URL, form and pager for subsequent navigation.
       shell.setAttribute('data-view', mode);
+      var viewInput = document.getElementById('lubViewInput');
       if (viewInput) viewInput.value = mode;
       Array.prototype.forEach.call(document.querySelectorAll('[data-lub-view]'), function (b) {
-        b.classList.toggle('is-active', b === btn);
+        var active = b === btn;
+        b.classList.toggle('is-active', active);
+        b.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      var url = new URL(window.location.href);
+      if (mode === 'table') url.searchParams.delete('view');
+      else url.searchParams.set('view', mode);
+      window.history.replaceState(null, '', url.toString());
+      Array.prototype.forEach.call(document.querySelectorAll('.lub-pager a[href]'), function (link) {
+        var dest = new URL(link.href, window.location.href);
+        if (mode === 'table') dest.searchParams.delete('view');
+        else dest.searchParams.set('view', mode);
+        link.href = dest.toString();
       });
     });
   });
@@ -746,6 +772,7 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
   var nextBtn   = document.getElementById('lubNextBtn');
   var lastFocus = null;
   var currentId = null;
+  var requestSeq = 0;
 
   function orderedIds() {
     var seen = {};
@@ -758,6 +785,7 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
   }
 
   function closeDrawer() {
+    requestSeq++;
     drawer.classList.remove('is-open');
     backdrop.classList.remove('is-open');
     drawer.setAttribute('aria-hidden', 'true');
@@ -767,14 +795,17 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
   function openDrawer(id, triggerEl) {
     if (triggerEl) lastFocus = triggerEl;
     currentId = String(id);
+    var thisRequest = ++requestSeq;
     drawer.classList.add('is-open');
     backdrop.classList.add('is-open');
     drawer.setAttribute('aria-hidden', 'false');
+    if (closeBtn) closeBtn.focus();
     bodyEl.innerHTML = '<div style="padding:18px 0;color:var(--t3);font-size:12.5px;">Loading fluid issue dossier…</div>';
 
     fetch(summaryBase + encodeURIComponent(id), { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (res) {
+        if (thisRequest !== requestSeq) return;
         if (!res || !res.ok || !res.record) {
           bodyEl.innerHTML = '<div style="color:var(--red);">Unable to load consumption record.</div>';
           return;
@@ -805,6 +836,7 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
         ctasEl.innerHTML = ctas;
       })
       .catch(function () {
+        if (thisRequest !== requestSeq) return;
         bodyEl.innerHTML = '<div style="color:var(--red);">Network error loading consumption dossier.</div>';
       });
   }
@@ -836,6 +868,19 @@ $lub_sort_icon = function ($col) use ($sort, $dir) {
       return;
     }
     if (!drawer.classList.contains('is-open')) return;
+    if (ev.key === 'Tab') {
+      var focusables = Array.prototype.slice.call(drawer.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled])'))
+        .filter(function (el) { return el.getClientRects().length > 0; });
+      if (focusables.length) {
+        var first = focusables[0], last = focusables[focusables.length - 1];
+        if (ev.shiftKey && (document.activeElement === first || !drawer.contains(document.activeElement))) {
+          ev.preventDefault(); last.focus();
+        } else if (!ev.shiftKey && (document.activeElement === last || !drawer.contains(document.activeElement))) {
+          ev.preventDefault(); first.focus();
+        }
+      }
+      return;
+    }
     if (ev.key === 'Escape') { ev.preventDefault(); closeDrawer(); }
     else if (ev.key === 'ArrowRight') { ev.preventDefault(); stepDrawer(1); }
     else if (ev.key === 'ArrowLeft') { ev.preventDefault(); stepDrawer(-1); }

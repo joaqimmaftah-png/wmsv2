@@ -165,9 +165,21 @@ class Suppliers extends MY_Controller {
             return $cmp * $mul;
         });
 
-        // Group filtered suppliers by country corridor for the "By Country" view
+        $viewMode = strtolower(trim((string)$this->input->get('view', TRUE)));
+        if (!in_array($viewMode, array('table', 'groups', 'cards'), TRUE)) $viewMode = 'table';
+
+        $allowedPP     = array(10, 25, 50, 100, 150);
+        $perPage       = (int)$this->input->get('per_page');
+        if (!in_array($perPage, $allowedPP, TRUE)) $perPage = 25;
+        $totalFiltered = count($filtered);
+        $totalPages    = max(1, (int)ceil($totalFiltered / $perPage));
+        $page          = max(1, min((int)$this->input->get('page') ?: 1, $totalPages));
+        $offset        = ($page - 1) * $perPage;
+        $rows          = $paginate ? array_slice($filtered, $offset, $perPage) : $filtered;
+
+        // Group current-page filtered suppliers by country corridor for the "By Country" view
         $groupsMap = array();
-        foreach ($filtered as $s) {
+        foreach ($rows as $s) {
             $ck = trim((string)($s->country ?: 'Unspecified'));
             if (!isset($groupsMap[$ck])) {
                 $groupsMap[$ck] = (object)array(
@@ -188,17 +200,6 @@ class Suppliers extends MY_Controller {
         }
         ksort($groupsMap, SORT_NATURAL | SORT_FLAG_CASE);
 
-        $viewMode = strtolower(trim((string)$this->input->get('view', TRUE)));
-        if (!in_array($viewMode, array('table', 'groups', 'cards'), TRUE)) $viewMode = 'table';
-
-        $allowedPP     = array(10, 25, 50, 100, 150);
-        $perPage       = (int)$this->input->get('per_page');
-        if (!in_array($perPage, $allowedPP, TRUE)) $perPage = 25;
-        $totalFiltered = count($filtered);
-        $totalPages    = max(1, (int)ceil($totalFiltered / $perPage));
-        $page          = max(1, min((int)$this->input->get('page') ?: 1, $totalPages));
-        $offset        = ($page - 1) * $perPage;
-        $rows          = $paginate ? array_slice($filtered, $offset, $perPage) : $filtered;
 
         return array(
             'suppliers'      => $rows,

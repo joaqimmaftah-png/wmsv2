@@ -38,3 +38,14 @@ change the result.
 - Prefer exercising real code over duplicating a rule in the test. When a rule
   lives inline in a large file, extract it into a function first (that is why
   `wms_base_url_from_host()` exists) rather than copying it here.
+
+## Table UX regression checks (Node)
+
+```bash
+node tests/table_ux.js
+```
+
+Dependency-free source checks for the Suppliers, Lubricants and Lube Budget
+surfaces, grouped-page calculation and the actual inline budget draft calculator.
+These do not substitute for PHP/MySQL or browser/assistive-technology tests.
+See `docs/table-ux-audit.md` for the staging acceptance checklist.
