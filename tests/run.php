@@ -2032,7 +2032,16 @@ check('BL-05 Accessible Slide-Over Defect Drawer rendered cleanly',
    18. Inventory Catalogue Register Overhaul (/materials/inventory — INV-01..INV-06)
    ───────────────────────────────────────────────────────────────────────── */
 
-section('18. Inventory Catalogue Register Overhaul (/materials/inventory)');
+if (!function_exists('form_open_multipart')) {
+    function form_open_multipart($action = '', $attrs = '') {
+        return '<form method="post" enctype="multipart/form-data" action="' . htmlspecialchars($action, ENT_QUOTES, 'UTF-8') . '">';
+    }
+}
+if (!function_exists('csrf_field')) {
+    function csrf_field() {
+        return '<input type="hidden" name="csrf_token_wms" value="test-csrf-token">';
+    }
+}
 
 require_once APPPATH . 'models/Materials_model.php';
 

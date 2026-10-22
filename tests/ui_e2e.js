@@ -828,7 +828,7 @@ for (const rawLine of cookieLines) {
       const csvRes = await fetch('/materials/export_csv?q=CI-', { credentials: 'same-origin' });
       const csvText = await csvRes.text();
       const csvOk = csvRes.status === 200
-        && csvText.includes('Qty to Order')
+        && csvText.includes('Qty To Order')
         && csvText.includes('CI-FLT-9901')
         && csvText.includes('CI-HYD-9902');
 

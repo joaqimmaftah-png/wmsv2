@@ -384,7 +384,7 @@ try:
         and 'data-inv-move="receive"' not in m_inv_html
     ), 'Manager role RBAC mismatch on /materials/inventory!'
     st_m_icsv, _, m_icsv_b = get_bytes('/materials/export_csv?stock=out', mgr_op)
-    assert st_m_icsv == 200 and m_icsv_b.startswith(b'\xef\xbb\xbf') and b'Qty to Order' in m_icsv_b
+    assert st_m_icsv == 200 and m_icsv_b.startswith(b'\xef\xbb\xbf') and b'Qty To Order' in m_icsv_b
     st_m_ixls, _, m_ixls_b = get_bytes('/materials/export_xlsx?stock=out', mgr_op)
     assert st_m_ixls == 200 and m_ixls_b[:4] == b'PK\x03\x04'
 
