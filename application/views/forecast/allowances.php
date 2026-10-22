@@ -30,7 +30,7 @@ foreach ($rows as $r) if ($r['source'] === 'derived') $derived_n++;
 </div>
 
 <div class="grid g-3 mb-4">
-  <div class="kpi"><div class="kpi-glow" style="background:var(--blue)"></div>
+  <div class="kpi">
     <span class="kpi-tag">Unplanned allowance mode</span>
     <div class="kpi-num" style="font-size:20px;text-transform:uppercase;"><?=htmlspecialchars((string)($mode))?></div>
     <div class="cs" style="font-size:10px;margin-top:3px;">
@@ -39,12 +39,12 @@ foreach ($rows as $r) if ($r['source'] === 'derived') $derived_n++;
         : 'one flat figure for every machine — switch to derived to use measured loss rates'?>
     </div>
   </div>
-  <div class="kpi"><div class="kpi-glow" style="background:var(--amber)"></div>
+  <div class="kpi">
     <span class="kpi-tag">Machines with a derived rate</span>
     <div class="kpi-num"><?=$derived_n?><sup>/<?=count($rows)?></sup></div>
     <div class="cs" style="font-size:10px;margin-top:3px;"><?=$lookback?>-week lookback</div>
   </div>
-  <div class="kpi"><div class="kpi-glow" style="background:var(--purple,var(--blue))"></div>
+  <div class="kpi">
     <span class="kpi-tag">Standing allowance configured</span>
     <div class="kpi-num"><?=max(0, count($standing) - 1)?><sup>types</sup></div>
     <div class="cs" style="font-size:10px;margin-top:3px;">default <?=isset($standing['__default__']) ? $num($standing['__default__']) : '—'?> h/day</div>
@@ -98,9 +98,9 @@ foreach ($rows as $r) if ($r['source'] === 'derived') $derived_n++;
         <td class="mono" style="text-align:right;font-weight:600;color:<?= $r['source'] === 'derived' ? 'var(--t1)' : 'var(--t3)' ?>;"><?=$num($r['unplanned'])?></td>
         <td style="text-align:center;">
           <?php if ($r['source'] === 'derived'): ?>
-            <span style="padding:3px 8px;border-radius:5px;font-size:9.5px;font-weight:700;color:var(--blue);background:rgba(109,63,192,0.10);">DERIVED</span>
+            <span class="badge b-info" style="font-size:9.5px;">DERIVED</span>
           <?php else: ?>
-            <span style="padding:3px 8px;border-radius:5px;font-size:9.5px;font-weight:600;color:var(--t3);background:var(--g2);">FLAT</span>
+            <span class="badge b-secondary" style="font-size:9.5px;">FLAT</span>
           <?php endif; ?>
         </td>
         <td class="mono" style="text-align:center;color:var(--t3);"><?=$r['events'] ?: '—'?></td>

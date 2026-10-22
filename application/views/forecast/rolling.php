@@ -35,7 +35,7 @@ $col = function ($v) {
 <!-- ── the three week headlines ──────────────────────────────────────── -->
 <div class="grid g-3 mb-4">
   <?php foreach ($weeks as $w): $f = $w['plan']['fleet']; ?>
-  <div class="kpi"><div class="kpi-glow" style="background:<?=$col($f['availability'])?>"></div>
+  <div class="kpi">
     <span class="kpi-tag">
       <?=$w['offset'] === 0 ? 'This week' : '+' . $w['offset'] . ' week' . ($w['offset'] > 1 ? 's' : '')?>
       · <?=htmlspecialchars((string)($w['iso_label']))?>
@@ -57,7 +57,7 @@ $col = function ($v) {
     <div class="ct" style="font-size:12px;">Fleet across the three weeks</div>
     <div class="cs">Planned downtime hours and the availability they produce. Out-of-service machines are flagged, not scored.</div>
   </div>
-  <table class="tbl">
+  <table class="tbl tbl-sticky-first">
     <thead>
       <tr>
         <th>MACHINE</th><th>TYPE</th><th>LOCATION</th>
