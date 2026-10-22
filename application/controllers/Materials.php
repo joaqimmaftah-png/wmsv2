@@ -665,21 +665,277 @@ class Materials extends MY_Controller {
         $this->render('materials/transaction', $data);
     }
 
-    /* ── TRANSACTIONS HISTORY ──────────────────────────── */
-    public function transactions() {
+    /* ── TRANSACTIONS HISTORY (Enterprise Stock Ledger) ── */
+    protected function _build_transactions_dataset($paginate = TRUE) {
+        $allowedTabs = array('all', 'receive', 'issue', 'equipment', 'valued', 'live');
+        $tab = strtolower(trim((string)$this->input->get('tab', TRUE)));
+        if (!in_array($tab, $allowedTabs, TRUE)) $tab = 'all';
+
+        $qRaw = trim((string)$this->input->get('q', TRUE));
+        if ($qRaw === '') {
+            $qRaw = trim((string)$this->input->get('search', TRUE));
+        }
+
+        $idsRaw = trim((string)$this->input->get('ids', TRUE));
+        $idList = array();
+        if ($idsRaw !== '') {
+            foreach (explode(',', $idsRaw) as $tok) {
+                $iv = (int)trim($tok);
+                if ($iv > 0) $idList[$iv] = $iv;
+            }
+        }
+
         $filter = array(
-            'type'       => $this->input->get('type'),
-            'item_code'  => $this->input->get('item_code'),
-            'date_from'  => $this->input->get('date_from'),
-            'date_to'    => $this->input->get('date_to'),
+            'tab'             => $tab,
+            'q'               => $qRaw,
+            'type'            => strtoupper(trim((string)$this->input->get('type', TRUE))),
+            'source'          => trim((string)$this->input->get('source', TRUE)),
+            'category'        => trim((string)$this->input->get('category', TRUE)),
+            'allocation_type' => trim((string)$this->input->get('allocation_type', TRUE)),
+            'item_code'       => trim((string)$this->input->get('item_code', TRUE)),
+            'date_from'       => trim((string)$this->input->get('date_from', TRUE)),
+            'date_to'         => trim((string)$this->input->get('date_to', TRUE)),
+            'ids'             => array_values($idList),
         );
-        $data = array(
-            'transactions' => $this->Materials_model->get_transactions($filter),
-            'filter'       => $filter,
-            'page_title'   => 'Transaction History',
-            'role_id'   => $this->role_id,
+
+        $allowedSort = array('txn_date', 'type', 'item_code', 'allocation', 'qty', 'stock_after', 'unit_price');
+        $sort = strtolower(trim((string)$this->input->get('sort', TRUE)));
+        if (!in_array($sort, $allowedSort, TRUE)) $sort = 'txn_date';
+        $dir = strtolower(trim((string)$this->input->get('dir', TRUE))) === 'asc' ? 'asc' : 'desc';
+
+        $view = strtolower(trim((string)$this->input->get('view', TRUE))) === 'cards' ? 'cards' : 'table';
+
+        $allowedPerPage = array(10, 25, 50, 100, 150);
+        $perPage = (int)$this->input->get('per_page');
+        if (!in_array($perPage, $allowedPerPage, TRUE)) $perPage = 25;
+        $reqPage = max(1, (int)$this->input->get('page'));
+
+        if ($paginate) {
+            $offset = ($reqPage - 1) * $perPage;
+            $ledger = $this->Materials_model->get_transactions_ledger($filter, $sort, $dir, $perPage, $offset);
+            $totalFiltered = (int)$ledger['filtered_count'];
+            $totalPages = max(1, (int)ceil($totalFiltered / $perPage));
+            if ($reqPage > $totalPages) {
+                $reqPage = $totalPages;
+                $offset  = ($reqPage - 1) * $perPage;
+                $ledger  = $this->Materials_model->get_transactions_ledger($filter, $sort, $dir, $perPage, $offset);
+            }
+        } else {
+            $offset = 0;
+            $ledger = $this->Materials_model->get_transactions_ledger($filter, $sort, $dir, 0, 0);
+            $totalFiltered = (int)$ledger['filtered_count'];
+            $totalPages = 1;
+        }
+
+        $kpi = $ledger['kpi'];
+        $tabCounts = array(
+            'all'       => $kpi['total_all'],
+            'receive'   => $kpi['receive_count'],
+            'issue'     => $kpi['issue_count'],
+            'equipment' => $kpi['equip_issues'],
+            'valued'    => $kpi['valued_receipts'],
+            'live'      => $kpi['live_entries'],
         );
+
+        return array(
+            'transactions'    => $ledger['rows'],
+            'kpi'             => $kpi,
+            'tab_counts'      => $tabCounts,
+            'tab'             => $tab,
+            'q'               => $qRaw,
+            'filter'          => $filter,
+            'categories'      => $this->Materials_model->get_categories(),
+            'sort'            => $sort,
+            'dir'             => $dir,
+            'view_mode'       => $view,
+            'per_page'        => $perPage,
+            'allowed_pp'      => $allowedPerPage,
+            'current_page'    => $reqPage,
+            'total_pages'     => $totalPages,
+            'total_filtered'  => $totalFiltered,
+            'offset'          => $offset,
+            'filtered_totals' => $ledger['filtered_totals'],
+            'can_write'       => $this->can_write(),
+            'is_supervisor'   => $this->is_supervisor(),
+            'role_id'         => $this->role_id,
+        );
+    }
+
+    public function transactions() {
+        $data = $this->_build_transactions_dataset(TRUE);
+        $data['page_title'] = 'Stock Transaction Ledger';
         $this->render('materials/transactions', $data);
+    }
+
+    public function transaction_json($id = NULL) {
+        $id = (int)$id;
+        if ($id <= 0) {
+            $this->json(array('ok' => FALSE, 'error' => 'Invalid transaction ID.'), 404);
+            return;
+        }
+        $row = $this->Materials_model->get_transaction_detail($id);
+        if (!$row) {
+            $this->json(array('ok' => FALSE, 'error' => 'Stock movement voucher not found.'), 404);
+            return;
+        }
+        $this->json(array(
+            'ok'  => TRUE,
+            'txn' => array(
+                'id'                  => (int)$row->id,
+                'material_id'         => (int)$row->material_id,
+                'movement_date'       => (string)$row->movement_date,
+                'created_at'          => (string)($row->created_at ?? ''),
+                'type'                => (string)$row->type,
+                'source'              => (string)(isset($row->source) && $row->source !== '' ? $row->source : 'Manual'),
+                'reference_no'        => (string)(isset($row->reference_no) && $row->reference_no !== '' ? $row->reference_no : '—'),
+                'item_code'           => (string)($row->item_code ?? '—'),
+                'description'         => (string)($row->description ?? '—'),
+                'part_number_size'    => (string)(isset($row->part_number_size) && $row->part_number_size !== '' ? $row->part_number_size : '—'),
+                'category'            => (string)($row->category ?? '—'),
+                'location'            => (string)(isset($row->location) && $row->location !== '' ? $row->location : 'Unassigned'),
+                'unit'                => (string)(isset($row->unit) && $row->unit !== '' ? $row->unit : 'pcs'),
+                'current_sku_balance' => $row->current_sku_balance !== NULL ? (int)$row->current_sku_balance : NULL,
+                'equipment_id'        => isset($row->equipment_id) && $row->equipment_id ? (int)$row->equipment_id : NULL,
+                'equipment_code'      => (string)(isset($row->equipment_code) ? $row->equipment_code : ''),
+                'equip_model_label'   => trim((string)((isset($row->equip_brand) ? $row->equip_brand : '') . ' ' . (isset($row->equip_model) ? $row->equip_model : ''))),
+                'allocation_type'     => (string)(isset($row->allocation_type) ? $row->allocation_type : 'Other'),
+                'allocation_display'  => (string)($row->allocation_display !== '' ? $row->allocation_display : '—'),
+                'supplier_display'    => (string)($row->supplier_display !== '' ? $row->supplier_display : '—'),
+                'counterparty'        => (string)($row->counterparty !== '' ? $row->counterparty : '—'),
+                'qty'                 => (float)$row->qty,
+                'qty_approved'        => isset($row->qty_approved) && $row->qty_approved !== NULL ? (float)$row->qty_approved : NULL,
+                'unit_price'          => isset($row->unit_price) && $row->unit_price !== NULL ? (float)$row->unit_price : NULL,
+                'currency'            => (string)(isset($row->currency) && $row->currency !== '' ? $row->currency : ''),
+                'stock_before'        => $row->stock_before !== NULL ? (float)$row->stock_before : NULL,
+                'stock_after'         => $row->stock_after !== NULL ? (float)$row->stock_after : NULL,
+                'is_live_balance'     => (bool)$row->is_live_balance,
+                'operator_display'    => (string)($row->operator_display !== '' ? $row->operator_display : 'System / Import'),
+                'notes'               => (string)(isset($row->notes) && $row->notes !== '' ? $row->notes : '—'),
+                'can_write'           => $this->can_write(),
+            ),
+        ));
+    }
+
+    public function transactions_csv() {
+        $data = $this->_build_transactions_dataset(FALSE);
+        $rows = $data['transactions'];
+
+        $filename = 'stock-transactions-' . date('Y-m-d') . '.csv';
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
+
+        fputcsv($out, array(
+            'Ledger ID',
+            'Business Date',
+            'Recorded Timestamp',
+            'Movement Type',
+            'Source Channel',
+            'Reference / MRN / R.non',
+            'Item Code',
+            'Description',
+            'Category',
+            'Part No / Size',
+            'Charged To / Supplier',
+            'Allocation Type',
+            'Quantity',
+            'Unit',
+            'Unit Price',
+            'Currency',
+            'Stock Before',
+            'Stock After',
+            'Operator / Collector',
+            'Notes',
+        ));
+
+        foreach ($rows as $t) {
+            fputcsv($out, array(
+                'TXN-' . (int)$t->id,
+                (string)$t->movement_date,
+                (string)($t->created_at ?? ''),
+                $t->type === 'RECEIVE' ? 'RECEIVE (+In)' : 'ISSUE (-Out)',
+                $this->_csv_guard(isset($t->source) ? $t->source : 'Manual'),
+                $this->_csv_guard(isset($t->reference_no) ? $t->reference_no : ''),
+                $this->_csv_guard($t->item_code ?? ''),
+                $this->_csv_guard($t->description ?? ''),
+                $this->_csv_guard($t->category ?? ''),
+                $this->_csv_guard($t->part_number_size ?? ''),
+                $this->_csv_guard($t->counterparty ?? ''),
+                $this->_csv_guard(isset($t->allocation_type) ? $t->allocation_type : ''),
+                (float)$t->qty,
+                $this->_csv_guard($t->unit ?? ''),
+                isset($t->unit_price) && $t->unit_price !== NULL ? (float)$t->unit_price : '',
+                $this->_csv_guard(isset($t->currency) ? $t->currency : ''),
+                $t->stock_before !== NULL ? (float)$t->stock_before : '',
+                $t->stock_after !== NULL ? (float)$t->stock_after : '',
+                $this->_csv_guard($t->operator_display ?? ''),
+                $this->_csv_guard($t->notes ?? ''),
+            ));
+        }
+        fclose($out);
+        exit;
+    }
+
+    public function transactions_xlsx() {
+        $this->load->helper('xlsx');
+        $data = $this->_build_transactions_dataset(FALSE);
+        $rows = $data['transactions'];
+
+        $xlsx  = new XlsxWriter();
+        $sHdr  = 'bold|fontSize:10|fontName:Arial|align:center|valign:middle|bg:1E3A8A|fg:FFFFFF|border:thin|wrap';
+        $sCell = 'fontSize:10|fontName:Arial|valign:middle|border:thin|wrap';
+        $sC    = 'fontSize:10|fontName:Arial|align:center|valign:middle|border:thin';
+        $sIn   = 'bold|fontSize:10|fontName:Arial|align:center|valign:middle|border:thin|bg:DCFCE7|fg:166534';
+        $sOut  = 'bold|fontSize:10|fontName:Arial|align:center|valign:middle|border:thin|bg:FEF3C7|fg:92400E';
+        foreach (array($sHdr, $sCell, $sC, $sIn, $sOut) as $st) {
+            $xlsx->registerStyle($st);
+        }
+
+        $xlsx->addSheet('Stock Ledger');
+        $widths = array(1=>12, 2=>13, 3=>13, 4=>14, 5=>16, 6=>15, 7=>34, 8=>16, 9=>16, 10=>24, 11=>11, 12=>9, 13=>14, 14=>10, 15=>11, 16=>11, 17=>20, 18=>32);
+        foreach ($widths as $col => $w) {
+            $xlsx->setColWidth($col, $w);
+        }
+        $xlsx->writeRow(array(
+            'LEDGER ID', 'BUSINESS DATE', 'TYPE', 'SOURCE', 'REF / MRN', 'ITEM CODE',
+            'DESCRIPTION', 'CATEGORY', 'PART NO', 'CHARGED TO / SUPPLIER',
+            'QTY', 'UNIT', 'UNIT PRICE', 'CURRENCY', 'BEFORE', 'AFTER', 'OPERATOR', 'NOTES',
+        ), $sHdr);
+        $xlsx->freezePane('A2');
+        $xlsx->setAutoFilter('A1:R1');
+
+        foreach ($rows as $t) {
+            $isRec = ($t->type === 'RECEIVE');
+            $xlsx->writeRowStyled(array(
+                array('v' => 'TXN-' . (int)$t->id, 's' => $sC),
+                array('v' => (string)$t->movement_date, 's' => $sC),
+                array('v' => $isRec ? 'RECEIVE' : 'ISSUE', 's' => $isRec ? $sIn : $sOut),
+                array('v' => (string)(isset($t->source) ? $t->source : 'Manual'), 's' => $sC),
+                array('v' => (string)(isset($t->reference_no) ? $t->reference_no : ''), 's' => $sC),
+                array('v' => (string)($t->item_code ?? ''), 's' => $sC),
+                array('v' => (string)($t->description ?? ''), 's' => $sCell),
+                array('v' => (string)($t->category ?? ''), 's' => $sC),
+                array('v' => (string)($t->part_number_size ?? ''), 's' => $sCell),
+                array('v' => (string)($t->counterparty ?? ''), 's' => $sCell),
+                array('v' => (float)$t->qty, 's' => $sC),
+                array('v' => (string)($t->unit ?? ''), 's' => $sC),
+                array('v' => isset($t->unit_price) && $t->unit_price !== NULL ? (float)$t->unit_price : '', 's' => $sC),
+                array('v' => (string)(isset($t->currency) ? $t->currency : ''), 's' => $sC),
+                array('v' => $t->stock_before !== NULL ? (float)$t->stock_before : '', 's' => $sC),
+                array('v' => $t->stock_after !== NULL ? (float)$t->stock_after : '', 's' => $sC),
+                array('v' => (string)($t->operator_display ?? ''), 's' => $sCell),
+                array('v' => (string)($t->notes ?? ''), 's' => $sCell),
+            ));
+        }
+
+        $fname = 'Stock_Transactions_' . date('Ymd_His') . '.xlsx';
+        $tmp   = $this->_tmp_path($fname);
+        $xlsx->save($tmp);
+        $this->_send_file($tmp, $fname);
     }
 
     /* ── REPORT — legacy alias of the Excel export ─────── */

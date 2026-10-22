@@ -1099,4 +1099,265 @@ class Materials_model extends CI_Model {
                         ->get()->result();
         return $res ? $res : array();
     }
+
+    /**
+     * Shared WHERE builder for the Warehouse Stock Transactions Ledger so
+     * counts, totals, paginated slices, CSV exports, and XLSX exports apply
+     * identical filtering semantics.
+     */
+    protected function _apply_txn_filters($filter, $dateCol, $hasMove, $hasSup) {
+        $tab = isset($filter['tab']) ? (string)$filter['tab'] : 'all';
+        if ($tab === 'receive') {
+            $this->db->where('mt.type', 'RECEIVE');
+        } elseif ($tab === 'issue') {
+            $this->db->where('mt.type', 'ISSUE');
+        } elseif ($tab === 'equipment' && $hasMove) {
+            $this->db->where("mt.type = 'ISSUE' AND (mt.equipment_id IS NOT NULL OR mt.allocation_type = 'Equipment')", NULL, FALSE);
+        } elseif ($tab === 'valued' && $hasMove) {
+            $this->db->where("mt.type = 'RECEIVE' AND mt.unit_price IS NOT NULL AND mt.unit_price > 0", NULL, FALSE);
+        } elseif ($tab === 'live' && $hasMove) {
+            $this->db->where("mt.source <> 'Excel Import'", NULL, FALSE);
+        }
+
+        if (!empty($filter['type']) && in_array($filter['type'], array('RECEIVE', 'ISSUE'), TRUE)) {
+            $this->db->where('mt.type', $filter['type']);
+        }
+        if ($hasMove && !empty($filter['source'])) {
+            $this->db->where('mt.source', (string)$filter['source']);
+        }
+        if (!empty($filter['category'])) {
+            $this->db->where('m.category', (string)$filter['category']);
+        }
+        if ($hasMove && !empty($filter['allocation_type'])) {
+            $this->db->where('mt.allocation_type', (string)$filter['allocation_type']);
+        }
+        if (!empty($filter['item_code'])) {
+            $this->db->like('m.item_code', (string)$filter['item_code']);
+        }
+        if (!empty($filter['date_from'])) {
+            $this->db->where($dateCol . ' >=', (string)$filter['date_from']);
+        }
+        if (!empty($filter['date_to'])) {
+            $this->db->where($dateCol . ' <=', (string)$filter['date_to']);
+        }
+        if (!empty($filter['ids']) && is_array($filter['ids'])) {
+            $this->db->where_in('mt.id', $filter['ids']);
+        }
+        if (!empty($filter['q'])) {
+            $s = $this->db->escape_like_str(trim((string)$filter['q']));
+            $parts = array(
+                "m.item_code LIKE '%{$s}%' ESCAPE '!'",
+                "m.description LIKE '%{$s}%' ESCAPE '!'",
+                "m.part_number_size LIKE '%{$s}%' ESCAPE '!'",
+                "mt.notes LIKE '%{$s}%' ESCAPE '!'",
+            );
+            if ($hasMove) {
+                $parts[] = "mt.reference_no LIKE '%{$s}%' ESCAPE '!'";
+                $parts[] = "mt.allocation_label LIKE '%{$s}%' ESCAPE '!'";
+                $parts[] = "mt.person LIKE '%{$s}%' ESCAPE '!'";
+                $parts[] = "mt.supplier_name LIKE '%{$s}%' ESCAPE '!'";
+                $parts[] = "e.registration_no LIKE '%{$s}%' ESCAPE '!'";
+            }
+            if ($hasSup) {
+                $parts[] = "s.company_name LIKE '%{$s}%' ESCAPE '!'";
+            }
+            $this->db->where('(' . implode(' OR ', $parts) . ')', NULL, FALSE);
+        }
+    }
+
+    /** Normalize derived display fields on a transaction row. */
+    public function hydrate_transaction_row($r) {
+        if (!$r) return null;
+        $r->movement_date = !empty($r->movement_date)
+            ? (string)$r->movement_date
+            : (!empty($r->txn_date) ? (string)$r->txn_date : substr((string)($r->created_at ?? ''), 0, 10));
+        $sup = '';
+        if (!empty($r->linked_supplier_name)) {
+            $sup = trim((string)$r->linked_supplier_name);
+        } elseif (!empty($r->supplier_name)) {
+            $sup = trim((string)$r->supplier_name);
+        }
+        $r->supplier_display = $sup;
+
+        $alloc = '';
+        if (!empty($r->equipment_code)) {
+            $alloc = trim((string)$r->equipment_code);
+        } elseif (!empty($r->allocation_label)) {
+            $alloc = trim((string)$r->allocation_label);
+        }
+        $r->allocation_display = $alloc;
+        $r->counterparty = ($r->type === 'RECEIVE')
+            ? ($sup !== '' ? $sup : ($alloc !== '' ? $alloc : ''))
+            : ($alloc !== '' ? $alloc : ($sup !== '' ? $sup : ''));
+
+        $uName = isset($r->user_name) ? trim((string)$r->user_name) : '';
+        $person = isset($r->person) ? trim((string)$r->person) : '';
+        $r->operator_display = $person !== '' ? $person : $uName;
+        $r->is_live_balance  = ($r->stock_before !== NULL || $r->stock_after !== NULL || (isset($r->affects_balance) && (int)$r->affects_balance === 1));
+        return $r;
+    }
+
+    /**
+     * Constant O(1) query ledger loader (3 SQL SELECT queries regardless of
+     * whether `material_transactions` contains 10 rows or 100,000+ rows):
+     *   1. Global KPI + governance tab counts
+     *   2. Filtered count + filtered Receive/Issue quantity sums
+     *   3. Paginated (or full export when $limit === 0) ledger rows
+     */
+    public function get_transactions_ledger($filter = array(), $sort = 'txn_date', $dir = 'desc', $limit = 25, $offset = 0) {
+        $empty = array(
+            'available'       => FALSE,
+            'rows'            => array(),
+            'kpi'             => array(
+                'total_all' => 0, 'receive_count' => 0, 'issue_count' => 0,
+                'equip_issues' => 0, 'valued_receipts' => 0, 'live_entries' => 0,
+                'total_received_qty' => 0.0, 'total_issued_qty' => 0.0,
+            ),
+            'filtered_count'  => 0,
+            'filtered_totals' => array('in_qty' => 0.0, 'out_qty' => 0.0),
+        );
+        if (!$this->db->table_exists('material_transactions')) return $empty;
+
+        $hasMove = $this->has_movement_fields();
+        $hasEq   = $hasMove && $this->db->table_exists('equipment');
+        $hasSup  = $hasMove && $this->db->table_exists('suppliers');
+        $dateCol = $hasMove ? 'COALESCE(mt.txn_date, DATE(mt.created_at))' : 'DATE(mt.created_at)';
+
+        // 1. Single aggregate query for global KPIs & 6 governance tab counters
+        $kpiSql = 'COUNT(*) AS total_all, '
+            . "COALESCE(SUM(CASE WHEN mt.type = 'RECEIVE' THEN 1 ELSE 0 END), 0) AS receive_count, "
+            . "COALESCE(SUM(CASE WHEN mt.type = 'ISSUE' THEN 1 ELSE 0 END), 0) AS issue_count, "
+            . "COALESCE(SUM(CASE WHEN mt.type = 'RECEIVE' THEN mt.qty ELSE 0 END), 0) AS total_received_qty, "
+            . "COALESCE(SUM(CASE WHEN mt.type = 'ISSUE' THEN mt.qty ELSE 0 END), 0) AS total_issued_qty";
+        if ($hasMove) {
+            $kpiSql .= ", COALESCE(SUM(CASE WHEN mt.type = 'ISSUE' AND (mt.equipment_id IS NOT NULL OR mt.allocation_type = 'Equipment') THEN 1 ELSE 0 END), 0) AS equip_issues"
+                     . ", COALESCE(SUM(CASE WHEN mt.type = 'RECEIVE' AND mt.unit_price IS NOT NULL AND mt.unit_price > 0 THEN 1 ELSE 0 END), 0) AS valued_receipts"
+                     . ", COALESCE(SUM(CASE WHEN mt.source <> 'Excel Import' THEN 1 ELSE 0 END), 0) AS live_entries";
+        }
+        $kRow = $this->db->select($kpiSql, FALSE)->from('material_transactions mt')->get()->row();
+        $kpi = array(
+            'total_all'          => $kRow ? (int)$kRow->total_all : 0,
+            'receive_count'      => $kRow ? (int)$kRow->receive_count : 0,
+            'issue_count'        => $kRow ? (int)$kRow->issue_count : 0,
+            'equip_issues'       => ($kRow && isset($kRow->equip_issues)) ? (int)$kRow->equip_issues : 0,
+            'valued_receipts'    => ($kRow && isset($kRow->valued_receipts)) ? (int)$kRow->valued_receipts : 0,
+            'live_entries'       => ($kRow && isset($kRow->live_entries)) ? (int)$kRow->live_entries : 0,
+            'total_received_qty' => $kRow ? (float)$kRow->total_received_qty : 0.0,
+            'total_issued_qty'   => $kRow ? (float)$kRow->total_issued_qty : 0.0,
+        );
+
+        // 2. Filtered count & quantity rollup
+        $this->db->select(
+            "COUNT(*) AS cnt, "
+            . "COALESCE(SUM(CASE WHEN mt.type = 'RECEIVE' THEN mt.qty ELSE 0 END), 0) AS in_qty, "
+            . "COALESCE(SUM(CASE WHEN mt.type = 'ISSUE' THEN mt.qty ELSE 0 END), 0) AS out_qty",
+            FALSE
+        )->from('material_transactions mt')
+         ->join('materials m', 'm.id = mt.material_id', 'left');
+        if ($hasEq)  $this->db->join('equipment e', 'e.id = mt.equipment_id', 'left');
+        if ($hasSup) $this->db->join('suppliers s', 's.id = mt.supplier_id', 'left');
+        $this->_apply_txn_filters($filter, $dateCol, $hasMove, $hasSup);
+        $fRow = $this->db->get()->row();
+        $filteredCount  = $fRow ? (int)$fRow->cnt : 0;
+        $filteredTotals = array(
+            'in_qty'  => $fRow ? (float)$fRow->in_qty : 0.0,
+            'out_qty' => $fRow ? (float)$fRow->out_qty : 0.0,
+        );
+
+        // 3. Sorted slice (25 rows default page, or full filtered export when $limit === 0)
+        $sel = 'mt.*, m.item_code, m.description, m.part_number_size, m.unit, m.category, m.location, '
+             . 'CONCAT(u.first_name, " ", u.last_name) AS user_name, '
+             . $dateCol . ' AS movement_date';
+        if ($hasEq)  $sel .= ', e.registration_no AS equipment_code, e.brand AS equip_brand, e.model AS equip_model';
+        if ($hasSup) $sel .= ', s.company_name AS linked_supplier_name';
+
+        $this->db->select($sel, FALSE)
+            ->from('material_transactions mt')
+            ->join('materials m', 'm.id = mt.material_id', 'left')
+            ->join('users u', 'u.id = mt.created_by', 'left');
+        if ($hasEq)  $this->db->join('equipment e', 'e.id = mt.equipment_id', 'left');
+        if ($hasSup) $this->db->join('suppliers s', 's.id = mt.supplier_id', 'left');
+        $this->_apply_txn_filters($filter, $dateCol, $hasMove, $hasSup);
+
+        $d = strtoupper($dir) === 'ASC' ? 'ASC' : 'DESC';
+        switch ($sort) {
+            case 'type':
+                $this->db->order_by('mt.type', $d)->order_by('mt.id', 'DESC');
+                break;
+            case 'item_code':
+                $this->db->order_by('m.item_code', $d)->order_by('mt.id', 'DESC');
+                break;
+            case 'allocation':
+                if ($hasMove) {
+                    $this->db->order_by('COALESCE(e.registration_no, mt.allocation_label, s.company_name, mt.supplier_name)', $d, FALSE);
+                }
+                $this->db->order_by('mt.id', 'DESC');
+                break;
+            case 'qty':
+                $this->db->order_by('mt.qty', $d)->order_by('mt.id', 'DESC');
+                break;
+            case 'stock_after':
+                $this->db->order_by('mt.stock_after', $d)->order_by('mt.id', 'DESC');
+                break;
+            case 'unit_price':
+                if ($hasMove) $this->db->order_by('mt.unit_price', $d);
+                $this->db->order_by('mt.id', 'DESC');
+                break;
+            case 'txn_date':
+            default:
+                $this->db->order_by($dateCol, $d, FALSE)->order_by('mt.id', $d);
+                break;
+        }
+        if ($limit > 0) {
+            $this->db->limit((int)$limit, max(0, (int)$offset));
+        }
+        $raw = $this->db->get()->result();
+        $rows = array();
+        if ($raw) {
+            foreach ($raw as $r) {
+                $rows[] = $this->hydrate_transaction_row($r);
+            }
+        }
+
+        return array(
+            'available'       => TRUE,
+            'rows'            => $rows,
+            'kpi'             => $kpi,
+            'filtered_count'  => $filteredCount,
+            'filtered_totals' => $filteredTotals,
+        );
+    }
+
+    /** Fetch one full transaction voucher with linked SKU & Asset metadata. */
+    public function get_transaction_detail($id) {
+        $id = (int)$id;
+        if ($id <= 0 || !$this->db->table_exists('material_transactions')) return null;
+
+        $hasMove = $this->has_movement_fields();
+        $hasEq   = $hasMove && $this->db->table_exists('equipment');
+        $hasSup  = $hasMove && $this->db->table_exists('suppliers');
+        $dateCol = $hasMove ? 'COALESCE(mt.txn_date, DATE(mt.created_at))' : 'DATE(mt.created_at)';
+
+        $sel = 'mt.*, m.item_code, m.description, m.part_number_size, m.unit, m.category, m.location, '
+             . 'm.initial_stock, m.qty_received AS mat_received, m.qty_sortie AS mat_issued, '
+             . 'CONCAT(u.first_name, " ", u.last_name) AS user_name, '
+             . $dateCol . ' AS movement_date';
+        if ($hasEq)  $sel .= ', e.registration_no AS equipment_code, e.brand AS equip_brand, e.model AS equip_model';
+        if ($hasSup) $sel .= ', s.company_name AS linked_supplier_name';
+
+        $this->db->select($sel, FALSE)
+            ->from('material_transactions mt')
+            ->join('materials m', 'm.id = mt.material_id', 'left')
+            ->join('users u', 'u.id = mt.created_by', 'left');
+        if ($hasEq)  $this->db->join('equipment e', 'e.id = mt.equipment_id', 'left');
+        if ($hasSup) $this->db->join('suppliers s', 's.id = mt.supplier_id', 'left');
+        $row = $this->db->where('mt.id', $id)->limit(1)->get()->row();
+        if (!$row) return null;
+
+        $row = $this->hydrate_transaction_row($row);
+        $row->current_sku_balance = isset($row->initial_stock)
+            ? ((int)$row->initial_stock + (int)$row->mat_received - (int)$row->mat_issued)
+            : null;
+        return $row;
+    }
 }
