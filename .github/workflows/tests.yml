@@ -183,9 +183,9 @@ jobs:
             VALUES
               (9901, 'CI-FLT-9901', 'SPARE PART', 'Primary Fuel Filter Spin-On', '1R-0750', 'pcs', 4, 2, 3, 3, 5, 12, 34.50, 'Mantrac CAT', 'EX 006', 'BIN A-12'),
               (9902, 'CI-HYD-9902', 'SPARE PART', 'Boom Cylinder Seal Kit', '295-5609', 'Set', 2, 0, 2, 0, 2, 6, 88.00, 'HydraForce TZ', 'C-HEADT 007', 'BIN B-04');
-            INSERT INTO material_transactions (material_id, txn_type, txn_date, quantity, balance_after, reference, remarks)
+            INSERT INTO material_transactions (material_id, type, txn_date, qty, stock_after, reference_no, notes)
             VALUES
-              (9901, 'IN', '2026-10-20', 2, 3, 'MRN-9901', 'CI seed receipt');
+              (9901, 'RECEIVE', '2026-10-20', 2, 3, 'MRN-9901', 'CI seed receipt');
           "
 
           node tests/ui_e2e.js
