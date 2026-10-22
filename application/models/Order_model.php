@@ -458,4 +458,151 @@ class Order_model extends CI_Model {
         }
         return array('rate' => round($on_time / $n * 100, 1), 'sample' => $n);
     }
+
+    /**
+     * Constant O(1) query hydrator (<= 2 SQL SELECT queries regardless of PO
+     * count) for the Enterprise Spare Parts Orders Register, KPI telemetry,
+     * 6 governance tabs, and multi-currency CSV / XLSX exports.
+     */
+    public function get_register_overview() {
+        $today    = date('Y-m-d');
+        $soonDate = date('Y-m-d', strtotime('+7 days'));
+
+        $sel = 'o.*, s.company_name AS supplier_name';
+        $hasWo = $this->db->table_exists('work_orders');
+        $hasEq = $hasWo && $this->db->table_exists('equipment');
+        $hasUs = $this->db->table_exists('users');
+
+        if ($hasWo) {
+            $sel .= ', wo.wo_number, wo.title AS wo_title';
+        }
+        if ($hasEq) {
+            $sel .= ', e.id AS equipment_id, e.registration_no AS equipment_code';
+        }
+        if ($hasUs) {
+            $sel .= ', CONCAT(u.first_name, " ", u.last_name) AS requester_name';
+        }
+
+        $qb = $this->db->select($sel, FALSE)
+            ->from('spare_orders o')
+            ->join('suppliers s', 's.id = o.supplier_id', 'left');
+        if ($hasWo) {
+            $qb->join('work_orders wo', 'wo.id = o.linked_wo_id', 'left');
+        }
+        if ($hasEq) {
+            $qb->join('equipment e', 'e.id = wo.equipment_id', 'left');
+        }
+        if ($hasUs) {
+            $qb->join('users u', 'u.id = o.requested_by', 'left');
+        }
+        $rows = $qb->order_by('o.order_date', 'DESC')->order_by('o.id', 'DESC')->get()->result();
+        if (!$rows) $rows = array();
+
+        // Single batch query across all line items (eliminates N+1 completely)
+        $itemMap = array();
+        if (!empty($rows) && $this->db->table_exists('spare_order_items')) {
+            $allItems = $this->db
+                ->select('order_id, description, part_number, qty_ordered, qty_received')
+                ->from('spare_order_items')
+                ->order_by('id', 'ASC')
+                ->get()->result();
+            if ($allItems) {
+                foreach ($allItems as $it) {
+                    $oid = (int)$it->order_id;
+                    if (!isset($itemMap[$oid])) {
+                        $itemMap[$oid] = array(
+                            'count'        => 0,
+                            'qty_ordered'  => 0.0,
+                            'qty_received' => 0.0,
+                            'first_label'  => '',
+                            'search_terms' => array(),
+                        );
+                    }
+                    $itemMap[$oid]['count']++;
+                    $itemMap[$oid]['qty_ordered']  += (float)$it->qty_ordered;
+                    $itemMap[$oid]['qty_received'] += (float)($it->qty_received ?? 0);
+                    if ($itemMap[$oid]['first_label'] === '') {
+                        $itemMap[$oid]['first_label'] = trim((string)$it->description);
+                    }
+                    $itemMap[$oid]['search_terms'][] = trim((string)$it->description . ' ' . (string)($it->part_number ?? ''));
+                }
+            }
+        }
+
+        $kpi = array(
+            'total_all'      => count($rows),
+            'open_orders'    => 0,
+            'in_transit'     => 0,
+            'overdue'        => 0,
+            'due_soon'       => 0,
+            'discrepancies'  => 0,
+            'closed_orders'  => 0,
+            'open_spend_by_ccy' => array(),
+        );
+        $overdueList = array();
+        $dueSoonList = array();
+
+        foreach ($rows as $r) {
+            $oid = (int)$r->id;
+            $im  = isset($itemMap[$oid]) ? $itemMap[$oid] : array(
+                'count' => 0, 'qty_ordered' => 0.0, 'qty_received' => 0.0,
+                'first_label' => '', 'search_terms' => array(),
+            );
+
+            $r->line_count          = (int)$im['count'];
+            $r->qty_ordered_sum     = round((float)$im['qty_ordered'], 2);
+            $r->qty_received_sum    = round((float)$im['qty_received'], 2);
+            $r->qty_outstanding_sum = max(0.0, round($r->qty_ordered_sum - $r->qty_received_sum, 2));
+            $r->fulfillment_pct     = $r->qty_ordered_sum > 0
+                ? min(100, (int)round(($r->qty_received_sum / $r->qty_ordered_sum) * 100))
+                : 0;
+            $r->first_item_label    = $im['first_label'];
+            $r->items_search_blob   = strtolower(implode(' ', $im['search_terms']));
+
+            $isClosedTerminal = in_array($r->status, array('Verified & Closed', 'Cancelled'), TRUE);
+            $isDeliveredOrDone = in_array($r->status, array('Received at Store', 'Verified & Closed', 'Cancelled'), TRUE);
+
+            $r->is_overdue = !empty($r->expected_delivery_date)
+                && $r->expected_delivery_date < $today
+                && !$isDeliveredOrDone;
+            $r->is_due_soon = !empty($r->expected_delivery_date)
+                && $r->expected_delivery_date >= $today
+                && $r->expected_delivery_date <= $soonDate
+                && !$isDeliveredOrDone;
+            $r->has_discrepancy = !empty($r->discrepancy_flag) && $r->discrepancy_flag !== 'None';
+
+            if (!$isClosedTerminal) {
+                $kpi['open_orders']++;
+                $ccy = !empty($r->currency) ? strtoupper((string)$r->currency) : 'TZS';
+                if (!isset($kpi['open_spend_by_ccy'][$ccy])) {
+                    $kpi['open_spend_by_ccy'][$ccy] = 0.0;
+                }
+                $kpi['open_spend_by_ccy'][$ccy] += (float)$r->total_cost;
+            }
+            if (in_array($r->status, array('Received at Store', 'Verified & Closed'), TRUE)) {
+                $kpi['closed_orders']++;
+            }
+            if (in_array($r->status, array('In Transit', 'Customs Clearance'), TRUE)) {
+                $kpi['in_transit']++;
+            }
+            if ($r->is_overdue) {
+                $kpi['overdue']++;
+                if (count($overdueList) < 5) $overdueList[] = $r;
+            }
+            if ($r->is_due_soon) {
+                $kpi['due_soon']++;
+                if (count($dueSoonList) < 5) $dueSoonList[] = $r;
+            }
+            if ($r->has_discrepancy) {
+                $kpi['discrepancies']++;
+            }
+        }
+
+        return array(
+            'rows'     => $rows,
+            'kpi'      => $kpi,
+            'overdue'  => $overdueList,
+            'due_soon' => $dueSoonList,
+        );
+    }
 }

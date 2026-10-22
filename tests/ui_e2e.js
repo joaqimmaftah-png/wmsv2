@@ -976,6 +976,96 @@ for (const rawLine of cookieLines) {
     assert(txnMobile.docOverflow <= 0, '/materials/transactions Mobile 390px overflowed: ' + txnMobile.docOverflow);
     assert(txnMobile.tableDisplay === 'none' && txnMobile.cardsDisplay === 'block', '/materials/transactions Mobile Card View failed: ' + JSON.stringify(txnMobile));
 
+    // =========================================================================
+    // 12. SPARE ORDERS REGISTER (/orders) DESKTOP 1440x900 & MOBILE 390x844
+    // =========================================================================
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/orders' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("ordShell"))')) break;
+      await sleep(200);
+    }
+
+    const ordDesktop = await evalJs(`(async () => {
+      const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+      const tblWrap = document.querySelector('.ord-table-wrap');
+      const tblOverflow = tblWrap ? (tblWrap.scrollWidth - tblWrap.clientWidth) : -1;
+
+      // Slash shortcut focuses #ordSearchInput
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+      const slashFocused = (document.activeElement === document.getElementById('ordSearchInput'));
+      document.activeElement.blur();
+
+      // Multi-select checkbox opens #ordBatchBar with ?ids= on both CSV & Excel buttons
+      const firstCb = document.querySelector('.ord-row-check');
+      firstCb.checked = true;
+      firstCb.dispatchEvent(new Event('change', { bubbles: true }));
+      const batchVisible = document.getElementById('ordBatchBar').classList.contains('is-open');
+      const batchCsvHref = document.getElementById('ordBatchExportBtn').getAttribute('href') || '';
+      const batchXlsHref = document.getElementById('ordBatchXlsxBtn').getAttribute('href') || '';
+
+      // Open Slide-Over PO & GRN Drawer
+      const trigger = document.querySelector('button[data-ord-open]');
+      trigger.focus();
+      trigger.click();
+      for (let w = 0; w < 25; w++) {
+        if (document.getElementById('ordDrawerBody').textContent.includes('Order Line Items')) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const drawerOpen = document.getElementById('ordDrawer').classList.contains('is-open');
+      const hasSupplier = document.getElementById('ordDrawerTitle').textContent.includes('Mantrac CAT Intl');
+      const firstHeader = document.getElementById('ordDrawerTitle').textContent;
+
+      // ArrowRight steps drawer between POs
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      for (let w = 0; w < 25; w++) {
+        if (document.getElementById('ordDrawerTitle').textContent !== firstHeader) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const secondHeader = document.getElementById('ordDrawerTitle').textContent;
+
+      // Escape closes drawer and restores focus
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const drawerClosed = !document.getElementById('ordDrawer').classList.contains('is-open');
+      const focusRestored = (document.activeElement === trigger);
+
+      // Toggle Cards <-> Table view smoothly
+      document.querySelector('[data-ord-view="cards"]').click();
+      const cardsShown = getComputedStyle(document.querySelector('.ord-cards-container')).display !== 'none'
+        && getComputedStyle(document.querySelector('.ord-table-wrap')).display === 'none';
+      document.querySelector('[data-ord-view="table"]').click();
+
+      return {
+        docOverflow, tblOverflow, slashFocused,
+        batchVisible, batchCsvHref, batchXlsHref,
+        drawerOpen, hasSupplier, stepped: firstHeader !== secondHeader,
+        drawerClosed, focusRestored, cardsShown
+      };
+    })()`);
+
+    assert(ordDesktop.docOverflow <= 0, '/orders Desktop overflowed: ' + JSON.stringify(ordDesktop));
+    assert(ordDesktop.tblOverflow <= 0, '/orders Table overflowed: ' + JSON.stringify(ordDesktop));
+    assert(ordDesktop.slashFocused === true, '/orders Slash shortcut failed: ' + JSON.stringify(ordDesktop));
+    assert(ordDesktop.batchVisible && ordDesktop.batchCsvHref.includes('ids=') && ordDesktop.batchXlsHref.includes('ids='), '/orders Batch bar failed: ' + JSON.stringify(ordDesktop));
+    assert(ordDesktop.drawerOpen && ordDesktop.hasSupplier, '/orders Drawer failed: ' + JSON.stringify(ordDesktop));
+    assert(ordDesktop.stepped === true, '/orders ArrowRight navigation failed: ' + JSON.stringify(ordDesktop));
+    assert(ordDesktop.drawerClosed && ordDesktop.focusRestored, '/orders Escape close/focus failed: ' + JSON.stringify(ordDesktop));
+    assert(ordDesktop.cardsShown === true, '/orders Cards switcher failed');
+
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/orders' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("ordShell"))')) break;
+      await sleep(200);
+    }
+    const ordMobile = await evalJs(`(() => ({
+      docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      tableDisplay: getComputedStyle(document.querySelector('.ord-table-wrap')).display,
+      cardsDisplay: getComputedStyle(document.querySelector('.ord-cards-container')).display
+    }))()`);
+    assert(ordMobile.docOverflow <= 0, '/orders Mobile 390px overflowed: ' + ordMobile.docOverflow);
+    assert(ordMobile.tableDisplay === 'none' && ordMobile.cardsDisplay === 'block', '/orders Mobile Card View failed: ' + JSON.stringify(ordMobile));
+
     ws.close();
     console.log('ALL HEADLESS CHROME DESKTOP (1440x900) & MOBILE (390x844) UI E2E ASSERTIONS PASSED!');
   } catch (err) {

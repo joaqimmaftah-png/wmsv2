@@ -10,30 +10,424 @@ class Orders extends MY_Controller {
         $this->load->model('Materials_model');
     }
 
+    /** Escape leading formula characters in CSV cells. */
+    protected function _csv_guard($val) {
+        $s = (string)$val;
+        if ($s !== '' && in_array($s[0], array('=', '+', '-', '@', "\t", "\r"), TRUE)) {
+            return "'" . $s;
+        }
+        return $s;
+    }
+
+    /**
+     * Build the filtered, sorted, and optionally paginated Purchase Orders
+     * dataset shared across index(), export_csv(), and export_xlsx().
+     */
+    protected function _build_orders_dataset($paginate = TRUE) {
+        $ov  = $this->Order_model->get_register_overview();
+        $all = $ov['rows'];
+
+        $allowedTabs = array('all', 'open', 'transit', 'overdue', 'discrepancy', 'closed');
+        $tab = strtolower(trim((string)$this->input->get('tab', TRUE)));
+        if (!in_array($tab, $allowedTabs, TRUE)) $tab = 'all';
+
+        $qRaw = trim((string)$this->input->get('q', TRUE));
+        if ($qRaw === '') {
+            $qRaw = trim((string)$this->input->get('search', TRUE));
+        }
+
+        $statusF   = trim((string)$this->input->get('status', TRUE));
+        $supplierF = (int)$this->input->get('supplier');
+        $countryF  = trim((string)$this->input->get('country', TRUE));
+        $methodF   = trim((string)$this->input->get('shipping_method', TRUE));
+
+        $idsRaw = trim((string)$this->input->get('ids', TRUE));
+        $idSet  = array();
+        if ($idsRaw !== '') {
+            foreach (explode(',', $idsRaw) as $tok) {
+                $iv = (int)trim($tok);
+                if ($iv > 0) $idSet[$iv] = TRUE;
+            }
+        }
+
+        $qLower = strtolower($qRaw);
+        $filtered = array();
+        foreach ($all as $r) {
+            if (!empty($idSet) && !isset($idSet[(int)$r->id])) continue;
+
+            if ($tab === 'open' && in_array($r->status, array('Verified & Closed', 'Cancelled'), TRUE)) continue;
+            if ($tab === 'transit' && !in_array($r->status, array('In Transit', 'Customs Clearance'), TRUE)) continue;
+            if ($tab === 'overdue' && empty($r->is_overdue)) continue;
+            if ($tab === 'discrepancy' && empty($r->has_discrepancy)) continue;
+            if ($tab === 'closed' && !in_array($r->status, array('Received at Store', 'Verified & Closed'), TRUE)) continue;
+
+            if ($statusF !== '' && (string)$r->status !== $statusF) continue;
+            if ($supplierF > 0 && (int)$r->supplier_id !== $supplierF) continue;
+            if ($countryF !== '' && strcasecmp((string)$r->country, $countryF) !== 0) continue;
+            if ($methodF !== '' && strcasecmp((string)$r->shipping_method, $methodF) !== 0) continue;
+
+            if ($qLower !== '') {
+                $hay = strtolower(
+                    (string)$r->order_no . ' '
+                    . (string)($r->supplier_name ?? '') . ' '
+                    . (string)($r->tracking_number ?? '') . ' '
+                    . (string)($r->carrier ?? '') . ' '
+                    . (string)($r->country ?? '') . ' '
+                    . (string)($r->wo_number ?? '') . ' '
+                    . (string)($r->equipment_code ?? '') . ' '
+                    . (string)($r->notes ?? '') . ' '
+                    . (string)($r->items_search_blob ?? '')
+                );
+                if (strpos($hay, $qLower) === FALSE) continue;
+            }
+            $filtered[] = $r;
+        }
+
+        $allowedSort = array('order_date', 'order_no', 'supplier', 'expected_delivery_date', 'fulfillment', 'status', 'total_cost');
+        $sort = strtolower(trim((string)$this->input->get('sort', TRUE)));
+        if (!in_array($sort, $allowedSort, TRUE)) $sort = 'order_date';
+        $dir = strtolower(trim((string)$this->input->get('dir', TRUE))) === 'asc' ? 'asc' : 'desc';
+        $mul = ($dir === 'asc') ? 1 : -1;
+
+        usort($filtered, function ($a, $b) use ($sort, $mul) {
+            switch ($sort) {
+                case 'order_no':
+                    $cmp = strcmp((string)$a->order_no, (string)$b->order_no);
+                    break;
+                case 'supplier':
+                    $cmp = strcasecmp((string)($a->supplier_name ?? ''), (string)($b->supplier_name ?? ''));
+                    break;
+                case 'expected_delivery_date':
+                    $cmp = strcmp((string)($a->expected_delivery_date ?? ''), (string)($b->expected_delivery_date ?? ''));
+                    break;
+                case 'fulfillment':
+                    $cmp = ($a->fulfillment_pct <=> $b->fulfillment_pct);
+                    break;
+                case 'status':
+                    $cmp = strcmp((string)$a->status, (string)$b->status);
+                    break;
+                case 'total_cost':
+                    $cmp = ((float)$a->total_cost <=> (float)$b->total_cost);
+                    break;
+                case 'order_date':
+                default:
+                    $cmp = strcmp((string)$a->order_date, (string)$b->order_date);
+                    break;
+            }
+            if ($cmp === 0) $cmp = ((int)$a->id <=> (int)$b->id);
+            return $cmp * $mul;
+        });
+
+        $filteredTotals = array(
+            'qty_ordered'  => 0.0,
+            'qty_received' => 0.0,
+            'by_currency'  => array(),
+        );
+        foreach ($filtered as $fr) {
+            $filteredTotals['qty_ordered']  += (float)$fr->qty_ordered_sum;
+            $filteredTotals['qty_received'] += (float)$fr->qty_received_sum;
+            $ccy = !empty($fr->currency) ? strtoupper((string)$fr->currency) : 'TZS';
+            if (!isset($filteredTotals['by_currency'][$ccy])) {
+                $filteredTotals['by_currency'][$ccy] = 0.0;
+            }
+            $filteredTotals['by_currency'][$ccy] += (float)$fr->total_cost;
+        }
+
+        $view = strtolower(trim((string)$this->input->get('view', TRUE))) === 'cards' ? 'cards' : 'table';
+        $allowedPerPage = array(10, 25, 50, 100, 150);
+        $perPage = (int)$this->input->get('per_page');
+        if (!in_array($perPage, $allowedPerPage, TRUE)) $perPage = 25;
+
+        $totalFiltered = count($filtered);
+        $totalPages    = max(1, (int)ceil($totalFiltered / $perPage));
+        $reqPage       = max(1, min($totalPages, (int)$this->input->get('page') ?: 1));
+        $offset        = ($reqPage - 1) * $perPage;
+        $rowsOut       = $paginate ? array_slice($filtered, $offset, $perPage) : $filtered;
+
+        $kpi = $ov['kpi'];
+        $tabCounts = array(
+            'all'         => $kpi['total_all'],
+            'open'        => $kpi['open_orders'],
+            'transit'     => $kpi['in_transit'],
+            'overdue'     => $kpi['overdue'],
+            'discrepancy' => $kpi['discrepancies'],
+            'closed'      => $kpi['closed_orders'],
+        );
+
+        return array(
+            'orders'          => $rowsOut,
+            'suppliers'       => $this->Supplier_model->get_all(),
+            'countries'       => $this->Supplier_model->get_countries(),
+            'statuses'        => Order_model::$STATUSES,
+            'methods'         => Order_model::$SHIPPING_METHODS,
+            'kpi'             => $kpi,
+            'tab_counts'      => $tabCounts,
+            'tab'             => $tab,
+            'q'               => $qRaw,
+            'overdue'         => $ov['overdue'],
+            'due_soon'        => $ov['due_soon'],
+            'filter'          => array(
+                'status'          => $statusF,
+                'supplier'        => $supplierF > 0 ? (string)$supplierF : '',
+                'country'         => $countryF,
+                'shipping_method' => $methodF,
+                'search'          => $qRaw,
+            ),
+            'sort'            => $sort,
+            'dir'             => $dir,
+            'view_mode'       => $view,
+            'per_page'        => $perPage,
+            'allowed_pp'      => $allowedPerPage,
+            'current_page'    => $reqPage,
+            'total_pages'     => $totalPages,
+            'total_filtered'  => $totalFiltered,
+            'offset'          => $offset,
+            'filtered_totals' => $filteredTotals,
+            'can_write'       => $this->can_write(),
+            'is_supervisor'   => $this->is_supervisor(),
+        );
+    }
+
     /* ── DASHBOARD / LIST ───────────────────────────────── */
     public function index() {
-        $filter = array(
-            'status'   => $this->input->get('status'),
-            'supplier' => $this->input->get('supplier'),
-            'country'  => $this->input->get('country'),
-            'search'   => $this->input->get('search'),
-        );
-        $data = array(
-            'orders'     => $this->Order_model->get_all($filter),
-            'suppliers'  => $this->Supplier_model->get_all(),
-            'countries'  => $this->Supplier_model->get_countries(),
-            'statuses'   => Order_model::$STATUSES,
-            'kpi'        => $this->Order_model->get_kpi(),
-            'overdue'    => $this->Order_model->get_overdue(5),
-            'due_soon'   => $this->Order_model->get_due_soon(5),
-            'filter'     => $filter,
-            'page_title' => 'Spare Parts Orders',
-        );
+        $data = $this->_build_orders_dataset(TRUE);
+        $data['page_title'] = 'Spare Parts Orders';
         $this->render('orders/index', $data);
+    }
+
+    /* ── JSON SUMMARY FOR SLIDE-OVER INSPECTOR DRAWER ───── */
+    public function summary_json($id = NULL) {
+        $id = (int)$id;
+        if ($id <= 0) {
+            $this->json(array('ok' => FALSE, 'error' => 'Invalid purchase order ID.'), 404);
+            return;
+        }
+        $order = $this->Order_model->get_by_id($id);
+        if (!$order) {
+            $this->json(array('ok' => FALSE, 'error' => 'Purchase order not found.'), 404);
+            return;
+        }
+
+        $woMeta = NULL;
+        if (!empty($order->linked_wo_id) && $this->db->table_exists('work_orders')) {
+            $woRow = $this->db
+                ->select('wo.id, wo.wo_number, wo.title, e.id AS equipment_id, e.registration_no')
+                ->from('work_orders wo')
+                ->join('equipment e', 'e.id = wo.equipment_id', 'left')
+                ->where('wo.id', (int)$order->linked_wo_id)
+                ->get()->row();
+            if ($woRow) {
+                $woMeta = array(
+                    'id'              => (int)$woRow->id,
+                    'wo_number'       => (string)$woRow->wo_number,
+                    'title'           => (string)($woRow->title ?? ''),
+                    'equipment_id'    => $woRow->equipment_id ? (int)$woRow->equipment_id : NULL,
+                    'registration_no' => (string)($woRow->registration_no ?? ''),
+                );
+            }
+        }
+
+        $itemsRaw = $this->Order_model->get_receive_state($id);
+        $items    = array();
+        $outTotal = 0.0;
+        foreach ($itemsRaw as $it) {
+            $outTotal += (float)$it->qty_outstanding;
+            $items[] = array(
+                'id'            => (int)$it->id,
+                'description'   => (string)$it->description,
+                'part_number'   => (string)($it->part_number ?: '—'),
+                'unit'          => (string)($it->unit ?: 'pcs'),
+                'qty_ordered'   => (float)$it->qty_ordered,
+                'qty_received'  => (float)$it->qty_previously_received,
+                'qty_outstanding' => (float)$it->qty_outstanding,
+                'unit_price'    => $it->unit_price !== NULL ? (float)$it->unit_price : NULL,
+            );
+        }
+
+        $receiptsRaw = $this->Order_model->get_receipts($id);
+        $receipts    = array();
+        foreach ($receiptsRaw as $gr) {
+            $receipts[] = array(
+                'id'               => (int)$gr->id,
+                'grn_no'           => (string)$gr->grn_no,
+                'receipt_date'     => (string)$gr->receipt_date,
+                'received_by'      => trim((string)(($gr->first_name ?? '') . ' ' . ($gr->last_name ?? ''))) ?: 'Store',
+                'discrepancy_flag' => (string)$gr->discrepancy_flag,
+            );
+        }
+
+        $canReceive = $this->can_write()
+            && $outTotal > 0.0001
+            && !in_array($order->status, array('Cancelled', 'Verified & Closed'), TRUE);
+
+        $this->json(array(
+            'ok'       => TRUE,
+            'order'    => array(
+                'id'                     => (int)$order->id,
+                'order_no'               => (string)$order->order_no,
+                'status'                 => (string)$order->status,
+                'supplier_id'            => (int)$order->supplier_id,
+                'supplier_name'          => (string)$order->supplier_name,
+                'country'                => (string)$order->country,
+                'shipping_method'        => (string)$order->shipping_method,
+                'order_date'             => (string)$order->order_date,
+                'expected_delivery_date' => (string)($order->expected_delivery_date ?: '—'),
+                'actual_delivery_date'   => (string)($order->actual_delivery_date ?: '—'),
+                'tracking_number'        => (string)($order->tracking_number ?: '—'),
+                'carrier'                => (string)($order->carrier ?: '—'),
+                'currency'               => (string)$order->currency,
+                'total_cost'             => (float)$order->total_cost,
+                'discrepancy_flag'       => (string)$order->discrepancy_flag,
+                'discrepancy_notes'      => (string)($order->discrepancy_notes ?: ''),
+                'notes'                  => (string)($order->notes ?: '—'),
+                'linked_wo'              => $woMeta,
+                'can_write'              => $this->can_write(),
+                'can_receive'            => $canReceive,
+            ),
+            'items'    => $items,
+            'receipts' => $receipts,
+        ));
+    }
+
+    /* ── UTF-8 BOM CSV EXPORT ───────────────────────────── */
+    public function export_csv() {
+        $data = $this->_build_orders_dataset(FALSE);
+        $rows = $data['orders'];
+
+        $filename = 'spare-orders-' . date('Y-m-d') . '.csv';
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
+
+        fputcsv($out, array(
+            'Order No',
+            'Order Date',
+            'Status',
+            'Supplier',
+            'Origin Country',
+            'Shipping Method',
+            'Carrier',
+            'Tracking Number',
+            'Expected Delivery',
+            'Actual Delivery',
+            'Linked Work Order',
+            'Fleet Asset',
+            'Line Count',
+            'Qty Ordered',
+            'Qty Received',
+            'Qty Outstanding',
+            'Fulfillment %',
+            'Currency',
+            'Total Cost',
+            'Discrepancy',
+            'Notes',
+        ));
+
+        foreach ($rows as $r) {
+            fputcsv($out, array(
+                $this->_csv_guard($r->order_no),
+                (string)$r->order_date,
+                $this->_csv_guard($r->status),
+                $this->_csv_guard($r->supplier_name ?? ''),
+                $this->_csv_guard($r->country ?? ''),
+                $this->_csv_guard($r->shipping_method ?? ''),
+                $this->_csv_guard($r->carrier ?? ''),
+                $this->_csv_guard($r->tracking_number ?? ''),
+                (string)($r->expected_delivery_date ?? ''),
+                (string)($r->actual_delivery_date ?? ''),
+                $this->_csv_guard($r->wo_number ?? ''),
+                $this->_csv_guard($r->equipment_code ?? ''),
+                (int)$r->line_count,
+                (float)$r->qty_ordered_sum,
+                (float)$r->qty_received_sum,
+                (float)$r->qty_outstanding_sum,
+                (int)$r->fulfillment_pct,
+                $this->_csv_guard($r->currency ?? 'TZS'),
+                number_format((float)$r->total_cost, 2, '.', ''),
+                $this->_csv_guard($r->discrepancy_flag ?? 'None'),
+                $this->_csv_guard($r->notes ?? ''),
+            ));
+        }
+        fclose($out);
+        exit;
+    }
+
+    /* ── STYLED OPENXML XLSX EXPORT ─────────────────────── */
+    public function export_xlsx() {
+        $this->load->helper('xlsx');
+        $data = $this->_build_orders_dataset(FALSE);
+        $rows = $data['orders'];
+
+        $xlsx  = new XlsxWriter();
+        $sHdr  = 'bold|fontSize:10|fontName:Arial|align:center|valign:middle|bg:1E3A8A|fg:FFFFFF|border:thin|wrap';
+        $sCell = 'fontSize:10|fontName:Arial|valign:middle|border:thin|wrap';
+        $sC    = 'fontSize:10|fontName:Arial|align:center|valign:middle|border:thin';
+        $sLate = 'bold|fontSize:10|fontName:Arial|align:center|valign:middle|border:thin|bg:FEE2E2|fg:991B1B';
+        $sDone = 'bold|fontSize:10|fontName:Arial|align:center|valign:middle|border:thin|bg:DCFCE7|fg:166534';
+        foreach (array($sHdr, $sCell, $sC, $sLate, $sDone) as $st) {
+            $xlsx->registerStyle($st);
+        }
+
+        $xlsx->addSheet('Spare Orders');
+        $widths = array(1=>16, 2=>13, 3=>18, 4=>26, 5=>15, 6=>16, 7=>18, 8=>13, 9=>15, 10=>15, 11=>10, 12=>12, 13=>12, 14=>12, 15=>10, 16=>15, 17=>14);
+        foreach ($widths as $col => $w) {
+            $xlsx->setColWidth($col, $w);
+        }
+        $xlsx->writeRow(array(
+            'ORDER NO', 'ORDER DATE', 'STATUS', 'SUPPLIER', 'COUNTRY', 'SHIPPING',
+            'TRACKING NO', 'EXPECTED ETA', 'LINKED WO', 'FLEET ASSET',
+            'LINES', 'ORDERED', 'RECEIVED', 'OUTSTANDING', 'CCY', 'TOTAL COST', 'DISCREPANCY',
+        ), $sHdr);
+        $xlsx->freezePane('A2');
+        $xlsx->setAutoFilter('A1:Q1');
+
+        foreach ($rows as $r) {
+            $stStyle = !empty($r->is_overdue)
+                ? $sLate
+                : (in_array($r->status, array('Received at Store', 'Verified & Closed'), TRUE) ? $sDone : $sC);
+            $xlsx->writeRowStyled(array(
+                array('v' => (string)$r->order_no, 's' => $sC),
+                array('v' => (string)$r->order_date, 's' => $sC),
+                array('v' => (string)$r->status, 's' => $stStyle),
+                array('v' => (string)($r->supplier_name ?? ''), 's' => $sCell),
+                array('v' => (string)($r->country ?? ''), 's' => $sC),
+                array('v' => (string)($r->shipping_method ?? ''), 's' => $sC),
+                array('v' => (string)($r->tracking_number ?? ''), 's' => $sCell),
+                array('v' => (string)($r->expected_delivery_date ?? ''), 's' => $sC),
+                array('v' => (string)($r->wo_number ?? ''), 's' => $sC),
+                array('v' => (string)($r->equipment_code ?? ''), 's' => $sC),
+                array('v' => (int)$r->line_count, 's' => $sC),
+                array('v' => (float)$r->qty_ordered_sum, 's' => $sC),
+                array('v' => (float)$r->qty_received_sum, 's' => $sC),
+                array('v' => (float)$r->qty_outstanding_sum, 's' => $sC),
+                array('v' => (string)($r->currency ?? 'TZS'), 's' => $sC),
+                array('v' => (float)$r->total_cost, 's' => $sC),
+                array('v' => (string)($r->discrepancy_flag ?? 'None'), 's' => $sC),
+            ));
+        }
+
+        $fname = 'Spare_Orders_' . date('Ymd_His') . '.xlsx';
+        $tmp   = wms_temp_path($fname);
+        $xlsx->save($tmp);
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $fname . '"');
+        header('Content-Length: ' . filesize($tmp));
+        header('Cache-Control: max-age=0');
+        readfile($tmp);
+        @unlink($tmp);
+        exit;
     }
 
     /* ── CREATE ─────────────────────────────────────────── */
     public function create() {
+        if (!$this->can_write()) {
+            show_error('Forbidden.', 403);
+            return;
+        }
         if ($this->input->method() === 'post') {
             $supplier = $this->Supplier_model->get_by_id((int)$this->input->post('supplier_id', TRUE));
             // A crafted/stale supplier_id used to dereference null two lines
@@ -140,15 +534,23 @@ class Orders extends MY_Controller {
         $data['history']   = $this->Order_model->get_status_history($id);
         $data['documents'] = $this->Order_model->get_documents($id);
         $data['statuses']  = Order_model::$STATUSES;
-        $data['next_statuses'] = Order_model::next_statuses($order->status);
-        $data['lead']      = $this->Order_model->get_estimated_lead_time($order->country, $order->shipping_method, $order->supplier_id);
-        $data['page_title']= 'Order '.$order->order_no;
+        $data['next_statuses']     = Order_model::next_statuses($order->status);
+        $data['lead']              = $this->Order_model->get_estimated_lead_time($order->country, $order->shipping_method, $order->supplier_id);
+        $data['can_write']         = $this->can_write();
+        $data['can_update_status'] = ($this->can_write() || $this->is_manager());
+        $data['page_title']        = 'Order '.$order->order_no;
         $this->render('orders/view', $data);
     }
 
     /* ── STATUS CHANGE ──────────────────────────────────── */
     public function update_status($id) {
         if (!$this->require_post()) return;
+        // Honour MY_Controller::MANAGER_WRITE_WHITELIST ('orders/update_status'):
+        // Supervisor (1), Store (3), and Manager (4) may advance/approve status.
+        if (!$this->can_write() && !$this->is_manager()) {
+            show_error('Forbidden.', 403);
+            return;
+        }
         if (!$this->db->trans_begin()) {
             $this->session->set_flashdata('error', 'The order status change could not be started.');
             redirect('orders/view/'.$id);
@@ -234,6 +636,10 @@ class Orders extends MY_Controller {
            silently rounded into the balance.
     */
     public function receive($id) {
+        if (!$this->can_write()) {
+            show_error('Forbidden.', 403);
+            return;
+        }
         $order = $this->Order_model->get_by_id($id);
         if (!$order) show_404();
 
@@ -517,6 +923,10 @@ class Orders extends MY_Controller {
     /* ── DOCUMENT UPLOAD (delivery note / invoice) ──────── */
     public function upload_document($id) {
         if (!$this->require_post()) return;
+        if (!$this->can_write()) {
+            show_error('Forbidden.', 403);
+            return;
+        }
         $order = $this->Order_model->get_by_id($id);
         if (!$order) show_404();
 

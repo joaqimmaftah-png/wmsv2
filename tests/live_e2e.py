@@ -404,7 +404,177 @@ try:
     st_m_txls, _, m_txls_b = get_bytes('/materials/transactions_xlsx?tab=valued&date_from=2026-09-01', mgr_op)
     assert st_m_txls == 200 and m_txls_b[:4] == b'PK\x03\x04'
 
-    print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS, INSPECTIONS, BACKLOG & INVENTORY E2E CHECKS PASSED!')
+    # Spare Orders ORD-01..ORD-06 End-to-End Multi-Currency, Partial GRN, RBAC & Export Verification
+    def post_op(op, path, fields):
+        data = urllib.parse.urlencode(fields, doseq=True).encode()
+        req = urllib.request.Request(f'{BASE}{path}', data=data, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        try:
+            r = op.open(req)
+            return r.status, r.geturl(), r.read().decode('utf-8', 'replace')
+        except urllib.error.HTTPError as e:
+            return e.code, path, e.read().decode('utf-8', 'replace')
+
+    # Create active supplier as Storekeeper (role_id = 3)
+    _, _, sup_new_b = get_bytes('/suppliers/create', store_op)
+    st_sup_c, sup_url, _ = post_op(store_op, '/suppliers/create', {
+        'csrf_token_wms': csrf_from(sup_new_b.decode('utf-8', 'replace')),
+        'company_name': 'Mantrac CAT Intl',
+        'country': 'Germany',
+        'currency': 'USD',
+        'status': 'Active',
+    })
+    assert st_sup_c == 200 and '/suppliers/view/' in sup_url, f'Supplier create failed: {st_sup_c} {sup_url}'
+    sup_id_new = int(sup_url.rstrip('/').split('/')[-1])
+
+    # PO #1: USD order linked to wo1_id ('EX 006'), walked to In Transit, partial GRN receipt (1/4) with Shortage
+    _, _, po1_new_b = get_bytes('/orders/create', store_op)
+    st_po1, po1_url, _ = post_op(store_op, '/orders/create', {
+        'csrf_token_wms': csrf_from(po1_new_b.decode('utf-8', 'replace')),
+        'supplier_id': str(sup_id_new),
+        'shipping_method': 'Air Freight',
+        'order_date': '2026-10-01',
+        'expected_delivery_date': '2026-10-25',
+        'currency': 'USD',
+        'total_cost': '1450.00',
+        'linked_wo_id': str(wo1_id),
+        'notes': '=SUM(1,2)',
+        'item_description[]': ['Main Boom Seal Kit'],
+        'item_part_number[]': ['295-5609'],
+        'item_unit[]': ['Set'],
+        'item_qty[]': ['4'],
+        'item_price[]': ['362.50'],
+    })
+    assert st_po1 == 200 and '/orders/view/' in po1_url, f'PO1 create failed: {st_po1} {po1_url}'
+    po1_id = int(po1_url.rstrip('/').split('/')[-1])
+
+    # Manager (role_id = 4) approves Pending Approval -> Sent to Supplier per MANAGER_WRITE_WHITELIST,
+    # then Storekeeper advances Confirmed -> In Transit
+    _, _, mgr_pv_b = get_bytes(f'/orders/view/{po1_id}', mgr_op)
+    st_mgr_app, _, _ = post_op(mgr_op, f'/orders/update_status/{po1_id}', {
+        'csrf_token_wms': csrf_from(mgr_pv_b.decode('utf-8', 'replace')),
+        'status': 'Sent to Supplier',
+        'notes': 'Approved by Manager',
+    })
+    assert st_mgr_app == 200, f'Manager PO approval failed: {st_mgr_app}'
+
+    for next_st in ('Confirmed', 'In Transit'):
+        _, _, pv_b = get_bytes(f'/orders/view/{po1_id}', store_op)
+        st_up, _, _ = post_op(store_op, f'/orders/update_status/{po1_id}', {
+            'csrf_token_wms': csrf_from(pv_b.decode('utf-8', 'replace')),
+            'status': next_st,
+            'tracking_number': 'DHL-8841209',
+            'carrier': 'DHL Express',
+            'notes': f'Moved to {next_st}',
+        })
+        assert st_up == 200
+
+    # Partial GRN receipt (1 of 4 units) with Shortage discrepancy
+    _, _, rcv_b = get_bytes(f'/orders/receive/{po1_id}', store_op)
+    rcv_html = rcv_b.decode('utf-8', 'replace')
+    sub_tok = re.search(r'name=["\x27]submit_token["\x27]\s+value=["\x27]([a-f0-9]{32})["\x27]', rcv_html)
+    itm_m = re.search(r'name=["\x27]qty_delivery\[(\d+)\]["\x27]', rcv_html)
+    assert sub_tok and itm_m, 'Missing submit_token or qty_delivery input on /orders/receive!'
+    st_rcv, _, _ = post_op(store_op, f'/orders/receive/{po1_id}', {
+        'csrf_token_wms': csrf_from(rcv_html),
+        'submit_token': sub_tok.group(1),
+        f'qty_delivery[{itm_m.group(1)}]': '1',
+        'discrepancy_flag': 'Shortage',
+        'discrepancy_notes': '3 seal kits backordered',
+    })
+    assert st_rcv == 200
+
+    # PO #2: TZS overdue order linked to wo2_id ('C-HEADT 007') in Transit
+    _, _, po2_new_b = get_bytes('/orders/create', store_op)
+    st_po2, po2_url, _ = post_op(store_op, '/orders/create', {
+        'csrf_token_wms': csrf_from(po2_new_b.decode('utf-8', 'replace')),
+        'supplier_id': str(sup_id_new),
+        'shipping_method': 'Sea Freight',
+        'order_date': '2026-10-02',
+        'expected_delivery_date': '2026-10-10',
+        'currency': 'TZS',
+        'total_cost': '3800000.00',
+        'linked_wo_id': str(wo2_id),
+        'notes': 'Port Dar shipment',
+        'item_description[]': ['Steer Axle Kingpin Kit'],
+        'item_part_number[]': ['KP-3000'],
+        'item_unit[]': ['pcs'],
+        'item_qty[]': ['2'],
+        'item_price[]': ['1900000.00'],
+    })
+    assert st_po2 == 200 and '/orders/view/' in po2_url
+    po2_id = int(po2_url.rstrip('/').split('/')[-1])
+    for next_st in ('Sent to Supplier', 'Confirmed', 'In Transit'):
+        _, _, pv2_b = get_bytes(f'/orders/view/{po2_id}', store_op)
+        st_up2, _, _ = post_op(store_op, f'/orders/update_status/{po2_id}', {
+            'csrf_token_wms': csrf_from(pv2_b.decode('utf-8', 'replace')),
+            'status': next_st,
+            'tracking_number': 'MAERSK-55201',
+            'carrier': 'Maersk Line',
+        })
+        assert st_up2 == 200
+
+    # Part-number search + Country & Shipping Method facet filters work cleanly
+    st_pq, _, pq_b = get_bytes('/orders?q=295-5609&country=Germany&shipping_method=Air+Freight', store_op)
+    pq_html = pq_b.decode('utf-8', 'replace')
+    assert st_pq == 200 and 'DHL-8841209' in pq_html and 'MAERSK-55201' not in pq_html and '25%' in pq_html
+
+    # Manager (role_id = 4) RBAC: full read & multi-currency visibility, ZERO mutation buttons, HTTP 403 on write endpoints
+    st_m_ord, _, m_ord_b = get_bytes('/orders', mgr_op)
+    m_ord_html = m_ord_b.decode('utf-8', 'replace')
+    assert (
+        st_m_ord == 200
+        and 'USD 1,450.00' in m_ord_html
+        and 'TZS 3,800,000.00' in m_ord_html
+        and '3,801,450' not in m_ord_html
+        and 'EX 006' in m_ord_html
+        and 'C-HEADT 007' in m_ord_html
+        and 'id="ordNewBtn"' not in m_ord_html
+    ), 'Manager /orders multi-currency or RBAC assertion failed!'
+
+    st_m_ovw, _, m_ovw_b = get_bytes(f'/orders/view/{po1_id}', mgr_op)
+    m_ovw_html = m_ovw_b.decode('utf-8', 'replace')
+    assert (
+        st_m_ovw == 200
+        and 'DHL-8841209' in m_ovw_html
+        and 'Update Status' in m_ovw_html
+        and 'Receive Items at Store' not in m_ovw_html
+        and 'Receive Outstanding Balance' not in m_ovw_html
+        and 'orders/upload_document/' not in m_ovw_html
+    ), 'Manager /orders/view RBAC mismatch!'
+
+    r_forb1 = mgr_op.open(f'{BASE}/orders/create')
+    forb1_url, forb1_html = r_forb1.geturl(), r_forb1.read().decode('utf-8', 'replace')
+    r_forb2 = mgr_op.open(f'{BASE}/orders/receive/{po1_id}')
+    forb2_url, forb2_html = r_forb2.geturl(), r_forb2.read().decode('utf-8', 'replace')
+    assert (
+        '/dashboard' in forb1_url and 'view-only access' in forb1_html
+        and '/dashboard' in forb2_url and 'view-only access' in forb2_html
+    ), f'Expected Manager redirect to /dashboard with view-only error, got {forb1_url}, {forb2_url}'
+
+    # Slide-Over Drawer JSON + CSV (UTF-8 BOM + formula guard) + Styled XLSX (PK\x03\x04)
+    st_m_oj, _, m_oj_b = get_bytes(f'/orders/summary_json/{po1_id}', mgr_op)
+    m_oj = json.loads(m_oj_b.decode('utf-8'))
+    assert (
+        st_m_oj == 200
+        and m_oj.get('ok') is True
+        and m_oj['order']['can_write'] is False
+        and m_oj['order']['can_receive'] is False
+        and m_oj['order']['linked_wo']['registration_no'] == 'EX 006'
+        and len(m_oj['receipts']) == 1
+    )
+    st_m_ocsv, _, m_ocsv_b = get_bytes('/orders/export_csv', mgr_op)
+    m_ocsv_txt = m_ocsv_b.decode('utf-8-sig')
+    assert (
+        st_m_ocsv == 200
+        and m_ocsv_b.startswith(b'\xef\xbb\xbf')
+        and "'=SUM(1,2)" in m_ocsv_txt
+        and 'EX 006' in m_ocsv_txt
+        and 'C-HEADT 007' in m_ocsv_txt
+    ), f'CSV check failed: status={st_m_ocsv} body={m_ocsv_txt[:400]!r}'
+    st_m_oxls, _, m_oxls_b = get_bytes('/orders/export_xlsx', mgr_op)
+    assert st_m_oxls == 200 and m_oxls_b[:4] == b'PK\x03\x04'
+
+    print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS, INSPECTIONS, BACKLOG, INVENTORY & SPARE ORDERS E2E CHECKS PASSED!')
 except BaseException:
     tb = traceback.format_exc().replace('\n', '%0A')
     print(f'::error title=PythonE2E::{tb}', flush=True)
