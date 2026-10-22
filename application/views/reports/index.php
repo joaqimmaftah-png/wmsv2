@@ -348,6 +348,32 @@
     </div>
   </div>
 
+  <!-- AML Individual Attendance Sheets -->
+  <div class="rpt-row">
+    <div class="rpt-icon" style="background:rgba(34,197,94,0.12);color:#16a34a;">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    </div>
+    <div class="rpt-text">
+      <div class="rpt-title">Individual Attendance Sheets (AML)</div>
+      <div class="rpt-desc">Print-ready per-worker &amp; batch AML attendance sign-off sheets (PDF &amp; Excel) for half-month or full-month periods</div>
+    </div>
+    <div class="rpt-controls">
+      <input type="month" class="rpt-date" id="timesheet-month" value="<?= date('Y-m') ?>">
+      <a class="rpt-btn-primary" id="timesheet-view" href="<?= base_url('team/report?month='.date('Y-m')) ?>">
+        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        View
+      </a>
+      <a class="rpt-btn-ghost" id="timesheet-pdf" href="<?= base_url('team/timesheets_batch?month='.date('Y-m')) ?>">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        All PDF
+      </a>
+      <a class="rpt-btn-ghost" id="timesheet-xlsx" href="<?= base_url('team/timesheets_batch?format=xlsx&month='.date('Y-m')) ?>">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        All XLSX
+      </a>
+    </div>
+  </div>
+
 </div>
 
 
@@ -682,6 +708,17 @@ bind('wwr-date',    'wwr-view',    'reports/workshop_weekly',           'week_st
 bind('wwr-date',    'wwr-excel',   'reports/export_workshop_weekly_xlsx','week_start');
 bind('wwr-date',    'wwr-pdf',     'reports/export_workshop_weekly_pdf', 'week_start');
 bind('monthly-date','monthly-view','reports/monthly',                   'month');
+bind('timesheet-month','timesheet-view','team/report',                  'month');
+bind('timesheet-month','timesheet-pdf', 'team/timesheets_batch',        'month');
+(function(){
+  var tm = document.getElementById('timesheet-month');
+  var tx = document.getElementById('timesheet-xlsx');
+  if (tm && tx) {
+    tm.addEventListener('change', function() {
+      tx.href = BASE + 'team/timesheets_batch?format=xlsx&month=' + this.value;
+    });
+  }
+})();
 bind('mplan-month', 'mplan-view',  'reports/monthly_plan',              'month');
 bind('mplan-month', 'mplan-excel', 'reports/export_monthly_plan_xlsx',  'month');
 bind('lube-month',  'lube-view',   'reports/lube_compliance',           'month');

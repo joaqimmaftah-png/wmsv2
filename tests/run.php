@@ -577,13 +577,22 @@ if (class_exists('ZipArchive')) {
     $tmpXlsx = tempnam(sys_get_temp_dir(), 'ts_test_');
     file_put_contents($tmpXlsx, $xlsxBin);
     $za = new ZipArchive();
-    check('Timesheet XLSX: opens cleanly in ZipArchive with embedded PNG + live IF(SUM) formula',
+    check('Timesheet XLSX: opens cleanly in ZipArchive with deduplicated PNG, valid ECMA-376 cNvPr id>=2, Normal cellStyle & live formulas',
         $za->open($tmpXlsx) === TRUE
         && $za->locateName('xl/media/image1.png') !== FALSE
-        && strpos((string)$za->getFromName('xl/worksheets/sheet1.xml'), 'IF(SUM(E12:E14)&gt;0,SUM(E12:E14),&quot;&quot;)') !== FALSE);
+        && $za->locateName('xl/media/image2.png') === FALSE
+        && strpos((string)$za->getFromName('xl/drawings/drawing1.xml'), 'cNvPr id="00"') === FALSE
+        && strpos((string)$za->getFromName('xl/drawings/drawing1.xml'), 'cNvPr id="2"') !== FALSE
+        && strpos((string)$za->getFromName('xl/styles.xml'), '<cellStyle name="Normal"') !== FALSE
+        && strpos((string)$za->getFromName('xl/worksheets/sheet1.xml'), 'IF(SUM(E12:E14)&gt;0,SUM(E12:E14),&quot;&quot;)') !== FALSE
+        && strpos((string)$za->getFromName('xl/worksheets/sheet1.xml'), 'IF(COUNT(E12:E14,E18:E24,E28:E33)&gt;0,COUNT(E12:E14,E18:E24,E28:E33),&quot;&quot;)') !== FALSE);
     $za->close();
     @unlink($tmpXlsx);
 }
+$tsModelSrc = file_get_contents(APPPATH . 'models/Timesheet_model.php');
+check('Timesheet model: queries report_sites.label (never non-existent report_sites.name)',
+    strpos($tsModelSrc, "select('label')") !== FALSE
+    && strpos($tsModelSrc, "get('report_sites')") !== FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
    Result

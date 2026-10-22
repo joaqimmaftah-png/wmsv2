@@ -5,9 +5,10 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * Timesheet_excel — builds native Microsoft Excel `.xlsx` workbooks matching
  * the exact AML Individual Attendance Sheet template (`TIME SHEET AML.pdf`),
  * complete with embedded AML corporate ribbon banner, `#92D050` green & `#9BC2E6`
- * sky-blue headers/subtotals, Monday–Sunday weekly blocks, red bold Sundays,
- * live `=SUM(...)` Excel formulas, `TOTAL DAYS WORKED` box, 3-column approval
- * footer, and A4 Portrait 1-page print configuration.
+ * sky-blue headers/subtotals, exact stepped `medium` outer frame borders,
+ * Monday–Sunday weekly blocks, red bold Sundays, live `=SUM(...)` / `=COUNT(...)`
+ * Excel formulas, `TOTAL DAYS WORKED` box, 3-column approval footer, and A4
+ * Portrait 1-page print configuration.
  */
 #[AllowDynamicProperties]
 class Timesheet_excel {
@@ -112,38 +113,66 @@ class Timesheet_excel {
         );
         foreach ($widths as $col => $w) $x->setColWidth($col, $w);
 
-        // Styles matching Excel 2019 template colors & fonts
-        $s_blank       = '';
-        $s_title_top   = 'bold|italic|fontName:Times New Roman|fontSize:13|align:center|valign:center|bg:70AD47|borderT:thin|borderL:thin|borderR:thin';
-        $s_title_sub   = 'bold|italic|fontName:Times New Roman|fontSize:10|align:center|valign:center|bg:70AD47|borderB:thin|borderL:thin|borderR:thin';
-        $s_meta        = 'bold|italic|fontName:Times New Roman|fontSize:11.5|align:left|valign:center';
+        // Styles matching Excel 2019 template colors, fonts & exact outer medium perimeter borders
+        $s_blank         = '';
+        $s_title_tl      = 'bold|italic|fontName:Times New Roman|fontSize:13|align:center|valign:center|bg:70AD47|borderT:thin|borderL:thin';
+        $s_title_tm      = 'bold|italic|fontName:Times New Roman|fontSize:13|align:center|valign:center|bg:70AD47|borderT:thin';
+        $s_title_tr      = 'bold|italic|fontName:Times New Roman|fontSize:13|align:center|valign:center|bg:70AD47|borderT:thin|borderR:thin';
+        $s_title_bl      = 'bold|italic|fontName:Times New Roman|fontSize:10|align:center|valign:center|bg:70AD47|borderB:thin|borderL:thin';
+        $s_title_bm      = 'bold|italic|fontName:Times New Roman|fontSize:10|align:center|valign:center|bg:70AD47|borderB:thin';
+        $s_title_br      = 'bold|italic|fontName:Times New Roman|fontSize:10|align:center|valign:center|bg:70AD47|borderB:thin|borderR:thin';
+        $s_meta          = 'bold|italic|fontName:Times New Roman|fontSize:11.5|align:left|valign:center';
 
-        $s_grn_left_hd = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:92D050|borderL:thin|borderR:thin|borderT:thin|borderB:medium';
-        $s_grn_days_hd = 'bold|fontName:Calibri|fontSize:9|align:left|valign:center|bg:92D050|borderL:thin|borderR:thin|borderT:thin|borderB:medium';
-        $s_grn_sig_top = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:92D050|borderL:medium|borderR:thin|borderT:medium|borderB:thin';
-        $s_grn_obs_top = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:92D050|borderL:thin|borderR:medium|borderT:medium|borderB:thin';
+        // Stepped top green header (#92D050): outer perimeter medium, inner dividers thin
+        $s_grn_days_hd   = 'bold|fontName:Calibri|fontSize:9|align:left|valign:center|bg:92D050|borderL:medium|borderR:thin|borderT:medium|borderB:medium';
+        $s_grn_left_hd   = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:92D050|borderL:thin|borderR:thin|borderT:medium|borderB:medium';
+        $s_grn_sig_top   = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:92D050|borderL:medium|borderR:thin|borderT:medium';
+        $s_grn_obs_top   = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:92D050|borderL:thin|borderR:medium|borderT:medium';
+        $s_grn_sig_bot   = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:92D050|borderL:thin|borderR:thin|borderB:medium';
+        $s_grn_obs_bot   = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:92D050|borderL:thin|borderR:medium|borderB:medium';
 
-        $s_day_lbl     = 'fontName:Calibri|fontSize:9|align:left|valign:center|border:thin';
-        $s_day_ctr     = 'fontName:Calibri|fontSize:9|align:center|valign:center|border:thin';
-        $s_day_num     = 'fontName:Calibri|fontSize:9|align:center|valign:center|border:thin|numFmt:0.##';
-        $s_day_obs     = 'fontName:Calibri|fontSize:9|align:left|valign:center|borderL:thin|borderR:medium|borderT:thin|borderB:thin';
-        $s_sun_lbl     = 'bold|fontName:Calibri|fontSize:9|fg:FF0000|align:left|valign:center|border:thin';
-        $s_sun_ctr     = 'bold|fontName:Calibri|fontSize:9|fg:FF0000|align:center|valign:center|border:thin';
+        // Standard day rows (left outer border medium on A, right outer border medium on G)
+        $s_day_lbl       = 'fontName:Calibri|fontSize:9|align:left|valign:center|borderL:medium|borderR:thin|borderT:thin|borderB:thin';
+        $s_day_lbl_notch = 'fontName:Calibri|fontSize:9|align:left|valign:center|borderL:medium|borderR:thin|borderT:thin|borderB:medium';
+        $s_day_ctr       = 'fontName:Calibri|fontSize:9|align:center|valign:center|border:thin';
+        $s_day_ctr_notch = 'fontName:Calibri|fontSize:9|align:center|valign:center|borderL:thin|borderR:thin|borderT:thin|borderB:medium';
+        $s_day_num       = 'fontName:Calibri|fontSize:9|align:center|valign:center|border:thin|numFmt:0.##';
+        $s_day_num_end   = 'fontName:Calibri|fontSize:9|align:center|valign:center|borderL:thin|borderR:thin|borderT:thin|borderB:medium|numFmt:0.##';
+        $s_day_sig_end   = 'fontName:Calibri|fontSize:9|align:center|valign:center|borderL:thin|borderR:thin|borderT:thin|borderB:medium';
+        $s_day_obs       = 'fontName:Calibri|fontSize:9|align:left|valign:center|borderL:thin|borderR:medium|borderT:thin|borderB:thin';
+        $s_day_obs_end   = 'fontName:Calibri|fontSize:9|align:left|valign:center|borderL:thin|borderR:medium|borderT:thin|borderB:medium';
 
-        $s_blu_tot_lbl = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|border:thin';
-        $s_blu_tot_val = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|border:thin|numFmt:0.##';
-        $s_blu_sig     = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|border:thin';
-        $s_blu_obs     = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|borderL:thin|borderR:medium|borderT:thin|borderB:thin';
-        $s_blu_days_hd = 'bold|fontName:Calibri|fontSize:9|align:left|valign:center|bg:9BC2E6|border:thin';
-        $s_blu_left_hd = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|border:thin';
+        $s_sun_lbl       = 'bold|fontName:Calibri|fontSize:9|fg:FF0000|align:left|valign:center|borderL:medium|borderR:thin|borderT:thin|borderB:thin';
+        $s_sun_lbl_notch = 'bold|fontName:Calibri|fontSize:9|fg:FF0000|align:left|valign:center|borderL:medium|borderR:thin|borderT:thin|borderB:medium';
+        $s_sun_ctr       = 'bold|fontName:Calibri|fontSize:9|fg:FF0000|align:center|valign:center|border:thin';
+        $s_sun_ctr_notch = 'bold|fontName:Calibri|fontSize:9|fg:FF0000|align:center|valign:center|borderL:thin|borderR:thin|borderT:thin|borderB:medium';
 
-        $s_sum_lbl     = 'bold|fontName:Calibri|fontSize:8.5|align:center|valign:center|bg:92D050|borderL:thin|borderR:thin|borderT:thin|borderB:medium';
-        $s_sum_val_c   = 'bold|fontName:Calibri|fontSize:9.5|align:center|valign:center|borderL:thin|borderR:thin|borderT:thin|borderB:medium';
-        $s_sum_val_d   = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|borderL:thin|borderR:medium|borderT:thin|borderB:medium|numFmt:0.##';
+        // Sky-blue (#9BC2E6) 3-row inter-week band
+        $s_blu_tot_c     = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|borderL:medium|borderT:thin|borderB:medium';
+        $s_blu_tot_d     = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|borderR:thin|borderT:thin|borderB:medium';
+        $s_blu_tot_val   = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|borderL:thin|borderR:thin|borderT:thin|borderB:medium|numFmt:0.##';
+        $s_blu_sig_t     = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|borderL:thin|borderR:thin|borderT:thin';
+        $s_blu_sig_m     = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|borderL:medium|borderR:thin';
+        $s_blu_sig_b     = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|borderL:thin|borderR:thin|borderB:thin';
+        $s_blu_obs_t     = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|borderL:thin|borderR:medium|borderT:thin';
+        $s_blu_obs_m     = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|borderL:thin|borderR:medium';
+        $s_blu_obs_b     = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|borderL:thin|borderR:medium|borderB:thin';
+        $s_blu_days_hd   = 'bold|fontName:Calibri|fontSize:9|align:left|valign:center|bg:9BC2E6|borderL:medium|borderR:thin|borderT:medium|borderB:thin';
+        $s_blu_left_hd   = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|bg:9BC2E6|borderL:thin|borderR:thin|borderT:medium|borderB:thin';
 
-        $s_sig_head    = 'bold|italic|underline|fontName:Calibri|fontSize:9|align:center|valign:center';
-        $s_sig_role    = 'bold|italic|fontName:Calibri|fontSize:9|align:center|valign:center';
-        $s_sig_dots    = 'fontName:Calibri|fontSize:9|align:center|valign:center';
+        // Bottom 2-row TOTAL DAYS WORKED summary block
+        $s_sum_lbl_tl    = 'bold|fontName:Calibri|fontSize:8.5|align:center|valign:center|bg:92D050|borderL:medium|borderT:thin';
+        $s_sum_lbl_tr    = 'bold|fontName:Calibri|fontSize:8.5|align:center|valign:center|bg:92D050|borderR:thin|borderT:thin';
+        $s_sum_lbl_bl    = 'bold|fontName:Calibri|fontSize:8.5|align:center|valign:center|bg:92D050|borderL:medium|borderB:medium';
+        $s_sum_lbl_br    = 'bold|fontName:Calibri|fontSize:8.5|align:center|valign:center|bg:92D050|borderR:thin|borderB:medium';
+        $s_sum_val_ct    = 'bold|fontName:Calibri|fontSize:9.5|align:center|valign:center|borderL:thin|borderR:thin|borderT:thin|numFmt:0';
+        $s_sum_val_cb    = 'bold|fontName:Calibri|fontSize:9.5|align:center|valign:center|borderL:thin|borderR:thin|borderB:medium|numFmt:0';
+        $s_sum_val_dt    = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|borderL:thin|borderR:medium|borderT:thin|numFmt:0.##';
+        $s_sum_val_db    = 'bold|fontName:Calibri|fontSize:9|align:center|valign:center|borderL:thin|borderR:medium|borderB:medium|numFmt:0.##';
+
+        $s_sig_head      = 'bold|italic|underline|fontName:Calibri|fontSize:9|align:center|valign:center';
+        $s_sig_role      = 'bold|italic|fontName:Calibri|fontSize:9|align:center|valign:center';
+        $s_sig_dots      = 'fontName:Calibri|fontSize:9|align:center|valign:center';
 
         $r = 1;
 
@@ -166,15 +195,15 @@ class Timesheet_excel {
             ));
         }
 
-        // Rows 3–4: Green Title Box across B3:F4
+        // Rows 3–4: Green Title Box across B3:F4 (clean outer border, no inner dividers)
         $x->setRowHeight($r, 20);
         $x->writeRowStyled(array(
             array('v' => '', 's' => $s_blank),
-            array('v' => 'INDIVIDUAL ATTENDANCE SHEET', 's' => $s_title_top),
-            array('v' => '', 's' => $s_title_top),
-            array('v' => '', 's' => $s_title_top),
-            array('v' => '', 's' => $s_title_top),
-            array('v' => '', 's' => $s_title_top),
+            array('v' => 'INDIVIDUAL ATTENDANCE SHEET', 's' => $s_title_tl),
+            array('v' => '', 's' => $s_title_tm),
+            array('v' => '', 's' => $s_title_tm),
+            array('v' => '', 's' => $s_title_tm),
+            array('v' => '', 's' => $s_title_tr),
             array('v' => '', 's' => $s_blank),
         ));
         $x->mergeCells('B' . $r, 'F' . $r);
@@ -183,11 +212,11 @@ class Timesheet_excel {
         $x->setRowHeight($r, 16);
         $x->writeRowStyled(array(
             array('v' => '', 's' => $s_blank),
-            array('v' => (string)$sheet['month_heading'], 's' => $s_title_sub),
-            array('v' => '', 's' => $s_title_sub),
-            array('v' => '', 's' => $s_title_sub),
-            array('v' => '', 's' => $s_title_sub),
-            array('v' => '', 's' => $s_title_sub),
+            array('v' => (string)$sheet['month_heading'], 's' => $s_title_bl),
+            array('v' => '', 's' => $s_title_bm),
+            array('v' => '', 's' => $s_title_bm),
+            array('v' => '', 's' => $s_title_bm),
+            array('v' => '', 's' => $s_title_br),
             array('v' => '', 's' => $s_blank),
         ));
         $x->mergeCells('B' . $r, 'F' . $r);
@@ -246,8 +275,8 @@ class Timesheet_excel {
             array('v' => 'TIME IN',  's' => $s_grn_left_hd),
             array('v' => 'TIME OUT', 's' => $s_grn_left_hd),
             array('v' => 'TOTAL H',  's' => $s_grn_left_hd),
-            array('v' => '',         's' => $s_grn_sig_top),
-            array('v' => '',         's' => $s_grn_obs_top),
+            array('v' => '',         's' => $s_grn_sig_bot),
+            array('v' => '',         's' => $s_grn_obs_bot),
         ));
         $x->mergeCells('F' . $hd_top_r, 'F' . $r);
         $x->mergeCells('G' . $hd_top_r, 'G' . $r);
@@ -258,22 +287,43 @@ class Timesheet_excel {
         $weeks = isset($grid['weeks']) ? $grid['weeks'] : array();
         $num_weeks = count($weeks);
         $all_day_ranges = array();
+        $days_without_hours = 0;
 
         foreach ($weeks as $wi => $wk) {
             $wk_first_row = $r;
-            foreach ($wk['days'] as $day) {
-                $is_sun = !empty($day['is_sunday']);
-                $h_val = ($day['hours'] !== NULL && $day['hours'] > 0) ? (float)$day['hours'] : '';
+            $wk_cnt = count($wk['days']);
+            foreach ($wk['days'] as $di => $day) {
+                $is_sun       = !empty($day['is_sunday']);
+                $is_wk_last   = ($di === $wk_cnt - 1);
+                $has_inter    = ($wi < $num_weeks - 1);
+                $is_table_end = ($wi === $num_weeks - 1) && $is_wk_last;
+
+                if ($day['hours'] !== NULL && $day['hours'] > 0) {
+                    $h_val = (float)$day['hours'];
+                } else {
+                    // Auto-computes decimal hours in Excel if HR enters TIME IN / TIME OUT later; stays "" when blank
+                    $h_val = '=IF(AND(C' . $r . '<>"",D' . $r . '<>""),ROUND(MOD(D' . $r . '-C' . $r . ',1)*24,2),"")';
+                    if (!empty($day['worked'])) {
+                        $days_without_hours++;
+                    }
+                }
+
+                $notch_ab = $has_inter && $is_wk_last;
+                $st_a = $is_sun ? ($notch_ab ? $s_sun_lbl_notch : $s_sun_lbl) : ($notch_ab ? $s_day_lbl_notch : $s_day_lbl);
+                $st_b = $is_sun ? ($notch_ab ? $s_sun_ctr_notch : $s_sun_ctr) : ($notch_ab ? $s_day_ctr_notch : $s_day_ctr);
+                $st_e = $is_table_end ? $s_day_num_end : $s_day_num;
+                $st_f = $is_table_end ? $s_day_sig_end : $s_day_ctr;
+                $st_g = $is_table_end ? $s_day_obs_end : $s_day_obs;
 
                 $x->setRowHeight($r, 15.2);
                 $x->writeRowStyled(array(
-                    array('v' => $day['day_name'],    's' => $is_sun ? $s_sun_lbl : $s_day_lbl),
-                    array('v' => $day['date_label'],  's' => $is_sun ? $s_sun_ctr : $s_day_ctr),
+                    array('v' => $day['day_name'],    's' => $st_a),
+                    array('v' => $day['date_label'],  's' => $st_b),
                     array('v' => $day['time_in'],     's' => $s_day_ctr),
                     array('v' => $day['time_out'],    's' => $s_day_ctr),
-                    array('v' => $h_val,              's' => $s_day_num),
-                    array('v' => '',                  's' => $s_day_ctr),
-                    array('v' => $day['observation'], 's' => $s_day_obs),
+                    array('v' => $h_val,              's' => $st_e),
+                    array('v' => '',                  's' => $st_f),
+                    array('v' => $day['observation'], 's' => $st_g),
                 ));
                 $r++;
             }
@@ -294,16 +344,16 @@ class Timesheet_excel {
                 $x->writeRowStyled(array(
                     array('v' => '',            's' => $s_blank),
                     array('v' => '',            's' => $s_blank),
-                    array('v' => 'TOTAL',       's' => $s_blu_tot_lbl),
-                    array('v' => '',            's' => $s_blu_tot_lbl),
+                    array('v' => 'TOTAL',       's' => $s_blu_tot_c),
+                    array('v' => '',            's' => $s_blu_tot_d),
                     array('v' => $sum_expr,     's' => $s_blu_tot_val),
-                    array('v' => 'SIGNATURE',   's' => $s_blu_sig),
-                    array('v' => 'OBSERVATION', 's' => $s_blu_obs),
+                    array('v' => 'SIGNATURE',   's' => $s_blu_sig_t),
+                    array('v' => 'OBSERVATION', 's' => $s_blu_obs_t),
                 ));
                 $x->mergeCells('C' . $r, 'D' . $r);
                 $r++;
 
-                // Band row 2: A..E white notch, F..G middle of merge
+                // Band row 2: A..E white notch, F..G middle of merge (medium borderL on F!)
                 $x->setRowHeight($r, 15.2);
                 $x->writeRowStyled(array(
                     array('v' => '', 's' => $s_blank),
@@ -311,8 +361,8 @@ class Timesheet_excel {
                     array('v' => '', 's' => $s_blank),
                     array('v' => '', 's' => $s_blank),
                     array('v' => '', 's' => $s_blank),
-                    array('v' => '', 's' => $s_blu_sig),
-                    array('v' => '', 's' => $s_blu_obs),
+                    array('v' => '', 's' => $s_blu_sig_m),
+                    array('v' => '', 's' => $s_blu_obs_m),
                 ));
                 $r++;
 
@@ -324,8 +374,8 @@ class Timesheet_excel {
                     array('v' => 'TIME IN',  's' => $s_blu_left_hd),
                     array('v' => 'TIME OUT', 's' => $s_blu_left_hd),
                     array('v' => 'TOTAL H',  's' => $s_blu_left_hd),
-                    array('v' => '',         's' => $s_blu_sig),
-                    array('v' => '',         's' => $s_blu_obs),
+                    array('v' => '',         's' => $s_blu_sig_b),
+                    array('v' => '',         's' => $s_blu_obs_b),
                 ));
                 $x->mergeCells('F' . $b1_r, 'F' . $r);
                 $x->mergeCells('G' . $b1_r, 'G' . $r);
@@ -333,19 +383,26 @@ class Timesheet_excel {
             }
         }
 
-        // Bottom 2-row summary block: TOTAL DAYS WORKED (A:B merged) + C + D
+        // Bottom 2-row summary block: TOTAL DAYS WORKED (A:B merged) + live Days Count (C) + live Total Hours (D)
         $tot_r1 = $r;
-        $days_val = !empty($grid['days_worked']) && (int)$grid['days_worked'] > 0 ? (int)$grid['days_worked'] : '';
-        $tot_h_expr = !empty($all_day_ranges)
-            ? ('=IF(SUM(' . implode(',', $all_day_ranges) . ')>0,SUM(' . implode(',', $all_day_ranges) . '),"")')
-            : '';
+        $rng_csv = implode(',', $all_day_ranges);
+        if ($rng_csv !== '') {
+            $cnt_expr = ($days_without_hours > 0)
+                ? ('(COUNT(' . $rng_csv . ')+' . (int)$days_without_hours . ')')
+                : ('COUNT(' . $rng_csv . ')');
+            $days_val   = '=IF(' . $cnt_expr . '>0,' . $cnt_expr . ',"")';
+            $tot_h_expr = '=IF(SUM(' . $rng_csv . ')>0,SUM(' . $rng_csv . '),"")';
+        } else {
+            $days_val   = !empty($grid['days_worked']) && (int)$grid['days_worked'] > 0 ? (int)$grid['days_worked'] : '';
+            $tot_h_expr = '';
+        }
 
         $x->setRowHeight($r, 15.2);
         $x->writeRowStyled(array(
-            array('v' => 'TOTAL DAYS WORKED', 's' => $s_sum_lbl),
-            array('v' => '',                  's' => $s_sum_lbl),
-            array('v' => $days_val,           's' => $s_sum_val_c),
-            array('v' => $tot_h_expr,         's' => $s_sum_val_d),
+            array('v' => 'TOTAL DAYS WORKED', 's' => $s_sum_lbl_tl),
+            array('v' => '',                  's' => $s_sum_lbl_tr),
+            array('v' => $days_val,           's' => $s_sum_val_ct),
+            array('v' => $tot_h_expr,         's' => $s_sum_val_dt),
             array('v' => '',                  's' => $s_blank),
             array('v' => '',                  's' => $s_blank),
             array('v' => '',                  's' => $s_blank),
@@ -354,10 +411,10 @@ class Timesheet_excel {
 
         $x->setRowHeight($r, 15.2);
         $x->writeRowStyled(array(
-            array('v' => '', 's' => $s_sum_lbl),
-            array('v' => '', 's' => $s_sum_lbl),
-            array('v' => '', 's' => $s_sum_val_c),
-            array('v' => '', 's' => $s_sum_val_d),
+            array('v' => '', 's' => $s_sum_lbl_bl),
+            array('v' => '', 's' => $s_sum_lbl_br),
+            array('v' => '', 's' => $s_sum_val_cb),
+            array('v' => '', 's' => $s_sum_val_db),
             array('v' => '', 's' => $s_blank),
             array('v' => '', 's' => $s_blank),
             array('v' => '', 's' => $s_blank),

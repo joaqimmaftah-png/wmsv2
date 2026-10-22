@@ -291,21 +291,28 @@ class XlsxWriter {
             $zip->addFromString("xl/worksheets/sheet".($i+1).".xml", $xml);
         }
 
-        // 4. images (W4.1): one media file per image, one drawing part per sheet
+        // 4. images (W4.1): deduplicate identical source files in xl/media/, one drawing part per sheet
         $media = 1;
+        $mediaByPath = array();
         foreach ($this->sheets as $i => $sheet) {
             if (empty($sheet['images'])) continue;
 
             $rels = '';
             $anchors = '';
             foreach ($sheet['images'] as $n => $img) {
-                $part = 'image' . $media . '.' . $img['ext'];
-                $zip->addFile($img['file'], 'xl/media/' . $part);
+                $keyPath = realpath($img['file']) ?: $img['file'];
+                if (!isset($mediaByPath[$keyPath])) {
+                    $part = 'image' . $media . '.' . $img['ext'];
+                    $zip->addFile($img['file'], 'xl/media/' . $part);
+                    $mediaByPath[$keyPath] = $part;
+                    $media++;
+                } else {
+                    $part = $mediaByPath[$keyPath];
+                }
                 $rid = 'rId' . ($n + 1);
                 $rels .= '<Relationship Id="' . $rid . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"'
                        . ' Target="../media/' . $part . '"/>';
-                $anchors .= $this->_anchorXml($img, $rid);
-                $media++;
+                $anchors .= $this->_anchorXml($img, $rid, $n + 2);
             }
 
             $zip->addFromString('xl/drawings/drawing' . ($i + 1) . '.xml',
@@ -417,15 +424,16 @@ class XlsxWriter {
         return $map;
     }
 
-    /** One <xdr:oneCellAnchor> — the anchor the approved workbook uses for its logo. */
-    private function _anchorXml($img, $rid) {
+    /** One <xdr:oneCellAnchor> — ST_DrawingElementId must be >= 1 even when anchored at A1 (col=0,row=0). */
+    private function _anchorXml($img, $rid, $picId = 2) {
         $name = htmlspecialchars((string)($img['name']), ENT_XML1);
+        $cNvId = max(2, (int)$picId);
         return '<xdr:oneCellAnchor>'
             . '<xdr:from><xdr:col>' . $img['col'] . '</xdr:col><xdr:colOff>' . $img['x'] . '</xdr:colOff>'
             . '<xdr:row>' . $img['row'] . '</xdr:row><xdr:rowOff>' . $img['y'] . '</xdr:rowOff></xdr:from>'
             . '<xdr:ext cx="' . $img['cx'] . '" cy="' . $img['cy'] . '"/>'
             . '<xdr:pic>'
-            . '<xdr:nvPicPr><xdr:cNvPr id="' . ($img['col'] . $img['row']) . '" name="' . $name . '"/>'
+            . '<xdr:nvPicPr><xdr:cNvPr id="' . $cNvId . '" name="' . $name . '"/>'
             . '<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>'
             . '<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="' . $rid . '" cstate="print"/>'
             . '<a:stretch><a:fillRect/></a:stretch></xdr:blipFill>'
@@ -749,6 +757,7 @@ class XlsxWriter {
 <borders count="'.count($borders).'">'.implode('',$borders).'</borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
 <cellXfs count="'.count($xfOrder).'">'.$xfs.'</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>';
     }
 

@@ -28,6 +28,9 @@ $can_punch     = !$is_manager;   // Manager is view-only (MY_Controller guard)
     <?php endif; ?>
     <?php if ($is_supervisor || $is_manager): ?>
       <a href="<?= base_url('attendance/log') ?>" class="btn btn-ghost btn-sm">Punch log</a>
+      <a href="<?= base_url('team/report') ?>" class="btn btn-ghost btn-sm">AML Timesheets</a>
+    <?php else: ?>
+      <a href="<?= base_url('team/view/' . (int)$this->session->userdata('user_id')) ?>" class="btn btn-ghost btn-sm">My AML Timesheet</a>
     <?php endif; ?>
     <a href="<?= base_url('team/attendance') ?>" class="btn btn-ghost btn-sm">Daily attendance →</a>
   </div>
