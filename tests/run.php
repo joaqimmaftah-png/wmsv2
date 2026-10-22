@@ -1553,7 +1553,7 @@ class PmPlannerFakeDB {
 
     public function dbprefix($t = '') { return (string)$t; }
     public function table_exists($t) {
-        return in_array($t, array('pm_schedules', 'equipment', 'equipment_types', 'pm_part_requirements', 'materials', 'pm_completions'), TRUE);
+        return in_array($t, array('pm_schedules', 'equipment', 'equipment_types', 'pm_part_requirements', 'materials', 'pm_completions', 'backlogs', 'work_orders', 'users'), TRUE);
     }
     public function select($s, $escape = NULL) { return $this; }
     public function from($t) { return $this; }
@@ -1880,6 +1880,148 @@ check('INSP-04 Manager UI RBAC: hides New Inspection, Manage Templates & Edit li
 check('INSP-06 Accessible Slide-Over Inspection Drawer rendered cleanly',
     strpos($inSupHtml, 'id="inDrawer" role="dialog" aria-modal="true"') !== FALSE
     && strpos($inSupHtml, 'inspections/summary_json/') !== FALSE);
+
+/* ─────────────────────────────────────────────────────────────────────────
+   17. Backlog Defect Register DataTable, O(1) Telemetry, F-08 RBAC & XSS
+   ───────────────────────────────────────────────────────────────────────── */
+
+if (!class_exists('Backlog_model', FALSE)) {
+    require_once APPPATH . 'models/Backlog_model.php';
+}
+
+$blDb = new PmPlannerFakeDB();
+$blModel = new Backlog_model();
+$blModel->db = $blDb;
+
+$blSeedRows = array(
+    // 1. Open overdue P1 BREAKDOWN raised by INSP-951 on EX 006 + XSS probe
+    (object)array(
+        'id' => 61, 'equipment_id' => 1, 'asset_label' => 'EX 006', 'equipment_code' => 'EX 006',
+        'machine_type' => 'Excavator', 'equip_location' => 'MET PLANT', 'model' => '336D2L',
+        'serial_no' => 'CAT336', 'start_odometer' => '1420 Hr', 'start_date' => '2026-10-01',
+        'description' => 'Service brake pressure loss<script>alert(7)</script>',
+        'source' => 'Inspection', 'reported_by' => 'John Moshi', 'in_charge' => 'John Moshi',
+        'priority' => 'P1', 'deadline' => '2026-10-15', 'observation' => 'Stop machine immediately',
+        'machine_status' => 'BREAKDOWN', 'status' => 'Open', 'end_odometer' => NULL, 'end_date' => NULL,
+        'closing_remarks' => NULL, 'mechanic' => NULL, 'supervisor' => NULL,
+        'work_order_id' => 5, 'wo_number' => 'WO-2026-005', 'wo_status' => 'In Progress',
+        'planned_date' => '2026-10-23', 'estimated_duration' => 180,
+        'source_ref' => 'insp_951_item_1', 'verified_by' => NULL, 'verified_at' => NULL,
+        'verifier_first' => NULL, 'verifier_last' => NULL, 'recurrence_of' => NULL,
+    ),
+    // 2. Closed supervisor-verified defect on C-HEADT 007
+    (object)array(
+        'id' => 62, 'equipment_id' => 2, 'asset_label' => 'C-HEADT 007', 'equipment_code' => 'C-HEADT 007',
+        'machine_type' => 'Horse Truck', 'equip_location' => 'WORKSHOP', 'model' => 'F3000',
+        'serial_no' => 'SHAC982', 'start_odometer' => '98000 Km', 'start_date' => '2026-10-10',
+        'description' => 'Air dryer purge valve sticking',
+        'source' => 'Checklist', 'reported_by' => 'Paul Kileo', 'in_charge' => 'Paul Kileo',
+        'priority' => 'P2', 'deadline' => '2026-10-20', 'observation' => '',
+        'machine_status' => 'OPERATIONAL', 'status' => 'Closed', 'end_odometer' => '98200 Km',
+        'end_date' => '2026-10-18', 'closing_remarks' => 'Replaced purge valve kit',
+        'mechanic' => 'Paul Kileo', 'supervisor' => 'Chief Sup',
+        'work_order_id' => NULL, 'wo_number' => NULL, 'wo_status' => NULL,
+        'planned_date' => NULL, 'estimated_duration' => NULL,
+        'source_ref' => NULL, 'verified_by' => 1, 'verified_at' => '2026-10-18 16:00:00',
+        'verifier_first' => 'Chief', 'verifier_last' => 'Supervisor', 'recurrence_of' => NULL,
+    ),
+);
+
+$blDb->queue = array(
+    new EquipFleetFakeResult($blSeedRows),
+    new EquipFleetFakeResult(array(
+        (object)array('id' => 1, 'registration_no' => 'EX 006', 'location' => 'MET PLANT'),
+        (object)array('id' => 2, 'registration_no' => 'C-HEADT 007', 'location' => 'WORKSHOP'),
+    )),
+);
+
+$qStartBl = count($blDb->queries);
+$blOverview = $blModel->get_register_overview('2026-10-22');
+$qTotalBl = count($blDb->queries) - $qStartBl;
+
+check('BL-03 O(1) Telemetry Scaling: Backlog_model::get_register_overview() hydrates defects, WOs, verifiers & hotspots in <= 3 SELECT queries',
+    $qTotalBl <= 3 && count($blOverview['rows']) === 2 && count($blOverview['by_asset']) === 1,
+    "Executed {$qTotalBl} SELECT queries");
+check('BL-03 Age, Overdue Deadline, Inspection Traceability (`insp_951`) & Verifier Resolution',
+    $blOverview['rows'][0]->days_down === 21
+    && $blOverview['rows'][0]->is_overdue === TRUE
+    && $blOverview['rows'][0]->inspection_record_id === 951
+    && $blOverview['rows'][0]->machine_display === 'EX 006'
+    && $blOverview['rows'][1]->days_down === 8
+    && $blOverview['rows'][1]->verifier_name === 'Chief Supervisor');
+
+$blCtrlSrc = file_get_contents(APPPATH . 'controllers/Backlog.php');
+check('BL-02 F-08 Closure Bypass Hardening: Backlog::_save() enforces supervisor verification on status = Closed',
+    strpos($blCtrlSrc, 'Closing a defect requires supervisor verification.') !== FALSE);
+if (isset($mutRegex)) {
+    foreach (array('index', 'export_csv', 'export_xlsx', 'summary_json') as $blAct) {
+        check("BL-04 Manager RBAC: Backlog::{$blAct}() is permitted under read-only MUTATION_PATTERN",
+            preg_match($mutRegex, $blAct) === 0);
+    }
+}
+
+$blVars = array(
+    'items'          => $blOverview['rows'],
+    'kpi'            => array('total' => 2, 'open' => 1, 'closed' => 1, 'p1' => 1, 'overdue' => 1, 'breakdown' => 1, 'scheduled' => 1, 'avg_days' => 21.0, 'oldest' => 21),
+    'by_asset'       => $blOverview['by_asset'],
+    'equipment'      => $blOverview['equipment'],
+    'available'      => TRUE,
+    'tab_counts'     => array('all' => 2, 'active' => 1, 'p1' => 1, 'breakdown' => 1, 'overdue' => 1, 'scheduled' => 1, 'closed' => 1),
+    'tab'            => 'all',
+    'q'              => '',
+    'filter'         => array('status' => '', 'priority' => '', 'source' => '', 'machine_status' => '', 'equipment_id' => '', 'date_from' => '', 'date_to' => '', 'overdue' => '', 'search' => ''),
+    'sort'           => 'default',
+    'dir'            => 'asc',
+    'view_mode'      => 'table',
+    'per_page'       => 25,
+    'allowed_pp'     => array(10, 25, 50, 100, 150),
+    'current_page'   => 1,
+    'total_pages'    => 1,
+    'total_filtered' => 2,
+    'offset'         => 0,
+    'can_write'      => TRUE,
+    'is_supervisor'  => TRUE,
+);
+
+$blWarnings = array();
+set_error_handler(function ($severity, $message, $file, $line) use (&$blWarnings) {
+    $blWarnings[] = "{$message} ({$file}:{$line})";
+    return TRUE;
+});
+ob_start();
+(function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/backlog/index.php'; })($blVars);
+$blSupHtml = ob_get_clean();
+
+$blTechHtml = '';
+ob_start();
+(function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/backlog/index.php'; })(array_merge($blVars, array('can_write' => TRUE, 'is_supervisor' => FALSE)));
+$blTechHtml = ob_get_clean();
+
+$blMgrHtml = '';
+ob_start();
+(function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/backlog/index.php'; })(array_merge($blVars, array('can_write' => FALSE, 'is_supervisor' => FALSE)));
+$blMgrHtml = ob_get_clean();
+restore_error_handler();
+
+check('BL-01 View Render: application/views/backlog/index.php renders Enterprise DataTable & Dual Cards with ZERO PHP warnings',
+    empty($blWarnings)
+    && strpos($blSupHtml, '<table class="bl-table"') !== FALSE
+    && strpos($blSupHtml, 'class="bl-cards-grid"') !== FALSE,
+    implode('; ', $blWarnings));
+check('BL-04 XSS Neutralization in backlog/index.php: hostile <script> tag escaped cleanly',
+    strpos($blSupHtml, '<script>alert(7)</script>') === FALSE
+    && strpos($blSupHtml, 'Service brake pressure loss&lt;script&gt;alert(7)&lt;/script&gt;') !== FALSE);
+check('BL-02 3-Role UI RBAC: Supervisor sees New/Edit/Verify, Technician sees New/Edit without Verify, Manager sees read-only Exports & Inspect',
+    strpos($blSupHtml, 'id="blCloseModal"') !== FALSE
+    && strpos($blTechHtml, 'backlog/create') !== FALSE
+    && strpos($blTechHtml, 'id="blCloseModal"') === FALSE
+    && strpos($blMgrHtml, 'backlog/create') === FALSE
+    && strpos($blMgrHtml, 'href="' . base_url('backlog/edit/')) === FALSE
+    && strpos($blMgrHtml, 'backlog/export_csv') !== FALSE
+    && strpos($blMgrHtml, 'backlog/export_xlsx') !== FALSE);
+check('BL-05 Accessible Slide-Over Defect Drawer rendered cleanly',
+    strpos($blSupHtml, 'id="blDrawer" role="dialog" aria-modal="true"') !== FALSE
+    && strpos($blSupHtml, 'backlog/summary_json/') !== FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
    Result

@@ -625,6 +625,110 @@ for (const rawLine of cookieLines) {
     assert(inMobile.docOverflow <= 0, '/inspections Mobile 390px overflowed: ' + inMobile.docOverflow);
     assert(inMobile.tableDisplay === 'none' && inMobile.cardsDisplay === 'block', '/inspections Mobile Card View failed: ' + JSON.stringify(inMobile));
 
+    // ---------------------------------------------------------------
+    // /backlog Enterprise Defect Register Desktop (1440x900) & Mobile (390x844) E2E
+    // ---------------------------------------------------------------
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/backlog' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("blShell"))')) break;
+      await sleep(200);
+    }
+    const blDesktop = await evalJs(`(async () => {
+      const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+      const tblWrap = document.querySelector('.bl-table-wrap');
+      const tblOverflow = tblWrap ? (tblWrap.scrollWidth - tblWrap.clientWidth) : -1;
+
+      // Slash shortcut focuses #blSearchInput
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+      const slashFocused = (document.activeElement === document.getElementById('blSearchInput'));
+      document.activeElement.blur();
+
+      // Supervisor Verify modal opens with target action & Escape restores focus
+      const verifyBtn = document.querySelector('[data-bl-close-id]');
+      verifyBtn.click();
+      const closeModalOpen = document.getElementById('blCloseModal').classList.contains('is-open')
+        && document.getElementById('blCloseForm').getAttribute('action').includes('backlog/close/961');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const closeModalClosed = !document.getElementById('blCloseModal').classList.contains('is-open')
+        && (document.activeElement === verifyBtn);
+
+      // Select first row checkbox -> opens sticky batch bar with ?ids=
+      const firstCb = document.querySelector('.bl-row-check');
+      firstCb.checked = true;
+      firstCb.dispatchEvent(new Event('change', { bubbles: true }));
+      const batchVisible = document.getElementById('blBatchBar').classList.contains('is-open');
+      const batchCsvHref = document.getElementById('blBatchExportBtn').getAttribute('href') || '';
+
+      // Open Slide-Over Defect Inspector Drawer (BL-0961)
+      const trigger = document.querySelector('.bl-inspect-trigger');
+      trigger.focus();
+      trigger.click();
+      for (let w = 0; w < 25; w++) {
+        if (document.getElementById('blDrawerBody').textContent.includes('Traceability')) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const drawerOpen = document.getElementById('blDrawer').classList.contains('is-open');
+      const hasInspLink = document.getElementById('blDrawerBody').textContent.includes('INSP-951');
+      const firstHeader = document.getElementById('blDrawerTitle').textContent;
+
+      // ArrowRight steps drawer to BL-0962
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      const secondHeader = document.getElementById('blDrawerTitle').textContent;
+
+      // Escape closes drawer and restores focus to trigger button
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const drawerClosed = !document.getElementById('blDrawer').classList.contains('is-open');
+      const focusRestored = (document.activeElement === trigger);
+
+      // Toggle Cards <-> Table view smoothly
+      document.querySelector('[data-bl-view="cards"]').click();
+      const cardsShown = getComputedStyle(document.querySelector('.bl-cards-container')).display !== 'none'
+        && getComputedStyle(document.querySelector('.bl-table-wrap')).display === 'none';
+      document.querySelector('[data-bl-view="table"]').click();
+
+      // Verify live UTF-8 BOM CSV export endpoint returns 200 + Backlog columns
+      const csvRes = await fetch('/backlog/export_csv?per_page=10', { credentials: 'same-origin' });
+      const csvText = await csvRes.text();
+      const csvOk = csvRes.status === 200
+        && csvText.includes('Backlog ID')
+        && csvText.includes('BL-961')
+        && csvText.includes('BL-962');
+
+      return {
+        docOverflow, tblOverflow, slashFocused, closeModalOpen, closeModalClosed,
+        batchVisible, batchCsvHref, drawerOpen, hasInspLink,
+        stepped: firstHeader !== secondHeader, drawerClosed, focusRestored,
+        cardsShown, csvOk
+      };
+    })()`);
+
+    assert(blDesktop.docOverflow <= 0, '/backlog Desktop overflowed: ' + blDesktop.docOverflow);
+    assert(blDesktop.tblOverflow <= 0, '/backlog Table wrapper overflowed: ' + blDesktop.tblOverflow);
+    assert(blDesktop.slashFocused === true, '/backlog Slash shortcut failed');
+    assert(blDesktop.closeModalOpen && blDesktop.closeModalClosed, '/backlog Supervisor Verify modal failed');
+    assert(blDesktop.batchVisible && blDesktop.batchCsvHref.includes('ids='), '/backlog Batch bar failed');
+    assert(blDesktop.drawerOpen && blDesktop.hasInspLink, '/backlog Drawer missed INSP-951 link');
+    assert(blDesktop.stepped === true, '/backlog ArrowRight navigation failed');
+    assert(blDesktop.drawerClosed && blDesktop.focusRestored, '/backlog Escape close/focus failed');
+    assert(blDesktop.cardsShown === true, '/backlog Cards switcher failed');
+    assert(blDesktop.csvOk === true, '/backlog CSV export failed');
+
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/backlog' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("blShell"))')) break;
+      await sleep(200);
+    }
+    const blMobile = await evalJs(`(() => ({
+      docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      tableDisplay: getComputedStyle(document.querySelector('.bl-table-wrap')).display,
+      cardsDisplay: getComputedStyle(document.querySelector('.bl-cards-container')).display
+    }))()`);
+    assert(blMobile.docOverflow <= 0, '/backlog Mobile 390px overflowed: ' + blMobile.docOverflow);
+    assert(blMobile.tableDisplay === 'none' && blMobile.cardsDisplay === 'block', '/backlog Mobile Card View failed: ' + JSON.stringify(blMobile));
+
     ws.close();
     console.log('ALL HEADLESS CHROME DESKTOP (1440x900) & MOBILE (390x844) UI E2E ASSERTIONS PASSED!');
   } catch (err) {

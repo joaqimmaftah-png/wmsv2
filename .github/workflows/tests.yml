@@ -169,6 +169,10 @@ jobs:
             VALUES
               (951, @it1, '{\"result\":\"No\"}', 'Hydraulic brake line seepage'),
               (952, @it1, '{\"result\":\"Yes\"}', '');
+            INSERT INTO backlogs (id, equipment_id, asset_label, model, start_odometer, start_date, description, source, reported_by, in_charge, priority, deadline, machine_status, status, source_ref)
+            VALUES
+              (961, @eq1, 'EX 006', '336D2L', '1420 Hr', '2026-10-05', 'Hydraulic brake line seepage', 'Inspection', 'John Moshi', 'John Moshi', 'P1', '2026-10-15', 'BREAKDOWN', 'Open', 'insp_951_item_1'),
+              (962, @eq2, 'C-HEADT 007', 'F3000', '98000 Km', '2026-10-10', 'Air dryer purge valve service', 'Checklist', 'Paul Kileo', 'Paul Kileo', 'P2', '2026-10-20', 'OPERATIONAL', 'Closed', NULL);
           "
 
           node tests/ui_e2e.js

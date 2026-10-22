@@ -329,6 +329,32 @@ try:
     except urllib.error.HTTPError as e405:
         assert e405.code == 405, f'Expected 405 on GET /inspections/save, got {e405.code}'
 
+    # Backlog F-08 Bypass Guard: Technician can raise a defect, CANNOT close via POST /backlog/edit/{id}!
+    _, _, bl_new_b = get_bytes('/backlog/create', tech_op)
+    bl_csrf = csrf_from(bl_new_b.decode('utf-8', 'replace'))
+    bl_create_body = urllib.parse.urlencode({
+        'csrf_token_wms': bl_csrf,
+        'asset_label': 'EX 006',
+        'start_date': '2026-10-20',
+        'description': 'CI Technician Hydraulic Hose Chafing',
+        'source': 'Inspection',
+        'priority': 'P2',
+        'status': 'Closed',  # Technician attempts forbidden self-closure!
+    }).encode()
+    bl_req = urllib.request.Request(f'{BASE}/backlog/create', data=bl_create_body, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+    with tech_op.open(bl_req) as bl_resp:
+        bl_reject_html = bl_resp.read().decode('utf-8', 'replace')
+    assert 'Closing a defect requires supervisor verification.' in bl_reject_html, 'Technician was allowed to self-close defect!'
+
+    # Manager (role_id = 4) read-only access succeeds on /backlog, /backlog/export_csv (UTF-8 BOM), AND /backlog/export_xlsx (ZIP PK\x03\x04)
+    st_m_bl, _, m_bl_b = get_bytes('/backlog', mgr_op)
+    m_bl_html = m_bl_b.decode('utf-8', 'replace')
+    assert st_m_bl == 200 and 'Export CSV' in m_bl_html and 'Download Excel' in m_bl_html and '+ New Defect' not in m_bl_html
+    st_m_bl_csv, _, m_bl_csv = get_bytes('/backlog/export_csv', mgr_op)
+    assert st_m_bl_csv == 200 and m_bl_csv.startswith(b'\xef\xbb\xbf')
+    st_m_bl_xls, _, m_bl_xls = get_bytes('/backlog/export_xlsx', mgr_op)
+    assert st_m_bl_xls == 200 and m_bl_xls[:4] == b'PK\x03\x04'
+
     print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS, INSPECTIONS & AML TIMESHEET E2E CHECKS PASSED!')
 except BaseException:
     tb = traceback.format_exc().replace('\n', '%0A')

@@ -150,6 +150,7 @@ $action = (isset($item) && $item) ? base_url('backlog/edit/'.$item->id) : base_u
         <option value="<?= $s ?>" <?= $v('status','Open') === $s ? 'selected' : '' ?>><?= $s ?></option>
         <?php endforeach; ?>
       </select>
+      <?php if ($err('status')): ?><div class="text-red" style="font-size:12px;"><?= htmlspecialchars((string)$err('status'), ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
     </div>
     <div>
       <label class="form-label">End date</label>
