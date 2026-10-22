@@ -414,7 +414,57 @@ jobs:
               st_forb_mj, _, _ = get_bytes(f'/team/member_json/{sup_id}', tech_op)
               assert st_forb_mj == 403, f'Expected HTTP 403 for peer member_json, got {st_forb_mj}'
 
-              print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY & AML TIMESHEET E2E CHECKS PASSED!')
+              # 9. Live Enterprise Work Orders DataTable (/workorders) E2E checks (Supervisor, Technician & Manager RBAC)
+              sql_wo2 = f"""
+              INSERT INTO work_orders (wo_number, equipment_id, title, type, priority, status, hold_code, expected_return_date, created_by)
+              SELECT 'WO-CI-HOLD-02', id, 'Steer axle kingpin & seal kit', 'Preventive Maintenance', 'High', 'Waiting Parts', 'WSP', '2025-05-01', {int(sup_id)}
+              FROM equipment WHERE registration_no = 'C-HEADT 007' LIMIT 1;
+              INSERT INTO wo_spare_parts (work_order_id, item_code, part_name, quantity, unit)
+              SELECT id, 'SP-KP-07', 'Hydraulic Boom Seal Kit', 2, 'pcs'
+              FROM work_orders WHERE wo_number = 'WO-CI-HOLD-02' LIMIT 1;
+              """
+              subprocess.run(
+                  ['mysql', '-h', '127.0.0.1', '-uroot', f'-p{os.environ["WMS_DB_PASS"]}', 'wms_fresh'],
+                  input=sql_wo2.encode('utf-8'),
+                  check=True,
+              )
+
+              wo_html = get('/workorders')
+              assert 'role="tablist"' in wo_html and 'id="woDrawer"' in wo_html, 'Missing workflow tabs/drawer on /workorders!'
+              assert 'WO-CI-TEAM-01' in wo_html and 'WO-CI-HOLD-02' in wo_html
+              assert 'WSP · Waiting for Spare Part' in wo_html and 'Overdue return' in wo_html
+
+              m_wo1 = re.search(r'data-wo-row="(\d+)"[^>]*data-wo-num="WO-CI-TEAM-01"', wo_html)
+              m_wo2 = re.search(r'data-wo-row="(\d+)"[^>]*data-wo-num="WO-CI-HOLD-02"', wo_html)
+              assert m_wo1 and m_wo2, 'Expected both WO-CI-TEAM-01 and WO-CI-HOLD-02 rows'
+              wo1_id, wo2_id = m_wo1.group(1), m_wo2.group(1)
+
+              # Verify workflow status tabs, technician-name search, legacy ?status= link & page clamping
+              hold_html = get('/workorders?tab=on_hold')
+              assert 'WO-CI-HOLD-02' in hold_html and 'data-wo-num="WO-CI-TEAM-01"' not in hold_html
+              tech_q_html = get('/workorders?q=Moshi')
+              assert 'WO-CI-TEAM-01' in tech_q_html and 'data-wo-num="WO-CI-HOLD-02"' not in tech_q_html
+              legacy_st_html = get('/workorders?status=In+Progress&sort=priority&dir=desc&per_page=10&page=999')
+              assert 'WO-CI-TEAM-01' in legacy_st_html and 'aria-sort="descending"' in legacy_st_html
+
+              # Verify JSON Drawer endpoint (/workorders/summary_json/{wo2_id})
+              st_wj, _, wj_raw = get_bytes(f'/workorders/summary_json/{wo2_id}')
+              wj_doc = json.loads(wj_raw.decode('utf-8'))
+              assert st_wj == 200 and wj_doc.get('ok') is True and wj_doc.get('hold_label') == 'Waiting for Spare Part'
+              assert any(p.get('part_name') == 'Hydraulic Boom Seal Kit' for p in wj_doc.get('spare_parts', []))
+
+              # Technician (role_id = 2) can now export UTF-8 BOM CSV WITH unstarted Open/Hold WOs included!
+              st_t_wcsv, _, t_wcsv_raw = get_bytes('/workorders/export_csv', tech_op)
+              assert st_t_wcsv == 200 and t_wcsv_raw.startswith(b'\xef\xbb\xbf'), 'Technician blocked or missing BOM on /workorders/export_csv!'
+              t_wcsv_txt = t_wcsv_raw.decode('utf-8-sig')
+              assert 'WO-CI-TEAM-01' in t_wcsv_txt and 'WO-CI-HOLD-02' in t_wcsv_txt, 'Unstarted WO dropped from CSV export!'
+
+              # Manager (role_id = 4) read-only access succeeds while hiding New WO & Edit mutations
+              st_m_wo, _, m_wo_b = get_bytes('/workorders', mgr_op)
+              m_wo_html = m_wo_b.decode('utf-8', 'replace')
+              assert st_m_wo == 200 and 'Export CSV' in m_wo_html and 'New WO' not in m_wo_html and 'Edit Work Order' not in m_wo_html
+
+              print('ALL LIVE ATTENDANCE WORKFLOW, WORKFORCE DIRECTORY, WORK ORDERS & AML TIMESHEET E2E CHECKS PASSED!')
           except BaseException:
               tb = traceback.format_exc().replace('\n', '%0A')
               print(f'::error title=PythonE2E::{tb}', flush=True)
@@ -673,6 +723,90 @@ jobs:
               }))()`);
               assert(teamMobile.docOverflow <= 0, '/team Mobile 390px overflowed: ' + teamMobile.docOverflow);
               assert(teamMobile.tableDisplay === 'none' && teamMobile.cardsDisplay === 'block', '/team Mobile Card View failed: ' + JSON.stringify(teamMobile));
+
+              // 4. Verify Desktop 1440x900 & Mobile 390x844 UI, Overflow, Batch Bar & Drawer on /workorders
+              await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+              await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/workorders?sort=wo_number&dir=asc' });
+              for (let i = 0; i < 50; i++) {
+                if (await evalJs('document.readyState === "complete" && Boolean(document.querySelector(".wo-row-chk"))')) break;
+                await sleep(200);
+              }
+
+              const woDesktop = await evalJs(`(async () => {
+                const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+                const tblWrap = document.querySelector('.wo-table-wrap');
+                const tblOverflow = tblWrap ? (tblWrap.scrollWidth - tblWrap.clientWidth) : -1;
+
+                // Slash shortcut focuses #woSearchInput
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+                const slashFocused = (document.activeElement && document.activeElement.id === 'woSearchInput');
+                document.activeElement.blur();
+
+                // Select first row -> batch bar opens with exact ?ids=
+                const chk = document.querySelector('.wo-row-chk');
+                chk.checked = true;
+                chk.dispatchEvent(new Event('change', { bubbles: true }));
+                const batchVisible = !document.getElementById('woBatchBar').hidden;
+                const batchCsvHref = document.getElementById('woBatchCsv').getAttribute('href');
+
+                // Click first row WO number (WO-CI-HOLD-02) -> Slide-Over Work Order Inspector Drawer opens
+                const trigger = document.querySelector('.wo-id-btn.js-open-wo');
+                trigger.focus();
+                trigger.click();
+                for (let w = 0; w < 25; w++) {
+                  if (document.getElementById('woDrawerBody').textContent.includes('Hydraulic Boom Seal Kit')) break;
+                  await new Promise((r) => setTimeout(r, 100));
+                }
+                const drawerOpen = !document.getElementById('woDrawer').hidden;
+                const drawerText = document.getElementById('woDrawerBody').textContent;
+                const hasPartAndHold = drawerText.includes('Hydraulic Boom Seal Kit') && drawerText.includes('Waiting for Spare Part');
+                const firstHeader = document.getElementById('woDrawerTitle').textContent;
+
+                // ArrowRight advances drawer to WO-CI-TEAM-01
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+                await new Promise((r) => setTimeout(r, 250));
+                const secondHeader = document.getElementById('woDrawerTitle').textContent;
+
+                // Escape closes drawer and restores focus to trigger button
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                const drawerClosed = document.getElementById('woDrawer').hidden;
+                const focusRestored = (document.activeElement === trigger);
+
+                // Toggle Cards <-> Table view smoothly
+                document.querySelector('[data-set-view="cards"]').click();
+                const cardsShown = getComputedStyle(document.querySelector('.wo-cards-container')).display !== 'none'
+                  && getComputedStyle(document.querySelector('.wo-table-wrap')).display === 'none';
+                document.querySelector('[data-set-view="table"]').click();
+
+                return {
+                  docOverflow, tblOverflow, slashFocused, batchVisible, batchCsvHref,
+                  drawerOpen, hasPartAndHold, stepped: firstHeader !== secondHeader,
+                  drawerClosed, focusRestored, cardsShown
+                };
+              })()`);
+
+              assert(woDesktop.docOverflow <= 0, '/workorders Desktop overflowed: ' + woDesktop.docOverflow);
+              assert(woDesktop.tblOverflow <= 0, '/workorders Table wrapper overflowed: ' + woDesktop.tblOverflow);
+              assert(woDesktop.slashFocused === true, '/workorders Slash shortcut failed');
+              assert(woDesktop.batchVisible && woDesktop.batchCsvHref.includes('ids='), '/workorders Batch bar failed');
+              assert(woDesktop.drawerOpen && woDesktop.hasPartAndHold, '/workorders Drawer missed part/hold details');
+              assert(woDesktop.stepped === true, '/workorders ArrowRight navigation failed');
+              assert(woDesktop.drawerClosed && woDesktop.focusRestored, '/workorders Escape close/focus failed');
+              assert(woDesktop.cardsShown === true, '/workorders Cards switcher failed');
+
+              await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+              await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/workorders' });
+              for (let i = 0; i < 40; i++) {
+                if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("woShell"))')) break;
+                await sleep(200);
+              }
+              const woMobile = await evalJs(`(() => ({
+                docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+                tableDisplay: getComputedStyle(document.querySelector('.wo-table-wrap')).display,
+                cardsDisplay: getComputedStyle(document.querySelector('.wo-cards-container')).display
+              }))()`);
+              assert(woMobile.docOverflow <= 0, '/workorders Mobile 390px overflowed: ' + woMobile.docOverflow);
+              assert(woMobile.tableDisplay === 'none' && woMobile.cardsDisplay === 'block', '/workorders Mobile Card View failed: ' + JSON.stringify(woMobile));
 
               ws.close();
               console.log('ALL HEADLESS CHROME DESKTOP (1440x900) & MOBILE (390x844) UI E2E ASSERTIONS PASSED!');

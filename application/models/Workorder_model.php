@@ -27,11 +27,148 @@ class Workorder_model extends CI_Model {
         }
         $results = $this->db->order_by('wo.created_at','DESC')->get()->result();
 
-        // Resolve assigned technician names from CSV
-        foreach ($results as &$wo) {
-            $wo->assigned_name = $this->_resolve_tech_names($wo->assigned_to);
-        }
+        // Batch-resolve assigned technician names across all rows in 1 SQL query (zero N+1, no dangling reference)
+        $this->_attach_tech_names_batch($results);
         return $results;
+    }
+
+    /**
+     * Hydrate the entire `/workorders` directory in constant O(1) SQL queries (<= 4 total):
+     *   1. `work_orders` + `equipment` (`registration_no`, `brand`, `model`, `location`, `status`)
+     *   2. `users` batch lookup across all referenced `assigned_to` / `created_by` IDs
+     *   3. `wo_spare_parts` grouped line & quantity counts per work order
+     *   4. `wo_sessions` grouped total logged labor hours & active open session count per work order
+     *
+     * @return object[]
+     */
+    public function get_directory_overview() {
+        $rows = $this->db
+            ->select('wo.*, e.registration_no, e.brand, e.model, e.location AS equipment_location, e.status AS equipment_live_status,
+                CONCAT(c.first_name, " ", c.last_name) AS created_by_name')
+            ->from('work_orders wo')
+            ->join('equipment e', 'e.id = wo.equipment_id', 'left')
+            ->join('users c', 'c.id = wo.created_by', 'left')
+            ->order_by('wo.created_at', 'DESC')
+            ->order_by('wo.id', 'DESC')
+            ->get()->result();
+
+        if (empty($rows)) return array();
+
+        // 2. Batch-resolve technician IDs & names in 1 query
+        $this->_attach_tech_names_batch($rows);
+
+        // 3. Batch-aggregate spare part line counts per WO (1 query)
+        $parts_map = array();
+        if ($this->db->table_exists('wo_spare_parts')) {
+            $p_rows = $this->db->select('work_order_id, COUNT(*) AS lines_cnt')
+                ->from('wo_spare_parts')
+                ->group_by('work_order_id')
+                ->get()->result();
+            foreach ($p_rows as $pr) {
+                $parts_map[(int)$pr->work_order_id] = (int)$pr->lines_cnt;
+            }
+        }
+
+        // 4. Batch-aggregate labor sessions (total hours + open session flag) in 1 query
+        $sess_map = array();
+        if ($this->db->table_exists('wo_sessions')) {
+            $s_rows = $this->db->select('wo_id, COALESCE(SUM(hours_worked), 0) AS hrs, SUM(CASE WHEN status = "Open" THEN 1 ELSE 0 END) AS open_cnt')
+                ->from('wo_sessions')
+                ->group_by('wo_id')
+                ->get()->result();
+            foreach ($s_rows as $sr) {
+                $sess_map[(int)$sr->wo_id] = array(
+                    'hrs'      => round((float)$sr->hrs, 2),
+                    'has_open' => ((int)$sr->open_cnt > 0),
+                );
+            }
+        }
+
+        $today   = date('Y-m-d');
+        $now_ts  = time();
+        $prio_rk = array('Critical' => 4, 'High' => 3, 'Medium' => 2, 'Low' => 1);
+        $stat_rk = array('Open' => 1, 'In Progress' => 2, 'Waiting Parts' => 3, 'Waiting Tools' => 4, 'Completed' => 5, 'Closed' => 6);
+
+        foreach ($rows as $wo) {
+            $wid  = (int)$wo->id;
+            $s_in = isset($sess_map[$wid]) ? $sess_map[$wid] : array('hrs' => 0.0, 'has_open' => FALSE);
+
+            $wo->spare_lines_count = isset($parts_map[$wid]) ? (int)$parts_map[$wid] : 0;
+            $wo->has_open_session  = (bool)$s_in['has_open'];
+            $wo->logged_hours      = $s_in['hrs'] > 0
+                ? (float)$s_in['hrs']
+                : (isset($wo->actual_hours) && $wo->actual_hours !== NULL ? round((float)$wo->actual_hours, 2) : 0.0);
+
+            $calc_down = NULL;
+            if ($wo->downtime_hours !== NULL && $wo->downtime_hours !== '') {
+                $calc_down = round((float)$wo->downtime_hours, 1);
+            } elseif (!empty($wo->start_datetime) && !empty($wo->end_datetime)) {
+                $st = strtotime((string)$wo->start_datetime);
+                $et = strtotime((string)$wo->end_datetime);
+                if ($st !== FALSE && $et !== FALSE && $et >= $st) {
+                    $calc_down = round(($et - $st) / 3600, 1);
+                }
+            }
+            $wo->effective_downtime = $calc_down;
+
+            $is_active = in_array((string)$wo->status, array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools'), TRUE);
+            $wo->is_active_queue = $is_active;
+            $wo->is_on_hold      = in_array((string)$wo->status, array('Waiting Parts', 'Waiting Tools'), TRUE);
+            $wo->is_overdue_eta  = ($is_active && !empty($wo->expected_return_date) && (string)$wo->expected_return_date < $today);
+
+            $created_ts = !empty($wo->created_at) ? strtotime((string)$wo->created_at) : FALSE;
+            $wo->open_age_days = ($is_active && $created_ts !== FALSE && $now_ts >= $created_ts)
+                ? (int)floor(($now_ts - $created_ts) / 86400)
+                : 0;
+
+            $wo->priority_rank = isset($prio_rk[$wo->priority]) ? $prio_rk[$wo->priority] : 0;
+            $wo->status_rank   = isset($stat_rk[$wo->status])   ? $stat_rk[$wo->status]   : 99;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Batch-populate `$wo->assigned_ids` (int[]) and `$wo->assigned_name` (string)
+     * across an entire array of work-order objects in a SINGLE `WHERE id IN (...)` query.
+     *
+     * @param object[] $rows
+     */
+    private function _attach_tech_names_batch(array $rows) {
+        $all_ids = array();
+        $row_ids = array();
+        foreach ($rows as $idx => $wo) {
+            $parsed = array();
+            if (!empty($wo->assigned_to)) {
+                foreach (explode(',', (string)$wo->assigned_to) as $tok) {
+                    $uid = (int)trim($tok);
+                    if ($uid > 0 && !in_array($uid, $parsed, TRUE)) {
+                        $parsed[]       = $uid;
+                        $all_ids[$uid]  = TRUE;
+                    }
+                }
+            }
+            $row_ids[$idx] = $parsed;
+        }
+
+        $name_map = array();
+        if (!empty($all_ids)) {
+            $u_rows = $this->db->select('id, first_name, last_name')
+                ->where_in('id', array_keys($all_ids))
+                ->get('users')->result();
+            foreach ($u_rows as $u) {
+                $name_map[(int)$u->id] = trim((string)$u->first_name . ' ' . (string)$u->last_name);
+            }
+        }
+
+        foreach ($rows as $idx => $wo) {
+            $wo->assigned_ids = $row_ids[$idx];
+            $names = array();
+            foreach ($row_ids[$idx] as $uid) {
+                if (isset($name_map[$uid])) $names[] = $name_map[$uid];
+            }
+            $wo->assigned_name = implode(', ', $names);
+        }
     }
 
     public function get_by_id($id) {

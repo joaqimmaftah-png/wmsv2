@@ -19,22 +19,403 @@ class Workorders extends MY_Controller {
     }
 
     /* ─────────────────────────────────────────────────────
-       INDEX
+       INDEX — Enterprise Work Orders DataTable
     ───────────────────────────────────────────────────── */
     public function index() {
-        $filter = array(
-            'status'   => $this->input->get('status'),
-            'type'     => $this->input->get('type'),
-            'priority' => $this->input->get('priority'),
-            'search'   => $this->input->get('search'),
+        $ctx = $this->_build_workorders_dataset();
+
+        $per_page_in = (int)$this->input->get('per_page', TRUE);
+        $per_page    = in_array($per_page_in, array(10, 25, 50, 100), TRUE) ? $per_page_in : 25;
+
+        $total_filtered = count($ctx['rows']);
+        $total_pages    = max(1, (int)ceil($total_filtered / $per_page));
+        $page_in        = (int)$this->input->get('page', TRUE);
+        $page           = max(1, min($total_pages, $page_in > 0 ? $page_in : 1));
+        $offset         = ($page - 1) * $per_page;
+        $paged_rows     = array_slice($ctx['rows'], $offset, $per_page);
+
+        $view_in   = strtolower(trim((string)$this->input->get('view', TRUE)));
+        $view_mode = ($view_in === 'cards') ? 'cards' : 'table';
+
+        $data = array(
+            'work_orders'    => $paged_rows,
+            'total_filtered' => $total_filtered,
+            'total_scope'    => $ctx['total_scope'],
+            'tab_counts'     => $ctx['tab_counts'],
+            'summary'        => $ctx['summary'],
+            'active_tab'     => $ctx['active_tab'],
+            'status_exact'   => $ctx['status_exact'],
+            'type_filter'    => $ctx['type_filter'],
+            'priority_filter'=> $ctx['priority_filter'],
+            'equip_filter'   => $ctx['equip_filter'],
+            'tech_filter'    => $ctx['tech_filter'],
+            'search_query'   => $ctx['search_query'],
+            'sort_by'        => $ctx['sort_by'],
+            'sort_dir'       => $ctx['sort_dir'],
+            'per_page'       => $per_page,
+            'page'           => $page,
+            'total_pages'    => $total_pages,
+            'showing_from'   => $total_filtered > 0 ? ($offset + 1) : 0,
+            'showing_to'     => min($total_filtered, $offset + count($paged_rows)),
+            'view_mode'      => $view_mode,
+            'equipment_list' => $this->Equipment_model->get_all_active(),
+            'tech_options'   => $this->Team_model->get_technicians(),
+            'can_write'      => !$this->is_manager(),
+            'is_supervisor'  => $this->is_supervisor(),
+            'is_manager'     => $this->is_manager(),
+            'page_title'     => 'Work Orders',
         );
-        $data['work_orders']    = $this->Workorder_model->get_all($filter);
-        $data['equipment_list'] = $this->Equipment_model->get_all_active();
-        $data['technicians']    = $this->_assignment_picker();
-        $data['attendance_gate']= $this->_attendance_gate();
-        $data['filter']         = $filter;
-        $data['page_title']     = 'Work Orders';
         $this->render('maintenance/workorders', $data);
+    }
+
+    /**
+     * Native UTF-8 BOM CSV export for `/workorders` respecting active status tab,
+     * filters, search query, sort order, and optional multi-select `?ids=` rows
+     * (accessible to all roles permitted on `workorders`: Supervisor, Technician & Manager).
+     */
+    public function export_csv() {
+        $ctx     = $this->_build_workorders_dataset();
+        $rows    = $ctx['rows'];
+        $raw_ids = trim((string)$this->input->get('ids', TRUE));
+        if ($raw_ids !== '') {
+            $allow = array();
+            foreach (explode(',', $raw_ids) as $tok) {
+                $idv = (int)trim($tok);
+                if ($idv > 0) $allow[$idv] = TRUE;
+            }
+            if (!empty($allow)) {
+                $rows = array_values(array_filter($rows, function ($w) use ($allow) {
+                    return isset($allow[(int)$w->id]);
+                }));
+            }
+        }
+
+        $safe_cell = function ($v) {
+            $s = (string)$v;
+            if ($s !== '' && in_array($s[0], array('=', '+', '-', '@', "\t", "\r"), TRUE)) {
+                return "'" . $s;
+            }
+            return $s;
+        };
+
+        $filename = 'WMS_Work_Orders_' . date('Y-m-d') . '.csv';
+        if (ob_get_level()) @ob_end_clean();
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: private, max-age=0, must-revalidate');
+
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, array(
+            'WO Number', 'Machine ID', 'Brand / Model', 'Type', 'Breakdown', 'Priority',
+            'Status', 'Hold Code', 'Title', 'Assigned Technicians', 'Logged Labor (h)',
+            'Downtime (h)', 'Expected Return', 'Created Date',
+        ), ',', '"', '\\');
+
+        foreach ($rows as $w) {
+            $hold_txt = '';
+            if (!empty($w->hold_code)) {
+                $lbl = function_exists('wo_hold_label') ? wo_hold_label($w->hold_code) : NULL;
+                $hold_txt = $w->hold_code . ($lbl ? ' - ' . $lbl : '');
+            }
+            $is_bd = (function_exists('wo_is_breakdown') ? wo_is_breakdown($w) : !empty($w->is_breakdown));
+            fputcsv($out, array(
+                $safe_cell($w->wo_number),
+                $safe_cell($w->registration_no),
+                $safe_cell(trim((string)$w->brand . ' ' . (string)$w->model)),
+                $safe_cell($w->type),
+                $is_bd ? 'Yes' : 'No',
+                $safe_cell($w->priority),
+                $safe_cell($w->status),
+                $safe_cell($hold_txt),
+                $safe_cell($w->title),
+                $safe_cell($w->assigned_name),
+                number_format((float)$w->logged_hours, 2, '.', ''),
+                $w->effective_downtime !== NULL ? number_format((float)$w->effective_downtime, 1, '.', '') : '',
+                $safe_cell(isset($w->expected_return_date) ? (string)$w->expected_return_date : ''),
+                !empty($w->created_at) ? date('Y-m-d H:i', strtotime((string)$w->created_at)) : '',
+            ), ',', '"', '\\');
+        }
+        fclose($out);
+        exit;
+    }
+
+    /**
+     * JSON endpoint backing the right-side Slide-Over Work Order Inspector Drawer on `/workorders`.
+     */
+    public function summary_json($id) {
+        $wid = (int)$id;
+        $send_json = function ($code, array $payload) {
+            if (ob_get_level()) @ob_end_clean();
+            http_response_code($code);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: private, no-store, max-age=0');
+            echo json_encode($payload);
+            exit;
+        };
+
+        if ($wid <= 0) {
+            $send_json(404, array('ok' => FALSE, 'error' => 'Invalid work order ID.'));
+        }
+        $wo = $this->Workorder_model->get_by_id($wid);
+        if (!$wo) {
+            $send_json(404, array('ok' => FALSE, 'error' => 'Work order not found.'));
+        }
+
+        $parts_raw = $this->Workorder_model->get_spare_parts($wid);
+        $parts_out = array();
+        foreach ($parts_raw as $sp) {
+            $parts_out[] = array(
+                'item_code'   => isset($sp->item_code) ? (string)$sp->item_code : '',
+                'part_name'   => (string)$sp->part_name,
+                'part_number' => isset($sp->part_number) ? (string)$sp->part_number : '',
+                'quantity'    => isset($sp->quantity) ? round((float)$sp->quantity, 2) : 0,
+                'unit'        => isset($sp->unit) && $sp->unit !== '' ? (string)$sp->unit : 'pcs',
+            );
+        }
+
+        $sessions_raw = $this->Workorder_model->get_sessions($wid);
+        $sessions_out = array();
+        $session_hrs  = 0.0;
+        foreach (array_slice($sessions_raw, 0, 5) as $s) {
+            $sessions_out[] = array(
+                'technician_name' => isset($s->technician_name) ? (string)$s->technician_name : 'Technician',
+                'started_at'      => !empty($s->started_at) ? date('d M H:i', strtotime((string)$s->started_at)) : '',
+                'status'          => (string)$s->status,
+                'hours_worked'    => isset($s->hours_worked) && $s->hours_worked !== NULL ? round((float)$s->hours_worked, 2) : NULL,
+            );
+        }
+        foreach ($sessions_raw as $s) {
+            $session_hrs += isset($s->hours_worked) ? (float)$s->hours_worked : 0.0;
+        }
+
+        $hist_raw = array_slice($this->Workorder_model->get_status_history($wid), 0, 5);
+        $hist_out = array();
+        foreach ($hist_raw as $h) {
+            $hist_out[] = array(
+                'old_status' => isset($h->old_status) ? (string)$h->old_status : '',
+                'new_status' => isset($h->new_status) ? (string)$h->new_status : '',
+                'user_name'  => isset($h->changed_by_name) ? (string)$h->changed_by_name : '',
+                'notes'      => isset($h->notes) ? (string)$h->notes : '',
+                'created_at' => !empty($h->changed_at) ? date('d M H:i', strtotime((string)$h->changed_at))
+                    : (!empty($h->created_at) ? date('d M H:i', strtotime((string)$h->created_at)) : ''),
+            );
+        }
+
+        $hold_lbl = (!empty($wo->hold_code) && function_exists('wo_hold_label'))
+            ? wo_hold_label($wo->hold_code)
+            : NULL;
+
+        $calc_down = NULL;
+        if ($wo->downtime_hours !== NULL && $wo->downtime_hours !== '') {
+            $calc_down = round((float)$wo->downtime_hours, 1);
+        } elseif (!empty($wo->start_datetime) && !empty($wo->end_datetime)) {
+            $st = strtotime((string)$wo->start_datetime);
+            $et = strtotime((string)$wo->end_datetime);
+            if ($st !== FALSE && $et !== FALSE && $et >= $st) {
+                $calc_down = round(($et - $st) / 3600, 1);
+            }
+        }
+
+        $send_json(200, array(
+            'ok'                   => TRUE,
+            'id'                   => $wid,
+            'wo_number'            => (string)$wo->wo_number,
+            'title'                => (string)$wo->title,
+            'description'          => isset($wo->description) ? (string)$wo->description : '',
+            'root_cause'           => isset($wo->root_cause) ? (string)$wo->root_cause : '',
+            'action_taken'         => isset($wo->action_taken) ? (string)$wo->action_taken : '',
+            'type'                 => (string)$wo->type,
+            'is_breakdown'         => (function_exists('wo_is_breakdown') ? wo_is_breakdown($wo) : !empty($wo->is_breakdown)),
+            'priority'             => (string)$wo->priority,
+            'status'               => (string)$wo->status,
+            'hold_code'            => isset($wo->hold_code) ? (string)$wo->hold_code : '',
+            'hold_label'           => $hold_lbl ? (string)$hold_lbl : '',
+            'registration_no'      => isset($wo->registration_no) ? (string)$wo->registration_no : '—',
+            'brand_model'          => trim((isset($wo->brand) ? (string)$wo->brand : '') . ' ' . (isset($wo->model) ? (string)$wo->model : '')),
+            'machine_status'       => isset($wo->machine_status) && $wo->machine_status !== '' ? (string)$wo->machine_status : 'Operational',
+            'hours_reading'        => isset($wo->hours_reading) && $wo->hours_reading !== NULL ? round((float)$wo->hours_reading, 1) : NULL,
+            'assigned_name'        => isset($wo->assigned_name) ? (string)$wo->assigned_name : '',
+            'created_by_name'      => isset($wo->created_by_name) ? (string)$wo->created_by_name : '',
+            'workplace'            => isset($wo->workplace) ? (string)$wo->workplace : '',
+            'expected_return_date' => !empty($wo->expected_return_date) ? date('d M Y', strtotime((string)$wo->expected_return_date)) : '',
+            'created_at'           => !empty($wo->created_at) ? date('d M Y H:i', strtotime((string)$wo->created_at)) : '',
+            'logged_hours'         => round($session_hrs > 0 ? $session_hrs : (float)(isset($wo->actual_hours) ? $wo->actual_hours : 0), 2),
+            'downtime_hours'       => $calc_down,
+            'spare_parts'          => $parts_out,
+            'sessions'             => $sessions_out,
+            'history'              => $hist_out,
+        ));
+    }
+
+    /**
+     * Shared filter, tab-counter, KPI summary, and deterministic sort pipeline for
+     * `Workorders::index()` and `Workorders::export_csv()`.
+     */
+    private function _build_workorders_dataset() {
+        $valid_types = array('Corrective Maintenance', 'Preventive Maintenance', 'Incident');
+        $type_in     = trim((string)$this->input->get('type', TRUE));
+        $type_filter = in_array($type_in, $valid_types, TRUE) ? $type_in : '';
+
+        $valid_prios     = array('Critical', 'High', 'Medium', 'Low');
+        $prio_in         = trim((string)$this->input->get('priority', TRUE));
+        $priority_filter = in_array($prio_in, $valid_prios, TRUE) ? $prio_in : '';
+
+        $equip_in     = (int)$this->input->get('equipment', TRUE);
+        $equip_filter = $equip_in > 0 ? $equip_in : 0;
+
+        $tech_in     = (int)$this->input->get('tech', TRUE);
+        $tech_filter = $tech_in > 0 ? $tech_in : 0;
+
+        // Accept both `?q=` and legacy `?search=` seamlessly
+        $q_raw = $this->input->get('q', TRUE);
+        if ($q_raw === NULL || $q_raw === '') {
+            $q_raw = $this->input->get('search', TRUE);
+        }
+        $search_query = trim((string)$q_raw);
+        if (strlen($search_query) > 100) $search_query = substr($search_query, 0, 100);
+
+        // Map legacy `?status=` links cleanly onto workflow tabs while preserving exact Waiting sub-statuses
+        $valid_statuses = array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools', 'Completed', 'Closed');
+        $status_in      = trim((string)$this->input->get('status', TRUE));
+        $status_exact   = in_array($status_in, $valid_statuses, TRUE) ? $status_in : '';
+
+        $valid_tabs = array('all', 'active', 'open', 'in_progress', 'on_hold', 'completed', 'closed');
+        $tab_in     = strtolower(trim((string)$this->input->get('tab', TRUE)));
+        $active_tab = in_array($tab_in, $valid_tabs, TRUE) ? $tab_in : 'all';
+
+        if ($tab_in === '' && $status_exact !== '') {
+            $status_to_tab = array(
+                'Open'          => 'open',
+                'In Progress'   => 'in_progress',
+                'Waiting Parts' => 'on_hold',
+                'Waiting Tools' => 'on_hold',
+                'Completed'     => 'completed',
+                'Closed'        => 'closed',
+            );
+            $active_tab = $status_to_tab[$status_exact];
+        }
+
+        $valid_sort = array('created', 'wo_number', 'equipment', 'type', 'priority', 'status', 'hours', 'assigned');
+        $sort_in    = strtolower(trim((string)$this->input->get('sort', TRUE)));
+        $sort_by    = in_array($sort_in, $valid_sort, TRUE) ? $sort_in : 'created';
+
+        $dir_in   = strtolower(trim((string)$this->input->get('dir', TRUE)));
+        $sort_dir = ($dir_in === 'asc' || $dir_in === 'desc')
+            ? $dir_in
+            : ($sort_by === 'created' || $sort_by === 'priority' || $sort_by === 'hours' ? 'desc' : 'asc');
+
+        $all_rows = $this->Workorder_model->get_directory_overview();
+
+        // Scope by Type + Priority + Equipment + Technician + Search BEFORE computing status tab counts
+        $scoped = array();
+        $q_low  = function_exists('mb_strtolower') ? mb_strtolower($search_query, 'UTF-8') : strtolower($search_query);
+        foreach ($all_rows as $w) {
+            if ($type_filter !== '' && (string)$w->type !== $type_filter) continue;
+            if ($priority_filter !== '' && (string)$w->priority !== $priority_filter) continue;
+            if ($equip_filter > 0 && (int)$w->equipment_id !== $equip_filter) continue;
+            if ($tech_filter > 0 && !in_array($tech_filter, $w->assigned_ids, TRUE)) continue;
+            if ($q_low !== '') {
+                $hold_lbl = (!empty($w->hold_code) && function_exists('wo_hold_label')) ? wo_hold_label($w->hold_code) : '';
+                $hay = strtolower(
+                    (string)$w->wo_number . ' ' . (string)$w->title . ' '
+                    . (isset($w->description) ? (string)$w->description : '') . ' '
+                    . (isset($w->symptoms) ? (string)$w->symptoms : '') . ' '
+                    . (string)$w->registration_no . ' ' . (string)$w->brand . ' ' . (string)$w->model . ' '
+                    . (isset($w->equipment_location) ? (string)$w->equipment_location : '') . ' '
+                    . (isset($w->workplace) ? (string)$w->workplace : '') . ' '
+                    . (string)$w->assigned_name . ' ' . (string)$w->hold_code . ' ' . (string)$hold_lbl
+                );
+                if (strpos($hay, $q_low) === FALSE) continue;
+            }
+            $scoped[] = $w;
+        }
+
+        $tab_counts = array(
+            'all'         => count($scoped),
+            'active'      => 0,
+            'open'        => 0,
+            'in_progress' => 0,
+            'on_hold'     => 0,
+            'completed'   => 0,
+            'closed'      => 0,
+        );
+        $crit_active = 0; $bd_active = 0; $live_sess = 0; $overdue_cnt = 0;
+
+        foreach ($scoped as $w) {
+            if ($w->is_active_queue) {
+                $tab_counts['active']++;
+                if ($w->priority === 'Critical') $crit_active++;
+                if (function_exists('wo_is_breakdown') ? wo_is_breakdown($w) : !empty($w->is_breakdown)) $bd_active++;
+                if ($w->is_overdue_eta) $overdue_cnt++;
+            }
+            if ($w->has_open_session)        $live_sess++;
+            if ($w->status === 'Open')       $tab_counts['open']++;
+            if ($w->status === 'In Progress') $tab_counts['in_progress']++;
+            if ($w->is_on_hold)              $tab_counts['on_hold']++;
+            if ($w->status === 'Completed')  $tab_counts['completed']++;
+            if ($w->status === 'Closed')     $tab_counts['closed']++;
+        }
+
+        $rows = array();
+        foreach ($scoped as $w) {
+            if ($status_exact !== '' && $tab_in === '' && $w->status !== $status_exact) continue;
+            if ($active_tab === 'active'      && !$w->is_active_queue)         continue;
+            if ($active_tab === 'open'        && $w->status !== 'Open')        continue;
+            if ($active_tab === 'in_progress' && $w->status !== 'In Progress') continue;
+            if ($active_tab === 'on_hold'     && !$w->is_on_hold)              continue;
+            if ($active_tab === 'completed'   && $w->status !== 'Completed')   continue;
+            if ($active_tab === 'closed'      && $w->status !== 'Closed')      continue;
+            $rows[] = $w;
+        }
+
+        $mul = ($sort_dir === 'desc') ? -1 : 1;
+        usort($rows, function ($a, $b) use ($sort_by, $mul) {
+            $cmp = 0;
+            switch ($sort_by) {
+                case 'wo_number': $cmp = strnatcasecmp((string)$a->wo_number, (string)$b->wo_number); break;
+                case 'equipment': $cmp = strnatcasecmp((string)$a->registration_no, (string)$b->registration_no); break;
+                case 'type':      $cmp = strnatcasecmp((string)$a->type, (string)$b->type); break;
+                case 'priority':  $cmp = ((int)$a->priority_rank <=> (int)$b->priority_rank); break;
+                case 'status':    $cmp = ((int)$a->status_rank <=> (int)$b->status_rank); break;
+                case 'hours':
+                    $ha = $a->effective_downtime !== NULL ? (float)$a->effective_downtime : (float)$a->logged_hours;
+                    $hb = $b->effective_downtime !== NULL ? (float)$b->effective_downtime : (float)$b->logged_hours;
+                    $cmp = ($ha <=> $hb);
+                    break;
+                case 'assigned':  $cmp = strnatcasecmp((string)$a->assigned_name, (string)$b->assigned_name); break;
+                case 'created':
+                default:          $cmp = strcmp((string)$a->created_at, (string)$b->created_at); break;
+            }
+            if ($cmp !== 0) return $cmp * $mul;
+            return ((int)$b->id <=> (int)$a->id);
+        });
+
+        return array(
+            'active_tab'      => $active_tab,
+            'status_exact'    => ($tab_in === '') ? $status_exact : '',
+            'type_filter'     => $type_filter,
+            'priority_filter' => $priority_filter,
+            'equip_filter'    => $equip_filter,
+            'tech_filter'     => $tech_filter,
+            'search_query'    => $search_query,
+            'sort_by'         => $sort_by,
+            'sort_dir'        => $sort_dir,
+            'total_scope'     => count($scoped),
+            'tab_counts'      => $tab_counts,
+            'summary'         => array(
+                'total_wos'       => count($scoped),
+                'active_queue'    => $tab_counts['active'],
+                'critical_active' => $crit_active,
+                'breakdowns_open' => $bd_active,
+                'in_progress'     => $tab_counts['in_progress'],
+                'live_sessions'   => $live_sess,
+                'on_hold'         => $tab_counts['on_hold'],
+                'overdue_eta'     => $overdue_cnt,
+                'awaiting_verify' => $tab_counts['completed'],
+            ),
+            'rows'            => $rows,
+        );
     }
 
     /* ─────────────────────────────────────────────────────

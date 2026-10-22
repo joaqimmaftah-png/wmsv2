@@ -26,17 +26,17 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:12px;">
   <div>
     <div class="flex ai-c gap-10" style="flex-wrap:wrap;align-items:center;margin-bottom:6px;">
-      <div class="mono" style="font-size:19px;font-weight:600;letter-spacing:-0.5px;color:var(--blue);"><?= $wo->wo_number ?></div>
-      <span class="badge <?= $sc ?>"><?= $wo->status ?></span>
-      <span class="badge <?= $pc ?>"><?= $wo->priority ?></span>
-      <span class="badge <?= $tc ?>"><?= $wo->type ?></span>
+      <div class="mono" style="font-size:19px;font-weight:600;letter-spacing:-0.5px;color:var(--blue);"><?= htmlspecialchars((string)$wo->wo_number, ENT_QUOTES, 'UTF-8') ?></div>
+      <span class="badge <?= $sc ?>"><?= htmlspecialchars((string)$wo->status, ENT_QUOTES, 'UTF-8') ?></span>
+      <span class="badge <?= $pc ?>"><?= htmlspecialchars((string)$wo->priority, ENT_QUOTES, 'UTF-8') ?></span>
+      <span class="badge <?= $tc ?>"><?= htmlspecialchars((string)$wo->type, ENT_QUOTES, 'UTF-8') ?></span>
       <?php if (!empty($wo->hold_code)): ?>
       <span class="badge b-waiting" title="Hold code — why the work is waiting">
-        ⏸ <?= htmlspecialchars((string)($wo->hold_code)) ?><?= wo_hold_label($wo->hold_code) ? ' — '.htmlspecialchars((string)(wo_hold_label($wo->hold_code))) : '' ?>
+        <?= htmlspecialchars((string)($wo->hold_code), ENT_QUOTES, 'UTF-8') ?><?= wo_hold_label($wo->hold_code) ? ' — '.htmlspecialchars((string)(wo_hold_label($wo->hold_code)), ENT_QUOTES, 'UTF-8') : '' ?>
       </span>
       <?php endif; ?>
     </div>
-    <div style="font-size:14px;font-weight:500;color:var(--t1);"><?= htmlspecialchars((string)($wo->title)) ?></div>
+    <div style="font-size:14px;font-weight:500;color:var(--t1);"><?= htmlspecialchars((string)($wo->title), ENT_QUOTES, 'UTF-8') ?></div>
   </div>
   <div class="flex ai-c gap-10">
     <!-- PRINT JOB CARD BUTTON — primary action -->
@@ -44,10 +44,12 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
       <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
       Print Job Card
     </a>
+    <?php if (empty($is_manager) && (!isset($role_id) || (int)$role_id !== 4)): ?>
     <a href="<?= base_url('workorders/edit/'.$wo->id) ?>" class="btn btn-ghost btn-icon">
       <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
       Edit
     </a>
+    <?php endif; ?>
     <a href="<?= base_url('workorders') ?>" class="btn btn-ghost">← Back</a>
   </div>
 </div>
@@ -63,18 +65,18 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
       <div class="kpi" style="animation-delay:.05s;">
         <div class="kpi-glow" style="background:var(--blue);"></div>
         <span class="kpi-tag">Equipment</span>
-        <div style="font-size:15px;font-weight:700;color:var(--t1);margin-top:4px;"><?= (isset($wo->registration_no) ? $wo->registration_no : '—') ?></div>
-        <div style="font-size:10px;color:var(--t3);margin-top:2px;"><?= htmlspecialchars((string)((isset($wo->brand) ? $wo->brand : '') . ' ' . (isset($wo->model) ? $wo->model : ''))) ?></div>
+        <div style="font-size:15px;font-weight:700;color:var(--t1);margin-top:4px;"><?= htmlspecialchars((string)(isset($wo->registration_no) ? $wo->registration_no : '—'), ENT_QUOTES, 'UTF-8') ?></div>
+        <div style="font-size:10px;color:var(--t3);margin-top:2px;"><?= htmlspecialchars((string)((isset($wo->brand) ? $wo->brand : '') . ' ' . (isset($wo->model) ? $wo->model : '')), ENT_QUOTES, 'UTF-8') ?></div>
       </div>
       <div class="kpi" style="animation-delay:.09s;">
         <div class="kpi-glow" style="background:var(--amber);"></div>
         <span class="kpi-tag">SMR / Hours</span>
-        <div class="kpi-num" style="font-size:18px;margin-top:4px;"><?= (isset($wo->hours_reading) ? $wo->hours_reading : (isset($wo->hour_meter_reading) ? $wo->hour_meter_reading : '—')) ?><sup style="font-size:11px;">hrs</sup></div>
+        <div class="kpi-num" style="font-size:18px;margin-top:4px;"><?= htmlspecialchars((string)(isset($wo->hours_reading) ? $wo->hours_reading : (isset($wo->hour_meter_reading) ? $wo->hour_meter_reading : '—')), ENT_QUOTES, 'UTF-8') ?><sup style="font-size:11px;">hrs</sup></div>
       </div>
       <div class="kpi" style="animation-delay:.13s;">
         <div class="kpi-glow" style="background:var(--purple);"></div>
         <span class="kpi-tag">Assigned To</span>
-        <div style="font-size:13px;font-weight:600;color:var(--t1);margin-top:4px;"><?= (isset($wo->assigned_name) ? $wo->assigned_name : '—') ?></div>
+        <div style="font-size:13px;font-weight:600;color:var(--t1);margin-top:4px;"><?= htmlspecialchars((string)((isset($wo->assigned_name) && $wo->assigned_name !== '') ? $wo->assigned_name : '—'), ENT_QUOTES, 'UTF-8') ?></div>
       </div>
       <div class="kpi" style="animation-delay:.17s;">
         <div class="kpi-glow" style="background:var(--red);"></div>
