@@ -20,7 +20,8 @@ for (const [page, controller, prefix] of [
   assert.ok(code.indexOf('$rows          = $paginate ?') < code.indexOf('$groupsMap = array();'), 'groups built after pagination');
   assert.match(code, /foreach \(\$rows as \$[sc]\) \{[\s\S]{0,280}\$groupsMap/, 'groups sourced from current page');
   assert.match(view, new RegExp('#' + prefix + 'Shell:not\\(\\[data-view="groups"\\]\\) \\.' + prefix + '-cards-container'), 'mobile cards must not override groups');
-  assert.match(view, /window\.location\.assign\(url\.toString\(\)\)/, 'view should survive navigation via URL');
+  assert.match(view, /window\.history\.replaceState\(null, '', url\.toString\(\)\)/, 'view should survive navigation via URL');
+  assert.match(view, new RegExp('\\.' + prefix + '-pager a\\[href\\]'), 'pager should follow the active view');
 }
 const budget = source('application/views/lubricants/budget.php');
 assert.match(budget, /\$can_write && !empty\(\$lines\)/, 'no empty budget submit');

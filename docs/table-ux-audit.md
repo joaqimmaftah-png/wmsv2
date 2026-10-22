@@ -85,7 +85,7 @@ Use `--surface`, `--sep`, `--t1`–`--t3`, `--blue`, `--green-d`/`--amber-d`/`--
 | Before | After | Why / benefit / verification |
 |---|---|---|
 | Dark navy fallback cards in white application | White shared surface across three pages and light-appropriate status tokens | Visual only; consistent scan/readability. Compare authenticated screenshots. |
-| Group view ignored page, view toggle was transient | Group only current-page rows; switch navigates with view query retained | Functional list navigation; no changed records. Test page 2 of >25. |
+| Group view ignored page, view toggle was transient | Group only current-page rows; switch updates the visible view immediately and retains its query in the URL and pager | Functional list navigation; no changed records. Test page 2 of >25. |
 | Drawer had no focus management or response ordering | Focus trap/restore and stale-response guard | Safer record inspection; keyboard/network simulation. |
 | Negative variance shown green in cards; null called “Top-Up” | Amber negative, blue “No OEM Std”, “No WO Link” segment | Accurate interpretation; compare table/card for same row. |
 | Remaining/utilization stale after draft edit; bad POST could overwrite budget | Recalculated draft issue valuation and unsaved KPIs; numeric prevalidation and transaction | Better planning/data integrity, no new field/schema; run PHP/MySQL write tests. |

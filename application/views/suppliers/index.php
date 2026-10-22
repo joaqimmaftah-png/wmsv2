@@ -698,11 +698,26 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
   Array.prototype.forEach.call(document.querySelectorAll('[data-sup-view]'), function (btn) {
     btn.addEventListener('click', function () {
       var mode = btn.getAttribute('data-sup-view') || 'table';
-      // Navigate with the current filters intact, so view and pagination share one dataset.
+      // Switch immediately without losing row selection or drawer context.
+      // Persist the mode in the URL, form and pager for subsequent navigation.
+      shell.setAttribute('data-view', mode);
+      var viewInput = document.getElementById('supViewInput');
+      if (viewInput) viewInput.value = mode;
+      Array.prototype.forEach.call(document.querySelectorAll('[data-sup-view]'), function (b) {
+        var active = b === btn;
+        b.classList.toggle('is-active', active);
+        b.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
       var url = new URL(window.location.href);
       if (mode === 'table') url.searchParams.delete('view');
       else url.searchParams.set('view', mode);
-      window.location.assign(url.toString());
+      window.history.replaceState(null, '', url.toString());
+      Array.prototype.forEach.call(document.querySelectorAll('.sup-pager a[href]'), function (link) {
+        var dest = new URL(link.href, window.location.href);
+        if (mode === 'table') dest.searchParams.delete('view');
+        else dest.searchParams.set('view', mode);
+        link.href = dest.toString();
+      });
     });
   });
 
