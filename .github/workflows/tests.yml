@@ -367,12 +367,14 @@ jobs:
           (async () => {
             const chrome = spawn('google-chrome', [
               '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
-              '--remote-debugging-port=9222', '--window-size=1440,900', 'http://127.0.0.1:8000/login'
+              '--no-first-run', '--no-default-browser-check', '--user-data-dir=/tmp/wms-chrome-profile',
+              '--remote-allow-origins=*', '--remote-debugging-port=9222',
+              '--window-size=1440,900', 'http://127.0.0.1:8000/login'
             ], { stdio: 'ignore' });
 
             try {
               let targets = null;
-              for (let i = 0; i < 30; i++) {
+              for (let i = 0; i < 80; i++) {
                 try {
                   const r = await fetch('http://127.0.0.1:9222/json');
                   const j = await r.json();
@@ -410,7 +412,7 @@ jobs:
               await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
 
               // Wait for login form and authenticate in real Chromium session
-              for (let i = 0; i < 20; i++) {
+              for (let i = 0; i < 40; i++) {
                 if (await evalJs('Boolean(document.querySelector("input[name=email]"))')) break;
                 await sleep(200);
               }
@@ -419,10 +421,13 @@ jobs:
                 document.querySelector('input[name="password"]').value = 'AdminPass123!';
                 document.querySelector('form').submit();
               `);
-              await sleep(1000);
+              for (let i = 0; i < 40; i++) {
+                if (await evalJs('location.pathname !== "/login"')) break;
+                await sleep(200);
+              }
 
               await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/team/report' });
-              for (let i = 0; i < 25; i++) {
+              for (let i = 0; i < 40; i++) {
                 if (await evalJs('Boolean(document.getElementById("tsShell"))')) break;
                 await sleep(200);
               }
@@ -492,7 +497,10 @@ jobs:
               // 2. Verify Mobile 390x844 responsive auto-card adaptation & zero horizontal overflow
               await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
               await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/team/report' });
-              await sleep(600);
+              for (let i = 0; i < 40; i++) {
+                if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("tsShell"))')) break;
+                await sleep(200);
+              }
               const mobileCheck = await evalJs(`(() => ({
                 docOverflow: document.documentElement.scrollWidth - window.innerWidth,
                 tableDisplay: getComputedStyle(document.querySelector('.ts-table-wrap')).display,
