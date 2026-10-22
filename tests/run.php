@@ -2867,6 +2867,218 @@ check('SUP-01, SUP-02 & SUP-06 Clean Render, XSS Neutralization, Verbatim EX 006
     implode('; ', $supWarnings));
 
 /* ─────────────────────────────────────────────────────────────────────────
+   23. Lubricants Ledger & Lube Budget Suite (LUB-01 .. LUB-06)
+   ───────────────────────────────────────────────────────────────────────── */
+
+if (!class_exists('Lubricant_model', FALSE)) {
+    require_once APPPATH . 'models/Lubricant_model.php';
+}
+
+class LubricantBoardFakeDB {
+    public $queries      = 0;
+    private $types       = array();
+    private $specs       = array();
+    private $schedules   = array();
+    private $consumption = array();
+    private $budgets     = array();
+    private $fromTable   = '';
+
+    public function __construct(array $types, array $specs, array $schedules, array $consumption, array $budgets) {
+        $this->types       = $types;
+        $this->specs       = $specs;
+        $this->schedules   = $schedules;
+        $this->consumption = $consumption;
+        $this->budgets     = $budgets;
+    }
+
+    public function select($s, $escape = NULL) { return $this; }
+    public function from($t) { $this->fromTable = (string)$t; return $this; }
+    public function join($t, $c, $type = '') { return $this; }
+    public function where($k, $v = NULL) { return $this; }
+    public function group_by($g) { return $this; }
+    public function order_by($c, $d = '') { return $this; }
+
+    public function get($table = NULL) {
+        $this->queries++;
+        $src = $table !== NULL ? (string)$table : $this->fromTable;
+        $this->fromTable = '';
+        if (strpos($src, 'lube_types') === 0) return new TeamRosterFakeResult($this->types);
+        if (strpos($src, 'lube_specifications') === 0) return new TeamRosterFakeResult($this->specs);
+        if (strpos($src, 'pm_schedules') === 0) return new TeamRosterFakeResult($this->schedules);
+        if (strpos($src, 'lube_consumption') === 0) return new TeamRosterFakeResult($this->consumption);
+        if (strpos($src, 'lube_budget') === 0) return new TeamRosterFakeResult($this->budgets);
+        return new TeamRosterFakeResult(array());
+    }
+}
+
+$fakeLubeTypes = array(
+    (object)array('id' => 1, 'name' => 'Engine Oil', 'grade' => '15W-40', 'category' => 'Engine Oil', 'unit' => 'L', 'unit_cost' => 520.00, 'description' => 'CI-4', 'status' => 'Active'),
+    (object)array('id' => 2, 'name' => 'Hydraulic<script>alert(11)</script>', 'grade' => 'ISO 46', 'category' => 'Hydraulic Oil', 'unit' => 'L', 'unit_cost' => 680.00, 'description' => 'AW 46', 'status' => 'Active'),
+);
+$fakeLubeSpecs = array(
+    (object)array('id' => 1, 'equipment_type_id' => 1, 'lube_type_id' => 1, 'type_name' => 'Excavator', 'lube_name' => 'Engine Oil', 'lube_grade' => '15W-40', 'unit' => 'L', 'recommended_qty' => 28.0, 'service_interval_hours' => 250, 'notes' => 'Sump'),
+);
+$curYm = date('Y-m');
+$fakeLubeSchedules = array();
+for ($pi = 1; $pi <= 300; $pi++) {
+    $fakeLubeSchedules[] = (object)array(
+        'id'                => $pi,
+        'equipment_id'      => $pi,
+        'equipment_type_id' => 1,
+        'interval_type'     => 'Hours',
+        'next_due_date'     => $curYm . '-15',
+        'next_due_hours'    => 1250,
+        'current_hours'     => 1240,
+        'status'            => 'Active',
+    );
+}
+$fakeLubeCons = array();
+for ($li = 1; $li <= 500; $li++) {
+    $fakeLubeCons[] = (object)array(
+        'id'               => $li,
+        'work_order_id'    => ($li === 1) ? 10 : NULL,
+        'wo_number'        => ($li === 1) ? 'WO<img src=x onerror=alert(12)>' : NULL,
+        'wo_title'         => '250h service',
+        'equipment_id'     => ($li === 1) ? 1 : 2,
+        'registration_no'  => ($li === 1) ? 'EX 006' : 'C-HEADT 007',
+        'brand'            => 'CAT',
+        'model'            => '336D2L',
+        'type_name'        => 'Excavator',
+        'lube_type_id'     => ($li % 2 === 1) ? 1 : 2,
+        'lube_name'        => ($li % 2 === 1) ? 'Engine Oil' : 'Hydraulic<script>alert(11)</script>',
+        'lube_grade'       => ($li % 2 === 1) ? '15W-40' : 'ISO 46',
+        'category'         => ($li % 2 === 1) ? 'Engine Oil' : 'Hydraulic Oil',
+        'unit'             => 'L',
+        'unit_cost'        => 520.00,
+        'quantity_used'    => 32.0,
+        'recommended_qty'  => 28.0,
+        'variance'         => 4.0,
+        'variance_reason'  => 'Top-up',
+        'consumption_date' => $curYm . '-12',
+        'equipment_hours'  => 1420.0,
+        'recorded_by_name' => 'Tech<script>alert(13)</script>',
+        'notes'            => NULL,
+        'actual_qty'       => 8000.0,
+        'records'          => 250,
+    );
+}
+$fakeLubeBudgets = array(
+    (object)array('id' => 1, 'lube_type_id' => 1, 'lube_name' => 'Engine Oil', 'unit' => 'L', 'year' => (int)date('Y'), 'month' => (int)date('m'), 'budget_qty' => 9000.0, 'unit_cost' => 520.0, 'budget_cost' => 4680000.0),
+);
+
+$lubFakeDb = new LubricantBoardFakeDB($fakeLubeTypes, $fakeLubeSpecs, $fakeLubeSchedules, $fakeLubeCons, $fakeLubeBudgets);
+$lubModel  = new Lubricant_model();
+$lubModel->db = $lubFakeDb;
+
+$fcOut   = $lubModel->get_monthly_forecast();
+$fcQueries = $lubFakeDb->queries;
+$lubFakeDb->queries = 0;
+$ledgOv  = $lubModel->get_ledger_overview($curYm);
+$ledgQueries = $lubFakeDb->queries;
+$lubFakeDb->queries = 0;
+$bgtOv   = $lubModel->get_budget_overview((int)date('Y'), (int)date('m'));
+$bgtQueries = $lubFakeDb->queries;
+
+check('LUB-03 Constant O(1) SQL Scaling: 300-PM forecast in <= 2 queries AND 500-row ledger/budget overviews in <= 5 queries each',
+    $fcQueries <= 2
+    && (float)$fcOut[$curYm][1] === 8400.0
+    && count($ledgOv['rows']) === 500
+    && $ledgQueries <= 5
+    && count($bgtOv['lines']) === 2
+    && $bgtQueries <= 5
+    && Lubricant_model::clean_category('Brake Fluid') === 'Other'
+    && Lubricant_model::clean_month('"><script>alert(10)</script>') === $curYm,
+    "fc={$fcQueries}, ledger={$ledgQueries}, budget={$bgtQueries}");
+
+$lubWarnings = array();
+$renderLubSuite = function ($canWrite, $canTypes, $canRpts) use ($ledgOv, $bgtOv, $fcOut, $fakeLubeTypes, $fakeLubeSpecs, &$lubWarnings) {
+    $consumption      = array_slice($ledgOv['rows'], 0, 2);
+    $groups           = array((object)array('registration_no' => 'EX 006', 'model_label' => 'CAT 336D2L', 'records' => array($ledgOv['rows'][0]), 'total_qty' => 32.0, 'total_cost' => 16640.0));
+    $summary          = $ledgOv['summary'];
+    $compliance       = $ledgOv['compliance'];
+    $kpi              = $ledgOv['kpi'];
+    $lube_types       = $fakeLubeTypes;
+    $equipment        = array(
+        (object)array('id' => 1, 'registration_no' => 'EX 006', 'brand' => 'CAT', 'model' => '336D2L'),
+        (object)array('id' => 2, 'registration_no' => 'C-HEADT 007', 'brand' => 'SHACMAN', 'model' => 'F3000'),
+    );
+    $tab_counts       = array('all' => 500, 'over_variance' => 500, 'linked_wo' => 1, 'engine_hyd' => 500, 'unlinked' => 499);
+    $tab              = 'all';
+    $q                = '';
+    $filter           = array('month' => '"><script>alert(10)</script>', 'equipment_id' => '', 'lube_type_id' => '', 'category' => '', 'search' => '');
+    $sort             = 'date';
+    $dir              = 'desc';
+    $view_mode        = 'table';
+    $per_page         = 25;
+    $allowed_pp       = array(10, 25, 50, 100, 150);
+    $current_page     = 1;
+    $total_pages      = 20;
+    $total_filtered   = 500;
+    $offset           = 0;
+    $can_write        = $canWrite;
+    $can_manage_types = $canTypes;
+    $can_view_reports = $canRpts;
+    $currency_code    = 'TZS';
+
+    $lines       = $bgtOv['lines'];
+    $totals      = $bgtOv['totals'];
+    $budget_data = $bgtOv['budget_data'];
+    $year        = '"><script>alert(14)</script>';
+    $month       = 10;
+    $open_wos    = array((object)array('id' => 10, 'equipment_id' => 1, 'wo_number' => 'WO-10', 'registration_no' => 'EX 006', 'title' => '250h service'));
+    $specs       = $fakeLubeSpecs;
+    $eq_types    = array((object)array('id' => 1, 'name' => 'Excavator'));
+    $categories  = Lubricant_model::$CATEGORIES;
+    $forecast    = $fcOut;
+
+    set_error_handler(function ($severity, $message, $file, $line) use (&$lubWarnings) {
+        $lubWarnings[] = "$message ($file:$line)";
+        return TRUE;
+    });
+    ob_start();
+    include APPPATH . 'views/lubricants/index.php';
+    if ($canWrite) {
+        include APPPATH . 'views/lubricants/budget.php';
+        include APPPATH . 'views/lubricants/record.php';
+    }
+    include APPPATH . 'views/lubricants/specifications.php';
+    include APPPATH . 'views/lubricants/types.php';
+    include APPPATH . 'views/lubricants/forecast.php';
+    $out = ob_get_clean();
+    restore_error_handler();
+    return $out;
+};
+
+$lubSupHtml   = $renderLubSuite(TRUE, TRUE, TRUE);
+$lubStoreHtml = $renderLubSuite(TRUE, FALSE, FALSE);
+$lubTechHtml  = $renderLubSuite(FALSE, FALSE, FALSE);
+
+check('LUB-01, LUB-02 & LUB-06 Clean Render Across All 6 Views, XSS Neutralization, Contrast Fix & Multi-Role RBAC',
+    empty($lubWarnings)
+    && strpos($lubSupHtml, 'id="lubRecordBtn"') !== FALSE
+    && strpos($lubSupHtml, 'Compliance Report') !== FALSE
+    && strpos($lubSupHtml, '+ Add Lube Type') !== FALSE
+    && strpos($lubStoreHtml, 'id="lubRecordBtn"') !== FALSE
+    && strpos($lubStoreHtml, 'id="lubBudgetShell"') !== FALSE
+    && strpos($lubStoreHtml, 'Compliance Report') === FALSE
+    && strpos($lubStoreHtml, '+ Add Lube Type') === FALSE
+    && strpos($lubTechHtml, 'id="lubRecordBtn"') === FALSE
+    && strpos($lubTechHtml, '+ Record Consumption') === FALSE
+    && strpos($lubTechHtml, 'Lube Budget') === FALSE
+    && strpos($lubTechHtml, 'Set OEM Fluid Standard') === FALSE
+    && strpos($lubTechHtml, '+ Add Lube Type') === FALSE
+    && strpos($lubTechHtml, 'Export CSV') !== FALSE
+    && strpos($lubTechHtml, 'Export Excel') !== FALSE
+    && strpos($lubSupHtml, 'EX 006') !== FALSE
+    && strpos($lubSupHtml, 'C-HEADT 007') !== FALSE
+    && strpos($lubSupHtml, 'Brake Fluid') === FALSE
+    && strpos($lubSupHtml, '#1a3c5e') === FALSE
+    && strpos($lubSupHtml, '<script>alert(') === FALSE
+    && strpos($lubSupHtml, '<img src=x onerror=') === FALSE
+    && strpos($lubSupHtml, 'id="lubDrawer" role="dialog" aria-modal="true"') !== FALSE,
+    implode('; ', $lubWarnings));
+
+/* ─────────────────────────────────────────────────────────────────────────
    Result
    ───────────────────────────────────────────────────────────────────────── */
 

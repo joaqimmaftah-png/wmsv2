@@ -44,6 +44,7 @@ $route['equipment/(:any)'] = 'equipment/$1';
 // Lubricants
 $route['lubricants'] = 'lubricants/index';
 $route['lubricants/(:any)'] = 'lubricants/$1';
+$route['lubricants/(:any)/(:any)'] = 'lubricants/$1/$2';
 
 // Backlog / defect register
 $route['backlog'] = 'backlog/index';
