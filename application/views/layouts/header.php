@@ -505,9 +505,10 @@ textarea.form-control { resize:vertical;min-height:80px; }
   border-bottom:1px solid var(--sep);letter-spacing:0;text-transform:none;
 }
 @media print {
-  #sidebar,#canvas .topbar,.btn,.btn-cta { display:none!important; }
-  #canvas { margin-left:0!important;height:auto!important;overflow:visible!important; }
-  .card { box-shadow:none!important;border:1px solid #e0e0e0!important; }
+  #sidebar,#canvas .topbar,.btn,.btn-cta,.no-print { display:none!important; }
+  html,body { height:auto!important;overflow:visible!important;background:#fff!important; }
+  #canvas,.page-body { margin-left:0!important;height:auto!important;overflow:visible!important; }
+  .card,.wms-card { box-shadow:none!important;border:1px solid #e0e0e0!important; }
 }
 
 /* ─────────────────────────────────────────────────────
