@@ -129,7 +129,7 @@ jobs:
             --data-urlencode "email=admin@ci.local" \
             --data-urlencode "password=AdminPass123!" >/dev/null
 
-          for ROUTE in dashboard equipment workorders pm inspections materials spareparts suppliers orders lubricants team attendance attendance/sites attendance/board attendance/print_qr attendance/log backlog reports forecast users settings; do
+          for ROUTE in dashboard equipment workorders pm inspections materials spareparts suppliers orders lubricants team team/report team/create attendance attendance/sites attendance/board attendance/print_qr attendance/log backlog reports forecast users users/create settings; do
             BODY=$(curl -fsSL -b "$COOKIES" -c "$COOKIES" "http://127.0.0.1:8000/$ROUTE")
             if echo "$BODY" | grep -Eq "Severity: (Warning|Notice|Deprecated|Error)|Fatal error|Uncaught|Database Error"; then
               echo "PHP error output found on /$ROUTE!"

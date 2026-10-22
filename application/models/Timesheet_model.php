@@ -44,11 +44,13 @@ class Timesheet_model extends CI_Model {
         }
 
         if ($this->db->table_exists('report_sites')) {
-            $rows = $this->db->select('name')
-                ->order_by('name', 'ASC')
+            $rows = $this->db->select('label')
+                ->where('is_active', 1)
+                ->order_by('sort_order', 'ASC')
+                ->order_by('label', 'ASC')
                 ->get('report_sites')->result();
             foreach ($rows as $r) {
-                $n = trim((string)$r->name);
+                $n = trim((string)$r->label);
                 $k = strtoupper($n);
                 if ($n !== '' && !isset($seen[$k])) {
                     $seen[$k] = TRUE;
