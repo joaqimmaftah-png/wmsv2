@@ -148,9 +148,21 @@ class Lubricants extends MY_Controller {
             return $cmp * $mul;
         });
 
-        // Group filtered records by verbatim Fleet Asset (`registration_no`) for "By Machine" view
+        $viewMode = strtolower(trim((string)$this->input->get('view', TRUE)));
+        if (!in_array($viewMode, array('table', 'groups', 'cards'), TRUE)) $viewMode = 'table';
+
+        $allowedPP     = array(10, 25, 50, 100, 150);
+        $perPage       = (int)$this->input->get('per_page');
+        if (!in_array($perPage, $allowedPP, TRUE)) $perPage = 25;
+        $totalFiltered = count($filtered);
+        $totalPages    = max(1, (int)ceil($totalFiltered / $perPage));
+        $page          = max(1, min((int)$this->input->get('page') ?: 1, $totalPages));
+        $offset        = ($page - 1) * $perPage;
+        $rows          = $paginate ? array_slice($filtered, $offset, $perPage) : $filtered;
+
+        // Group current-page filtered records by verbatim Fleet Asset (`registration_no`) for "By Machine" view
         $groupsMap = array();
-        foreach ($filtered as $c) {
+        foreach ($rows as $c) {
             $reg = (string)($c->registration_no ?: ('Asset #' . (int)$c->equipment_id));
             if (!isset($groupsMap[$reg])) {
                 $groupsMap[$reg] = (object)array(
@@ -167,17 +179,6 @@ class Lubricants extends MY_Controller {
             $g->total_cost += (float)$c->line_cost;
         }
 
-        $viewMode = strtolower(trim((string)$this->input->get('view', TRUE)));
-        if (!in_array($viewMode, array('table', 'groups', 'cards'), TRUE)) $viewMode = 'table';
-
-        $allowedPP     = array(10, 25, 50, 100, 150);
-        $perPage       = (int)$this->input->get('per_page');
-        if (!in_array($perPage, $allowedPP, TRUE)) $perPage = 25;
-        $totalFiltered = count($filtered);
-        $totalPages    = max(1, (int)ceil($totalFiltered / $perPage));
-        $page          = max(1, min((int)$this->input->get('page') ?: 1, $totalPages));
-        $offset        = ($page - 1) * $perPage;
-        $rows          = $paginate ? array_slice($filtered, $offset, $perPage) : $filtered;
 
         return array_merge($this->_base_view_flags(), array(
             'consumption'    => $rows,
@@ -551,25 +552,58 @@ class Lubricants extends MY_Controller {
             }
 
             $items = $this->input->post('budget');
+            $validated = array();
             if (is_array($items)) {
                 foreach ($items as $lube_id => $vals) {
                     $lid = (int)$lube_id;
                     if (!isset($validTypes[$lid]) || !is_array($vals)) continue;
-                    $qty_raw  = isset($vals['qty']) ? trim((string)$vals['qty']) : '';
-                    $cost_raw = isset($vals['cost']) ? trim((string)$vals['cost']) : '';
-                    $qty      = ($qty_raw !== '' && is_numeric($qty_raw)) ? max(0.0, (float)$qty_raw) : 0.0;
-                    $cost     = ($cost_raw !== '' && is_numeric($cost_raw)) ? max(0.0, (float)$cost_raw) : 0.0;
-                    $this->db->replace('lube_budget', array(
+                    $qtyRaw  = isset($vals['qty']) ? trim((string)$vals['qty']) : '';
+                    $costRaw = isset($vals['cost']) ? trim((string)$vals['cost']) : '';
+                    // Empty quantity is an intentional zero allocation. Invalid/negative values
+                    // must not silently overwrite an existing budget with zero.
+                    if (($qtyRaw !== '' && !is_numeric($qtyRaw)) || ($costRaw !== '' && !is_numeric($costRaw))) {
+                        $validated = NULL;
+                        break;
+                    }
+                    $qty  = $qtyRaw === '' ? 0.0 : (float)$qtyRaw;
+                    $cost = $costRaw === '' ? 0.0 : (float)$costRaw;
+                    if (!is_finite($qty) || !is_finite($cost) || $qty < 0 || $cost < 0
+                        || $qty > 99999999.99 || $cost > 99999999.99 || $qty * $cost > 99999999.99) {
+                        $validated = NULL;
+                        break;
+                    }
+                    $qty = round($qty, 2);
+                    $cost = round($cost, 2);
+                    if ($qty * $cost > 99999999.99) {
+                        $validated = NULL;
+                        break;
+                    }
+                    $validated[] = array(
                         'lube_type_id' => $lid,
                         'year'         => $year,
                         'month'        => $month,
                         'budget_qty'   => round($qty, 2),
                         'unit_cost'    => round($cost, 2),
                         'budget_cost'  => round($qty * $cost, 2),
-                    ));
+                    );
                 }
             }
-            $this->session->set_flashdata('success', 'Budget saved.');
+            if ($validated === NULL) {
+                $this->session->set_flashdata('error', 'Budget not saved: enter non-negative numbers within the supported range.');
+                redirect('lubricants/budget?year=' . $year . '&month=' . $month);
+                return;
+            }
+            $this->db->trans_begin();
+            foreach ($validated as $entry) {
+                $this->db->replace('lube_budget', $entry);
+            }
+            if ($this->db->trans_status() === FALSE) {
+                $this->db->trans_rollback();
+                $this->session->set_flashdata('error', 'Budget could not be saved. Please try again.');
+            } else {
+                $this->db->trans_commit();
+                $this->session->set_flashdata('success', 'Budget saved.');
+            }
             redirect('lubricants/budget?year=' . $year . '&month=' . $month);
             return;
         }

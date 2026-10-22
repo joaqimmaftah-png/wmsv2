@@ -85,7 +85,7 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
 }
 .sup-kpi {
   position: relative; padding: 12px 14px; border-radius: 12px;
-  background: var(--card, #111827); border: 1px solid var(--sep, rgba(148,163,184,0.16));
+  background: var(--surface); border: 1px solid var(--sep, rgba(148,163,184,0.16));
   overflow: hidden; min-width: 0;
 }
 .sup-kpi-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--t3); }
@@ -98,7 +98,7 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
 .sup-tab {
   display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 8px;
   font-size: 12px; font-weight: 600; color: var(--t2); text-decoration: none;
-  background: var(--card, #111827); border: 1px solid var(--sep, rgba(148,163,184,0.16));
+  background: var(--surface); border: 1px solid var(--sep, rgba(148,163,184,0.16));
   transition: border-color .15s, background .15s;
 }
 .sup-tab:hover { border-color: var(--blue); color: var(--t1); }
@@ -112,7 +112,7 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
 .sup-toolbar {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   flex-wrap: wrap; padding: 10px 12px; margin-bottom: 12px; border-radius: 12px;
-  background: var(--card, #111827); border: 1px solid var(--sep, rgba(148,163,184,0.16));
+  background: var(--surface); border: 1px solid var(--sep, rgba(148,163,184,0.16));
 }
 .sup-filter-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
 .sup-search-wrap { position: relative; flex: 1 1 210px; min-width: 170px; max-width: 300px; }
@@ -139,8 +139,8 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
 }
 .sup-batch-bar.is-open { display: flex; }
 
-.sup-table-wrap { width: 100%; overflow-x: hidden; }
-.sup-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.sup-table-wrap { width: 100%; overflow-x: auto; }
+.sup-table { width: 100%; min-width: 950px; table-layout: fixed; border-collapse: collapse; }
 .sup-table th, .sup-table td {
   padding: 10px 8px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis;
   border-bottom: 1px solid var(--g2, rgba(148,163,184,0.12));
@@ -177,18 +177,18 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
 .sup-status-pill {
   display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; line-height: 1.2;
 }
-.sup-st-active { background: rgba(22,163,74,0.16); color: #4ade80; border: 1px solid rgba(74,222,128,0.32); }
-.sup-st-inactive { background: rgba(148,163,184,0.16); color: #cbd5e1; border: 1px solid rgba(148,163,184,0.3); }
-.sup-st-blacklisted { background: rgba(220,38,38,0.18); color: #fca5a5; border: 1px solid rgba(252,165,165,0.35); }
+.sup-st-active { background: var(--green-d); color: var(--green); border: 1px solid var(--sep); }
+.sup-st-inactive { background: var(--g2); color: var(--t2); border: 1px solid var(--sep); }
+.sup-st-blacklisted { background: var(--red-d); color: var(--red); border: 1px solid var(--sep); }
 
 .sup-fleet-chip {
   display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;
-  font-family: monospace; background: rgba(56,189,248,0.14); color: #7dd3fc; margin-top: 3px;
+  font-family: monospace; background: var(--blue-d); color: var(--blue); margin-top: 3px;
 }
 .sup-groups-container { display: none; }
 .sup-group-card {
   margin-bottom: 12px; border-radius: 12px; overflow: hidden;
-  background: var(--card, #111827); border: 1px solid var(--sep, rgba(148,163,184,0.16));
+  background: var(--surface); border: 1px solid var(--sep, rgba(148,163,184,0.16));
 }
 .sup-group-hdr {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
@@ -205,7 +205,7 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
 }
 .sup-card {
-  padding: 14px; border-radius: 12px; background: var(--card, #111827);
+  padding: 14px; border-radius: 12px; background: var(--surface);
   border: 1px solid var(--sep, rgba(148,163,184,0.16)); display: flex; flex-direction: column; gap: 10px; min-width: 0;
 }
 .sup-card-metrics {
@@ -235,11 +235,12 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
 .sup-drawer-backdrop.is-open { opacity: 1; pointer-events: auto; }
 .sup-drawer {
   position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100vw); z-index: 1050;
-  background: var(--card, #0f172a); border-left: 1px solid var(--sep, rgba(148,163,184,0.22));
+  background: var(--surface); border-left: 1px solid var(--sep, rgba(148,163,184,0.22));
   box-shadow: -16px 0 40px rgba(0,0,0,0.45); display: flex; flex-direction: column;
   transform: translateX(100%); visibility: hidden; transition: transform .2s ease, visibility .2s;
 }
 .sup-drawer.is-open { transform: translateX(0); visibility: visible; }
+.sup-drawer :focus-visible, #supShell :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .sup-drawer-hdr {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
   padding: 16px 18px; border-bottom: 1px solid var(--g2);
@@ -265,11 +266,12 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
 @media (max-width: 900px) {
   .sup-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sup-table-wrap { display: none !important; }
-  .sup-cards-container { display: block !important; }
+  #supShell:not([data-view="groups"]) .sup-cards-container { display: block !important; }
   .sup-cards-grid { grid-template-columns: minmax(0, 1fr); }
   .sup-group-rows { grid-template-columns: minmax(0, 1fr); }
   .sup-search-wrap { max-width: 100%; flex: 1 1 100%; }
   .sup-kv-grid { grid-template-columns: minmax(0, 1fr); }
+  .sup-view-btn[data-sup-view="table"] { display: none; }
 }
 </style>
 
@@ -321,7 +323,7 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
   </div>
 
   <!-- Segment Filter Tabs -->
-  <div class="sup-tabs" role="tablist" aria-label="Supplier segments">
+  <div class="sup-tabs" aria-label="Supplier segments">
     <?php
     $tabDefs = array(
         'all'          => array('All Vendors', $tab_counts['all']),
@@ -334,12 +336,14 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
     ?>
     <a href="<?= $sup_esc($sup_url('suppliers', array('tab' => $tk === 'all' ? '' : $tk, 'page' => 1))) ?>"
        class="sup-tab <?= $tab === $tk ? 'is-active' : '' ?>"
-       role="tab" aria-selected="<?= $tab === $tk ? 'true' : 'false' ?>">
+       aria-current="<?= $tab === $tk ? 'page' : 'false' ?>">
       <span><?= $sup_esc($meta[0]) ?></span>
       <span class="sup-tab-cnt"><?= (int)$meta[1] ?></span>
     </a>
     <?php endforeach; ?>
   </div>
+
+  <p class="cs" style="margin:-5px 0 12px;">Segment counts include all suppliers, before search and other filters.</p>
 
   <!-- Search, Filters & 3-Way View Switcher -->
   <div class="sup-toolbar">
@@ -389,9 +393,9 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
     </form>
 
     <div class="sup-view-switch" role="group" aria-label="Directory layout">
-      <button type="button" class="sup-view-btn <?= $view_mode === 'table' ? 'is-active' : '' ?>" data-sup-view="table">Table</button>
-      <button type="button" class="sup-view-btn <?= $view_mode === 'groups' ? 'is-active' : '' ?>" data-sup-view="groups">By Country</button>
-      <button type="button" class="sup-view-btn <?= $view_mode === 'cards' ? 'is-active' : '' ?>" data-sup-view="cards">Cards</button>
+      <button type="button" class="sup-view-btn <?= $view_mode === 'table' ? 'is-active' : '' ?>" aria-pressed="<?= $view_mode === 'table' ? 'true' : 'false' ?>" data-sup-view="table">Table</button>
+      <button type="button" class="sup-view-btn <?= $view_mode === 'groups' ? 'is-active' : '' ?>" aria-pressed="<?= $view_mode === 'groups' ? 'true' : 'false' ?>" data-sup-view="groups">By Country</button>
+      <button type="button" class="sup-view-btn <?= $view_mode === 'cards' ? 'is-active' : '' ?>" aria-pressed="<?= $view_mode === 'cards' ? 'true' : 'false' ?>" data-sup-view="cards">Cards</button>
     </div>
   </div>
 
@@ -533,7 +537,7 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
         <div class="sup-group-hdr">
           <div style="font-weight:700;color:var(--t1);font-size:13.5px;">
             <?= $sup_esc($grp->country) ?>
-            <span class="sup-count-pill" style="margin-left:6px;"><?= (int)$grp->total_count ?> vendor(s)</span>
+            <span class="sup-count-pill" style="margin-left:6px;"><?= (int)$grp->total_count ?> vendor(s) on this page</span>
           </div>
           <div style="font-size:11.5px;color:var(--t3);">
             <?= (int)$grp->active_count ?> active &middot; <?= (int)$grp->item_count ?> catalog quotes &middot; <?= (int)$grp->open_orders ?> open POs
@@ -665,6 +669,14 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
 (function () {
   var shell = document.getElementById('supShell');
   if (!shell) return;
+  // At mobile widths the dense table becomes cards; reflect the actual view in the control.
+  if (window.matchMedia('(max-width: 900px)').matches && shell.getAttribute('data-view') === 'table') {
+    shell.setAttribute('data-view', 'cards');
+    var tableButton = document.querySelector('[data-sup-view="table"]');
+    var cardsButton = document.querySelector('[data-sup-view="cards"]');
+    if (tableButton) { tableButton.classList.remove('is-active'); tableButton.setAttribute('aria-pressed', 'false'); }
+    if (cardsButton) { cardsButton.classList.add('is-active'); cardsButton.setAttribute('aria-pressed', 'true'); }
+  }
 
   var summaryBase = <?= json_encode(rtrim(base_url('suppliers/summary_json'), '/') . '/') ?>;
   var viewBase    = <?= json_encode(rtrim(base_url('suppliers/view'), '/') . '/') ?>;
@@ -683,15 +695,14 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
   }
 
   // 3-Way View Switcher (Table / By Country / Cards)
-  var viewInput = document.getElementById('supViewInput');
   Array.prototype.forEach.call(document.querySelectorAll('[data-sup-view]'), function (btn) {
     btn.addEventListener('click', function () {
       var mode = btn.getAttribute('data-sup-view') || 'table';
-      shell.setAttribute('data-view', mode);
-      if (viewInput) viewInput.value = mode;
-      Array.prototype.forEach.call(document.querySelectorAll('[data-sup-view]'), function (b) {
-        b.classList.toggle('is-active', b === btn);
-      });
+      // Navigate with the current filters intact, so view and pagination share one dataset.
+      var url = new URL(window.location.href);
+      if (mode === 'table') url.searchParams.delete('view');
+      else url.searchParams.set('view', mode);
+      window.location.assign(url.toString());
     });
   });
 
@@ -740,6 +751,7 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
   var nextBtn   = document.getElementById('supNextBtn');
   var lastFocus = null;
   var currentId = null;
+  var requestSeq = 0;
 
   function orderedIds() {
     var seen = {};
@@ -752,6 +764,7 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
   }
 
   function closeDrawer() {
+    requestSeq++;
     drawer.classList.remove('is-open');
     backdrop.classList.remove('is-open');
     drawer.setAttribute('aria-hidden', 'true');
@@ -763,14 +776,17 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
   function openDrawer(id, triggerEl) {
     if (triggerEl) lastFocus = triggerEl;
     currentId = String(id);
+    var thisRequest = ++requestSeq;
     drawer.classList.add('is-open');
     backdrop.classList.add('is-open');
     drawer.setAttribute('aria-hidden', 'false');
+    if (closeBtn) closeBtn.focus();
     bodyEl.innerHTML = '<div style="padding:18px 0;color:var(--t3);font-size:12.5px;">Loading vendor dossier…</div>';
 
     fetch(summaryBase + encodeURIComponent(id), { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (res) {
+        if (thisRequest !== requestSeq) return;
         if (!res || !res.ok || !res.supplier) {
           bodyEl.innerHTML = '<div style="color:var(--red);">Unable to load supplier details.</div>';
           return;
@@ -836,6 +852,7 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
         ctasEl.innerHTML = ctas;
       })
       .catch(function () {
+        if (thisRequest !== requestSeq) return;
         bodyEl.innerHTML = '<div style="color:var(--red);">Network error loading supplier dossier.</div>';
       });
   }
@@ -871,6 +888,19 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
       return;
     }
     if (!drawer.classList.contains('is-open')) return;
+    if (ev.key === 'Tab') {
+      var focusables = Array.prototype.slice.call(drawer.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled])'))
+        .filter(function (el) { return el.getClientRects().length > 0; });
+      if (focusables.length) {
+        var first = focusables[0], last = focusables[focusables.length - 1];
+        if (ev.shiftKey && (document.activeElement === first || !drawer.contains(document.activeElement))) {
+          ev.preventDefault(); last.focus();
+        } else if (!ev.shiftKey && (document.activeElement === last || !drawer.contains(document.activeElement))) {
+          ev.preventDefault(); first.focus();
+        }
+      }
+      return;
+    }
     if (ev.key === 'Escape') {
       ev.preventDefault();
       closeDrawer();

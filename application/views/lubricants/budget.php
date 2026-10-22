@@ -48,22 +48,22 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
 }
 .lub-subnav a {
   padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600;
-  text-decoration: none; color: var(--t2); background: var(--card, #111827);
+  text-decoration: none; color: var(--t2); background: var(--surface);
   border: 1px solid var(--sep, rgba(148,163,184,0.16));
 }
 .lub-subnav a.is-active { background: var(--blue); color: #ffffff; border-color: var(--blue); }
 
 .bgt-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .bgt-kpi {
-  padding: 12px 14px; border-radius: 12px; background: var(--card, #111827);
+  padding: 12px 14px; border-radius: 12px; background: var(--surface);
   border: 1px solid var(--sep, rgba(148,163,184,0.16)); min-width: 0;
 }
 .bgt-kpi-k { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--t3); }
 .bgt-kpi-v { font-size: 20px; font-weight: 800; color: var(--t1); margin-top: 4px; }
 .bgt-kpi-s { font-size: 11px; color: var(--t3); margin-top: 3px; }
 
-.bgt-table-wrap { width: 100%; overflow-x: hidden; }
-.bgt-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.bgt-table-wrap { width: 100%; overflow-x: auto; }
+.bgt-table { width: 100%; min-width: 760px; table-layout: fixed; border-collapse: collapse; }
 .bgt-table th, .bgt-table td {
   padding: 10px 8px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis;
   border-bottom: 1px solid var(--g2, rgba(148,163,184,0.12));
@@ -73,10 +73,11 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
   color: var(--t3); text-align: left; white-space: nowrap;
 }
 .bgt-input { width: 100%; max-width: 112px; }
+#lubBudgetShell :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 @media (max-width: 900px) {
   .bgt-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .bgt-table, .bgt-table tbody, .bgt-table tfoot { display: block; width: 100%; }
+  .bgt-table, .bgt-table tbody, .bgt-table tfoot { display: block; width: 100%; min-width: 0; }
   .bgt-table thead { display: none; }
   .bgt-table tbody tr {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
@@ -111,7 +112,7 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
   <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:12px;">
     <div>
       <h1 style="margin:0;font-size:18px;font-weight:700;color:var(--t1);">Lubricant Budget — <?= $lub_esc($month_name) ?></h1>
-      <div class="cs">Monthly volume &amp; cost allocation compared against scheduled PM demand and live store issues</div>
+      <div class="cs">Monthly volume &amp; cost allocation compared against scheduled PM demand and recorded store issues</div>
     </div>
 
     <div class="flex ai-c gap-10" style="flex-wrap:wrap;">
@@ -141,16 +142,16 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
       <div class="bgt-kpi-s"><?= number_format((float)$totals['budget_qty'], 1) ?> units allocated</div>
     </div>
     <div class="bgt-kpi">
-      <div class="bgt-kpi-k">MTD Actual Spend</div>
-      <div class="bgt-kpi-v"><?= $lub_esc($ccy) ?> <?= number_format((float)$totals['actual_cost'], 2) ?></div>
-      <div class="bgt-kpi-s"><?= number_format((float)$totals['actual_qty'], 1) ?> units dispensed</div>
+      <div class="bgt-kpi-k">Estimated Issue Value</div>
+      <div class="bgt-kpi-v" id="budgetIssueValue"><?= $lub_esc($ccy) ?> <?= number_format((float)$totals['actual_cost'], 2) ?></div>
+      <div class="bgt-kpi-s"><?= number_format((float)$totals['actual_qty'], 1) ?> units dispensed in selected month</div>
     </div>
     <div class="bgt-kpi">
-      <div class="bgt-kpi-k">Remaining Balance</div>
-      <div class="bgt-kpi-v" style="color:<?= (float)$totals['remaining_cost'] < 0 ? 'var(--red)' : 'var(--green)' ?>;">
+      <div class="bgt-kpi-k">Estimated Balance</div>
+      <div class="bgt-kpi-v" id="budgetRemaining" style="color:<?= (float)$totals['remaining_cost'] < 0 ? 'var(--red)' : 'var(--green)' ?>;">
         <?= $lub_esc($ccy) ?> <?= number_format((float)$totals['remaining_cost'], 2) ?>
       </div>
-      <div class="bgt-kpi-s">
+      <div class="bgt-kpi-s" id="budgetUtilization">
         <?= $totals['utilization_pct'] !== NULL ? ($totals['utilization_pct'] . '% utilized') : 'Set budget quantities below' ?>
       </div>
     </div>
@@ -165,7 +166,7 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
     <div class="ch">
       <div>
         <div class="ct">Monthly Fluid Allocation Matrix (<?= $lub_esc($ccy) ?>)</div>
-        <div class="cs">Enter monthly quantities and unit rates; budget totals calculate live</div>
+        <div class="cs">Enter monthly quantities and unit rates; budget totals calculate live. Issue value uses the selected month’s budget rate (or the fluid’s current rate if none is saved), not historical purchase cost.</div>
       </div>
       <?php if ($can_write): ?>
       <button type="button" id="bgtFillPmBtn" class="btn btn-ghost btn-sm">Copy PM Demand to Empty Rows</button>
@@ -177,6 +178,9 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
       <input type="hidden" name="year" value="<?= (int)$year_i ?>">
       <input type="hidden" name="month" value="<?= (int)$month_i ?>">
 
+      <?php if (empty($lines)): ?>
+      <p style="padding:24px 8px;color:var(--t2);">No lubricant types are available for this period. Add a lubricant type before creating a budget.</p>
+      <?php else: ?>
       <div class="bgt-table-wrap">
         <table class="bgt-table">
           <thead>
@@ -187,7 +191,7 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
               <th style="width:14%;">Budget Qty</th>
               <th style="width:14%;">Unit Cost (<?= $lub_esc($ccy) ?>)</th>
               <th style="width:14%;text-align:right;">Budget Cost (<?= $lub_esc($ccy) ?>)</th>
-              <th style="width:15%;text-align:right;">MTD Actual</th>
+              <th style="width:15%;text-align:right;">Period Issues</th>
             </tr>
           </thead>
           <tbody>
@@ -210,6 +214,7 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
               <td data-label="Budget Qty (<?= $lub_esc($ln->unit) ?>)">
                 <input type="number" name="budget[<?= $lid ?>][qty]"
                        class="form-control bgt-input budget-qty"
+                       <?= !$can_write ? 'readonly' : '' ?>
                        step="0.1" min="0"
                        data-id="<?= $lid ?>"
                        data-pm="<?= number_format((float)$ln->pm_req_qty, 2, '.', '') ?>"
@@ -219,19 +224,22 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
               <td data-label="Unit Cost (<?= $lub_esc($ccy) ?>)">
                 <input type="number" name="budget[<?= $lid ?>][cost]"
                        class="form-control bgt-input budget-cost"
+                       <?= !$can_write ? 'readonly' : '' ?>
                        step="0.01" min="0"
                        data-id="<?= $lid ?>"
+                       data-actual-qty="<?= number_format((float)$ln->actual_qty, 2, '.', '') ?>"
+                       data-default-rate="<?= number_format((float)($ln->default_cost ?? 0), 2, '.', '') ?>"
                        value="<?= $lub_esc($cstVal) ?>"
                        aria-label="Unit cost for <?= $lub_esc($ln->name) ?>">
               </td>
               <td data-label="Budget Cost" class="mono" style="text-align:right;font-weight:700;color:var(--t1);">
                 <span class="budget-total" id="total-<?= $lid ?>">
-                  <?= (float)$ln->budget_cost > 0 ? ($lub_esc($ccy) . ' ' . number_format((float)$ln->budget_cost, 2)) : '—' ?>
+                  <?= !empty($ln->has_saved_row) ? ($lub_esc($ccy) . ' ' . number_format((float)$ln->budget_cost, 2)) : '—' ?>
                 </span>
               </td>
-              <td data-label="MTD Actual" class="mono" style="text-align:right;font-size:12px;color:var(--t2);">
+              <td data-label="Period Issues" class="mono" style="text-align:right;font-size:12px;color:var(--t2);">
                 <?= number_format((float)$ln->actual_qty, 1) ?> <?= $lub_esc($ln->unit) ?>
-                <div style="font-size:10.5px;color:var(--t3);"><?= $lub_esc($ccy) ?> <?= number_format((float)$ln->actual_cost, 2) ?></div>
+                <div style="font-size:10.5px;color:var(--t3);" id="issue-value-<?= $lid ?>"><?= $lub_esc($ccy) ?> <?= number_format((float)$ln->actual_cost, 2) ?></div>
               </td>
             </tr>
           <?php endforeach; ?>
@@ -248,7 +256,9 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
         </table>
       </div>
 
-      <?php if ($can_write): ?>
+      <?php endif; ?>
+
+      <?php if ($can_write && !empty($lines)): ?>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--g2);">
         <button type="submit" class="btn btn-primary" id="saveBudgetBtn">Save Monthly Budget</button>
       </div>
@@ -264,6 +274,9 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
   var qtyInputs  = Array.prototype.slice.call(document.querySelectorAll('.budget-qty'));
   var costInputs = Array.prototype.slice.call(document.querySelectorAll('.budget-cost'));
   var grandEl    = document.getElementById('grandTotal');
+  var remainingEl = document.getElementById('budgetRemaining');
+  var utilizationEl = document.getElementById('budgetUtilization');
+  var issueValueEl = document.getElementById('budgetIssueValue');
   var kpiEl      = document.getElementById('kpiPlannedTotal');
   var fillBtn    = document.getElementById('bgtFillPmBtn');
 
@@ -273,18 +286,33 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
 
   function recalc() {
     var grand = 0;
+    var actualCost = 0;
     qtyInputs.forEach(function (qEl) {
       var id = qEl.getAttribute('data-id');
       var cEl = document.querySelector('.budget-cost[data-id="' + id + '"]');
       var qv = parseFloat(qEl.value) || 0;
       var cv = cEl ? (parseFloat(cEl.value) || 0) : 0;
       var line = qv * cv;
-      grand += line;
+      grand += Math.round(line * 100) / 100;
+      // The persisted month rate determines the value of this month's already-issued
+      // quantity. A rate edit changes that estimate too; it is never booked spend.
+      var issueQty = cEl ? (parseFloat(cEl.getAttribute('data-actual-qty')) || 0) : 0;
+      var defaultRate = cEl ? (parseFloat(cEl.getAttribute('data-default-rate')) || 0) : 0;
+      var issueCost = Math.round(issueQty * (cv > 0 ? cv : defaultRate) * 100) / 100;
+      actualCost += issueCost;
+      var issueEl = document.getElementById('issue-value-' + id);
+      if (issueEl) issueEl.textContent = fmt(issueCost);
       var tEl = document.getElementById('total-' + id);
-      if (tEl) tEl.textContent = line > 0 ? fmt(line) : '—';
+      if (tEl) tEl.textContent = fmt(Math.round(line * 100) / 100);
     });
     if (grandEl) grandEl.textContent = fmt(grand);
+    if (issueValueEl) issueValueEl.textContent = fmt(actualCost);
     if (kpiEl) kpiEl.textContent = fmt(grand);
+    if (remainingEl) {
+      remainingEl.textContent = fmt(grand - actualCost);
+      remainingEl.style.color = grand - actualCost < 0 ? 'var(--red)' : 'var(--green)';
+    }
+    if (utilizationEl) utilizationEl.textContent = grand > 0 ? (Math.round(actualCost / grand * 1000) / 10) + '% utilized · Unsaved' : 'Set budget quantities below · Unsaved';
   }
 
   qtyInputs.concat(costInputs).forEach(function (el) {
