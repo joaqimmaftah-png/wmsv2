@@ -353,10 +353,10 @@ jobs:
 
               # 8. Live Enterprise Workforce Directory (/team) E2E checks (Supervisor, Manager & Technician RBAC)
               sql_seed = f"""
-              INSERT INTO certifications (user_id, cert_name, cert_number, issuing_body, issue_date, expiry_date, status)
+              INSERT INTO certifications (user_id, cert_name, cert_number, issuing_body, issued_date, expiry_date, status)
               VALUES ({int(tech_id)}, 'Heavy Excavator Safety', 'CERT-EX-01', 'OSHA TZ', '2024-01-01', '2025-01-01', 'Valid');
               INSERT INTO work_orders (wo_number, equipment_id, title, type, priority, status, assigned_to, created_by)
-              SELECT 'WO-CI-TEAM-01', id, 'Main boom cylinder seal leak', 'Corrective', 'Critical', 'In Progress', '{int(tech_id)}', {int(sup_id)}
+              SELECT 'WO-CI-TEAM-01', id, 'Main boom cylinder seal leak', 'Corrective Maintenance', 'Critical', 'In Progress', '{int(tech_id)}', {int(sup_id)}
               FROM equipment WHERE registration_no = 'EX 006' LIMIT 1;
               INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, days_count, reason, status)
               VALUES ({int(tech_id)}, 'Annual Leave', '2026-11-10', '2026-11-12', 3, 'Family event', 'Pending');
