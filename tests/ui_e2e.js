@@ -745,6 +745,126 @@ for (const rawLine of cookieLines) {
     assert(blMobile.docOverflow <= 0, '/backlog Mobile 390px overflowed: ' + blMobile.docOverflow);
     assert(blMobile.tableDisplay === 'none' && blMobile.cardsDisplay === 'block', '/backlog Mobile Card View failed: ' + JSON.stringify(blMobile));
 
+    // =========================================================================
+    // 10. INVENTORY CATALOGUE REGISTER (/materials/inventory) — 1440x900 & 390x844
+    // =========================================================================
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/materials/inventory' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("invShell"))')) break;
+      await sleep(200);
+    }
+    const invPage1 = await evalJs(`(() => ({
+      docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      tblOverflow: document.querySelector('.inv-table-wrap').scrollWidth - document.querySelector('.inv-table-wrap').clientWidth,
+      rowCount: document.querySelectorAll('.inv-table tbody tr[data-inv-row]').length
+    }))()`);
+    assert(invPage1.docOverflow <= 0, '/materials/inventory Page 1 Desktop overflowed: ' + JSON.stringify(invPage1));
+    assert(invPage1.tblOverflow <= 0, '/materials/inventory Page 1 Table overflowed: ' + JSON.stringify(invPage1));
+    assert(invPage1.rowCount === 25, '/materials/inventory Page 1 did not paginate to 25 rows: ' + JSON.stringify(invPage1));
+
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/materials/inventory?q=CI-' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.querySelector(\'[data-inv-open="9901"]\'))')) break;
+      await sleep(200);
+    }
+    const invDesktop = await evalJs(`(async () => {
+      const docOverflow = document.documentElement.scrollWidth - window.innerWidth;
+      const wrap = document.querySelector('.inv-table-wrap');
+      const tblOverflow = wrap.scrollWidth - wrap.clientWidth;
+
+      // '/' keyboard shortcut focuses search input
+      document.body.focus();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+      const slashFocused = (document.activeElement === document.getElementById('invSearchInput'));
+      document.activeElement.blur();
+
+      // Open Quick Stock Movement Modal (+In) & close cleanly via Escape
+      const moveBtn = document.querySelector('[data-inv-move="receive"][data-inv-id="9901"]');
+      moveBtn.focus();
+      moveBtn.click();
+      const moveModalOpen = document.getElementById('invMoveModal').classList.contains('is-open');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const moveModalClosed = !document.getElementById('invMoveModal').classList.contains('is-open');
+
+      // Select first row checkbox -> opens sticky batch bar with ?ids=
+      const firstCb = document.querySelector('.inv-row-check');
+      firstCb.checked = true;
+      firstCb.dispatchEvent(new Event('change', { bubbles: true }));
+      const batchVisible = document.getElementById('invBatchBar').classList.contains('is-open');
+      const batchCsvHref = document.getElementById('invBatchCsvBtn').getAttribute('href') || '';
+      const batchXlsHref = document.getElementById('invBatchXlsxBtn').getAttribute('href') || '';
+
+      // Open Slide-Over Inventory Drawer (SKU 9901 -> 1R-0750 + MRN-9901 ledger entry)
+      const trigger = document.querySelector('[data-inv-open="9901"]');
+      trigger.focus();
+      trigger.click();
+      for (let w = 0; w < 25; w++) {
+        if (document.getElementById('invDrawerBody').textContent.includes('MRN-9901')) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const drawerOpen = document.getElementById('invDrawer').classList.contains('is-open');
+      const drawerText = document.getElementById('invDrawerBody').textContent;
+      const hasPartAndLedger = drawerText.includes('1R-0750') && drawerText.includes('MRN-9901');
+      const firstHeader = document.getElementById('invDrawerTitle').textContent;
+
+      // ArrowRight steps drawer to next SKU (CI-HYD-9902)
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      const secondHeader = document.getElementById('invDrawerTitle').textContent;
+
+      // Escape closes drawer and restores focus to trigger button
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const drawerClosed = !document.getElementById('invDrawer').classList.contains('is-open');
+      const focusRestored = (document.activeElement === trigger);
+
+      // Toggle Cards <-> Table view smoothly
+      document.querySelector('[data-inv-view="cards"]').click();
+      const cardsShown = getComputedStyle(document.querySelector('.inv-cards-container')).display !== 'none'
+        && getComputedStyle(document.querySelector('.inv-table-wrap')).display === 'none';
+      document.querySelector('[data-inv-view="table"]').click();
+
+      // Verify live UTF-8 BOM CSV export endpoint returns 200 + Inventory columns
+      const csvRes = await fetch('/materials/export_csv?q=CI-', { credentials: 'same-origin' });
+      const csvText = await csvRes.text();
+      const csvOk = csvRes.status === 200
+        && csvText.includes('Qty to Order')
+        && csvText.includes('CI-FLT-9901')
+        && csvText.includes('CI-HYD-9902');
+
+      return {
+        docOverflow, tblOverflow, slashFocused, moveModalOpen, moveModalClosed,
+        batchVisible, batchCsvHref, batchXlsHref, drawerOpen, hasPartAndLedger,
+        stepped: firstHeader !== secondHeader, drawerClosed, focusRestored,
+        cardsShown, csvOk
+      };
+    })()`);
+
+    assert(invDesktop.docOverflow <= 0, '/materials/inventory Desktop overflowed: ' + JSON.stringify(invDesktop));
+    assert(invDesktop.tblOverflow <= 0, '/materials/inventory Table overflowed: ' + JSON.stringify(invDesktop));
+    assert(invDesktop.slashFocused === true, '/materials/inventory Slash shortcut failed: ' + JSON.stringify(invDesktop));
+    assert(invDesktop.moveModalOpen && invDesktop.moveModalClosed, '/materials/inventory Quick Movement modal failed: ' + JSON.stringify(invDesktop));
+    assert(invDesktop.batchVisible && invDesktop.batchCsvHref.includes('ids=') && invDesktop.batchXlsHref.includes('ids='), '/materials/inventory Batch bar failed: ' + JSON.stringify(invDesktop));
+    assert(invDesktop.drawerOpen && invDesktop.hasPartAndLedger, '/materials/inventory Drawer missed part/ledger: ' + JSON.stringify(invDesktop));
+    assert(invDesktop.stepped === true, '/materials/inventory ArrowRight navigation failed: ' + JSON.stringify(invDesktop));
+    assert(invDesktop.drawerClosed && invDesktop.focusRestored, '/materials/inventory Escape close/focus failed');
+    assert(invDesktop.cardsShown === true, '/materials/inventory Cards switcher failed');
+    assert(invDesktop.csvOk === true, '/materials/inventory CSV export failed');
+
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/materials/inventory' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("invShell"))')) break;
+      await sleep(200);
+    }
+    const invMobile = await evalJs(`(() => ({
+      docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      tableDisplay: getComputedStyle(document.querySelector('.inv-table-wrap')).display,
+      cardsDisplay: getComputedStyle(document.querySelector('.inv-cards-container')).display
+    }))()`);
+    assert(invMobile.docOverflow <= 0, '/materials/inventory Mobile 390px overflowed: ' + invMobile.docOverflow);
+    assert(invMobile.tableDisplay === 'none' && invMobile.cardsDisplay === 'block', '/materials/inventory Mobile Card View failed: ' + JSON.stringify(invMobile));
+
     ws.close();
     console.log('ALL HEADLESS CHROME DESKTOP (1440x900) & MOBILE (390x844) UI E2E ASSERTIONS PASSED!');
   } catch (err) {

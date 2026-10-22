@@ -1553,15 +1553,20 @@ class PmPlannerFakeDB {
 
     public function dbprefix($t = '') { return (string)$t; }
     public function table_exists($t) {
-        return in_array($t, array('pm_schedules', 'equipment', 'equipment_types', 'pm_part_requirements', 'materials', 'pm_completions', 'backlogs', 'work_orders', 'users'), TRUE);
+        return in_array($t, array(
+            'pm_schedules', 'equipment', 'equipment_types', 'pm_part_requirements',
+            'materials', 'material_transactions', 'suppliers',
+            'pm_completions', 'backlogs', 'work_orders', 'users',
+        ), TRUE);
     }
+    public function field_exists($f, $t = '') { return TRUE; }
     public function select($s, $escape = NULL) { return $this; }
     public function from($t) { return $this; }
     public function join($t, $c, $type = '') { return $this; }
     public function where($k, $v = NULL) { return $this; }
     public function where_in($k, $vals) { return $this; }
     public function group_by($g) { return $this; }
-    public function order_by($c, $d = '') { return $this; }
+    public function order_by($c, $d = '', $escape = NULL) { return $this; }
     public function limit($n, $off = 0) { return $this; }
     public function get($table = NULL) {
         $this->queries[] = (string)$table;
@@ -2022,6 +2027,138 @@ check('BL-02 3-Role UI RBAC: Supervisor sees New/Edit/Verify, Technician sees Ne
 check('BL-05 Accessible Slide-Over Defect Drawer rendered cleanly',
     strpos($blSupHtml, 'id="blDrawer" role="dialog" aria-modal="true"') !== FALSE
     && strpos($blSupHtml, 'backlog/summary_json/') !== FALSE);
+
+/* ─────────────────────────────────────────────────────────────────────────
+   18. Inventory Catalogue Register Overhaul (/materials/inventory — INV-01..INV-06)
+   ───────────────────────────────────────────────────────────────────────── */
+
+section('18. Inventory Catalogue Register Overhaul (/materials/inventory)');
+
+require_once APPPATH . 'models/Materials_model.php';
+
+$invDb = new PmPlannerFakeDB();
+$invModel = new Materials_model();
+$invModel->db = $invDb;
+
+$invRows = array(
+    // Custom min_stock = 10 -> balance = 8 MUST be flagged 'low' with qty_to_order = 12 (max_stock 20 - 8)
+    (object)array(
+        'id' => 9901, 'item_code' => 'FLT-9901', 'category' => 'SPARE PART',
+        'description' => 'Primary Fuel Filter<script>alert(8)</script>', 'part_number_size' => '1R-0750',
+        'unit' => 'pcs', 'initial_stock' => 5, 'qty_received' => 6, 'qty_sortie' => 3, 'final_qty' => 8,
+        'min_stock' => 10, 'max_stock' => 20, 'unit_price_ugx' => NULL, 'unit_price_usd' => 34.50,
+        'supplier_id' => 1, 'supplier_name' => NULL, 'linked_supplier_name' => 'Mantrac CAT',
+        'application' => 'EX 006 / 336D2L', 'location' => 'BIN A-12',
+    ),
+    // Out of stock item -> balance = 0, qty_to_order = 6
+    (object)array(
+        'id' => 9902, 'item_code' => 'HYD-9902', 'category' => 'HYDRAULIC',
+        'description' => 'Boom Cylinder Seal Kit', 'part_number_size' => '295-5609',
+        'unit' => 'Set', 'initial_stock' => 0, 'qty_received' => 2, 'qty_sortie' => 2, 'final_qty' => 0,
+        'min_stock' => 2, 'max_stock' => 6, 'unit_price_ugx' => NULL, 'unit_price_usd' => NULL,
+        'supplier_id' => NULL, 'supplier_name' => 'HydraForce TZ', 'linked_supplier_name' => NULL,
+        'application' => 'C-HEADT 007', 'location' => 'BIN B-04',
+    ),
+);
+for ($k = 3; $k <= 250; $k++) {
+    $invRows[] = (object)array(
+        'id' => 9900 + $k, 'item_code' => 'CON-' . (9900 + $k), 'category' => 'CONSUMABLE',
+        'description' => 'Workshop Consumable #' . $k, 'part_number_size' => 'P-' . $k,
+        'unit' => 'pcs', 'initial_stock' => 10, 'qty_received' => 5, 'qty_sortie' => 2, 'final_qty' => 13,
+        'min_stock' => NULL, 'max_stock' => NULL, 'unit_price_ugx' => NULL, 'unit_price_usd' => NULL,
+        'supplier_id' => NULL, 'supplier_name' => NULL, 'linked_supplier_name' => NULL,
+        'application' => NULL, 'location' => 'MAIN STORE',
+    );
+}
+$invDb->queue = array(
+    new EquipFleetFakeResult($invRows),
+    new EquipFleetFakeResult(array(
+        (object)array('material_id' => 9901, 'txn_count' => 4, 'last_movement_date' => '2026-10-20'),
+    )),
+);
+$invOv = $invModel->get_catalogue_overview();
+check('INV-02 O(1) Query Scaling: 250 inventory SKUs hydrated in <= 2 constant SQL SELECT queries',
+    count($invDb->queries) <= 2 && count($invOv['rows']) === 250,
+    'Executed ' . count($invDb->queries) . ' queries');
+
+$iv0 = $invOv['rows'][0];
+$iv1 = $invOv['rows'][1];
+check('INV-03 Custom Reorder & Supplier Hydration: custom min_stock=10 flags balance=8 as low (order 12) & resolves supplier',
+    $iv0->balance === 8 && $iv0->stock_state === 'low' && $iv0->qty_to_order === 12
+    && $iv0->supplier_display === 'Mantrac CAT' && $iv0->txn_count === 4
+    && $iv1->balance === 0 && $iv1->stock_state === 'out' && $iv1->qty_to_order === 6
+    && $iv1->supplier_display === 'HydraForce TZ');
+
+$matCtrlSrc = file_get_contents(APPPATH . 'controllers/Materials.php');
+check('INV-01 Diagnostic Endpoint Hardening: Materials::ping() restricted to Supervisor & hides PHP_VERSION',
+    strpos($matCtrlSrc, 'if (!$this->is_supervisor())') !== FALSE
+    && strpos($matCtrlSrc, 'PHP_VERSION') === FALSE);
+
+foreach (array('inventory', 'summary_json', 'export_csv', 'export_xlsx', 'template_xlsx') as $roMethod) {
+    check('INV-05 Manager MUTATION_PATTERN compatibility: GET allowed on Materials::' . $roMethod,
+        !preg_match($mutPattern, $roMethod));
+}
+
+$invWarnings = array();
+$renderInvView = function ($roleId, $canWrite, $isSup) use ($invOv, &$invWarnings) {
+    $materials       = array_slice($invOv['rows'], 0, 2);
+    $categories      = $invOv['categories'];
+    $locations       = $invOv['locations'];
+    $suppliers       = $invOv['suppliers'];
+    $kpi             = array('total_items' => 250, 'in_stock_items' => 248, 'low_stock' => 1, 'out_of_stock' => 1, 'total_units' => 3258, 'total_received' => 1258, 'total_issued' => 505, 'reorder_needed' => 18);
+    $filtered_totals = array('initial' => 5, 'received' => 8, 'issued' => 5, 'balance' => 8);
+    $tab_counts      = array('all' => 250, 'in_stock' => 248, 'low' => 1, 'out' => 1, 'movers' => 1, 'valued' => 1);
+    $tab             = 'all';
+    $q               = '';
+    $filter          = array('category' => '', 'location' => '', 'supplier' => '', 'stock' => '', 'search' => '');
+    $sort            = 'default';
+    $dir             = 'asc';
+    $view_mode       = 'table';
+    $per_page        = 25;
+    $allowed_pp      = array(10, 25, 50, 100, 150);
+    $current_page    = 1;
+    $total_pages     = 10;
+    $total_filtered  = 250;
+    $offset          = 0;
+    $can_write       = $canWrite;
+    $can_import      = $canWrite;
+    $is_supervisor   = $isSup;
+    $role_id         = $roleId;
+
+    set_error_handler(function ($severity, $message, $file, $line) use (&$invWarnings) {
+        $invWarnings[] = "$message ($file:$line)";
+        return TRUE;
+    });
+    ob_start();
+    include APPPATH . 'views/materials/inventory.php';
+    $out = ob_get_clean();
+    restore_error_handler();
+    return $out;
+};
+
+$invSupHtml   = $renderInvView(1, TRUE, TRUE);
+$invStoreHtml = $renderInvView(3, TRUE, FALSE);
+$invMgrHtml   = $renderInvView(4, FALSE, FALSE);
+
+check('INV-06 Clean View Render: materials/inventory.php renders Table + Dual Cards with ZERO PHP warnings',
+    empty($invWarnings)
+    && strpos($invSupHtml, '<table class="inv-table"') !== FALSE
+    && strpos($invSupHtml, 'class="inv-cards-grid"') !== FALSE,
+    implode('; ', $invWarnings));
+check('INV-04 XSS Neutralization in materials/inventory.php: hostile <script> tag escaped cleanly',
+    strpos($invSupHtml, '<script>alert(8)</script>') === FALSE
+    && strpos($invSupHtml, 'Primary Fuel Filter&lt;script&gt;alert(8)&lt;/script&gt;') !== FALSE);
+check('INV-01 Store Role Fix & Manager Read-Only RBAC: Store (role 3) sees +In/-Out/Edit/Import, Manager (role 4) is read-only',
+    strpos($invStoreHtml, 'data-inv-move="receive"') !== FALSE
+    && strpos($invStoreHtml, 'data-inv-move="issue"') !== FALSE
+    && strpos($invStoreHtml, 'id="invAddManualBtn"') !== FALSE
+    && strpos($invMgrHtml, 'id="invAddManualBtn"') === FALSE
+    && strpos($invMgrHtml, 'data-inv-move="receive"') === FALSE
+    && strpos($invMgrHtml, 'materials/export_csv') !== FALSE
+    && strpos($invMgrHtml, 'materials/export_xlsx') !== FALSE);
+check('INV-05 Accessible Slide-Over SKU & Ledger Drawer rendered cleanly',
+    strpos($invSupHtml, 'id="invDrawer" role="dialog" aria-modal="true"') !== FALSE
+    && strpos($invSupHtml, 'materials/summary_json/') !== FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
    Result

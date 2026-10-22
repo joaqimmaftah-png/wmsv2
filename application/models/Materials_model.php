@@ -94,18 +94,32 @@ class Materials_model extends CI_Model {
                 $this->db->where('location', $filter['location']);
             }
             if (!empty($filter['stock'])) {
-                if ($filter['stock'] === 'low') {
-                    $this->db->where('final_qty >', 0);
-                    $this->db->where('final_qty <=', 5);
-                } elseif ($filter['stock'] === 'out') {
-                    $this->db->where('final_qty <=', 0);
-                } elseif ($filter['stock'] === 'ok') {
-                    $this->db->where('final_qty >', 5);
+                $low = (int)self::LOW_STOCK;
+                if ($this->has_extended_fields()) {
+                    if ($filter['stock'] === 'low') {
+                        $this->db->where('final_qty >', 0);
+                        $this->db->where('((min_stock IS NOT NULL AND final_qty <= min_stock) OR (min_stock IS NULL AND final_qty <= '.$low.'))', NULL, FALSE);
+                    } elseif ($filter['stock'] === 'out') {
+                        $this->db->where('final_qty <=', 0);
+                    } elseif ($filter['stock'] === 'ok') {
+                        $this->db->where('final_qty >', 0);
+                        $this->db->where('((min_stock IS NOT NULL AND final_qty > min_stock) OR (min_stock IS NULL AND final_qty > '.$low.'))', NULL, FALSE);
+                    }
+                } else {
+                    if ($filter['stock'] === 'low') {
+                        $this->db->where('final_qty >', 0);
+                        $this->db->where('final_qty <=', $low);
+                    } elseif ($filter['stock'] === 'out') {
+                        $this->db->where('final_qty <=', 0);
+                    } elseif ($filter['stock'] === 'ok') {
+                        $this->db->where('final_qty >', $low);
+                    }
                 }
             }
             if (!empty($filter['search'])) {
                 $s = $this->db->escape_like_str($filter['search']);
-                $this->db->where("(item_code LIKE '%{$s}%' OR description LIKE '%{$s}%' OR category LIKE '%{$s}%')");
+                $extraCols = $this->has_extended_fields() ? " OR supplier_name LIKE '%{$s}%'" : '';
+                $this->db->where("(item_code LIKE '%{$s}%' OR description LIKE '%{$s}%' OR category LIKE '%{$s}%' OR part_number_size LIKE '%{$s}%' OR application LIKE '%{$s}%' OR location LIKE '%{$s}%'{$extraCols})");
             }
             $result = $this->db->order_by('category')->order_by('item_code')->get()->result();
             return $result ? $result : array();
@@ -935,5 +949,154 @@ class Materials_model extends CI_Model {
     public function get_import_history($limit = 5) {
         if (!$this->has_import_log()) return array();
         return $this->db->order_by('id', 'DESC')->limit((int)$limit)->get('inventory_import_logs')->result();
+    }
+
+    /**
+     * Constant O(1) query hydrator (<= 2 SQL SELECT queries) for the Enterprise
+     * Inventory DataTable, KPI strip, governance tabs, and CSV/XLSX exports.
+     */
+    public function get_catalogue_overview() {
+        if (!$this->_table_ok()) {
+            return array(
+                'available'  => FALSE,
+                'rows'       => array(),
+                'categories' => array(),
+                'locations'  => array(),
+                'suppliers'  => array(),
+            );
+        }
+
+        $hasExt = $this->has_extended_fields();
+        $hasSup = $hasExt && $this->db->table_exists('suppliers');
+
+        $sel = 'm.*';
+        if ($hasSup) {
+            $sel .= ', s.company_name AS linked_supplier_name';
+        }
+        $qb = $this->db->select($sel)->from('materials m');
+        if ($hasSup) {
+            $qb->join('suppliers s', 's.id = m.supplier_id', 'left');
+        }
+        $rows = $qb->order_by('m.category', 'ASC')->order_by('m.item_code', 'ASC')->get()->result();
+        if (!$rows) $rows = array();
+
+        // Single grouped rollup for stock movement counts & latest movement date
+        $txnMap = array();
+        if (!empty($rows) && $this->db->table_exists('material_transactions')) {
+            $dExpr = $this->has_movement_fields()
+                ? 'MAX(COALESCE(txn_date, DATE(created_at)))'
+                : 'MAX(DATE(created_at))';
+            $mRows = $this->db
+                ->select('material_id, COUNT(*) AS txn_count, ' . $dExpr . ' AS last_movement_date', FALSE)
+                ->from('material_transactions')
+                ->group_by('material_id')
+                ->get()->result();
+            if ($mRows) {
+                foreach ($mRows as $mr) {
+                    $txnMap[(int)$mr->material_id] = $mr;
+                }
+            }
+        }
+
+        $catSet = array();
+        $locSet = array();
+        $supSet = array();
+
+        foreach ($rows as $r) {
+            $mid = (int)$r->id;
+            $r->balance = (int)$r->initial_stock + (int)$r->qty_received - (int)$r->qty_sortie;
+
+            $hasMin = isset($r->min_stock) && $r->min_stock !== NULL && $r->min_stock !== '';
+            $effMin = $hasMin ? (int)$r->min_stock : (int)self::LOW_STOCK;
+            $r->effective_min = $effMin;
+            $r->has_custom_min = $hasMin;
+
+            if ($r->balance <= 0) {
+                $r->stock_state = 'out';
+                $r->stock_rank  = 1;
+            } elseif ($r->balance <= $effMin) {
+                $r->stock_state = 'low';
+                $r->stock_rank  = 2;
+            } else {
+                $r->stock_state = 'ok';
+                $r->stock_rank  = 3;
+            }
+
+            $maxSt = (isset($r->max_stock) && $r->max_stock !== NULL && $r->max_stock !== '') ? (int)$r->max_stock : NULL;
+            if ($maxSt !== NULL && $maxSt > $r->balance) {
+                $r->qty_to_order = $maxSt - $r->balance;
+            } elseif ($effMin > $r->balance) {
+                $r->qty_to_order = $effMin - $r->balance;
+            } else {
+                $r->qty_to_order = 0;
+            }
+
+            $linkedSup = trim((string)(isset($r->linked_supplier_name) ? $r->linked_supplier_name : ''));
+            $rawSup    = trim((string)(isset($r->supplier_name) ? $r->supplier_name : ''));
+            $r->supplier_display = $linkedSup !== '' ? $linkedSup : $rawSup;
+
+            $priceUgx = isset($r->unit_price_ugx) && $r->unit_price_ugx !== NULL ? (float)$r->unit_price_ugx : 0.0;
+            $priceUsd = isset($r->unit_price_usd) && $r->unit_price_usd !== NULL ? (float)$r->unit_price_usd : 0.0;
+            $r->has_price = ($priceUgx > 0.0 || $priceUsd > 0.0);
+
+            if (isset($txnMap[$mid])) {
+                $r->txn_count          = (int)$txnMap[$mid]->txn_count;
+                $r->last_movement_date = (string)$txnMap[$mid]->last_movement_date;
+            } else {
+                $r->txn_count          = 0;
+                $r->last_movement_date = '';
+            }
+
+            $cat = trim((string)$r->category);
+            if ($cat !== '') $catSet[$cat] = TRUE;
+            $loc = trim((string)(isset($r->location) ? $r->location : ''));
+            if ($loc !== '') $locSet[$loc] = TRUE;
+            if ($r->supplier_display !== '') $supSet[$r->supplier_display] = TRUE;
+        }
+
+        ksort($catSet, SORT_NATURAL | SORT_FLAG_CASE);
+        ksort($locSet, SORT_NATURAL | SORT_FLAG_CASE);
+        ksort($supSet, SORT_NATURAL | SORT_FLAG_CASE);
+
+        $categories = array();
+        foreach (array_keys($catSet) as $c) {
+            $categories[] = (object)array('category' => $c);
+        }
+        $locations = array();
+        foreach (array_keys($locSet) as $l) {
+            $locations[] = (object)array('location' => $l);
+        }
+
+        return array(
+            'available'  => TRUE,
+            'rows'       => $rows,
+            'categories' => $categories,
+            'locations'  => $locations,
+            'suppliers'  => array_keys($supSet),
+        );
+    }
+
+    /** Recent stock ledger entries for a single item in the Slide-Over Drawer. */
+    public function get_item_recent_movements($material_id, $limit = 8) {
+        $material_id = (int)$material_id;
+        if ($material_id <= 0 || !$this->db->table_exists('material_transactions')) return array();
+        $dateCol = $this->has_movement_fields()
+            ? 'COALESCE(mt.txn_date, DATE(mt.created_at))'
+            : 'DATE(mt.created_at)';
+        $this->db
+            ->select('mt.*, CONCAT(u.first_name, " ", u.last_name) AS user_name', FALSE)
+            ->select($dateCol . ' AS movement_date', FALSE)
+            ->from('material_transactions mt')
+            ->join('users u', 'u.id = mt.created_by', 'left');
+        if ($this->has_movement_fields() && $this->db->table_exists('equipment')) {
+            $this->db->select('e.registration_no AS equipment_code', FALSE)
+                     ->join('equipment e', 'e.id = mt.equipment_id', 'left');
+        }
+        $res = $this->db->where('mt.material_id', $material_id)
+                        ->order_by($dateCol, 'DESC', FALSE)
+                        ->order_by('mt.id', 'DESC')
+                        ->limit((int)$limit)
+                        ->get()->result();
+        return $res ? $res : array();
     }
 }
