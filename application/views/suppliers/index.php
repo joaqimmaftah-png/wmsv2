@@ -141,11 +141,15 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
 
 .sup-act-menu { position: relative; display: inline-flex; align-items: center; gap: 4px; }
 .sup-menu {
-  position: absolute; top: 100%; right: 0; min-width: 140px;
-  margin-top: 6px; padding: 6px 0;
-  background: var(--surface); border: 1px solid var(--sep);
-  border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-  display: none; z-index: 20;
+  position: fixed;
+  min-width: 140px;
+  padding: 6px 0;
+  background: var(--surface);
+  border: 1px solid var(--sep);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  display: none;
+  z-index: 1000;
 }
 .sup-menu.is-open { display: block; }
 .sup-menu-item {
@@ -799,8 +803,26 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
     var menu   = document.getElementById(menuId);
     if (!menu) return;
     var open = false;
+    function position() {
+      var rect = btn.getBoundingClientRect();
+      // Force layout so we can measure the menu at its natural width
+      menu.style.display = 'block';
+      var mw = menu.offsetWidth;
+      var mh = menu.offsetHeight;
+      var left = rect.right - mw;
+      var top  = rect.bottom + 6;
+      var vpW  = window.innerWidth || document.documentElement.clientWidth;
+      var vpH  = window.innerHeight || document.documentElement.clientHeight;
+      if (left < 8)                  left = 8;
+      if (left + mw > vpW - 8)       left = vpW - mw - 8;
+      if (top + mh > vpH - 8) { top = rect.top - mh - 6; if (top < 8) top = 8; }
+      menu.style.left = Math.max(8, left) + 'px';
+      menu.style.top  = Math.max(8, top)  + 'px';
+      menu.style.display = open ? 'block' : 'none';
+    }
     function toggle() {
       open = !open;
+      if (open) position();
       menu.classList.toggle('is-open', open);
       btn.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
@@ -817,6 +839,7 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
     document.addEventListener('click', function (e) {
       if (!btn.contains(e.target) && !menu.contains(e.target)) close();
     });
+    window.addEventListener('scroll', close);
     var items = Array.prototype.slice.call(menu.querySelectorAll('[role="menuitem"]'));
     menu.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') { close(); btn.focus(); }
