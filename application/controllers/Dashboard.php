@@ -56,6 +56,20 @@ class Dashboard extends MY_Controller {
             ->where('status !=', 'Retired')
             ->get('equipment')->result();
 
+        // One status definition (application/helpers/equip_helper.php): roll the
+        // fleet into the four machine states and count what is down right now
+        // (Breakdown or In Maintenance). Same helper the equipment screens use,
+        // so the dashboard never invents a second status taxonomy.
+        $fleet_status  = array('Available' => 0, 'In Maintenance' => 0, 'Breakdown' => 0, 'Standby' => 0);
+        $machines_down = 0;
+        foreach ($data['equipment'] as $eq) {
+            if (isset($fleet_status[$eq->status])) $fleet_status[$eq->status]++;
+            if (equip_status_group($eq) === 'Down') $machines_down++;
+        }
+        $data['fleet_status']  = $fleet_status;
+        $data['machines_down'] = $machines_down;
+        $data['fleet_total']   = count($data['equipment']);
+
         // --- Fleet KPI by type (for dashboard strip + charts) ---
         $data['fleet_kpi_by_type'] = $this->Dashboard_model->get_fleet_kpi_by_type();
 
@@ -95,6 +109,16 @@ class Dashboard extends MY_Controller {
             ->where('a.date', date('Y-m-d'))
             ->where('a.status', 'Absent')
             ->get()->result();
+
+        // --- Incidents (safety exceptions surfaced on the operational board) ---
+        // Count only; the CEO view carries the record lists.
+        $data['incidents_month']    = $this->db->where('type','Incident')
+            ->where('MONTH(created_at)', date('m'))->where('YEAR(created_at)', date('Y'))
+            ->count_all_results('work_orders');
+        $data['critical_incidents'] = $this->db->select('id')->from('incident_details')
+            ->where('activity_status','Uncontrolled')
+            ->where('MONTH(created_at)', date('m'))->where('YEAR(created_at)', date('Y'))
+            ->count_all_results();
 
         // --- Pending Spare Parts Tracking & Availability Alerts ---
         // Answers: "which pending jobs can now proceed because their parts arrived?"
