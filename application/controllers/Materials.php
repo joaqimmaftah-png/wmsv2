@@ -291,45 +291,142 @@ class Materials extends MY_Controller {
         );
     }
 
-    /* ── DASHBOARD ─────────────────────────────────────── */
+    /* ── DASHBOARD ───────────────────────────────────────
+       Inventory overview.
+
+       Built from get_catalogue_overview() — the SAME row set and the SAME
+       derived columns the Inventory list renders — so the dashboard's
+       stock-health counts can never disagree with the list. The previous
+       version re-derived "low" as a hard-coded `final <= 5` here, which
+       ignored each item's own min_stock and disagreed with the list; that
+       duplicate logic is gone.
+    ────────────────────────────────────────────────────── */
     public function index() {
-        $all = $this->Materials_model->get_all();
+        $ov  = $this->Materials_model->get_catalogue_overview();
+        $rows = $ov['rows'];
 
-        $total_items   = count($all);
-        $out_of_stock  = 0;
-        $low_stock     = 0;
-        $total_received= 0;
-        $total_issued  = 0;
-        $by_category   = array();
+        $kpi = array(
+            'items'         => 0,
+            'in_stock'      => 0,
+            'low'           => 0,
+            'out'           => 0,
+            'units'         => 0,
+            'received'      => 0,
+            'issued'        => 0,
+            'reorder_units' => 0,
+            'reorder_items' => 0,
+            'valued_items'  => 0,
+            'stock_value'   => 0.0,
+            'movers'        => 0,
+            'dormant'       => 0,
+        );
+        $by_category    = array();
+        $low_items      = array();
+        $out_items      = array();
+        $reorder_items  = array();
+        $movers         = array();
 
-        foreach ($all as $m) {
-            $final = $m->initial_stock + $m->qty_received - $m->qty_sortie;
-            $total_received += $m->qty_received;
-            $total_issued   += $m->qty_sortie;
-            if ($final <= 0)  $out_of_stock++;
-            elseif ($final <= 5) $low_stock++;
-            $cat = $m->category;
-            if (!isset($by_category[$cat])) {
-                $by_category[$cat] = array('count'=>0,'stock'=>0,'issued'=>0);
+        foreach ($rows as $r) {
+            $bal  = (int)$r->balance;
+            $kpi['items']++;
+            $kpi['units']     += max(0, $bal);
+            $kpi['received']  += (int)$r->qty_received;
+            $kpi['issued']    += (int)$r->qty_sortie;
+
+            if ($r->stock_state === 'out') {
+                $kpi['out']++;
+                $out_items[] = $r;
+            } elseif ($r->stock_state === 'low') {
+                $kpi['low']++;
+                $low_items[] = $r;
+            } else {
+                $kpi['in_stock']++;
             }
-            $by_category[$cat]['count']++;
-            $by_category[$cat]['stock']  += $final;
-            $by_category[$cat]['issued'] += $m->qty_sortie;
+
+            if ((int)$r->qty_to_order > 0) {
+                $kpi['reorder_units']  += (int)$r->qty_to_order;
+                $kpi['reorder_items']++;
+                $reorder_items[] = $r;
+            }
+
+            // Price: the UGX column is authoritative when present, otherwise
+            // fall back to USD. An item with no price contributes nothing.
+            $price = 0.0;
+            if (!empty($r->has_price)) {
+                if (!empty($r->unit_price_ugx)) {
+                    $price = (float)$r->unit_price_ugx;
+                } elseif (!empty($r->unit_price_usd)) {
+                    $price = (float)$r->unit_price_usd;
+                }
+            }
+            if ($price > 0.0) {
+                $kpi['valued_items']++;
+                $kpi['stock_value'] += max(0, $bal) * $price;
+            }
+
+            if ((int)$r->txn_count > 0) {
+                $kpi['movers']++;
+                $movers[] = $r;
+            } else {
+                $kpi['dormant']++;
+            }
+
+            // Per-category rollup (items, units, value, health).
+            $cat = trim((string)$r->category);
+            if ($cat === '') $cat = 'Uncategorised';
+            if (!isset($by_category[$cat])) {
+                $by_category[$cat] = array(
+                    'items' => 0, 'units' => 0, 'received' => 0,
+                    'issued' => 0, 'value' => 0.0, 'low' => 0, 'out' => 0,
+                );
+            }
+            $by_category[$cat]['items']++;
+            $by_category[$cat]['units']     += max(0, $bal);
+            $by_category[$cat]['received']  += (int)$r->qty_received;
+            $by_category[$cat]['issued']    += (int)$r->qty_sortie;
+            $by_category[$cat]['value']     += max(0, $bal) * $price;
+            if ($r->stock_state === 'low') $by_category[$cat]['low']++;
+            if ($r->stock_state === 'out') $by_category[$cat]['out']++;
         }
 
-        $recent    = $this->Materials_model->get_recent_movements(10);
-        $low_items = $this->Materials_model->get_low_stock(10);
+        // Sort exceptions by severity (lowest balance first), cap the lists.
+        usort($low_items, function ($a, $b) {
+            return ((int)$a->balance <=> (int)$b->balance)
+                ?: ((int)$a->qty_to_order <=> (int)$b->qty_to_order);
+        });
+        usort($out_items, function ($a, $b) {
+            return ((int)$a->balance <=> (int)$b->balance);
+        });
+        usort($reorder_items, function ($a, $b) {
+            return ((int)$b->qty_to_order <=> (int)$a->qty_to_order);
+        });
+        usort($movers, function ($a, $b) {
+            return ((int)$b->txn_count <=> (int)$a->txn_count)
+                ?: ((int)$a->balance <=> (int)$b->balance);
+        });
+
+        $low_items     = array_slice($low_items, 0, 8);
+        $out_items     = array_slice($out_items, 0, 8);
+        $reorder_items = array_slice($reorder_items, 0, 6);
+        $movers        = array_slice($movers, 0, 6);
+
+        // Biggest categories first.
+        uasort($by_category, function ($a, $b) {
+            return $b['items'] <=> $a['items'];
+        });
+
+        $recent = $this->Materials_model->get_recent_movements(10);
 
         $data = array(
-            'all_materials'  => $all,
-            'total_items'    => $total_items,
-            'out_of_stock'   => $out_of_stock,
-            'low_stock'      => $low_stock,
-            'total_received' => $total_received,
-            'total_issued'   => $total_issued,
+            'kpi'            => $kpi,
             'by_category'    => $by_category,
-            'recent'         => $recent,
             'low_items'      => $low_items,
+            'out_items'      => $out_items,
+            'reorder_items'  => $reorder_items,
+            'movers'         => $movers,
+            'recent'         => $recent,
+            'catalogue_rows' => count($rows),
+            'available'      => (bool)$ov['available'],
             'page_title'     => 'Inventory Dashboard',
             'can_write'      => $this->can_write(),
             'role_id'        => $this->role_id,
