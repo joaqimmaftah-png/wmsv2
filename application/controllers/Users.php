@@ -23,25 +23,92 @@ class Users extends MY_Controller {
             'search'  => $this->input->get('q'),
         );
 
-        $q = $this->db->select('u.*, r.name as role_name')
-            ->from('users u')
-            ->join('roles r', 'r.id = u.role_id');
+        $stats = $this->_get_stats();
 
-        if (!empty($filter['role_id'])) $q->where('u.role_id', $filter['role_id']);
-        if (!empty($filter['status']))  $q->where('u.status', $filter['status']);
-        if (!empty($filter['search'])) {
-            $s = $filter['search'];
-            $q->group_start()
-              ->like('u.first_name', $s)->or_like('u.last_name', $s)
-              ->or_like('u.email', $s)->or_like('u.employee_id', $s)
-              ->group_end();
-        }
+        // Whitelisted sortable columns (prevents arbitrary ORDER BY injection).
+        $sort_map = array(
+            'name'         => 'u.first_name, u.last_name',
+            'employee_id'  => 'u.employee_id',
+            'role'         => 'r.name',
+            'status'       => 'u.status',
+            'skill_level'  => 'u.skill_level',
+            'last_login'   => 'u.last_login',
+        );
+        $sort_in  = strtolower(trim((string)$this->input->get('sort', TRUE)));
+        $sort_dir = strtolower(trim((string)$this->input->get('dir', TRUE)));
+        $sort_dir = in_array($sort_dir, array('asc', 'desc'), TRUE) ? $sort_dir : 'asc';
+        $sort_by  = isset($sort_map[$sort_in]) ? $sort_in : 'name';
 
-        $data['users']      = $q->order_by('u.first_name', 'ASC')->get()->result();
-        $data['roles']      = $this->db->get('roles')->result();
-        $data['filter']     = $filter;
-        $data['stats']      = $this->_get_stats();
-        $data['page_title'] = 'User Access Management';
+        $per_page_in = (int)$this->input->get('per_page', TRUE);
+        $per_page = in_array($per_page_in, array(10, 25, 50, 100), TRUE) ? $per_page_in : 25;
+
+        $page_in = (int)$this->input->get('page', TRUE);
+        $page = max(1, $page_in > 0 ? $page_in : 1);
+        $offset = ($page - 1) * $per_page;
+
+        // Apply the same filter conditions to both the count query and the data
+        // query. CI3's count_all_results() resets the Query Builder internally,
+        // so the two queries are built independently to keep the WHERE clauses
+        // in sync and guarantee the paginated slice matches the total count.
+        $apply_filters = function ($q) use ($filter) {
+            if (!empty($filter['role_id'])) $q->where('u.role_id', $filter['role_id']);
+            if (!empty($filter['status']))  $q->where('u.status', $filter['status']);
+            if (!empty($filter['search'])) {
+                $s = $filter['search'];
+                $q->group_start()
+                  ->like('u.first_name', $s)->or_like('u.last_name', $s)
+                  ->or_like('u.email', $s)->or_like('u.employee_id', $s)
+                  ->group_end();
+            }
+            return $q;
+        };
+
+        $total_filtered = (int)$apply_filters(
+            $this->db->select('COUNT(*) as cnt')->from('users u')->join('roles r', 'r.id = u.role_id')
+        )->get()->row()->cnt;
+
+        $users_q = $apply_filters(
+            $this->db->select('u.*, r.name as role_name')
+                ->from('users u')
+                ->join('roles r', 'r.id = u.role_id')
+        );
+        $users_q->order_by($sort_map[$sort_by] . ' ' . $sort_dir);
+        $users_q->limit($per_page, $offset);
+        $data['users'] = $users_q->get()->result();
+
+        $total_pages    = max(1, (int)ceil($total_filtered / $per_page));
+        $page           = min($page, $total_pages);
+        $offset         = ($page - 1) * $per_page;
+        $showing_from   = $total_filtered > 0 ? $offset + 1 : 0;
+        $showing_to     = min($total_filtered, $offset + count($data['users']));
+
+        $on_leave = (int)$this->db->where('status', 'On Leave')->count_all_results('users');
+        $tab_counts = array(
+            'all'      => $stats['total'],
+            'active'   => $stats['active'],
+            'inactive' => $stats['inactive'],
+            'on_leave' => $on_leave,
+        );
+
+        $data['users']         = $data['users'];
+        $data['roles']         = $this->db->get('roles')->result();
+        $data['filter']        = $filter;
+        $data['stats']         = $stats;
+        $data['tab_counts']    = $tab_counts;
+        $status_to_tab = array('Active' => 'active', 'Inactive' => 'inactive', 'On Leave' => 'on_leave');
+        $data['active_tab'] = (isset($filter['status']) && isset($status_to_tab[$filter['status']]))
+            ? $status_to_tab[$filter['status']] : 'all';
+        $data['sort_by']       = $sort_by;
+        $data['sort_dir']      = $sort_dir;
+        $data['per_page']      = $per_page;
+        $data['page']          = $page;
+        $data['total_pages']   = $total_pages;
+        $data['total_filtered']= $total_filtered;
+        $data['total_scope']   = $stats['total'];
+        $data['showing_from']  = $showing_from;
+        $data['showing_to']    = $showing_to;
+        $data['current_user_id'] = (int)$this->user_id;
+        $data['page_title']    = 'User Access Management';
         $this->render('users/index', $data);
     }
 
