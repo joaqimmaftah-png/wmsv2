@@ -454,6 +454,14 @@ textarea.form-control { resize:vertical;min-height:80px; }
   border:1px solid var(--sep);
 }
 .btn-ghost:hover { background:var(--g2);color:var(--t1);border-color:var(--sep-strong); }
+/* Filled neutral variant: used by team/report, suppliers and lubricants for secondary
+   calls to action. Previously referenced but never defined, so those buttons rendered
+   as unstyled text. */
+.btn-secondary {
+  background:var(--fill, #f1f1f4);color:var(--t1);
+  border:1px solid var(--sep);
+}
+.btn-secondary:hover { background:var(--g2);color:var(--t1);border-color:var(--sep-strong); }
 .btn-danger  { background:var(--red-fill);color:var(--red);border:1px solid rgba(192,57,43,0.15); }
 .btn-danger:hover { background:rgba(192,57,43,0.14);color:var(--red); }
 .btn-success { background:var(--green-fill);color:var(--green);border:1px solid rgba(28,140,60,0.15); }
