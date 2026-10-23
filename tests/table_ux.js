@@ -121,4 +121,70 @@ assert.match(source('application/views/forecast/allowances.php'), /class="badge 
 assert.match(source('application/views/forecast/parts.php'), /onsubmit="return confirm\('/, 'part removal requires confirmation');
 assert.match(source('application/views/forecast/parts.php'), /csrf_field\(\)/, 'part forms carry CSRF protection');
 
+// ── Lubricants suite: one shared design system across all six surfaces ──
+// The suite partial owns the shell chrome (nav, page head, KPI cards, bars,
+// badges, empty states, print banner) so no surface can drift on its own.
+const lubUi = source('application/views/lubricants/_ui.php');
+for (const helper of ['$lub_nav', '$lub_page_head', '$lub_print_banner', '$lub_kpi', '$lub_bar', '$lub_badge', '$lub_empty']) {
+  assert.ok(lubUi.includes(helper + ' = function'), helper + ' is provided by the shared lubricants partial');
+}
+assert.match(lubUi, /#lubShell, #lubBudgetShell, \.lub-page/, 'suite tokens are scoped to the lubricants shells');
+assert.match(lubUi, /@media print/, 'suite partial carries print rules');
+
+// Each surface opts into the partial and marks its own nav entry as active.
+for (const [view, active] of [
+  ['index.php', 'ledger'],
+  ['record.php', 'ledger'],
+  ['budget.php', 'budget'],
+  ['types.php', 'types'],
+  ['specifications.php', 'specifications'],
+  ['forecast.php', 'forecast']
+]) {
+  const src = source('application/views/lubricants/' + view);
+  assert.match(src, /include __DIR__ \. '\/_ui\.php';/, view + ' includes the shared partial');
+  assert.ok(src.includes("$lub_nav('" + active + "')"), view + ' marks the ' + active + ' nav entry active');
+  assert.match(src, /\$lub_page_head\(array\(/, view + ' renders the shared page head');
+  assert.match(src, /\$lub_print_banner\(/, view + ' prints a report banner');
+  assert.doesNotMatch(src, /\.lub-subnav\s*\{/, view + ' must not redeclare suite nav styles');
+}
+// The budget editor keeps its exact POST contract and calculator hooks.
+assert.match(budget, /form_open\('lubricants\/budget'\)/, 'budget posts back to its own endpoint');
+assert.match(budget, /name="budget\[<\?= \$lid \?>\]\[qty\]"/, 'budget qty field name is unchanged');
+assert.match(budget, /name="budget\[<\?= \$lid \?>\]\[cost\]"/, 'budget rate field name is unchanged');
+for (const attr of ['data-pm=', 'data-actual-qty=', 'data-default-rate=']) {
+  assert.ok(budget.includes(attr), 'budget calculator keeps the ' + attr + ' attribute');
+}
+for (const id of ['grandTotal', 'kpiPlannedTotal', 'budgetIssueValue', 'budgetRemaining', 'budgetUtilization', 'bgtFillPmBtn']) {
+  assert.ok(budget.includes('id="' + id + '"'), 'budget keeps #' + id);
+}
+assert.match(budget, /id="total-<\?= \$lid \?>"/, 'budget keeps the per-line total target');
+assert.match(budget, /id="issue-value-<\?= \$lid \?>"/, 'budget keeps the per-line issue value target');
+assert.match(budget, /budget_csv/, 'budget CSV export is wired');
+assert.match(budget, /budget_xlsx/, 'budget Excel export is wired');
+assert.doesNotMatch(budget, /\.lub-subnav/, 'budget view drops its private nav copy');
+
+// Types and specifications gate their editors on the roles the controller sends.
+const lubeTypes = source('application/views/lubricants/types.php');
+assert.match(lubeTypes, /if \(\$can_manage_types\):/, 'type creation is supervisor-gated');
+assert.match(lubeTypes, /form_open\('lubricants\/types'\)/, 'type register posts to its endpoint');
+assert.match(lubeTypes, /\$lub_empty\(/, 'type catalogue has an illustrated empty state');
+const lubeSpecs = source('application/views/lubricants/specifications.php');
+assert.match(lubeSpecs, /if \(\$can_write\):/, 'spec editor is write-gated');
+assert.match(lubeSpecs, /form_open\('lubricants\/specifications'\)/, 'spec form posts to its endpoint');
+assert.match(lubeSpecs, /data-spec-edit/, 'spec rows expose the edit affordance');
+assert.ok(lubeSpecs.includes('id="specSaveHint"'), 'spec form keeps its live save hint');
+assert.match(lubeSpecs, /\$lub_empty\(/, 'spec master has an illustrated empty state');
+// Record keeps its dependent work-order filter and every required field.
+const lubeRecord = source('application/views/lubricants/record.php');
+for (const field of ['name="equipment_id"', 'name="lube_type_id"', 'name="quantity_used"', 'name="consumption_date"', 'name="work_order_id"']) {
+  assert.ok(lubeRecord.includes(field), 'record form keeps ' + field);
+}
+assert.match(lubeRecord, /data-equipment=/, 'work-order options carry their machine for filtering');
+assert.match(lubeRecord, /opt\.disabled = off/, 'off-machine work orders are disabled, not just hidden');
+// Forecast keeps a sticky first column and a mobile month card fallback.
+const lubeForecast = source('application/views/lubricants/forecast.php');
+assert.match(lubeForecast, /position: sticky; left: 0/, 'forecast pins the month column');
+assert.match(lubeForecast, /\.lub-forecast-months \{ display: grid/, 'forecast swaps to month cards on small screens');
+assert.doesNotMatch(lubeForecast, /kpi-glow/, 'forecast drops the inert decorative glow');
+
 console.log('Table surface and budget calculator regressions: passed');

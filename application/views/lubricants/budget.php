@@ -1,6 +1,14 @@
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
 
+/**
+ * Lubricants — Monthly Budget.
+ *
+ * Presentation follows the /team/report enterprise design system through the
+ * shared lubricants partial. The live budget calculator is unchanged in
+ * behaviour: same input names, same element ids, same arithmetic.
+ */
+
 $lub_esc = function ($v) {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 };
@@ -47,156 +55,163 @@ foreach ($lines as $line) {
     $issue_records += (int)($line->actual_records ?? 0);
 }
 $exportQs = '?year=' . $year_i . '&month=' . $month_i;
+
+include __DIR__ . '/_ui.php';
+
+$print_meta = 'Period: <strong>' . $lub_esc($month_name) . '</strong>'
+    . ' &middot; Grades: <strong>' . count($lines) . '</strong>'
+    . ' &middot; Planned: <strong>' . $lub_esc($ccy . ' ' . number_format((float)$totals['budget_cost'], 2)) . '</strong>';
+
+$header_actions = '<a href="' . $lub_esc(base_url('lubricants/budget_csv' . $exportQs)) . '" class="btn btn-ghost btn-sm">Export CSV</a>'
+    . '<a href="' . $lub_esc(base_url('lubricants/budget_xlsx' . $exportQs)) . '" class="btn btn-ghost btn-sm">Export Excel</a>';
 ?>
 <style>
-#lubBudgetShell { max-width: 100%; overflow-x: clip; }
-.lub-subnav {
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-  margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--sep, rgba(148,163,184,0.16));
-}
-.lub-subnav a {
-  padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600;
-  text-decoration: none; color: var(--t2); background: var(--surface);
-  border: 1px solid var(--sep, rgba(148,163,184,0.16));
-}
-.lub-subnav a.is-active { background: var(--blue); color: #ffffff; border-color: var(--blue); }
-
-.bgt-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+/* Page-specific layout for the budget matrix. */
 .bgt-kpi {
-  padding: 12px 14px; border-radius: 12px; background: var(--surface);
-  border: 1px solid var(--sep, rgba(148,163,184,0.16)); min-width: 0;
+  background: var(--surface); border: 1px solid var(--sep);
+  border-radius: var(--r-md, 14px); box-shadow: var(--shadow-card);
+  padding: 12px 14px; min-width: 0;
 }
-.bgt-kpi-k { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--t3); }
-.bgt-kpi-v { font-size: 20px; font-weight: 800; color: var(--t1); margin-top: 4px; }
-.bgt-kpi-s { font-size: 11px; color: var(--t3); margin-top: 3px; }
-
-.bgt-table-wrap { width: 100%; overflow-x: auto; }
-.bgt-table { width: 100%; min-width: 760px; table-layout: fixed; border-collapse: collapse; }
-.bgt-table th, .bgt-table td {
-  padding: 10px 8px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis;
-  border-bottom: 1px solid var(--g2, rgba(148,163,184,0.12));
-}
-.bgt-table th {
-  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--t3); text-align: left; white-space: nowrap;
-}
-.bgt-input { width: 100%; max-width: 112px; }
-#lubBudgetShell :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.bgt-col-name  { width: 20%; }
+.bgt-col-cat   { width: 12%; }
+.bgt-col-pm    { width: 10%; }
+.bgt-col-qty   { width: 13%; }
+.bgt-col-rate  { width: 13%; }
+.bgt-col-total { width: 13%; }
+.bgt-col-util  { width: 10%; }
+.bgt-col-issue { width: 11%; }
+.bgt-input { width: 100%; max-width: 118px; }
 
 @media (max-width: 900px) {
-  .bgt-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Stack each allocation line into a labelled card. */
   .bgt-table, .bgt-table tbody, .bgt-table tfoot { display: block; width: 100%; min-width: 0; }
   .bgt-table thead { display: none; }
   .bgt-table tbody tr {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
     padding: 12px; margin-bottom: 10px; border-radius: 10px;
-    border: 1px solid var(--sep, rgba(148,163,184,0.18));
+    border: 1px solid var(--sep); background: var(--surface);
   }
-  .bgt-table tbody td {
-    padding: 4px 0; border-bottom: 0; overflow: visible;
-  }
+  .bgt-table tbody td { padding: 4px 0; border-bottom: 0; overflow: visible; display: block; }
   .bgt-table tbody td::before {
-    content: attr(data-label); display: block; font-size: 10px; font-weight: 700;
-    text-transform: uppercase; color: var(--t3); margin-bottom: 2px;
+    content: attr(data-label); display: block; font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.03em; color: var(--t3); margin-bottom: 2px;
   }
-  .bgt-table tfoot tr {
-    display: flex; justify-content: space-between; align-items: center; gap: 10px;
-    padding: 12px; border-top: 1px solid var(--g2);
-  }
+  .bgt-table tbody tr:hover { background: var(--surface); }
+  .bgt-table tfoot tr { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px; }
   .bgt-input { max-width: 100%; }
+  .bgt-table tfoot td { display: block; padding: 0; }
+  .bgt-table tfoot td:first-child { text-align: left !important; }
 }
 </style>
 
-<div id="lubBudgetShell">
-  <nav class="lub-subnav" aria-label="Lubricants navigation">
-    <a href="<?= base_url('lubricants') ?>">Consumption Ledger</a>
-    <a href="<?= base_url('lubricants/budget') ?>" class="is-active">Lube Budget</a>
-    <a href="<?= base_url('lubricants/specifications') ?>">OEM Specifications</a>
-    <a href="<?= base_url('lubricants/types') ?>">Lube Types</a>
-    <a href="<?= base_url('lubricants/forecast') ?>">PM Forecast</a>
-  </nav>
+<?= $lub_print_banner('Lubricant Budget — ' . $month_name, $print_meta) ?>
 
-  <!-- Header & Period Picker -->
-  <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:12px;">
-    <div>
-      <h1 style="margin:0;font-size:18px;font-weight:700;color:var(--t1);">Lubricant Budget — <?= $lub_esc($month_name) ?></h1>
-      <div class="cs">Monthly allocations versus PM demand and recorded issues, with quantities shown per fluid unit</div>
-    </div>
+<div id="lubBudgetShell" class="lub-page">
 
-    <div class="flex ai-c gap-10" style="flex-wrap:wrap;">
-      <form method="get" action="<?= base_url('lubricants/budget') ?>" class="flex ai-c gap-10" style="flex-wrap:wrap;">
-        <input type="number" name="year" class="form-control" style="width:100px;" min="2000" max="2100" step="1"
-               value="<?= (int)$year_i ?>" aria-label="Budget year" required>
-        <select name="month" class="form-select" style="width:132px;" aria-label="Budget month">
-          <?php for ($m = 1; $m <= 12; $m++): ?>
-          <option value="<?= (int)$m ?>" <?= $month_i === $m ? 'selected' : '' ?>><?= $lub_esc(date('F', mktime(0, 0, 0, $m, 1))) ?></option>
-          <?php endfor; ?>
-        </select>
-        <button type="submit" class="btn btn-ghost btn-sm">Load Period</button>
-      </form>
-      <a href="<?= $lub_esc(base_url('lubricants/budget_csv' . $exportQs)) ?>" class="btn btn-ghost btn-sm">Export CSV</a>
-      <a href="<?= $lub_esc(base_url('lubricants/budget_xlsx' . $exportQs)) ?>" class="btn btn-ghost btn-sm">Export Excel</a>
-    </div>
-  </div>
+  <?= $lub_nav('budget') ?>
 
-  <!-- 4-Card KPI Strip -->
-  <div class="bgt-kpi-grid">
+  <?php
+  $period_form = '<form method="get" action="' . base_url('lubricants/budget') . '" style="display:contents;">'
+      . '<div class="lub-field"><label for="bgtYear">Year</label>'
+      . '<input type="number" id="bgtYear" name="year" class="lub-input" style="max-width:100px;" min="2000" max="2100" step="1"'
+      . ' value="' . (int)$year_i . '" aria-label="Budget year" required'
+      . ' onchange="this.form.submit()"></div>'
+      . '<div class="lub-field"><label for="bgtMonth">Month</label>'
+      . '<select id="bgtMonth" name="month" class="lub-select" style="max-width:150px;" aria-label="Budget month" onchange="this.form.submit()">';
+  for ($m = 1; $m <= 12; $m++) {
+      $period_form .= '<option value="' . (int)$m . '"' . ($month_i === $m ? ' selected' : '') . '>'
+          . $lub_esc(date('F', mktime(0, 0, 0, $m, 1))) . '</option>';
+  }
+  $period_form .= '</select></div>'
+      . '<div class="lub-scope-actions"><button type="submit" class="btn btn-ghost btn-sm">Load period</button></div>'
+      . '</form>';
+  ?>
+
+  <?= $lub_page_head(array(
+      'crumb'    => array(array('Lubricants', 'lubricants'), array('Lube Budget', NULL)),
+      'title'    => 'Lubricant Budget',
+      'pill'     => $month_name,
+      'subtitle' => 'Monthly allocations measured against PM demand and the issues actually recorded from the store.',
+      'actions'  => $header_actions,
+  )) ?>
+
+  <!-- ── KPI strip ── -->
+  <div class="lub-kpi-grid no-print">
     <div class="bgt-kpi">
-      <div class="bgt-kpi-k">Planned Budget</div>
-      <div class="bgt-kpi-v" id="kpiPlannedTotal"><?= $lub_esc($ccy) ?> <?= number_format((float)$totals['budget_cost'], 2) ?></div>
-      <div class="bgt-kpi-s"><?= (int)$allocated_grades ?> fluid grade(s) allocated; quantities by unit below</div>
-    </div>
-    <div class="bgt-kpi">
-      <div class="bgt-kpi-k">Estimated Issue Value</div>
-      <div class="bgt-kpi-v" id="budgetIssueValue"><?= $lub_esc($ccy) ?> <?= number_format((float)$totals['actual_cost'], 2) ?></div>
-      <div class="bgt-kpi-s"><?= (int)$issue_records ?> issue(s) recorded in selected month</div>
+      <div class="lub-kpi-k">Planned Budget</div>
+      <div class="lub-kpi-v" id="kpiPlannedTotal"><?= $lub_esc($ccy) ?> <?= number_format((float)$totals['budget_cost'], 2) ?></div>
+      <div class="lub-kpi-s"><?= (int)$allocated_grades ?> fluid grade(s) allocated</div>
     </div>
     <div class="bgt-kpi">
-      <div class="bgt-kpi-k">Estimated Balance</div>
-      <div class="bgt-kpi-v" id="budgetRemaining" style="color:<?= (float)$totals['remaining_cost'] < 0 ? 'var(--red)' : 'var(--green)' ?>;">
+      <div class="lub-kpi-k">Estimated Issue Value</div>
+      <div class="lub-kpi-v" id="budgetIssueValue"><?= $lub_esc($ccy) ?> <?= number_format((float)$totals['actual_cost'], 2) ?></div>
+      <div class="lub-kpi-s"><?= (int)$issue_records ?> issue(s) recorded this month</div>
+    </div>
+    <div class="bgt-kpi">
+      <div class="lub-kpi-k">Estimated Balance</div>
+      <div class="lub-kpi-v" id="budgetRemaining" style="color:<?= (float)$totals['remaining_cost'] < 0 ? 'var(--red)' : 'var(--green)' ?>;">
         <?= $lub_esc($ccy) ?> <?= number_format((float)$totals['remaining_cost'], 2) ?>
       </div>
-      <div class="bgt-kpi-s" id="budgetUtilization">
+      <div class="lub-kpi-s" id="budgetUtilization">
         <?= $totals['utilization_pct'] !== NULL ? ($totals['utilization_pct'] . '% utilized') : 'Set budget quantities below' ?>
       </div>
     </div>
     <div class="bgt-kpi">
-      <div class="bgt-kpi-k">PM Plan Coverage</div>
-      <div class="bgt-kpi-v"><?= (int)$pm_grades ?></div>
-      <div class="bgt-kpi-s">Fluid grade(s) with PM demand; quantities by unit below</div>
+      <div class="lub-kpi-k">PM Plan Coverage</div>
+      <div class="lub-kpi-v"><?= (int)$pm_grades ?></div>
+      <div class="lub-kpi-s">Fluid grade(s) with PM demand</div>
     </div>
   </div>
 
-  <div class="card">
-    <div class="ch">
+  <div class="lub-surface">
+
+    <!-- Scope: budget period -->
+    <div class="lub-scope-bar no-print">
+      <?= $period_form ?>
+    </div>
+
+    <!-- Panel heading -->
+    <div class="lub-panel-head no-print">
       <div>
-        <div class="ct">Monthly Fluid Allocation Matrix (<?= $lub_esc($ccy) ?>)</div>
-        <div class="cs">Enter monthly quantities and unit rates; budget totals calculate live. PM demand includes dated and projected hour-based schedules (assuming 20 running hours/day); issue value uses this month’s budget rate (or current fluid rate when unset), not historical purchase cost.</div>
+        <div class="lub-panel-title">Monthly Fluid Allocation Matrix (<?= $lub_esc($ccy) ?>)</div>
+        <p class="lub-panel-sub">
+          Enter monthly quantities and unit rates — totals recalculate as you type. PM demand includes dated and
+          projected hour-based schedules (20 running hours/day). Issue value uses this month's budget rate, or the
+          current fluid rate when unset — never historical purchase cost.
+        </p>
       </div>
-      <?php if ($can_write): ?>
+      <?php if ($can_write && !empty($lines)): ?>
       <button type="button" id="bgtFillPmBtn" class="btn btn-ghost btn-sm">Copy PM Demand to Empty Rows</button>
       <?php endif; ?>
     </div>
 
-    <div style="padding:12px 16px 20px;">
+    <?php if (empty($lines)): ?>
+      <div class="lub-empty">
+        <div class="lub-empty-ico" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <h3>No lubricant types available</h3>
+        <p>Add a lubricant type before creating a budget for <?= $lub_esc($month_name) ?>.</p>
+        <a href="<?= base_url('lubricants/types') ?>" class="btn btn-secondary">Go to Lube Types</a>
+      </div>
+    <?php else: ?>
+
       <?= form_open('lubricants/budget') ?>
       <input type="hidden" name="year" value="<?= (int)$year_i ?>">
       <input type="hidden" name="month" value="<?= (int)$month_i ?>">
 
-      <?php if (empty($lines)): ?>
-      <p style="padding:24px 8px;color:var(--t2);">No lubricant types are available for this period. Add a lubricant type before creating a budget.</p>
-      <?php else: ?>
-      <div class="bgt-table-wrap">
-        <table class="bgt-table">
+      <div class="lub-table-wrap">
+        <table class="lub-table bgt-table" style="min-width:1020px;">
           <thead>
             <tr>
-              <th style="width:20%;">Lubricant &amp; Grade</th>
-              <th style="width:13%;">Category</th>
-              <th style="width:10%;text-align:right;">PM Demand</th>
-              <th style="width:14%;">Budget Qty</th>
-              <th style="width:14%;">Unit Cost (<?= $lub_esc($ccy) ?>)</th>
-              <th style="width:14%;text-align:right;">Budget Cost (<?= $lub_esc($ccy) ?>)</th>
-              <th style="width:15%;text-align:right;">Period Issues</th>
+              <th scope="col" class="bgt-col-name">Lubricant &amp; Grade</th>
+              <th scope="col" class="bgt-col-cat">Category</th>
+              <th scope="col" class="bgt-col-pm lub-num">PM Demand</th>
+              <th scope="col" class="bgt-col-qty">Budget Qty</th>
+              <th scope="col" class="bgt-col-rate">Unit Cost (<?= $lub_esc($ccy) ?>)</th>
+              <th scope="col" class="bgt-col-total lub-num">Budget Cost (<?= $lub_esc($ccy) ?>)</th>
+              <th scope="col" class="bgt-col-util lub-num">Utilisation</th>
+              <th scope="col" class="bgt-col-issue lub-num">Period Issues</th>
             </tr>
           </thead>
           <tbody>
@@ -204,21 +219,33 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
             $lid    = (int)$ln->id;
             $qtyVal = $ln->budget_qty !== NULL ? rtrim(rtrim(number_format((float)$ln->budget_qty, 2, '.', ''), '0'), '.') : '';
             $cstVal = number_format((float)$ln->unit_cost, 2, '.', '');
+            $utilPct = isset($ln->utilization_pct) ? $ln->utilization_pct : NULL;
+            $utilTone = ($utilPct === NULL) ? 'good' : ((float)$utilPct > 100 ? 'bad' : ((float)$utilPct >= 75 ? 'warn' : 'good'));
           ?>
             <tr>
-              <td data-label="Lubricant" style="grid-column:1 / -1;">
-                <div style="font-weight:700;color:var(--t1);font-size:13px;"><?= $lub_esc($ln->name) ?></div>
-                <div style="font-size:11px;color:var(--t3);"><?= $lub_esc($ln->grade ?: 'Standard') ?> &middot; <?= $lub_esc($ln->unit) ?></div>
+              <td class="bgt-col-name" data-label="Lubricant">
+                <div class="lub-entity">
+                  <span class="lub-avatar" aria-hidden="true"><?= $lub_esc(strtoupper(function_exists('mb_substr') ? mb_substr((string)$ln->name, 0, 2, 'UTF-8') : substr((string)$ln->name, 0, 2))) ?></span>
+                  <div class="lub-entity-info">
+                    <span class="lub-entity-name is-plain"><?= $lub_esc($ln->name) ?></span>
+                    <div class="lub-entity-meta">
+                      <span><?= $lub_esc($ln->grade ?: 'Standard') ?></span>
+                      <span aria-hidden="true">·</span>
+                      <span class="lub-code"><?= $lub_esc($ln->unit) ?></span>
+                    </div>
+                  </div>
+                </div>
               </td>
-              <td data-label="Category">
+              <td class="bgt-col-cat" data-label="Category">
                 <span style="font-size:11.5px;color:var(--t2);"><?= $lub_esc($ln->category) ?></span>
               </td>
-              <td data-label="PM Demand" class="mono" style="text-align:right;font-size:12px;color:var(--t2);">
-                <?= number_format((float)$ln->pm_req_qty, 2) ?> <?= $lub_esc($ln->unit) ?>
+              <td class="bgt-col-pm lub-num" data-label="PM Demand">
+                <span class="lub-num-txt" style="font-size:12px;color:var(--t2);"><?= number_format((float)$ln->pm_req_qty, 2) ?></span>
+                <span class="lub-code"><?= $lub_esc($ln->unit) ?></span>
               </td>
-              <td data-label="Budget Qty (<?= $lub_esc($ln->unit) ?>)">
+              <td class="bgt-col-qty" data-label="Budget Qty (<?= $lub_esc($ln->unit) ?>)">
                 <input type="number" name="budget[<?= $lid ?>][qty]"
-                       class="form-control bgt-input budget-qty"
+                       class="form-control lub-input bgt-input budget-qty"
                        <?= !$can_write ? 'readonly' : '' ?>
                        step="0.01" min="0"
                        data-id="<?= $lid ?>"
@@ -226,9 +253,9 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
                        value="<?= $lub_esc($qtyVal) ?>"
                        aria-label="Budget quantity for <?= $lub_esc($ln->name) ?>">
               </td>
-              <td data-label="Unit Cost (<?= $lub_esc($ccy) ?>)">
+              <td class="bgt-col-rate" data-label="Unit Cost (<?= $lub_esc($ccy) ?>)">
                 <input type="number" name="budget[<?= $lid ?>][cost]"
-                       class="form-control bgt-input budget-cost"
+                       class="form-control lub-input bgt-input budget-cost"
                        <?= !$can_write ? 'readonly' : '' ?>
                        step="0.01" min="0"
                        data-id="<?= $lid ?>"
@@ -237,39 +264,55 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
                        value="<?= $lub_esc($cstVal) ?>"
                        aria-label="Unit cost for <?= $lub_esc($ln->name) ?>">
               </td>
-              <td data-label="Budget Cost" class="mono" style="text-align:right;font-weight:700;color:var(--t1);">
-                <span class="budget-total" id="total-<?= $lid ?>">
+              <td class="bgt-col-total lub-num" data-label="Budget Cost">
+                <span class="lub-num-txt" id="total-<?= $lid ?>" style="font-weight:700;color:var(--t1);">
                   <?= !empty($ln->has_saved_row) ? ($lub_esc($ccy) . ' ' . number_format((float)$ln->budget_cost, 2)) : '—' ?>
                 </span>
               </td>
-              <td data-label="Period Issues" class="mono" style="text-align:right;font-size:12px;color:var(--t2);">
-                <?= number_format((float)$ln->actual_qty, 2) ?> <?= $lub_esc($ln->unit) ?>
-                <div style="font-size:10.5px;color:var(--t3);" id="issue-value-<?= $lid ?>"><?= $lub_esc($ccy) ?> <?= number_format((float)$ln->actual_cost, 2) ?></div>
+              <td class="bgt-col-util lub-num" data-label="Utilisation">
+                <span id="util-<?= $lid ?>">
+                  <?php if ($utilPct === NULL): ?>
+                    <span class="lub-note-pill">—</span>
+                  <?php else: ?>
+                    <?= $lub_bar($utilPct, $utilTone, number_format((float)$utilPct, 0) . '%', 34) ?>
+                  <?php endif; ?>
+                </span>
+              </td>
+              <td class="bgt-col-issue lub-num" data-label="Period Issues">
+                <span class="lub-num-txt" style="font-size:12px;color:var(--t2);"><?= number_format((float)$ln->actual_qty, 2) ?></span>
+                <span class="lub-code"><?= $lub_esc($ln->unit) ?></span>
+                <div class="lub-cell-sub" id="issue-value-<?= $lid ?>" style="font-size:10.5px;">
+                  <?= $lub_esc($ccy) ?> <?= number_format((float)$ln->actual_cost, 2) ?>
+                </div>
               </td>
             </tr>
           <?php endforeach; ?>
           </tbody>
           <tfoot>
             <tr>
-              <td colspan="5" style="text-align:right;font-weight:700;color:var(--t2);">TOTAL MONTHLY BUDGET:</td>
-              <td class="mono" style="text-align:right;font-weight:800;font-size:14px;color:var(--blue);" id="grandTotal">
-                <?= $lub_esc($ccy) ?> <?= number_format((float)$totals['budget_cost'], 2) ?>
+              <td colspan="5" style="text-align:right;font-weight:600;color:var(--t2);font-size:11.5px;text-transform:uppercase;letter-spacing:0.03em;">
+                Total monthly budget
               </td>
-              <td></td>
+              <td class="lub-num" style="text-align:right;">
+                <span class="lub-num-txt" id="grandTotal" style="font-weight:800;font-size:14px;color:var(--blue);">
+                  <?= $lub_esc($ccy) ?> <?= number_format((float)$totals['budget_cost'], 2) ?>
+                </span>
+              </td>
+              <td colspan="2"></td>
             </tr>
           </tfoot>
         </table>
       </div>
 
-      <?php endif; ?>
-
       <?php if ($can_write && !empty($lines)): ?>
-      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--g2);">
+      <div class="lub-form-actions no-print" style="margin:0;padding:14px 16px;border-top:1px solid var(--sep);">
+        <span class="lub-form-note">Totals above are unsaved until you store this month's allocation.</span>
         <button type="submit" class="btn btn-primary" id="saveBudgetBtn">Save Monthly Budget</button>
       </div>
       <?php endif; ?>
       <?= form_close() ?>
-    </div>
+
+    <?php endif; ?>
   </div>
 </div>
 
@@ -309,6 +352,19 @@ $exportQs = '?year=' . $year_i . '&month=' . $month_i;
       if (issueEl) issueEl.textContent = fmt(issueCost);
       var tEl = document.getElementById('total-' + id);
       if (tEl) tEl.textContent = fmt(Math.round(line * 100) / 100);
+      // Utilisation is only meaningful once a budget exists for the line.
+      var utilEl = document.getElementById('util-' + id);
+      if (utilEl) {
+        if (line > 0) {
+          var pct = Math.round(issueCost / line * 100);
+          utilEl.innerHTML = '<span class="lub-rate-wrap lub-rate-' + (pct > 100 ? 'bad' : (pct >= 75 ? 'warn' : 'good')) + '">'
+            + '<span class="lub-rate-pct">' + pct + '%</span>'
+            + '<span class="lub-rate-bar" style="width:34px" aria-hidden="true">'
+            + '<span class="lub-rate-fill" style="width:' + Math.max(4, Math.min(100, pct)) + '%"></span></span></span>';
+        } else {
+          utilEl.innerHTML = '<span class="lub-note-pill">—</span>';
+        }
+      }
     });
     if (grandEl) grandEl.textContent = fmt(grand);
     if (issueValueEl) issueValueEl.textContent = fmt(actualCost);
