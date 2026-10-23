@@ -797,52 +797,65 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
     });
   }
 
-  // Overflow action menus per supplier row
+  // Overflow action menus per supplier row (portal pattern)
   Array.prototype.forEach.call(document.querySelectorAll('[data-sup-menu]'), function (btn) {
     var menuId = 'sup-menu-' + btn.getAttribute('data-sup-menu');
     var menu   = document.getElementById(menuId);
     if (!menu) return;
-    var open = false;
+    var open        = false;
+    var originalPar = menu.parentNode;
+
     function position() {
       var rect = btn.getBoundingClientRect();
-      // Force layout so we can measure the menu at its natural width
-      menu.style.display = 'block';
+      // Menu is already display:block when positioned; measure its natural size
       var mw = menu.offsetWidth;
       var mh = menu.offsetHeight;
       var left = rect.right - mw;
       var top  = rect.bottom + 6;
       var vpW  = window.innerWidth || document.documentElement.clientWidth;
       var vpH  = window.innerHeight || document.documentElement.clientHeight;
-      if (left < 8)                  left = 8;
-      if (left + mw > vpW - 8)       left = vpW - mw - 8;
+      if (left < 8)                   left = 8;
+      if (left + mw > vpW - 8)        left = vpW - mw - 8;
       if (top + mh > vpH - 8) { top = rect.top - mh - 6; if (top < 8) top = 8; }
       menu.style.left = Math.max(8, left) + 'px';
       menu.style.top  = Math.max(8, top)  + 'px';
-      menu.style.display = open ? 'block' : 'none';
     }
-    function toggle() {
-      open = !open;
-      if (open) position();
-      menu.classList.toggle('is-open', open);
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+
+    function openMenu() {
+      open = true;
+      // Portal: move to document.body so position: fixed escapes every
+      // overflow/transform/scroll ancestor of the table cell.
+      document.body.appendChild(menu);
+      menu.style.display = 'block';
+      position();
+      menu.classList.add('is-open');
+      btn.setAttribute('aria-expanded', 'true');
     }
-    function close() {
+
+    function closeMenu() {
       open = false;
       menu.classList.remove('is-open');
       btn.setAttribute('aria-expanded', 'false');
+      menu.style.display = 'none';
     }
-    btn.addEventListener('click', function (e) { e.stopPropagation(); toggle(); });
+
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      open ? closeMenu() : openMenu();
+    });
     btn.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
-      if (e.key === 'Escape') { close(); btn.focus(); }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open ? closeMenu() : openMenu(); }
+      if (e.key === 'Escape') { closeMenu(); btn.focus(); }
     });
     document.addEventListener('click', function (e) {
-      if (!btn.contains(e.target) && !menu.contains(e.target)) close();
+      if (open && !btn.contains(e.target) && !menu.contains(e.target)) closeMenu();
     });
-    window.addEventListener('scroll', close);
+    window.addEventListener('scroll', function () { if (open) closeMenu(); });
+    window.addEventListener('resize', function () { if (open) position(); });
+
     var items = Array.prototype.slice.call(menu.querySelectorAll('[role="menuitem"]'));
     menu.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') { close(); btn.focus(); }
+      if (e.key === 'Escape') { closeMenu(); btn.focus(); }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         var idx = items.indexOf(document.activeElement);
