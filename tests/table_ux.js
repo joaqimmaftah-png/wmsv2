@@ -36,6 +36,24 @@ assert.match(supIndex, /onsubmit="return confirm\('/, 'supplier delete requires 
 assert.match(supIndex, /csrf_field\(\)/, 'supplier delete form carries CSRF protection');
 assert.match(supIndex, /sup-menu-item--danger/, 'supplier delete uses the destructive style');
 
+// ── Suppliers ↔ /team/report design-system parity ──
+assert.match(supIndex, /\.sup-table thead th \{\s*position: sticky/, 'supplier table header is sticky');
+assert.match(supIndex, /aria-sort="/, 'sortable supplier headers expose ARIA sort state');
+assert.match(supIndex, /\$cls\s+= 'sup-th-sort'/, 'supplier headers use the shared sort link component');
+assert.match(supIndex, /class="sup-chips-bar no-print"/, 'active filters render as a chips strip');
+assert.match(supIndex, /class="sup-select sup-autosubmit"/, 'scope filters are marked for auto-submit');
+assert.match(supIndex, /filterForm\.submit\(\)/, 'scope filters submit the form on change');
+assert.match(supIndex, /sup-rate-fill/, 'on-time delivery renders as a colour-coded rate bar');
+assert.match(supIndex, /'b-success'/, 'active suppliers use the shared success badge');
+assert.match(supIndex, /'b-danger'/, 'blacklisted suppliers use the shared danger badge');
+assert.doesNotMatch(supIndex, /sup-st-active/, 'bespoke supplier status pill classes are gone');
+assert.match(supIndex, /\.sup-print-banner \{/, 'a print-only report banner exists');
+assert.match(supIndex, /@media print/, 'suppliers ship a clean print layout');
+assert.match(supIndex, /sup-empty-ico/, 'zero-match state has an illustrated empty state');
+assert.match(supIndex, /sup-user-forced-table/, 'an explicit table choice survives the mobile card fallback');
+assert.match(supIndex, /sheetCache\[currentId\]/, 'drawer payloads are cached per supplier');
+assert.doesNotMatch(supIndex, /supBatchPdf/, 'no dead batch PDF button is rendered');
+
 // Exercise the actual inline calculator with minimal fake DOM nodes.
 const script = budget.match(/<script>\s*([\s\S]*?)\s*<\/script>/)[1]
   .replace(/<\?= json_encode\(\$ccy\) \?>/, JSON.stringify('TZS'))
