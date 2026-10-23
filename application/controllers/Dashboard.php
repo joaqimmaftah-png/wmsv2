@@ -26,6 +26,11 @@ class Dashboard extends MY_Controller {
             'total_downtime'=> $this->Dashboard_model->get_total_downtime_30d(),
         ];
 
+        // Availability provenance — the window it was computed over and how many
+        // machines actually reported, so the card can show "14/16 machines"
+        // instead of a bare percentage that hides a partial dataset.
+        $data['availability_window'] = $this->Dashboard_model->get_availability_window();
+
         // --- Charts ---
         $data['avail_target']       = $this->Dashboard_model->availability_target_pct();
         $data['availability_trend'] = $this->Dashboard_model->get_availability_trend();
