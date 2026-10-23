@@ -188,7 +188,7 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
 .sup-col-cat  { width: 8%; text-align: center !important; }
 .sup-col-po   { width: 10%; text-align: center !important; }
 .sup-col-st   { width: 9%; text-align: center !important; }
-.sup-col-act  { width: 112px; text-align: right !important; }
+.sup-col-act  { width: 170px; text-align: right !important; }
 
 .sup-name-btn {
   background: none; border: 0; padding: 0; text-align: left; cursor: pointer;
@@ -543,6 +543,9 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
             </td>
             <td class="sup-col-act">
               <div class="sup-act-menu">
+                <button type="button" class="btn btn-ghost btn-sm" data-sup-open="<?= (int)$s->id ?>" title="Inspect supplier">Inspect</button>
+                <a href="<?= base_url('suppliers/view/' . (int)$s->id) ?>" class="btn btn-ghost btn-sm">Profile</a>
+                <?php if ($can_write): ?>
                 <button type="button" class="btn btn-ghost btn-sm"
                         aria-label="More actions for <?= $sup_esc($s->company_name) ?>"
                         aria-controls="sup-menu-<?= (int)$s->id ?>"
@@ -552,16 +555,13 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
                   <span class="visually-hidden">More actions</span>
                 </button>
                 <div class="sup-menu" id="sup-menu-<?= (int)$s->id ?>" role="menu" aria-label="Supplier actions">
-                  <button type="button" class="sup-menu-item" role="menuitem" data-sup-open="<?= (int)$s->id ?>">Inspect</button>
-                  <a href="<?= base_url('suppliers/view/' . (int)$s->id) ?>" class="sup-menu-item" role="menuitem">Profile</a>
-                  <?php if ($can_write): ?>
                   <a href="<?= base_url('suppliers/edit/' . (int)$s->id) ?>" class="sup-menu-item" role="menuitem">Edit</a>
                   <form method="post" action="<?= base_url('suppliers/delete/' . (int)$s->id) ?>" class="sup-menu-item-form" style="display:inline;margin:0;" onsubmit="return confirm('Delete this supplier? This cannot be undone.')">
                     <?= csrf_field() ?>
                     <button type="submit" class="sup-menu-item sup-menu-item--danger" role="menuitem">Delete</button>
                   </form>
-                  <?php endif; ?>
                 </div>
+                <?php endif; ?>
               </div>
             </td>
           </tr>
