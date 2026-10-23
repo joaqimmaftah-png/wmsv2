@@ -36,6 +36,14 @@ $avail_color  = $availability >= $avail_target ? 'var(--green)' : ($availability
 $avail_delta  = round($availability - $avail_target, 1);
 $avail_delta_txt = ($avail_delta >= 0 ? '+' : '') . $avail_delta . ' pp';
 
+// Availability provenance: the window it was computed over and how many
+// machines contributed data. A partial dataset is the one thing that can make
+// an availability number misleading, so it is surfaced, not hidden.
+$avail_window  = isset($availability_window) ? (array)$availability_window : array();
+$avail_with    = isset($avail_window['machines_with']) ? (int)$avail_window['machines_with'] : 0;
+$avail_from    = isset($avail_window['from']) ? $avail_window['from'] : null;
+$avail_to      = isset($avail_window['to']) ? $avail_window['to'] : null;
+
 $fleet_status  = isset($fleet_status) ? (array)$fleet_status : array('Available' => 0, 'In Maintenance' => 0, 'Breakdown' => 0, 'Standby' => 0);
 $machines_down = isset($machines_down) ? (int)$machines_down : 0;
 $fleet_total   = isset($fleet_total) ? (int)$fleet_total : 0;
@@ -154,6 +162,33 @@ $ico_alert = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke
 .dsh-type-row .hd .nm { font-weight:600;color:var(--t1); }
 .dsh-type-row .hd .ct { color:var(--t3);font-variant-numeric:tabular-nums; }
 
+/* KPI cards become drill-in links; a subtle meta line replaces the pill. */
+a.kpi { display:block; text-decoration:none; color:inherit; }
+a.kpi:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+.dsh-meta { font-size:11.5px; color:var(--t3); margin-top:9px; line-height:1.4; }
+.dsh-meta .dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:7px; vertical-align:middle; }
+
+/* Top-priority exception row — the one thing to act on. Accent follows the
+   exception's severity; no fill, just a left bar + a tag. */
+.dsh-exc-row.is-top { position:relative; border-radius:8px; padding:13px 14px 13px 18px; border-bottom:none; margin:0 0 6px; --accent:var(--red); }
+.dsh-exc-row.is-top.warn { --accent:var(--amber); }
+.dsh-exc-row.is-top::before { content:''; position:absolute; left:0; top:10px; bottom:10px; width:3px; border-radius:3px; background:var(--accent); }
+.dsh-exc-row .top-tag { font-size:9.5px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; color:var(--red); margin-bottom:2px; }
+.dsh-exc-row .act { font-size:12px; font-weight:600; color:var(--blue); text-decoration:none; white-space:nowrap; margin-left:auto; }
+.dsh-exc-row .act:hover { text-decoration:underline; }
+.dsh-exc-row .arr { color:var(--t3); margin-left:auto; font-size:14px; }
+
+/* Chart accessible fallback table — visually hidden, read by assistive tech. */
+.dsh-sr { position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+
+/* Collapsible secondary analysis (keeps the landing page effortless). */
+.dsh-more { margin-top:18px; }
+.dsh-more > summary { font-size:12px; font-weight:600; color:var(--t3); cursor:pointer; padding:6px 2px; list-style:none; }
+.dsh-more > summary::-webkit-details-marker { display:none; }
+.dsh-more > summary::before { content:'▸'; display:inline-block; margin-right:8px; color:var(--t3); }
+.dsh-more[open] > summary::before { content:'▾'; }
+.dsh-more[open] > summary { margin-bottom:12px; }
+
 @media (max-width:900px){
   .grid.g-2 { grid-template-columns:1fr; }
   .dsh-kpis { grid-template-columns:repeat(2,1fr); }
@@ -165,41 +200,46 @@ $ico_alert = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke
 <!-- ═══ CONTEXT ═══ -->
 <div class="dsh-context">
   <div class="t"><strong>Operations Dashboard</strong> · 30-day fleet window — availability, MTTR / MTBF, breakdowns and downtime are computed over this window</div>
-  <div class="r">Updated <?= $h(date('d M Y, H:i')) ?></div>
+  <div class="r"><?= $avail_to ? $h('Availability through ' . date('d M Y', strtotime($avail_to))) . ' · ' : '' ?>Updated <?= $h(date('d M Y, H:i')) ?></div>
 </div>
 
+<?php
+$avail_meta = $fleet_total > 0
+    ? '<span class="dot" style="background:' . $avail_color . '"></span>' . $avail_with . '/' . $fleet_total . ' machines · target ≥' . $avail_target . '% (' . $avail_delta_txt . ')'
+    : '<span class="dot" style="background:' . $avail_color . '"></span>target ≥' . $avail_target . '% (' . $avail_delta_txt . ')';
+?>
 <!-- ═══ KPI STRIP ═══ -->
 <div class="dsh-kpis">
 
-  <div class="kpi">
+  <a class="kpi" href="<?= $h(base_url('equipment')) ?>">
     <span class="kpi-tag">Availability</span>
     <div class="kpi-num" style="color:<?= $avail_color ?>;"><span class="cu" data-to="<?= $availability ?>" data-decimals="1"><?= $availability ?></span><sup>%</sup></div>
-    <div class="kpi-chip <?= $avail_class ?>">Target ≥ <?= $avail_target ?>% · <?= $avail_delta_txt ?></div>
-  </div>
+    <div class="dsh-meta"><?= $avail_meta ?></div>
+  </a>
 
-  <div class="kpi">
+  <a class="kpi" href="<?= $h(base_url('workorders')) ?>">
     <span class="kpi-tag">Open Work Orders</span>
     <div class="kpi-num"><span class="cu" data-to="<?= $open_wo ?>"><?= $open_wo ?></span></div>
-    <div class="kpi-chip chip-warn">Active work orders</div>
-  </div>
+    <div class="dsh-meta">Active work orders</div>
+  </a>
 
-  <div class="kpi">
+  <a class="kpi" href="<?= $h(base_url('pm')) ?>">
     <span class="kpi-tag">Overdue PM</span>
     <div class="kpi-num" style="color:<?= $overdue_pm > 0 ? 'var(--red)' : 'var(--green)' ?>;"><span class="cu" data-to="<?= $overdue_pm ?>"><?= $overdue_pm ?></span></div>
-    <div class="kpi-chip <?= $overdue_pm > 0 ? 'chip-dn' : 'chip-up' ?>"><?= $overdue_pm > 0 ? 'Needs attention' : 'On schedule' ?></div>
-  </div>
+    <div class="dsh-meta"><span class="dot" style="background:<?= $overdue_pm > 0 ? 'var(--red)' : 'var(--green)' ?>;"></span><?= $overdue_pm > 0 ? 'Needs attention' : 'On schedule' ?></div>
+  </a>
 
-  <div class="kpi">
+  <a class="kpi" href="<?= $h(base_url('team')) ?>">
     <span class="kpi-tag">Manpower</span>
     <div class="kpi-num"><span class="cu" data-to="<?= $manpower ?>"><?= $manpower ?></span><sup>/<?= $total_workers ?></sup></div>
-    <div class="kpi-chip chip-up">Present today</div>
-  </div>
+    <div class="dsh-meta">Present today</div>
+  </a>
 
-  <div class="kpi">
+  <a class="kpi" href="<?= $h(base_url('equipment')) ?>">
     <span class="kpi-tag">Machines Down</span>
     <div class="kpi-num" style="color:<?= $machines_down > 0 ? 'var(--amber)' : 'var(--green)' ?>;"><span class="cu" data-to="<?= $machines_down ?>"><?= $machines_down ?></span></div>
-    <div class="kpi-chip <?= $machines_down > 0 ? 'chip-warn' : 'chip-up' ?>">Out of service now</div>
-  </div>
+    <div class="dsh-meta"><span class="dot" style="background:<?= $machines_down > 0 ? 'var(--amber)' : 'var(--green)' ?>;"></span>Out of service now</div>
+  </a>
 
 </div>
 
@@ -217,6 +257,11 @@ $ico_alert = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke
     <div class="card-body" style="padding-top:14px;">
       <?php if (!empty($avail_vals)): ?>
         <div class="chart-container"><canvas id="cAvail" aria-label="Fleet availability trend over the last 30 days, with the availability target line" role="img"></canvas></div>
+        <table class="dsh-sr"><caption>Fleet availability per day over the last 30 days</caption><thead><tr><th>Date</th><th>Availability</th></tr></thead><tbody>
+        <?php foreach ($availability_trend as $d): ?>
+          <tr><td><?= $h(date('Y-m-d', strtotime($d['date']))) ?></td><td><?= $h(number_format((float)$d['pct'], 1)) ?>%</td></tr>
+        <?php endforeach; ?>
+        </tbody></table>
       <?php else: ?>
         <div class="dsh-empty">No availability data for this window.</div>
       <?php endif; ?>
@@ -297,6 +342,22 @@ $ico_alert = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke
     </div>
   </div>
 
+<?php
+// Rank exceptions by severity so the one thing to act on is obvious, then
+// pull the top item out as a highlighted priority.
+$exceptions = array();
+if ($critical_incidents > 0)
+    $exceptions[] = array('label' => 'Critical incidents', 'count' => $critical_incidents, 'sub' => $critical_incidents . ' uncontrolled this month', 'href' => base_url('workorders'), 'act' => 'Review', 'sev' => 'crit');
+if ($overdue_pm > 0)
+    $exceptions[] = array('label' => 'Overdue PM', 'count' => $overdue_pm, 'sub' => $overdue_pm . ' maintenance jobs past due', 'href' => base_url('pm'), 'act' => 'Planner', 'sev' => 'warn');
+if (isset($spares_summary['lines']) && (int)$spares_summary['lines'] > 0)
+    $exceptions[] = array('label' => 'Pending spare parts', 'count' => (int)$spares_summary['lines'], 'sub' => (int)$spares_summary['lines'] . ' demand lines · ' . (int)($spares_summary['available_lines'] ?? 0) . ' covered', 'href' => base_url('spareparts'), 'act' => 'Board', 'sev' => 'warn');
+if (!empty($absent_today))
+    $exceptions[] = array('label' => 'Absent today', 'count' => count($absent_today), 'sub' => count($absent_today) . ' staff not on site', 'href' => base_url('team'), 'act' => 'Team', 'sev' => 'info');
+$sev_rank = array('crit' => 0, 'warn' => 1, 'info' => 2);
+usort($exceptions, function ($a, $b) use ($sev_rank) { return $sev_rank[$a['sev']] - $sev_rank[$b['sev']]; });
+$top_exception = array_shift($exceptions);
+?>
   <div class="card">
     <div class="ch">
       <div>
@@ -305,43 +366,29 @@ $ico_alert = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke
       </div>
     </div>
     <div class="card-body">
-      <?php if ($overdue_pm > 0): ?>
-        <div class="dsh-exc-row">
+      <?php if ($top_exception): ?>
+        <div class="dsh-exc-row is-top <?= $top_exception['sev'] !== 'crit' ? 'warn' : '' ?>">
           <div class="ic"><?= $ico_alert ?></div>
-          <div class="tx"><div class="t1">Overdue PM</div><div class="t2"><?= $overdue_pm ?> maintenance jobs past due</div></div>
-          <div class="n"><?= $overdue_pm ?></div>
-          <a class="ca" href="<?= $h(base_url('pm')) ?>">Planner →</a>
+          <div class="tx">
+            <div class="top-tag">Top priority</div>
+            <div class="t1"><?= $h($top_exception['label']) ?></div>
+            <div class="t2"><?= $h($top_exception['sub']) ?></div>
+          </div>
+          <div class="n"><?= (int)$top_exception['count'] ?></div>
+          <a class="act" href="<?= $h($top_exception['href']) ?>"><?= $h($top_exception['act']) ?> →</a>
         </div>
       <?php endif; ?>
 
-      <?php if ($critical_incidents > 0): ?>
-        <div class="dsh-exc-row">
+      <?php foreach ($exceptions as $ex): ?>
+        <div class="dsh-exc-row <?= $ex['sev'] !== 'crit' ? 'warn' : '' ?>">
           <div class="ic"><?= $ico_alert ?></div>
-          <div class="tx"><div class="t1">Critical incidents</div><div class="t2"><?= $critical_incidents ?> uncontrolled this month</div></div>
-          <div class="n"><?= $critical_incidents ?></div>
-          <a class="ca" href="<?= $h(base_url('workorders')) ?>">Incidents →</a>
+          <div class="tx"><div class="t1"><?= $h($ex['label']) ?></div><div class="t2"><?= $h($ex['sub']) ?></div></div>
+          <div class="n"><?= (int)$ex['count'] ?></div>
+          <a class="ca" href="<?= $h($ex['href']) ?>"><?= $h($ex['act']) ?> →</a>
         </div>
-      <?php endif; ?>
+      <?php endforeach; ?>
 
-      <?php if (isset($spares_summary['lines']) && (int)$spares_summary['lines'] > 0): ?>
-        <div class="dsh-exc-row warn">
-          <div class="ic"><?= $ico_alert ?></div>
-          <div class="tx"><div class="t1">Pending spare parts</div><div class="t2"><?= (int)$spares_summary['lines'] ?> demand lines · <?= (int)($spares_summary['available_lines'] ?? 0) ?> covered</div></div>
-          <div class="n"><?= (int)$spares_summary['lines'] ?></div>
-          <a class="ca" href="<?= $h(base_url('spareparts')) ?>">Board →</a>
-        </div>
-      <?php endif; ?>
-
-      <?php if (!empty($absent_today)): ?>
-        <div class="dsh-exc-row warn">
-          <div class="ic"><?= $ico_alert ?></div>
-          <div class="tx"><div class="t1">Absent today</div><div class="t2"><?= count($absent_today) ?> staff not on site</div></div>
-          <div class="n"><?= count($absent_today) ?></div>
-          <a class="ca" href="<?= $h(base_url('team')) ?>">Team →</a>
-        </div>
-      <?php endif; ?>
-
-      <?php if ($overdue_pm === 0 && $critical_incidents === 0 && empty($absent_today) && (empty($spares_summary['lines']) || (int)$spares_summary['lines'] === 0)): ?>
+      <?php if (!$top_exception && empty($exceptions)): ?>
         <div class="dsh-empty" style="min-height:120px;">Nothing outstanding right now.</div>
       <?php endif; ?>
     </div>
@@ -448,6 +495,11 @@ $ico_alert = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke
     <div class="card-body" style="padding-top:14px;">
       <?php if (!empty($wo_vals)): ?>
         <div class="chart-container"><canvas id="cMonthly" aria-label="Work orders closed per month over the last 12 months" role="img"></canvas></div>
+        <table class="dsh-sr"><caption>Work orders closed per month over the last 12 months</caption><thead><tr><th>Month</th><th>Closed</th></tr></thead><tbody>
+        <?php foreach ($wo_monthly as $m): ?>
+          <tr><td><?= $h($m['month']) ?></td><td><?= (int)$m['closed'] ?></td></tr>
+        <?php endforeach; ?>
+        </tbody></table>
       <?php else: ?>
         <div class="dsh-empty">No work orders recorded in the last 12 months.</div>
       <?php endif; ?>
@@ -456,7 +508,9 @@ $ico_alert = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke
 
 </div>
 
-<!-- ═══ ANALYSIS: attendance + work-order mix ═══ -->
+<!-- ═══ ANALYSIS: secondary (collapsible) ═══ -->
+<details class="dsh-more">
+<summary>Additional analysis</summary>
 <div class="grid g-2 mb-5">
 
   <div class="card">
@@ -470,6 +524,11 @@ $ico_alert = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke
     <div class="card-body" style="padding-top:14px;">
       <?php if (!empty($att_present)): ?>
         <div class="chart-container"><canvas id="cAttend" aria-label="Staff attendance over the last 14 days, stacked present and absent" role="img"></canvas></div>
+        <table class="dsh-sr"><caption>Staff attendance per day over the last 14 days</caption><thead><tr><th>Date</th><th>Present</th><th>Absent</th></tr></thead><tbody>
+        <?php foreach ($attendance_trend as $d): ?>
+          <tr><td><?= $h(date('Y-m-d', strtotime($d['date']))) ?></td><td><?= (int)$d['present'] ?></td><td><?= (int)$d['absent'] ?></td></tr>
+        <?php endforeach; ?>
+        </tbody></table>
       <?php else: ?>
         <div class="dsh-empty">No attendance data for the last 14 days.</div>
       <?php endif; ?>
@@ -499,6 +558,7 @@ $ico_alert = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke
   </div>
 
 </div>
+</details>
 
 <!-- ═══ CHARTS ═══ -->
 <script>

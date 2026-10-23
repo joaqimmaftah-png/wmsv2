@@ -55,6 +55,24 @@ class Dashboard_model extends CI_Model {
     }
 
     /**
+     * Availability plus its provenance: the window it was computed over and how
+     * many machines actually contributed data. A partial dataset (e.g. 14 of 16
+     * machines reporting) is the one thing that can make an availability number
+     * misleading, so the dashboard surfaces the count instead of hiding it —
+     * trust comes from knowing what a figure is built on.
+     */
+    public function get_availability_window() {
+        $data = $this->_fleet_window();
+        $pct  = $data['fleet']['availability_pct'];
+        return [
+            'pct'            => $pct === null ? 100.0 : $pct,
+            'machines_with'  => isset($data['fleet']['machines_with_data']) ? (int)$data['fleet']['machines_with_data'] : 0,
+            'from'           => isset($data['period']['from']) ? $data['period']['from'] : null,
+            'to'             => isset($data['period']['to']) ? $data['period']['to'] : null,
+        ];
+    }
+
+    /**
      * The availability target in percent, for the screens that label a card or
      * draw a target line. Q1: one target for the whole system — the engine's
      * (equipment_kpi_targets → settings.default_availability_target → 88 %),
