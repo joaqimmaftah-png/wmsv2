@@ -31,8 +31,6 @@ $avail_target = isset($kpi['avail_target']) && (float)$kpi['avail_target'] > 0
     ? (float)$kpi['avail_target']
     : (isset($avail_target) ? (float)$avail_target : 88.0);
 $avail_watch  = $avail_target - 10;                       // "watch" band, not a second target
-$avail_class  = $availability >= $avail_target ? 'chip-up' : ($availability >= $avail_watch ? 'chip-warn' : 'chip-dn');
-$avail_color  = $availability >= $avail_target ? 'var(--green)' : ($availability >= $avail_watch ? 'var(--amber)' : 'var(--red)');
 $avail_delta  = round($availability - $avail_target, 1);
 $avail_delta_txt = ($avail_delta >= 0 ? '+' : '') . $avail_delta . ' pp';
 
@@ -121,7 +119,14 @@ $ico_alert = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke
 .dsh-context .t strong { color:var(--t1);font-weight:600; }
 .dsh-context .r { font-size:12px;color:var(--t3);font-variant-numeric:tabular-nums; }
 
-.dsh-kpis { display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px; }
+.dsh-kpis {
+  /* Slate token set (the /materials #invShell palette), scoped to this strip. */
+  --sk-text:#0F172A; --sk-muted:#475569; --sk-subtle:#64748B;
+  --sk-border:#E2E8F0; --sk-border-strong:#CBD5E1;
+  --sk-accent:#1D4ED8; --sk-accent-soft:#EFF6FF;
+  --sk-ok:#047857; --sk-warn:#B45309; --sk-crit:#B91C1C;
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:18px;
+}
 
 .dsh-fleet { display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:6px; }
 .dsh-fs { display:flex;flex-direction:column;align-items:center;gap:3px;padding:11px 4px;background:var(--gray-fill);border-radius:10px; }
@@ -162,11 +167,25 @@ $ico_alert = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke
 .dsh-type-row .hd .nm { font-weight:600;color:var(--t1); }
 .dsh-type-row .hd .ct { color:var(--t3);font-variant-numeric:tabular-nums; }
 
-/* KPI cards become drill-in links; a subtle meta line replaces the pill. */
-a.kpi { display:block; text-decoration:none; color:inherit; }
-a.kpi:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
-.dsh-meta { font-size:11.5px; color:var(--t3); margin-top:9px; line-height:1.4; }
-.dsh-meta .dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:7px; vertical-align:middle; }
+/* KPI cards — the /materials Slate card language, scoped to this strip:
+   uppercase label → value → plain meta. Status lives on the value text
+   (is-crit / is-warn / is-accent), never a pill or a dot. */
+.dsh-kpi-card {
+  background:#FFFFFF;border:1px solid var(--sk-border);border-radius:12px;
+  padding:14px 16px;display:flex;flex-direction:column;gap:4px;
+  text-decoration:none;color:var(--sk-text);
+  box-shadow:0 1px 2px rgba(15,23,42,0.03);
+  transition:border-color .14s ease,box-shadow .14s ease,transform .14s ease;
+}
+.dsh-kpi-card:hover { border-color:var(--sk-border-strong); box-shadow:0 4px 12px rgba(15,23,42,0.06); transform:translateY(-1px); }
+.dsh-kpi-card:focus-visible { outline:2px solid var(--sk-accent); outline-offset:2px; }
+.dsh-kpi-lbl { font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--sk-subtle); }
+.dsh-kpi-val { font-size:25px;font-weight:700;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;line-height:1.15;color:var(--sk-text); }
+.dsh-kpi-val sup { font-size:13px;font-weight:600;color:var(--sk-muted);letter-spacing:0; }
+.dsh-kpi-meta { font-size:11.5px;color:var(--sk-muted);font-variant-numeric:tabular-nums;line-height:1.35; }
+.dsh-kpi-val.is-crit { color:var(--sk-crit); }
+.dsh-kpi-val.is-warn { color:var(--sk-warn); }
+.dsh-kpi-val.is-accent { color:var(--sk-accent); }
 
 /* Top-priority exception row — the one thing to act on. Accent follows the
    exception's severity; no fill, just a left bar + a tag. */
@@ -204,41 +223,45 @@ a.kpi:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
 </div>
 
 <?php
+// Availability status: on/above target stays neutral — the /materials
+// convention is that problems are coloured and healthy values keep the
+// default text colour. Below the watch band is crit, watch→target is warn.
+$avail_status = $availability >= $avail_target ? '' : ($availability >= $avail_watch ? 'is-warn' : 'is-crit');
 $avail_meta = $fleet_total > 0
-    ? '<span class="dot" style="background:' . $avail_color . '"></span>' . $avail_with . '/' . $fleet_total . ' machines · target ≥' . $avail_target . '% (' . $avail_delta_txt . ')'
-    : '<span class="dot" style="background:' . $avail_color . '"></span>target ≥' . $avail_target . '% (' . $avail_delta_txt . ')';
+    ? $avail_with . '/' . $fleet_total . ' machines · target ≥' . $avail_target . '% (' . $avail_delta_txt . ')'
+    : 'target ≥' . $avail_target . '% (' . $avail_delta_txt . ')';
 ?>
 <!-- ═══ KPI STRIP ═══ -->
 <div class="dsh-kpis">
 
-  <a class="kpi" href="<?= $h(base_url('equipment')) ?>">
-    <span class="kpi-tag">Availability</span>
-    <div class="kpi-num" style="color:<?= $avail_color ?>;"><span class="cu" data-to="<?= $availability ?>" data-decimals="1"><?= $availability ?></span><sup>%</sup></div>
-    <div class="dsh-meta"><?= $avail_meta ?></div>
+  <a class="dsh-kpi-card" href="<?= $h(base_url('equipment')) ?>">
+    <span class="dsh-kpi-lbl">Availability</span>
+    <span class="dsh-kpi-val <?= $avail_status ?>"><span class="cu" data-to="<?= $availability ?>" data-decimals="1"><?= $availability ?></span><sup>%</sup></span>
+    <span class="dsh-kpi-meta"><?= $avail_meta ?></span>
   </a>
 
-  <a class="kpi" href="<?= $h(base_url('workorders')) ?>">
-    <span class="kpi-tag">Open Work Orders</span>
-    <div class="kpi-num"><span class="cu" data-to="<?= $open_wo ?>"><?= $open_wo ?></span></div>
-    <div class="dsh-meta">Active work orders</div>
+  <a class="dsh-kpi-card" href="<?= $h(base_url('workorders')) ?>">
+    <span class="dsh-kpi-lbl">Open Work Orders</span>
+    <span class="dsh-kpi-val"><span class="cu" data-to="<?= $open_wo ?>"><?= $open_wo ?></span></span>
+    <span class="dsh-kpi-meta">Active work orders</span>
   </a>
 
-  <a class="kpi" href="<?= $h(base_url('pm')) ?>">
-    <span class="kpi-tag">Overdue PM</span>
-    <div class="kpi-num" style="color:<?= $overdue_pm > 0 ? 'var(--red)' : 'var(--green)' ?>;"><span class="cu" data-to="<?= $overdue_pm ?>"><?= $overdue_pm ?></span></div>
-    <div class="dsh-meta"><span class="dot" style="background:<?= $overdue_pm > 0 ? 'var(--red)' : 'var(--green)' ?>;"></span><?= $overdue_pm > 0 ? 'Needs attention' : 'On schedule' ?></div>
+  <a class="dsh-kpi-card" href="<?= $h(base_url('pm')) ?>">
+    <span class="dsh-kpi-lbl">Overdue PM</span>
+    <span class="dsh-kpi-val <?= $overdue_pm > 0 ? 'is-crit' : '' ?>"><span class="cu" data-to="<?= $overdue_pm ?>"><?= $overdue_pm ?></span></span>
+    <span class="dsh-kpi-meta"><?= $overdue_pm > 0 ? 'Needs attention' : 'On schedule' ?></span>
   </a>
 
-  <a class="kpi" href="<?= $h(base_url('team')) ?>">
-    <span class="kpi-tag">Manpower</span>
-    <div class="kpi-num"><span class="cu" data-to="<?= $manpower ?>"><?= $manpower ?></span><sup>/<?= $total_workers ?></sup></div>
-    <div class="dsh-meta">Present today</div>
+  <a class="dsh-kpi-card" href="<?= $h(base_url('team')) ?>">
+    <span class="dsh-kpi-lbl">Manpower</span>
+    <span class="dsh-kpi-val"><span class="cu" data-to="<?= $manpower ?>"><?= $manpower ?></span><sup>/<?= $total_workers ?></sup></span>
+    <span class="dsh-kpi-meta">Present today</span>
   </a>
 
-  <a class="kpi" href="<?= $h(base_url('equipment')) ?>">
-    <span class="kpi-tag">Machines Down</span>
-    <div class="kpi-num" style="color:<?= $machines_down > 0 ? 'var(--amber)' : 'var(--green)' ?>;"><span class="cu" data-to="<?= $machines_down ?>"><?= $machines_down ?></span></div>
-    <div class="dsh-meta"><span class="dot" style="background:<?= $machines_down > 0 ? 'var(--amber)' : 'var(--green)' ?>;"></span>Out of service now</div>
+  <a class="dsh-kpi-card" href="<?= $h(base_url('equipment')) ?>">
+    <span class="dsh-kpi-lbl">Machines Down</span>
+    <span class="dsh-kpi-val <?= $machines_down > 0 ? 'is-warn' : '' ?>"><span class="cu" data-to="<?= $machines_down ?>"><?= $machines_down ?></span></span>
+    <span class="dsh-kpi-meta">Out of service now</span>
   </a>
 
 </div>
@@ -567,10 +590,10 @@ $top_exception = array_shift($exceptions);
 
   var RM = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  var GRID = { color: 'rgba(0,0,0,0.04)', drawBorder: false };
+  var GRID = { color: 'rgba(15,23,42,0.05)', drawBorder: false };
   var TIP = {
-    backgroundColor: '#1d1d1f',
-    borderColor: 'rgba(0,0,0,0)',
+    backgroundColor: '#0F172A',
+    borderColor: 'rgba(15,23,42,0)',
     borderWidth: 0,
     padding: 11,
     cornerRadius: 8,
@@ -608,17 +631,17 @@ $top_exception = array_shift($exceptions);
     var target = <?= json_encode((float)$avail_target) ?>;
     var ctx = cAvail.getContext('2d');
     var g = ctx.createLinearGradient(0, 0, 0, 200);
-    g.addColorStop(0, 'rgba(0,113,227,0.16)');
-    g.addColorStop(1, 'rgba(0,113,227,0)');
+    g.addColorStop(0, 'rgba(29,78,216,0.16)');
+    g.addColorStop(1, 'rgba(29,78,216,0)');
     new Chart(ctx, {
       type: 'line',
       data: {
         labels: labels,
         datasets: [
-          { label: 'Availability %', data: values, borderColor: '#0071e3', backgroundColor: g,
+          { label: 'Availability %', data: values, borderColor: '#1D4ED8', backgroundColor: g,
             fill: true, borderWidth: 2, tension: 0.4, pointRadius: 0, pointHoverRadius: 5 },
           { label: 'Target ' + target + '%', data: values.map(function () { return target; }),
-            borderColor: 'rgba(0,0,0,0.22)', fill: false, borderWidth: 1.5, borderDash: [5, 5], pointRadius: 0, tension: 0 }
+            borderColor: 'rgba(15,23,42,0.18)', fill: false, borderWidth: 1.5, borderDash: [5, 5], pointRadius: 0, tension: 0 }
         ]
       },
       options: {
@@ -631,8 +654,8 @@ $top_exception = array_shift($exceptions);
           } })
         },
         scales: {
-          x: { grid: GRID, border: { display: false }, ticks: { maxTicksLimit: 6, color: 'rgba(0,0,0,0.30)' } },
-          y: { grid: GRID, border: { display: false }, ticks: { color: 'rgba(0,0,0,0.30)', callback: function (v) { return v + '%'; } } }
+          x: { grid: GRID, border: { display: false }, ticks: { maxTicksLimit: 6, color: 'rgba(15,23,42,0.45)' } },
+          y: { grid: GRID, border: { display: false }, ticks: { color: 'rgba(15,23,42,0.45)', callback: function (v) { return v + '%'; } } }
         }
       }
     });
@@ -645,12 +668,12 @@ $top_exception = array_shift($exceptions);
     var mV = <?= json_encode($wo_vals) ?>;
     var ctx5 = cMonthly.getContext('2d');
     var g5 = ctx5.createLinearGradient(0, 0, 0, 200);
-    g5.addColorStop(0, 'rgba(28,140,60,0.16)');
-    g5.addColorStop(1, 'rgba(28,140,60,0)');
+    g5.addColorStop(0, 'rgba(4,120,87,0.16)');
+    g5.addColorStop(1, 'rgba(4,120,87,0)');
     new Chart(ctx5, {
       type: 'line',
       data: { labels: mL, datasets: [{
-        label: 'WOs Closed', data: mV, borderColor: '#1c8c3c', backgroundColor: g5,
+        label: 'WOs Closed', data: mV, borderColor: '#047857', backgroundColor: g5,
         fill: true, borderWidth: 2, tension: 0.4, pointRadius: 0, pointHoverRadius: 5
       }] },
       options: {
@@ -661,8 +684,8 @@ $top_exception = array_shift($exceptions);
           tooltip: Object.assign({}, TIP, { callbacks: { label: function (c) { return ' ' + c.raw + ' WOs'; } } })
         },
         scales: {
-          x: { grid: GRID, border: { display: false }, ticks: { color: 'rgba(0,0,0,0.30)' } },
-          y: { grid: GRID, border: { display: false }, ticks: { color: 'rgba(0,0,0,0.30)' } }
+          x: { grid: GRID, border: { display: false }, ticks: { color: 'rgba(15,23,42,0.45)' } },
+          y: { grid: GRID, border: { display: false }, ticks: { color: 'rgba(15,23,42,0.45)' } }
         }
       }
     });
@@ -679,19 +702,19 @@ $top_exception = array_shift($exceptions);
       data: {
         labels: aL,
         datasets: [
-          { label: 'Present', data: aP, backgroundColor: 'rgba(28,140,60,0.70)', borderRadius: 4, borderSkipped: false },
-          { label: 'Absent',  data: aA, backgroundColor: 'rgba(192,57,43,0.45)', borderRadius: 4, borderSkipped: false }
+          { label: 'Present', data: aP, backgroundColor: 'rgba(4,120,87,0.70)', borderRadius: 4, borderSkipped: false },
+          { label: 'Absent',  data: aA, backgroundColor: 'rgba(185,28,28,0.45)', borderRadius: 4, borderSkipped: false }
         ]
       },
       options: {
         responsive: true, maintainAspectRatio: false, animation: !RM,
         plugins: {
-          legend: { display: true, position: 'top', labels: { color: 'rgba(0,0,0,0.35)', font: { size: 10.5 }, boxWidth: 9, boxHeight: 9 } },
+          legend: { display: true, position: 'top', labels: { color: 'rgba(15,23,42,0.45)', font: { size: 10.5 }, boxWidth: 9, boxHeight: 9 } },
           tooltip: TIP
         },
         scales: {
-          x: { grid: GRID, border: { display: false }, ticks: { color: 'rgba(0,0,0,0.30)', maxRotation: 45, font: { size: 9.5 } } },
-          y: { grid: GRID, border: { display: false }, ticks: { color: 'rgba(0,0,0,0.30)' } }
+          x: { grid: GRID, border: { display: false }, ticks: { color: 'rgba(15,23,42,0.45)', maxRotation: 45, font: { size: 9.5 } } },
+          y: { grid: GRID, border: { display: false }, ticks: { color: 'rgba(15,23,42,0.45)' } }
         }
       }
     });
