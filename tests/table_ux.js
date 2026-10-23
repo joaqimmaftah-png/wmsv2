@@ -27,6 +27,15 @@ const budget = source('application/views/lubricants/budget.php');
 assert.match(budget, /\$can_write && !empty\(\$lines\)/, 'no empty budget submit');
 assert.match(budget, /\!\$can_write \? 'readonly'/, 'no edit affordance for read-only mode');
 
+// ── Suppliers Actions column (overflow menu) ──
+const supIndex = source('application/views/suppliers/index.php');
+assert.match(supIndex, /data-sup-menu=/, 'suppliers actions column uses an overflow menu button');
+assert.match(supIndex, /role="menu"/, 'suppliers overflow menu has a menu role');
+assert.match(supIndex, /aria-expanded="false"/, 'suppliers overflow button exposes expanded state');
+assert.match(supIndex, /onsubmit="return confirm\('/, 'supplier delete requires explicit confirmation');
+assert.match(supIndex, /csrf_field\(\)/, 'supplier delete form carries CSRF protection');
+assert.match(supIndex, /sup-menu-item--danger/, 'supplier delete uses the destructive style');
+
 // Exercise the actual inline calculator with minimal fake DOM nodes.
 const script = budget.match(/<script>\s*([\s\S]*?)\s*<\/script>/)[1]
   .replace(/<\?= json_encode\(\$ccy\) \?>/, JSON.stringify('TZS'))
