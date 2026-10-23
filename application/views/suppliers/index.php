@@ -139,6 +139,27 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
 }
 .sup-batch-bar.is-open { display: flex; }
 
+.sup-act-menu { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.sup-menu {
+  position: absolute; top: 100%; right: 0; min-width: 140px;
+  margin-top: 6px; padding: 6px 0;
+  background: var(--surface); border: 1px solid var(--sep);
+  border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  display: none; z-index: 20;
+}
+.sup-menu.is-open { display: block; }
+.sup-menu-item {
+  display: block; width: 100%; padding: 7px 14px; font-size: 12.5px;
+  color: var(--t1); text-decoration: none; border: 0; background: transparent;
+  text-align: left; cursor: pointer; transition: background .15s;
+}
+.sup-menu-item:hover, .sup-menu-item:focus { background: var(--g1); color: var(--t1); outline: 2px solid var(--blue); outline-offset: -2px; }
+.sup-menu-item--danger { color: var(--red); }
+.sup-menu-item--danger:hover { background: var(--red-d); color: var(--red); }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 .sup-table-wrap { width: 100%; overflow-x: auto; }
 .sup-table { width: 100%; min-width: 950px; table-layout: fixed; border-collapse: collapse; }
 .sup-table th, .sup-table td {
@@ -517,9 +538,26 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
               <span class="sup-status-pill <?= $stCls ?>"><?= $sup_esc($stVal) ?></span>
             </td>
             <td class="sup-col-act">
-              <div style="display:inline-flex;align-items:center;gap:4px;">
-                <button type="button" class="btn btn-ghost btn-sm" data-sup-open="<?= (int)$s->id ?>">Inspect</button>
-                <a href="<?= base_url('suppliers/view/' . (int)$s->id) ?>" class="btn btn-ghost btn-sm">Profile</a>
+              <div class="sup-act-menu">
+                <button type="button" class="btn btn-ghost btn-sm"
+                        aria-label="More actions for <?= $sup_esc($s->company_name) ?>"
+                        aria-controls="sup-menu-<?= (int)$s->id ?>"
+                        aria-expanded="false"
+                        data-sup-menu="<?= (int)$s->id ?>">
+                  <span aria-hidden="true">…</span>
+                  <span class="visually-hidden">More actions</span>
+                </button>
+                <div class="sup-menu" id="sup-menu-<?= (int)$s->id ?>" role="menu" aria-label="Supplier actions">
+                  <button type="button" class="sup-menu-item" role="menuitem" data-sup-open="<?= (int)$s->id ?>">Inspect</button>
+                  <a href="<?= base_url('suppliers/view/' . (int)$s->id) ?>" class="sup-menu-item" role="menuitem">Profile</a>
+                  <?php if ($can_write): ?>
+                  <a href="<?= base_url('suppliers/edit/' . (int)$s->id) ?>" class="sup-menu-item" role="menuitem">Edit</a>
+                  <form method="post" action="<?= base_url('suppliers/delete/' . (int)$s->id) ?>" class="sup-menu-item-form" style="display:inline;margin:0;" onsubmit="return confirm('Delete this supplier? This cannot be undone.')">
+                    <?= csrf_field() ?>
+                    <button type="submit" class="sup-menu-item sup-menu-item--danger" role="menuitem">Delete</button>
+                  </form>
+                  <?php endif; ?>
+                </div>
               </div>
             </td>
           </tr>
@@ -754,6 +792,43 @@ $openCostLabel = !empty($openCostParts) ? implode(' · ', array_slice($openCostP
       syncSelection();
     });
   }
+
+  // Overflow action menus per supplier row
+  Array.prototype.forEach.call(document.querySelectorAll('[data-sup-menu]'), function (btn) {
+    var menuId = 'sup-menu-' + btn.getAttribute('data-sup-menu');
+    var menu   = document.getElementById(menuId);
+    if (!menu) return;
+    var open = false;
+    function toggle() {
+      open = !open;
+      menu.classList.toggle('is-open', open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    function close() {
+      open = false;
+      menu.classList.remove('is-open');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+    btn.addEventListener('click', function (e) { e.stopPropagation(); toggle(); });
+    btn.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      if (e.key === 'Escape') { close(); btn.focus(); }
+    });
+    document.addEventListener('click', function (e) {
+      if (!btn.contains(e.target) && !menu.contains(e.target)) close();
+    });
+    var items = Array.prototype.slice.call(menu.querySelectorAll('[role="menuitem"]'));
+    menu.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { close(); btn.focus(); }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        var idx = items.indexOf(document.activeElement);
+        var dir = (e.key === 'ArrowDown') ? 1 : -1;
+        var next = (idx + dir + items.length) % items.length;
+        items[next].focus();
+      }
+    });
+  });
 
   // Slide-Over Vendor Inspector Drawer
   var drawer    = document.getElementById('supDrawer');
