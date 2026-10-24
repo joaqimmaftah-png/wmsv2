@@ -58,6 +58,8 @@ assert.ok(/\.topbar-actions\s*\{[^}]*width:100%/.test(header),
   'the utility row spans the header so Find can anchor the start');
 assert.ok(/\.global-find-trigger\s*\{[^}]*margin-right:auto/.test(header),
   'Find stays left-aligned while the other utilities remain right-aligned');
+assert.ok(/\.global-find-trigger\s*\{[^}]*width:clamp\(240px,32%,360px\)/.test(header),
+  'Find uses available desktop space without crowding narrower layouts');
 assert.ok(header.includes('.global-find-root[hidden]'), 'hidden dialog state wins over display styling');
 
 assert.ok(attentionModel.includes("base_url('workorders?type=Incident')"),
