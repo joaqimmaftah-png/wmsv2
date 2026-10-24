@@ -19,7 +19,7 @@ foreach ($rows as $r) if ($r['source'] === 'derived') $derived_n++;
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Planned Allowances</div>
+    <h1 class="page-heading" style="font-size:16px;">Planned Allowances</h1>
     <div class="cs">Standing and unplanned hours per machine — what the generators will write for <?=htmlspecialchars((string)($iso_label))?></div>
   </div>
   <form method="get" class="flex ai-c gap-10">

@@ -1,6 +1,6 @@
 <div class="flex ai-c jb mb-4">
   <div>
-    <div class="page-heading" style="font-size:17px;">Change Your Password</div>
+    <h1 class="page-heading" style="font-size:17px;">Change Your Password</h1>
     <div style="font-size:11px;color:var(--t3);margin-top:3px;">Update your personal login credentials</div>
   </div>
   <a href="<?= base_url('dashboard') ?>" class="btn btn-ghost">← Dashboard</a>

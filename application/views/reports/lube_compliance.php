@@ -11,7 +11,7 @@ $underCount = count(array_filter($rows, fn($r) => $r['variance_pct'] !== null &&
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Lubricant Compliance Report</div>
+    <h1 class="page-heading" style="font-size:16px;">Lubricant Compliance Report</h1>
     <div class="cs">PM-driven requirement vs. actual consumption — <?=date('F Y',strtotime($from))?></div>
   </div>
   <div class="flex ai-c gap-10" style="flex-wrap:wrap;">

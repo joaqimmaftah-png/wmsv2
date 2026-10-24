@@ -8,7 +8,7 @@ $trendMtbf   = array_column($trend, 'mtbf');
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">MTTR / MTBF Report</div>
+    <h1 class="page-heading" style="font-size:16px;">MTTR / MTBF Report</h1>
     <div class="cs">Reliability performance over the last <?= $sel ?> months</div>
   </div>
   <form method="get" class="flex ai-c gap-10">

@@ -6,7 +6,7 @@ $prio_bg    = ['Critical'=>'var(--red-d)','High'=>'var(--amber-d)','Medium'=>'va
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Monthly Maintenance Plan</div>
+    <h1 class="page-heading" style="font-size:16px;">Monthly Maintenance Plan</h1>
     <div class="cs"><?=date('F Y',strtotime($from))?></div>
   </div>
   <div class="flex ai-c gap-10" style="flex-wrap:wrap;">

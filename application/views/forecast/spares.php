@@ -15,7 +15,7 @@ $num = function ($v) { return rtrim((string)(rtrim((string)(number_format((float
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">PM Spare-Parts Forecast</div>
+    <h1 class="page-heading" style="font-size:16px;">PM Spare-Parts Forecast</h1>
     <div class="cs">What the PM plan needs, from <?=htmlspecialchars((string)($iso_label))?> over <?= (int)$horizon ?> weeks</div>
   </div>
   <form method="get" class="flex ai-c gap-10">

@@ -41,9 +41,9 @@ $back = base_url('forecast?week=' . urlencode($iso_label));
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">
+    <h1 class="page-heading" style="font-size:16px;">
       Maintenance jobs — <?= $machine ? $h($machine['registration_no']) : 'choose a machine' ?>
-    </div>
+    </h1>
     <div class="cs"><?=$h($iso_label)?> · <?=date('D d M Y', strtotime($date))?></div>
   </div>
   <a class="btn btn-sm" href="<?=$back?>">Back to the planned week</a>

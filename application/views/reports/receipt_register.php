@@ -10,7 +10,7 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Receipt Register</div>
+    <h1 class="page-heading" style="font-size:16px;">Receipt Register</h1>
     <div class="cs">Goods received into the store — delivery date, MRN, supplier, approved vs delivered quantity</div>
   </div>
   <div class="flex ai-c gap-10">

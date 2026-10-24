@@ -37,13 +37,13 @@ $pm_num = function ($field) use ($pm_val) {
 <div class="row justify-content-center">
   <div class="col-lg-8">
     <div class="wms-card">
-      <div class="card-head">
+      <h1 class="card-head">
         <i class="bi <?= $editing ? 'bi-pencil-square text-primary' : 'bi-calendar-plus text-success' ?> me-1"></i>
         <?= $editing ? 'Edit PM Schedule' : 'Create PM Schedule' ?>
         <?php if ($editing): ?>
           <span class="fw-400 text-300" style="font-size:12px;">— <?= $pm_val('schedule_name') ?></span>
         <?php endif; ?>
-      </div>
+      </h1>
       <div class="card-body">
         <?= $editing ? form_open('pm/edit/' . (int)$pm->id) : form_open('pm/create') ?>
         <div class="row g-3">

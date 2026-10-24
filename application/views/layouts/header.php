@@ -231,25 +231,30 @@ html,body {
 
 .topbar {
   position:sticky;top:0;z-index:50;
-  padding:16px 32px 0;
+  padding:12px 32px 0;
   background:var(--surface);
   border-bottom:1px solid var(--sep-strong);
   box-shadow:none;
 }
 .topbar.is-scrolled { box-shadow:var(--shadow-header); }
 .topbar-row {
-  display:flex;align-items:center;justify-content:space-between;gap:20px;
-  padding-bottom:16px;
+  display:flex;align-items:center;justify-content:flex-end;gap:20px;
+  padding-bottom:12px;
 }
-.topbar-heading { min-width:0; }
-.topbar-greeting { font-size:12px;line-height:1.4;color:var(--t2);font-weight:400;margin-bottom:2px; }
-.topbar-greeting strong { color:var(--blue);font-weight:600; }
-.page-heading { font-size:20px;font-weight:700;letter-spacing:-0.5px;color:var(--t1); }
-.topbar .page-heading { line-height:1.25;overflow-wrap:anywhere; }
 .topbar-actions { display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap; }
 .topbar a:focus-visible,.topbar button:focus-visible {
   outline:2px solid var(--blue);outline-offset:2px;
 }
+
+/* Page identity belongs to the main content, not the global utility bar. */
+.main-page-head { margin-bottom:20px; }
+.main-page-greeting { font-size:12px;line-height:1.4;color:var(--t2);font-weight:400;margin-bottom:4px; }
+.main-page-greeting strong { color:var(--blue);font-weight:600; }
+.main-page-title {
+  font-size:24px;line-height:1.25;font-weight:700;letter-spacing:-0.6px;
+  color:var(--t1);overflow-wrap:anywhere;
+}
+.page-heading { font-size:20px;font-weight:700;letter-spacing:-0.5px;color:var(--t1); }
 
 /* Status and notification pills */
 .live-pill {
@@ -518,15 +523,14 @@ textarea.form-control { resize:vertical;min-height:80px; }
 }
 @media (max-width:1100px){
   .topbar { padding-left:24px;padding-right:24px; }
-  .topbar-row { align-items:flex-start;gap:16px; }
+  .topbar-row { gap:16px; }
 }
 @media (max-width:760px){
-  .topbar { padding:14px 16px 0; }
-  .topbar-row { flex-direction:column;gap:12px;padding-bottom:14px; }
-  .topbar-heading { width:100%; }
-  .topbar-greeting { display:none; }
-  .topbar .page-heading { font-size:18px;line-height:1.25; }
-  .topbar-actions { width:100%;gap:8px; }
+  .topbar { padding:10px 16px 0; }
+  .topbar-row { gap:8px;padding-bottom:10px; }
+  .topbar-actions { gap:8px;flex-wrap:nowrap; }
+  .main-page-head { margin-bottom:16px; }
+  .main-page-title { font-size:20px; }
   .security-pill { padding-left:10px;padding-right:10px; }
   .security-pill-label { display:none; }
   .spare-alerts-pill { width:44px;height:44px; }

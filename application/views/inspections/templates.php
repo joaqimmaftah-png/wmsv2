@@ -6,7 +6,7 @@ $labels = array('matrix' => 'Matrix (one column per equipment type)', 'complianc
 
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
     <div>
-      <div style="font-size:22px;font-weight:700;color:var(--t1);">Inspection Templates</div>
+      <h1 style="font-size:22px;font-weight:700;color:var(--t1);">Inspection Templates</h1>
       <div style="font-size:12.5px;color:var(--t2);margin-top:2px;">
         The bilingual checklist rows behind every inspection form. Inactive templates disappear from the picker but keep their history.
       </div>

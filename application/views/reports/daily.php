@@ -1,6 +1,6 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <h4 class="fw-700 mb-0">Daily Report</h4>
+    <h1 class="fw-700 mb-0" style="font-size:18px;line-height:1.35;">Daily Report</h1>
     <div class="text-muted" style="font-size:13px;"><?= date('l, d F Y', strtotime($date)) ?></div>
   </div>
   <div class="d-flex gap-2">

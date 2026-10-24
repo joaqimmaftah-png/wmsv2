@@ -18,7 +18,7 @@ foreach ($monthAgg as $a) { $maxVal = max($maxVal, $a['required'], $a['actual'])
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Lubricant Compliance Report</div>
+    <h1 class="page-heading" style="font-size:16px;">Lubricant Compliance Report</h1>
     <div class="cs">PM-driven requirement vs. actual consumption — Annual <?=$selYear?></div>
   </div>
   <form method="get" class="flex ai-c gap-10">

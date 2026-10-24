@@ -18,7 +18,7 @@ $week_input = date('o-\WW', strtotime($week_start));
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:12px;">
   <div>
-    <div style="font-size:22px;font-weight:700;color:var(--t1);letter-spacing:-0.3px;">Shift Roster</div>
+    <h1 style="font-size:22px;font-weight:700;color:var(--t1);letter-spacing:-0.3px;">Shift Roster</h1>
     <div style="font-size:12px;color:var(--t3);margin-top:2px;">
       Week of <?= date('d M', strtotime($week_start)) ?> — <?= date('d M Y', strtotime($week_start . ' +6 days')) ?>
     </div>

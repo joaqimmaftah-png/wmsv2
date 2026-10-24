@@ -12,7 +12,7 @@ $action = (isset($item) && $item) ? base_url('backlog/edit/'.$item->id) : base_u
 
 <div class="flex ai-c jb mb-4">
   <div>
-    <div class="page-heading" style="font-size:16px;"><?= (isset($item) && $item) ? 'Edit Backlog Item' : 'New Backlog Item' ?></div>
+    <h1 class="page-heading" style="font-size:16px;"><?= (isset($item) && $item) ? 'Edit Backlog Item' : 'New Backlog Item' ?></h1>
     <div class="cs">A defect found on a machine — raised, prioritised and tracked to closure</div>
   </div>
   <a href="<?= base_url('backlog') ?>" class="btn btn-ghost btn-sm">Back to register</a>

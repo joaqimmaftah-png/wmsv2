@@ -12,7 +12,7 @@ $is_edit = !empty($s->id);
 <div class="card">
   <div class="ch">
     <div>
-      <div class="ct"><?= $is_edit ? 'Edit: ' . $sup_esc($s->company_name ?? '') : 'Add Supplier' ?></div>
+      <h1 class="ct"><?= $is_edit ? 'Edit: ' . $sup_esc($s->company_name ?? '') : 'Add Supplier' ?></h1>
       <div class="cs"><?= $is_edit ? 'Update supplier profile' : 'Register a new supplier in the database' ?></div>
     </div>
     <a href="<?= base_url($is_edit ? 'suppliers/view/' . (int)$s->id : 'suppliers') ?>" class="ca">&larr; Back</a>

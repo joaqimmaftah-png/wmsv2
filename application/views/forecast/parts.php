@@ -15,7 +15,7 @@ $is_supervisor = $role_id === 1;
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Parts — <?=htmlspecialchars((string)($schedule->schedule_name))?></div>
+    <h1 class="page-heading" style="font-size:16px;">Parts — <?=htmlspecialchars((string)($schedule->schedule_name))?></h1>
     <div class="cs">
       <?=htmlspecialchars((string)(isset($schedule->registration_no) ? (string)$schedule->registration_no : '—'))?>
       · every <?=htmlspecialchars((string)$schedule->interval_value)?> <?=htmlspecialchars((string)$schedule->interval_type)?>

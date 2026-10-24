@@ -272,7 +272,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   <?php if (!$print_mode): ?>
   <div class="w36-head">
     <div>
-      <h2 class="w36-title">Weekly Report <?= $esc($report_name) ?> — preview</h2>
+      <h1 class="w36-title">Weekly Report <?= $esc($report_name) ?> — preview</h1>
       <p class="w36-sub">
         <?= $esc($week_label) ?> ·
         <?= $esc(date('D d M Y', strtotime($week['start']))) ?> → <?= $esc(date('D d M Y', strtotime($week['end']))) ?> ·

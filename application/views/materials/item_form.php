@@ -28,7 +28,7 @@ $final = $init + $recv - $iss;
 <div class="card">
   <div class="ch">
     <div>
-      <div class="ct"><?= $is_edit ? 'Edit: '.htmlspecialchars((string)($item->item_code)) : 'Add Inventory Item' ?></div>
+      <h1 class="ct"><?= $is_edit ? 'Edit: '.htmlspecialchars((string)($item->item_code)) : 'Add Inventory Item' ?></h1>
       <div class="cs"><?= $is_edit ? 'Update item details and stock quantities' : 'Add one item manually — for many items use “Import from Excel”' ?></div>
     </div>
     <a href="<?= base_url('materials/inventory') ?>" class="ca">&larr; Back</a>

@@ -1,4 +1,4 @@
-  </div><!-- /.page -->
+  </main><!-- /.page -->
 </div><!-- /#canvas -->
 <script>
 setTimeout(function(){

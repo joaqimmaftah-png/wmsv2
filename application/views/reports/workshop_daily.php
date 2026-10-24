@@ -25,7 +25,7 @@ foreach ($report as $type => $g) {
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Workshop Daily Report</div>
+    <h1 class="page-heading" style="font-size:16px;">Workshop Daily Report</h1>
     <div class="cs"><?= date('l, d F Y', strtotime($displayDate)) ?></div>
   </div>
   <div class="flex ai-c gap-10" style="flex-wrap:wrap;">

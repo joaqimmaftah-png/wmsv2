@@ -19,7 +19,7 @@ $badge = array(
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="ct" style="font-size:16px;">Sign-in Security</div>
+    <h1 class="ct" style="font-size:16px;">Sign-in Security</h1>
     <div class="cs">What the sign-in throttle does, and what it has actually stopped</div>
   </div>
   <a href="<?= base_url('settings') ?>" class="btn btn-ghost btn-sm">← System settings</a>

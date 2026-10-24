@@ -10,7 +10,7 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Issue Register <span style="color:var(--t3);font-weight:400;">(Sortie)</span></div>
+    <h1 class="page-heading" style="font-size:16px;">Issue Register <span style="color:var(--t3);font-weight:400;">(Sortie)</span></h1>
     <div class="cs">Every item issued from the store — what, when, to which machine or department, and to whom</div>
   </div>
   <div class="flex ai-c gap-10">

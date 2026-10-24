@@ -17,7 +17,7 @@ $can_receive       = $can_write && $outstanding_total > 0.0001 && !in_array($ord
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
     <div class="flex ai-c gap-10">
-      <div class="page-heading" style="font-size:16px;"><?= htmlspecialchars((string)($order->order_no)) ?></div>
+      <h1 class="page-heading" style="font-size:16px;"><?= htmlspecialchars((string)($order->order_no)) ?></h1>
       <span style="padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;color:<?= $col ?>;background:<?= $bg ?>;"><?= htmlspecialchars((string)($order->status)) ?></span>
       <?php if ($overdueFlag): ?><span style="padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;color:var(--red);background:var(--red-d);">OVERDUE</span><?php endif; ?>
     </div>

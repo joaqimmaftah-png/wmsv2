@@ -1,6 +1,6 @@
 <div style="max-width:600px;margin:0 auto;">
   <div class="card">
-    <div class="ch"><div><div class="ct">System Settings</div><div class="cs">Workshop configuration</div></div></div>
+    <div class="ch"><div><h1 class="ct">System Settings</h1><div class="cs">Workshop configuration</div></div></div>
     <div style="padding:24px;">
       <?= form_open('settings') ?>
       <?php $s = (isset($settings_data) ? $settings_data : []); ?>

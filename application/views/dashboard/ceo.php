@@ -21,7 +21,7 @@ $order_kpi = $k['order_kpi'];
 ?>
 
 <div class="mb-4">
-  <div class="page-heading" style="font-size:17px;">Executive Summary</div>
+  <h1 class="page-heading" style="font-size:17px;">Executive Summary</h1>
   <div class="cs">High-level operational &amp; financial overview — <?= date('F Y') ?></div>
 </div>
 

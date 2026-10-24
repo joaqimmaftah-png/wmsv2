@@ -10,7 +10,7 @@ $monthHasData = array_filter($months, fn($m) => !empty($m['pm']));
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Annual Maintenance Plan</div>
+    <h1 class="page-heading" style="font-size:16px;">Annual Maintenance Plan</h1>
     <div class="cs"><?= $selYear ?> — <?= $total_pm ?> PM jobs scheduled across <?= count($monthHasData) ?> months</div>
   </div>
   <div class="flex ai-c gap-10" style="flex-wrap:wrap;">

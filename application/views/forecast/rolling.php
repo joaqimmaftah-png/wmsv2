@@ -17,7 +17,7 @@ $col = function ($v) {
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Rolling Maintenance Plan</div>
+    <h1 class="page-heading" style="font-size:16px;">Rolling Maintenance Plan</h1>
     <div class="cs">Three weeks from <?=htmlspecialchars((string)($base_label))?> — machine, planned hours, availability</div>
   </div>
   <div class="flex ai-c gap-10">

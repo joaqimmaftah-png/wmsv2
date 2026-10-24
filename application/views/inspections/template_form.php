@@ -17,9 +17,9 @@ $val = function ($key, $default = '') use ($t) {
 
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
     <div>
-      <div style="font-size:22px;font-weight:700;color:var(--t1);">
+      <h1 style="font-size:22px;font-weight:700;color:var(--t1);">
         <?= $is_edit ? 'Edit Inspection Template' : 'New Inspection Template' ?>
-      </div>
+      </h1>
       <div style="font-size:12.5px;color:var(--t2);margin-top:2px;">
         <?= $is_edit
             ? htmlspecialchars((string)($val('code'))) . ' — ' . $records . ' submitted record(s)'

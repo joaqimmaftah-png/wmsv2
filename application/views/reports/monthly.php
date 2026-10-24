@@ -18,8 +18,8 @@ foreach ($work_orders as $wo_item) {
 <!-- ═══ REPORT TOOLBAR ═══ -->
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-bottom:28px;">
   <div>
-    <div style="font-family:inherit;font-size:20px;font-weight:800;letter-spacing:-.4px;color:var(--t1);"><?= $month_name; ?></div>
-    <div style="font-size:12px;color:var(--t3);margin-top:2px;">Monthly Maintenance Report &mdash; Generated <?= date('d M Y, H:i'); ?></div>
+    <h1 style="font-family:inherit;font-size:20px;font-weight:800;letter-spacing:-.4px;color:var(--t1);">Monthly Report &mdash; <?= $month_name; ?></h1>
+    <div style="font-size:12px;color:var(--t3);margin-top:2px;">Generated <?= date('d M Y, H:i'); ?></div>
   </div>
   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
     <form method="get" style="display:flex;align-items:center;gap:8px;">

@@ -15,6 +15,12 @@
 
 $h = function ($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); };
 
+$dashboard_first_name = (isset($current_user) && isset($current_user->first_name))
+    ? (string)$current_user->first_name : '';
+$dashboard_hour = (int)date('H');
+$dashboard_greeting = $dashboard_hour < 12
+    ? 'Good morning' : ($dashboard_hour < 17 ? 'Good afternoon' : 'Good evening');
+
 $open_wo        = isset($kpi['open_wo'])        ? (int)$kpi['open_wo']        : 0;
 $availability   = isset($kpi['availability'])   ? (float)$kpi['availability'] : 0;
 $manpower_data  = isset($kpi['manpower'])       ? $kpi['manpower']            : array('present' => 0, 'total' => 0, 'pct' => 0);
@@ -216,9 +222,17 @@ $ico_alert = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke
 @media (max-width:560px){ .dsh-fleet{grid-template-columns:1fr 1fr;} .dsh-stats{grid-template-columns:1fr;} }
 </style>
 
+<header class="main-page-head">
+  <p class="main-page-greeting">
+    <?= $h($dashboard_greeting) ?>, <strong><?= $h($dashboard_first_name !== '' ? $dashboard_first_name : 'there') ?></strong>
+    &mdash; <time datetime="<?= date('Y-m-d') ?>"><?= date('l, d F Y') ?></time>
+  </p>
+  <h1 class="main-page-title"><?= $h(isset($page_title) ? $page_title : 'Dashboard') ?></h1>
+</header>
+
 <!-- ═══ CONTEXT ═══ -->
 <div class="dsh-context">
-  <div class="t"><strong>Operations Dashboard</strong> · 30-day fleet window — availability, MTTR / MTBF, breakdowns and downtime are computed over this window</div>
+  <div class="t">30-day fleet window — availability, MTTR / MTBF, breakdowns and downtime are computed over this window</div>
   <div class="r"><?= $avail_to ? $h('Availability through ' . date('d M Y', strtotime($avail_to))) . ' · ' : '' ?>Updated <?= $h(date('d M Y, H:i')) ?></div>
 </div>
 

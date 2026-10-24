@@ -27,7 +27,7 @@ foreach ($attendance as $a) {
             <?= htmlspecialchars(strtoupper((string)(substr($worker->first_name,0,1) . substr($worker->last_name,0,1))), ENT_QUOTES, 'UTF-8') ?>
           <?php endif; ?>
         </div>
-        <h5 class="fw-700 mb-1"><?= htmlspecialchars($worker->first_name . ' ' . $worker->last_name, ENT_QUOTES, 'UTF-8') ?></h5>
+        <h1 class="fw-700 mb-1" style="font-size:18px;line-height:1.35;"><?= htmlspecialchars($worker->first_name . ' ' . $worker->last_name, ENT_QUOTES, 'UTF-8') ?></h1>
         <div class="text-muted mb-2" style="font-size:13px;"><?= htmlspecialchars((string)$worker->position, ENT_QUOTES, 'UTF-8') ?></div>
         <div class="d-flex justify-content-center gap-2 mb-3">
           <span class="badge bg-<?= (isset($status_colors[$worker->status]) ? $status_colors[$worker->status] : 'secondary') ?>"><?= htmlspecialchars((string)$worker->status, ENT_QUOTES, 'UTF-8') ?></span>

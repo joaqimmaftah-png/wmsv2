@@ -130,6 +130,9 @@
 }
 </style>
 
+<header class="main-page-head">
+  <h1 class="main-page-title"><?= htmlspecialchars((string)(isset($page_title) ? $page_title : 'Reports'), ENT_QUOTES, 'UTF-8') ?></h1>
+</header>
 
 <!-- ══════════════════════════════════════════════
      GROUP 1 — DAILY OPERATIONS

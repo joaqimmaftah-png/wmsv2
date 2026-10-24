@@ -44,7 +44,7 @@ foreach ($report as $type => $g) {
 <!-- ── Toolbar ── -->
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Workshop Weekly Report</div>
+    <h1 class="page-heading" style="font-size:16px;">Workshop Weekly Report</h1>
     <div class="cs"><?= $wkLabel ?></div>
   </div>
   <div class="flex ai-c gap-10" style="flex-wrap:wrap;">

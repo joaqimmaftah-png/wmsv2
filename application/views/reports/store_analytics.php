@@ -12,7 +12,7 @@ $spend_by_currency = isset($spend_by_currency) ? $spend_by_currency : array();
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Store Analytics</div>
+    <h1 class="page-heading" style="font-size:16px;">Store Analytics</h1>
     <div class="cs">Supplier spend &amp; route lead-times — <?= $year ?></div>
   </div>
   <form method="get" class="flex ai-c gap-10">

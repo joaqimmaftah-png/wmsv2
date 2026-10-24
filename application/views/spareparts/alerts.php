@@ -24,7 +24,7 @@ $cur_status = isset($filter['status']) && $filter['status'] !== '' ? $filter['st
 
 <div class="card">
   <div class="ch">
-    <div><div class="ct">Availability Alerts</div>
+    <div><h1 class="ct">Availability Alerts</h1>
     <div class="cs">Generated automatically when a stock receipt matches a spare part required by a pending work order (matched on item code)</div></div>
   </div>
 

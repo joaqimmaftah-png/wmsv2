@@ -57,10 +57,10 @@ $cols = $is_matrix && is_array($template->columns) ? $template->columns : array(
 <div class="insp-wrap">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
     <div>
-      <div class="insp-title"><?= htmlspecialchars((string)($rname)); ?>
+      <h1 class="insp-title"><?= htmlspecialchars((string)($rname)); ?>
         <?php if ($readonly): ?><span class="readonly-badge"><?= $L('Submitted','Soumis'); ?></span><?php endif; ?>
         <?php if ($editing): ?><span class="readonly-badge" style="background:#fdf2d9;color:#8a6100;"><?= $L('Editing','Modification'); ?></span><?php endif; ?>
-      </div>
+      </h1>
       <?php
         $sub_text = in_array($template->code, array('heavy_equipment', 'lv_bus', 'heavy_vehicle'))
             ? $L('Quarterly Permit Coding', 'Codification trimestrielle des permis')

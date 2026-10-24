@@ -1,6 +1,6 @@
 <div class="flex ai-c jb mb-4">
   <div>
-    <div class="page-heading">Leave Request</div>
+    <h1 class="page-heading">Leave Request</h1>
     <div style="font-size:11px;color:var(--t3);margin-top:3px;">Submit a leave request for supervisor approval</div>
   </div>
   <a href="<?= base_url('team') ?>" class="btn btn-ghost">← Back to Team</a>

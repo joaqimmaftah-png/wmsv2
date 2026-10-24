@@ -9,7 +9,7 @@ $can_write = !empty($can_write);
 <div style="max-width:860px;margin:0 auto;">
 <div class="card">
   <div class="ch">
-    <div><div class="ct">Who Supplies This Part?</div><div class="cs">Search across all supplier catalogs by part name, part number, or store item code</div></div>
+    <div><h1 class="ct">Who Supplies This Part?</h1><div class="cs">Search across all supplier catalogs by part name, part number, or store item code</div></div>
     <a href="<?= base_url('suppliers') ?>" class="ca">&larr; Back</a>
   </div>
   <div style="padding:18px 24px;">

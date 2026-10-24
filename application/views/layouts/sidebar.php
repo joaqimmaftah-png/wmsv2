@@ -24,8 +24,6 @@ $rl        = array(1=>'Supervisor',2=>'Technician',3=>'Store Keeper',4=>'Manager
 $role_lbl  = isset($rl[$role_id]) ? $rl[$role_id] : 'User';
 $company   = (isset($site_settings['company_name']) && $site_settings['company_name'])
            ? $site_settings['company_name'] : 'Workshop WMS';
-$h = (int)date('H');
-$greeting  = ($h<12) ? 'Good morning' : (($h<17) ? 'Good afternoon' : 'Good evening');
 
 // Role helpers
 $is_supervisor = ($role_id == 1);
@@ -35,7 +33,6 @@ $is_manager    = ($role_id == 4);
 $is_ceo        = ($role_id == 5);
 
 // Header state: keep global utilities relevant to the current destination.
-$is_dashboard     = ($uri === '' || $uri === 'dashboard' || $uri === 'dashboard/index');
 $is_spare_alerts  = (strpos($uri, 'spareparts/alerts') === 0);
 $is_security      = (strpos($uri, 'settings/security') === 0);
 $spare_alert_count = isset($new_spares_alerts) ? (int)$new_spares_alerts : 0;
@@ -436,12 +433,6 @@ $security_alert_label = $security_alert_count . ' security event' . ($security_a
 <div id="canvas">
   <header class="topbar">
     <div class="topbar-row">
-      <div class="topbar-heading">
-        <?php if ($is_dashboard): ?>
-        <div class="topbar-greeting"><?= $greeting; ?>, <strong><?= htmlspecialchars((string)($fn ?: 'there')); ?></strong> &mdash; <?= date('l, d F Y'); ?></div>
-        <?php endif; ?>
-        <div class="page-heading"><?= isset($page_title) ? htmlspecialchars((string)($page_title)) : 'Dashboard'; ?></div>
-      </div>
       <div class="topbar-actions">
         <?php if ($is_supervisor && $security_alert_count > 0 && !$is_security): ?>
         <a href="<?= base_url('settings/security') ?>" class="live-pill security-pill"
@@ -509,7 +500,7 @@ $security_alert_label = $security_alert_count . ' security event' . ($security_a
     </div>
   </header><!-- /.topbar -->
 
-  <div class="page">
+  <main class="page" id="main-content">
   <?php if ($this->session->flashdata('success')): ?>
   <div class="flash flash-ok"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> <?= $this->session->flashdata('success'); ?></div>
   <?php endif; ?>

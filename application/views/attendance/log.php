@@ -23,7 +23,7 @@ foreach ($punches as $p) $by_user[(int)$p->user_id][] = $p;
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="ct" style="font-size:16px;">Punch log — <?= date('l, d F Y', strtotime($date)) ?></div>
+    <h1 class="ct" style="font-size:16px;">Punch log — <?= date('l, d F Y', strtotime($date)) ?></h1>
     <div class="cs"><?= count($punches) ?> punch(es) · <?= count($on_site) ?> on site</div>
   </div>
   <form method="get" action="<?= base_url('attendance/log') ?>" class="flex ai-c gap-10">
