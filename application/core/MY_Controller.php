@@ -53,6 +53,8 @@ class MY_Controller extends CI_Controller {
     public $Auth_throttle_model;
     public $Attendance_model;
     public $Timesheet_model;
+    public $Search_model;
+    public $Attention_model;
 
     /**
      * PHP 8.x parameter guard: CodeIgniter 3 dispatches URL segments directly
@@ -150,6 +152,7 @@ class MY_Controller extends CI_Controller {
     const ACCESS_MATRIX = array(
         'auth'        => array(1, 2, 3, 4, 5),
         'dashboard'   => array(1, 2, 3, 4, 5),
+        'search'      => array(1, 2, 3, 4),
         'workorders'  => array(1, 2, 4),
         'equipment'   => array(1, 2, 4),
         'pm'          => array(1, 2, 4),
@@ -325,6 +328,12 @@ class MY_Controller extends CI_Controller {
         if (!isset($data['new_spares_alerts'])) {
             $data['new_spares_alerts'] = $this->_new_spares_alert_count();
         }
+        // Operational exceptions are distinct from sign-in security. The
+        // attention model receives the already-scoped parts count so that the
+        // shared header does not repeat that query on every page.
+        if (!isset($data['operational_attention'])) {
+            $data['operational_attention'] = $this->_operational_attention($data['new_spares_alerts']);
+        }
         // Sign-in security events waiting to be looked at (F-19). Supervisors
         // only, and silent when the security-events table is missing.
         if (!isset($data['security_events_open'])) {
@@ -349,6 +358,31 @@ class MY_Controller extends CI_Controller {
             // database that cannot answer raises an Error. A badge is not worth
             // an empty page. (Same reasoning as _load_settings().)
             return 0;
+        }
+    }
+
+    /** Role-scoped operational exceptions; a data problem leaves a safe parts fallback. */
+    private function _operational_attention($new_parts_count) {
+        $new_parts_count = (int)$new_parts_count;
+        if ($this->is_ceo()) return array('groups' => array(), 'count' => 0);
+
+        try {
+            $this->load->model('Attention_model');
+            return $this->Attention_model->for_user($this->user_id, $this->role_id, $new_parts_count);
+        } catch (Throwable $e) {
+            log_message('error', 'Operational attention could not be loaded: '.$e->getMessage());
+            $groups = array();
+            if ($new_parts_count > 0) {
+                $groups[] = array(
+                    'key'   => 'parts',
+                    'label' => 'Parts newly available',
+                    'count' => $new_parts_count,
+                    'tone'  => 'success',
+                    'url'   => base_url('spareparts/alerts?status=New'),
+                    'items' => array(),
+                );
+            }
+            return array('groups' => $groups, 'count' => $new_parts_count);
         }
     }
 

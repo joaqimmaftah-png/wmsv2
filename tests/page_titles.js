@@ -16,7 +16,9 @@ const topbar = sidebar.split('<header class="topbar">')[1].split('</header>')[0]
 assert.ok(!topbar.includes('page_title'), 'the global header must not render the page title');
 assert.ok(!topbar.includes('topbar-greeting'), 'the global header must not render the Dashboard greeting');
 assert.ok(topbar.includes('topbar-actions'), 'global actions remain in the header');
-assert.ok(topbar.includes('spare-alerts-pill'), 'spare-parts alerts remain available');
+assert.ok(topbar.includes('global-find-trigger'), 'Global Find remains available in the utility header');
+assert.ok(topbar.includes('attention-trigger'), 'operational attention remains available');
+assert.ok(sidebar.includes('spareparts/alerts?status=New'), 'parts attention links to the filtered availability queue');
 assert.ok(topbar.includes('tb-user-trigger'), 'the account disclosure remains available');
 assert.ok(sidebar.includes('<main class="page" id="main-content">'), 'the content canvas uses a main landmark');
 assert.ok(footer.includes('</main><!-- /.page -->'), 'the main landmark is closed by the footer');

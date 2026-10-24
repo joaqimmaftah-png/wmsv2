@@ -1201,6 +1201,18 @@ function invImportToggle() {
     }
   });
 
+  // Global Find deep-link: ?q=ITEM-CODE&item=ID filters the catalogue to the
+  // authorized record, then opens the existing item/stock-ledger drawer.
+  var initialItemMatch = window.location.search.match(/[?&]item=(\d+)/);
+  if (initialItemMatch) {
+    var initialItemId = parseInt(initialItemMatch[1], 10);
+    var initialOpener = null;
+    document.querySelectorAll('[data-inv-open]').forEach(function (candidate) {
+      if (parseInt(candidate.getAttribute('data-inv-open'), 10) === initialItemId) initialOpener = candidate;
+    });
+    if (initialOpener) openDrawer(initialItemId, initialOpener);
+  }
+
   document.addEventListener('keydown', function (ev) {
     var tag = ev.target && ev.target.tagName ? ev.target.tagName.toLowerCase() : '';
     var inField = (tag === 'input' || tag === 'textarea' || tag === 'select' || (ev.target && ev.target.isContentEditable));

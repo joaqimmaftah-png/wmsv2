@@ -686,9 +686,10 @@ class Spareparts_model extends CI_Model {
         return $this->_hydrate_alerts($this->db->order_by('a.created_at', 'DESC')->limit(200)->get()->result());
     }
 
-    public function get_recent_alerts($user_id, $role_id, $limit = 6) {
+    public function get_recent_alerts($user_id, $role_id, $limit = 6, $status = NULL) {
         if (!$this->tables_ready()) return array();
         $this->_scope_alert_query($user_id, $role_id);
+        if ($status !== NULL && $status !== '') $this->db->where('a.status', $status);
         return $this->_hydrate_alerts($this->db->order_by('a.created_at', 'DESC')->limit((int)$limit)->get()->result());
     }
 
