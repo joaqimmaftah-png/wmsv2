@@ -12,6 +12,9 @@ $route['logout'] = 'auth/logout';
 // Dashboard
 $route['dashboard'] = 'dashboard/index';
 
+// Global Find (read-only JSON; role and technician scoping in Search_model)
+$route['search'] = 'search/index';
+
 // Team Management
 $route['team'] = 'team/index';
 $route['team/(:any)'] = 'team/$1';

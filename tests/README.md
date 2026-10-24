@@ -49,6 +49,18 @@ Verifies that the global header contains utilities only, the content canvas uses
 `<main>` landmark, and every standard rendered view has one main `<h1>` (with
 separate, mutually exclusive screen/print headings for the W36 report).
 
+## Global Find and Operational Attention checks (Node)
+
+```bash
+node --check assets/js/global-find.js
+node tests/global_find_attention.js
+```
+
+Dependency-free structural checks for role/technician scoping, authorized record
+and filtered-queue destinations, dialog semantics, keyboard behavior and the
+inventory drawer deep-link. Authenticated database and browser/assistive-
+technology checks remain necessary.
+
 ## Table UX regression checks (Node)
 
 ```bash

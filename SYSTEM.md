@@ -75,10 +75,10 @@ Key architectural facts:
 - **`MY_Controller`** is the security and presentation backbone: it redirects
   anonymous users to `/login`, enforces the role matrix (§4), loads the whole
   `settings` table into `site_settings` view data on every request, and its
-  `render()` injects the current user, role, unread spare-part alert count and
-  unacknowledged security-event count (supervisors) into every page. It also
-  provides `require_post()` (405 for non-POST) and a `json()` responder used
-  by the AJAX endpoints.
+  `render()` injects the current user, role, unread spare-part alert count,
+  role-scoped operational attention and unacknowledged security-event count
+  (supervisors) into every page. It also provides `require_post()` (405 for
+  non-POST) and a `json()` responder used by the AJAX endpoints.
 - **Print documents bypass the layout**: job cards, GRNs, the daily-report
   print page and the W36/workshop "PDF" exports render standalone HTML meant
   for browser print-to-PDF. Only inspection records produce a binary PDF
@@ -127,6 +127,7 @@ the noted gaps (§17 details).
 | 15 | `Settings` | `Settings_model`, `Auth_throttle_model` | Business settings; sign-in security console | Implemented |
 | 16 | `Reports` | 14 models (dashboard/WO/team/lube/equipment/order/supplier/asset/materials/store/settings/KPI target/KPI engine/W36) | 20+ reports and exports incl. W36 and the asset-register import | Implemented |
 | 17 | `Forecast` | `Forecast_model`, `Maintenance_plan_model` (+ PM/materials/order/W36 on demand) | Planned availability, jobs, publish/revisions, plan-vs-actual, rolling plan, spares & allowances, workbook export | Implemented |
+| 18 | `Search` | `Search_model` | Read-only Global Find across WOs, equipment and inventory; exact-identifier ranking and role-scoped JSON | Implemented |
 
 Views: 94 PHP files under `application/views/` (one folder per module, plus
 `layouts/`, `auth/`, and custom `errors/html/`). `layouts/header-apple.php`
@@ -229,7 +230,12 @@ Per-action restrictions inside controllers (on top of the matrix):
 
 Alert visibility (`Spareparts_model`): supervisors, store and managers see all
 spare-part alerts; technicians only alerts for WOs they created, supervise, or
-are assigned to (CSV match on `assigned_to`).
+are assigned to (exact CSV match on `assigned_to`). Global Find (`Search_model`)
+uses that same WO scope for technicians; equipment/WO results are limited to
+roles 1/2/4, inventory to roles 1–4, and CEO has no search endpoint or trigger.
+Operational Attention (`Attention_model`) applies the same incident scope;
+verification is Supervisor-only, and Store part alerts stay on authorized
+availability-queue destinations rather than linking to WOs.
 
 ### 4.4 Other security controls
 
@@ -1065,9 +1071,11 @@ Answers "which pending jobs can proceed now that parts arrived?".
   GRN): for each waiting line of that material whose coverability **improved**
   (free-before < needed ≤ free-after → `Available`; free increased but still
   short → `Partial`) it inserts a `spare_part_alerts` row. No alert is
-  created when the line was already coverable. Alerts surface in the top-bar
-  bell (count via `MY_Controller::render`), the dashboard board, and
-  `/spareparts/alerts` (mark read / mark all read, POST-only).
+  created when the line was already coverable. Alerts surface in Operational
+  Attention (alongside uncontrolled incidents, overdue PM and Supervisor
+  verification), the dashboard board, and `/spareparts/alerts` (mark read /
+  mark all read, POST-only). The attention badge counts actionable exceptions;
+  the Pending Spares navigation badge remains parts-specific.
 
 ### 7.7 Suppliers & purchase orders
 
@@ -1314,8 +1322,8 @@ service reduce required time in availability.
 
 **W4 — Stock receipt → job unblocked.** Store receives stock (manual receive
 or order GRN) through the single stock writer → matcher finds waiting WO
-lines for that item → `Available`/`Partial` alerts appear (bell, dashboard,
-alerts page, scoped per §4.3) → store allocates free stock to the WO line →
+lines for that item → `Available`/`Partial` alerts appear (Operational
+Attention, dashboard, alerts page, scoped per §4.3) → store allocates free stock to the WO line →
 issues it at hand-out (ISSUE movement) → WO proceeds; leftovers auto-issue
 when the WO completes.
 
@@ -1370,6 +1378,7 @@ POST (many also render a form on GET); POST-only endpoints return 405 on GET.
 |---|---|
 | auth | `login` (GET form/POST), `logout` (POST-only) |
 | dashboard | `index` — also `/` and `/dashboard` |
+| search | `index?q=` JSON GET (roles 1–4; technician WO scope; CEO excluded) |
 | workorders | `index`, `create` (POST saves), `view(id)`, `edit(id)`, `update_status(id)` POST, `jobcard(id)` (print; `?autoprint=1`), `api_spare_lookup` JSON GET, `api_stock_check` JSON GET, `start_session(id)` POST, `close_session(session_id, wo_id)` POST, `session_jobcard(session_id)`, `review_incident(id)` POST, `upload_evidence(id)` POST, `download_attachment(id)`, `delete_attachment(att_id, wo_id)` POST, `link_breakdown_event(id)` POST |
 | equipment | `index`, `create`, `view(id)`, `edit(id)`, `update_hours(id)` POST |
 | pm | `index`, `create`, `edit(id)`, `complete([id])` POST (id in URI or `pm_id` field), `calendar` |
@@ -1413,6 +1422,11 @@ equipment history (WOs + KPIs + lube); W36 weekly (§7.9) + weekly targets.
   navigation; visibility mirrors §4.3 but enforcement is server-side),
   `layouts/footer.php`. Page title/company name from `settings.company_name`
   (fallback "Workshop WMS").
+- Global Find opens with Ctrl/Cmd+K (roles 1–4) and returns direct authorized
+  WO/equipment records or an inventory item drawer deep-link. Existing
+  page-local `/` search shortcuts remain separate. Operational Attention is a
+  server-rendered native disclosure with filtered-queue destinations; it does
+  not depend on a client-side notification request.
 - Chart.js renders dashboard/report charts from JSON embedded by the views.
   Without internet, charts and the Inter font silently degrade; data tables
   remain functional.
@@ -1564,8 +1578,8 @@ editing signatures/photos orphans the previous file.
 - **No cron/queue/workers exist.** Retention and cleanup are opportunistic:
   login attempts/events pruned during sign-in processing; import-report JSON
   pruned on the next import; CI garbage-collects DB sessions probabilistically.
-- Notifications are in-app only (spare-part alerts, security-event badge).
-  Nothing sends e-mail.
+- Notifications are in-app only (role-scoped Operational Attention, spare-part
+  alerts and the separate security-event badge). Nothing sends e-mail.
 
 ## 16. Deployment & operations
 
