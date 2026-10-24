@@ -26,7 +26,7 @@ $bg               = $stVal === 'Active' ? 'var(--green-d)' : ($stVal === 'Blackl
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
     <div class="flex ai-c gap-10" style="flex-wrap:wrap;">
-      <div class="page-heading" style="font-size:16px;"><?= $sup_esc($supplier->company_name) ?></div>
+      <h1 class="page-heading" style="font-size:16px;"><?= $sup_esc($supplier->company_name) ?></h1>
       <span style="padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;color:<?= $badge ?>;background:<?= $bg ?>;"><?= $sup_esc($stVal) ?></span>
     </div>
     <div class="cs">

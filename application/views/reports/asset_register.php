@@ -11,7 +11,7 @@ foreach (equip_statuses() as $s) {
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Asset Register</div>
+    <h1 class="page-heading" style="font-size:16px;">Asset Register</h1>
     <div class="cs">Full fleet inventory — <?=date('d F Y')?></div>
   </div>
   <div class="flex ai-c gap-10" style="flex-wrap:wrap;">

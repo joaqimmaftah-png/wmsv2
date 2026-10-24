@@ -2,7 +2,7 @@
 
 <div class="row mb-3">
   <div class="col">
-    <h4 class="fw-700"><?= htmlspecialchars((string)$equipment->registration_no, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars((string)trim((string)$equipment->brand . ' ' . (string)$equipment->model), ENT_QUOTES, 'UTF-8') ?></h4>
+    <h1 class="fw-700" style="font-size:18px;line-height:1.35;"><?= htmlspecialchars((string)$equipment->registration_no, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars((string)trim((string)$equipment->brand . ' ' . (string)$equipment->model), ENT_QUOTES, 'UTF-8') ?></h1>
     <div style="font-size:13px;color:#64748b;">
       <?= htmlspecialchars((string)($equipment->type_name ?: 'Other'), ENT_QUOTES, 'UTF-8') ?><?= !empty($equipment->category) ? ' (' . htmlspecialchars((string)$equipment->category, ENT_QUOTES, 'UTF-8') . ')' : '' ?>
       | <?= htmlspecialchars((string)($equipment->year ?: '—'), ENT_QUOTES, 'UTF-8') ?>

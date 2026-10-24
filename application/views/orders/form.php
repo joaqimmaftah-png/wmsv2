@@ -1,7 +1,7 @@
 <div style="max-width:880px;margin:0 auto;">
 <div class="card">
   <div class="ch">
-    <div><div class="ct">New Spare Parts Order</div><div class="cs">Expected delivery date is estimated automatically from past orders on this route</div></div>
+    <div><h1 class="ct">New Spare Parts Order</h1><div class="cs">Expected delivery date is estimated automatically from past orders on this route</div></div>
     <a href="<?= base_url('orders') ?>" class="ca">&larr; Back</a>
   </div>
   <div style="padding:24px 28px 32px;">

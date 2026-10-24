@@ -108,7 +108,7 @@ function _v($is_edit, $wo, $field, $default = '') {
 <div class="card">
   <div class="ch">
     <div>
-      <div class="ct"><?= $is_edit ? 'Edit Work Order: '.htmlspecialchars((string)($wo->wo_number)) : 'New Work Order'; ?></div>
+      <h1 class="ct"><?= $is_edit ? 'Edit Work Order: '.htmlspecialchars((string)($wo->wo_number)) : 'New Work Order'; ?></h1>
       <div class="cs">Spare parts, oil top-up, work completed, pending work and remarks all save here and print on the Job Card</div>
     </div>
     <a href="<?= base_url('workorders'); ?>" class="ca">&larr; Back</a>

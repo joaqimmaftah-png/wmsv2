@@ -26,7 +26,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:12px;">
   <div>
     <div class="flex ai-c gap-10" style="flex-wrap:wrap;align-items:center;margin-bottom:6px;">
-      <div class="mono" style="font-size:19px;font-weight:600;letter-spacing:-0.5px;color:var(--blue);"><?= htmlspecialchars((string)$wo->wo_number, ENT_QUOTES, 'UTF-8') ?></div>
+      <h1 class="mono" style="font-size:19px;font-weight:600;letter-spacing:-0.5px;color:var(--blue);"><?= htmlspecialchars((string)$wo->wo_number, ENT_QUOTES, 'UTF-8') ?></h1>
       <span class="badge <?= $sc ?>"><?= htmlspecialchars((string)$wo->status, ENT_QUOTES, 'UTF-8') ?></span>
       <span class="badge <?= $pc ?>"><?= htmlspecialchars((string)$wo->priority, ENT_QUOTES, 'UTF-8') ?></span>
       <span class="badge <?= $tc ?>"><?= htmlspecialchars((string)$wo->type, ENT_QUOTES, 'UTF-8') ?></span>

@@ -10,7 +10,7 @@ $downtime = (isset($kpi['total_downtime']) ? $kpi['total_downtime'] : 0);
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:12px;">
   <div>
-    <div class="page-title">Weekly Report</div>
+    <h1 class="page-title page-heading">Weekly Report</h1>
     <div style="font-size:12px;color:var(--t3);margin-top:3px;"><?= $from_fmt ?> — <?= $to_fmt ?></div>
   </div>
   <div class="flex ai-c gap-10">

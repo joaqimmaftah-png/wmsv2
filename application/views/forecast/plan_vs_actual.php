@@ -34,7 +34,7 @@ $signed = function ($v) {
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Plan vs Actual — <?=htmlspecialchars((string)($iso_label))?></div>
+    <h1 class="page-heading" style="font-size:16px;">Plan vs Actual — <?=htmlspecialchars((string)($iso_label))?></h1>
     <div class="cs"><?=date('d M Y', strtotime($week_start))?> – <?=date('d M Y', strtotime($week_end))?></div>
   </div>
   <form method="get" class="flex ai-c gap-10">

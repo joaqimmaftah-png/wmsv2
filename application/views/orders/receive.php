@@ -1,7 +1,7 @@
 <div style="max-width:920px;margin:0 auto;">
 <div class="card">
   <div class="ch">
-    <div><div class="ct">Receive Order <?= htmlspecialchars((string)($order->order_no)) ?></div><div class="cs">Enter what arrived in <strong>this delivery</strong> — catalogued items go into stock, and the balance stays outstanding on the order</div></div>
+    <div><h1 class="ct">Receive Order <?= htmlspecialchars((string)($order->order_no)) ?></h1><div class="cs">Enter what arrived in <strong>this delivery</strong> — catalogued items go into stock, and the balance stays outstanding on the order</div></div>
     <a href="<?= base_url('orders/view/'.$order->id) ?>" class="ca">&larr; Back</a>
   </div>
   <div style="padding:24px 28px 32px;">

@@ -33,6 +33,10 @@ $has_photo= !empty($me->photo);
 
 <div style="max-width:720px;margin:0 auto;">
 
+  <header class="main-page-head">
+    <h1 class="main-page-title"><?= htmlspecialchars((string)(isset($page_title) ? $page_title : 'My Profile'), ENT_QUOTES, 'UTF-8') ?></h1>
+  </header>
+
   <!-- Flash -->
   <?php if ($this->session->flashdata('success')): ?>
   <div class="flash flash-ok mb-4">

@@ -15,7 +15,7 @@ $can_punch     = !$is_manager;   // Manager is view-only (MY_Controller guard)
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="ct" style="font-size:16px;">Attendance</div>
+    <h1 class="ct" style="font-size:16px;">Attendance</h1>
     <div class="cs">Site check-in / check-out by QR code + GPS</div>
   </div>
   <div class="flex ai-c gap-10" style="flex-wrap:wrap;">

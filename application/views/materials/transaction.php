@@ -7,7 +7,7 @@ $action_url = $issue_mode ? 'materials/issue/'.$item->id : 'materials/receive/'.
 <div class="card">
   <div class="ch">
     <div>
-      <div class="ct"><?= $issue_mode ? '— Issue Stock' : '+ Receive Stock' ?></div>
+      <h1 class="ct"><?= $issue_mode ? '— Issue Stock' : '+ Receive Stock' ?></h1>
       <div class="cs"><?= htmlspecialchars((string)($item->item_code.' — '.$item->description)) ?></div>
     </div>
     <a href="<?= base_url('materials/inventory') ?>" class="ca">&larr; Back</a>

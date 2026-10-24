@@ -1,6 +1,6 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <h4 class="fw-700">12-Month PM Forecast Calendar</h4>
+    <h1 class="fw-700" style="font-size:18px;line-height:1.35;">12-Month PM Forecast Calendar</h1>
     <div class="text-muted" style="font-size:13px;">Upcoming preventive maintenance schedule overview</div>
   </div>
   <a href="<?= base_url('pm') ?>" class="btn btn-outline-primary btn-sm">&larr; PM Planner</a>

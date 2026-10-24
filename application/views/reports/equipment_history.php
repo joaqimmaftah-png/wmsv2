@@ -6,7 +6,7 @@ $status_color = equip_status_map($eq->status)['badge'];   // W0.2
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:12px;">
   <div>
-    <div class="page-title"><?= htmlspecialchars((string)($eq->registration_no)) ?> — Equipment History</div>
+    <h1 class="page-title page-heading"><?= htmlspecialchars((string)($eq->registration_no)) ?> — Equipment History</h1>
     <div style="font-size:12px;color:var(--t3);margin-top:3px;"><?= htmlspecialchars((string)($eq->brand.' '.$eq->model)) ?> · <?= (isset($eq->type_name) ? $eq->type_name : '') ?></div>
   </div>
   <div class="flex ai-c gap-10">

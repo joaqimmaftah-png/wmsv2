@@ -37,7 +37,7 @@ if ($role_value === '' && !empty($roles)) {
 
   <div class="form-page-head">
     <div>
-      <div class="form-page-title"><?= $is_edit ? 'Edit Worker' : 'Add New Worker' ?></div>
+      <h1 class="form-page-title"><?= $is_edit ? 'Edit Worker' : 'Add New Worker' ?></h1>
       <div class="form-page-sub">
         <?= $is_edit
             ? 'Changes apply to the account immediately — ' . htmlspecialchars((string)($val('employee_id'))) . '.'

@@ -76,7 +76,7 @@ $src_short = array(
   <div class="card">
     <div class="ch">
       <div>
-        <div class="ct">Availability Targets</div>
+        <h1 class="ct">Availability Targets</h1>
         <div class="cs"><?= htmlspecialchars((string)($report_name)) ?> — daily target per machine and per group, with single-day overrides</div>
       </div>
       <div class="tgt-bar" style="margin:0;">

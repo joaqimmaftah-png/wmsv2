@@ -14,7 +14,7 @@ $amberPct  = 70.0;   // "watch" band, not a target
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Annual Report <?= $selYear ?></div>
+    <h1 class="page-heading" style="font-size:16px;">Annual Report <?= $selYear ?></h1>
     <div class="cs">Full-year fleet performance overview</div>
   </div>
   <div class="flex ai-c gap-10" style="flex-wrap:wrap;">

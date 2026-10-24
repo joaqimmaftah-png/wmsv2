@@ -6,7 +6,7 @@ if (!in_array($activeType, $types) && !empty($types)) $activeType = $types[0];
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">Service Kit Recommendations</div>
+    <h1 class="page-heading" style="font-size:16px;">Service Kit Recommendations</h1>
     <div class="cs">Parts, lubricants and oils per machine — based on historical WO data · Generated <?= $generated_at ?></div>
   </div>
   <div class="flex ai-c gap-10">

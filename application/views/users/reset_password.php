@@ -1,7 +1,7 @@
 <div class="flex ai-c jb mb-4">
   <div>
     <div style="font-size:11px;color:var(--t3);margin-bottom:4px;"><a href="<?= base_url('users') ?>" style="color:var(--blue);text-decoration:none;">User Access</a> / Reset Password</div>
-    <div class="page-heading" style="font-size:17px;">Reset Password</div>
+    <h1 class="page-heading" style="font-size:17px;">Reset Password</h1>
   </div>
   <a href="<?= base_url('users') ?>" class="btn btn-ghost">← Back</a>
 </div>

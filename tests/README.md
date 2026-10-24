@@ -39,6 +39,16 @@ change the result.
   lives inline in a large file, extract it into a function first (that is why
   `wms_base_url_from_host()` exists) rather than copying it here.
 
+## Shared-layout and page-title checks (Node)
+
+```bash
+node tests/page_titles.js
+```
+
+Verifies that the global header contains utilities only, the content canvas uses a
+`<main>` landmark, and every standard rendered view has one main `<h1>` (with
+separate, mutually exclusive screen/print headings for the W36 report).
+
 ## Table UX regression checks (Node)
 
 ```bash

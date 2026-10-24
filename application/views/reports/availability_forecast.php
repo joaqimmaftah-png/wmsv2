@@ -10,7 +10,7 @@ foreach($forecast as $f) { $byType[$f['type']][] = $f; }
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="page-heading" style="font-size:16px;">PM Due Forecast</div>
+    <h1 class="page-heading" style="font-size:16px;">PM Due Forecast</h1>
     <div class="cs">Preventive-maintenance schedules falling due by <?=date('d M Y',strtotime($horizon_date))?></div>
     <div class="cs" style="margin-top:2px;">For projected <em>availability</em>, see <a href="<?= base_url('forecast') ?>">Planned Availability</a>.</div>
   </div>

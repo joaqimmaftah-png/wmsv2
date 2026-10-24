@@ -1,5 +1,5 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <div><h4 class="fw-700 mb-0">Certifications Tracker</h4></div>
+  <div><h1 class="fw-700 mb-0" style="font-size:18px;line-height:1.35;">Certifications Tracker</h1></div>
   <a href="<?= base_url('team') ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back to Team</a>
 </div>
 

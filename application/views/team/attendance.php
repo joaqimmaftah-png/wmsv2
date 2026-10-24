@@ -14,7 +14,7 @@
 
 <div class="card">
   <div class="ch">
-    <div><div class="ct">Attendance — <?= date('l, d F Y',strtotime($date)) ?></div><div class="cs"><?= isset($workers)?count($workers):0 ?> workers</div></div>
+    <div><h1 class="ct">Attendance — <?= date('l, d F Y',strtotime($date)) ?></h1><div class="cs"><?= isset($workers)?count($workers):0 ?> workers</div></div>
   </div>
   <?= form_open('team/attendance') ?>
   <input type="hidden" name="date" value="<?= htmlspecialchars((string)($date), ENT_QUOTES, 'UTF-8') ?>">

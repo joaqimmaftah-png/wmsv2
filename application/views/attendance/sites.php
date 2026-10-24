@@ -23,7 +23,7 @@ $has_saved_point = $editing && $editing->latitude !== NULL && $editing->longitud
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <div class="ct" style="font-size:16px;">Attendance sites &amp; policy</div>
+    <h1 class="ct" style="font-size:16px;">Attendance sites &amp; policy</h1>
     <div class="cs">Where a punch is allowed, how accurate the position must be, who is assignable</div>
   </div>
   <div class="flex ai-c gap-10" style="flex-wrap:wrap;">
