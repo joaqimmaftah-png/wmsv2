@@ -303,17 +303,6 @@ html,body {
 .tbd-item.danger:hover { background:var(--red-fill); }
 .tbd-sep { height:1px;background:var(--sep); }
 
-/* CTA button */
-.btn-cta {
-  display:inline-flex;align-items:center;gap:7px;
-  background:var(--blue);color:#fff;border:none;
-  padding:9px 18px;border-radius:100px;
-  font-size:13px;font-weight:500;cursor:pointer;
-  transition:background 0.15s,transform 0.15s;text-decoration:none;
-}
-.btn-cta:hover { background:#0077ed;transform:scale(1.02);color:#fff; }
-.btn-cta svg { width:13px;height:13px;fill:currentColor; }
-
 /* ─────────────────────────────────────────────────────
    FLASH MESSAGES
 ───────────────────────────────────────────────────── */
@@ -542,7 +531,7 @@ textarea.form-control { resize:vertical;min-height:80px; }
   .tb-dropdown { animation:none; }
 }
 @media print {
-  #sidebar,#canvas .topbar,.btn,.btn-cta,.no-print { display:none!important; }
+  #sidebar,#canvas .topbar,.btn,.no-print { display:none!important; }
   html,body { height:auto!important;overflow:visible!important;background:#fff!important; }
   #canvas,.page-body { margin-left:0!important;height:auto!important;overflow:visible!important; }
   .card,.wms-card { box-shadow:none!important;border:1px solid #e0e0e0!important; }
