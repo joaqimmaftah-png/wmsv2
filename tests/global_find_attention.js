@@ -54,6 +54,10 @@ assert.ok(js.includes('function trapTab'), 'modal focus is contained');
 assert.ok(js.includes('activeController.abort()'), 'stale searches are cancelled');
 assert.ok(js.includes('node.textContent = String(text)'), 'record text is inserted without HTML parsing');
 assert.ok(header.includes('.global-find-panel { width:100%;'), 'the mobile Find dialog is full width');
+assert.ok(/\.topbar-actions\s*\{[^}]*width:100%/.test(header),
+  'the utility row spans the header so Find can anchor the start');
+assert.ok(/\.global-find-trigger\s*\{[^}]*margin-right:auto/.test(header),
+  'Find stays left-aligned while the other utilities remain right-aligned');
 assert.ok(header.includes('.global-find-root[hidden]'), 'hidden dialog state wins over display styling');
 
 assert.ok(attentionModel.includes("base_url('workorders?type=Incident')"),

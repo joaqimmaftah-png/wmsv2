@@ -241,7 +241,7 @@ html,body {
   display:flex;align-items:center;justify-content:flex-end;gap:20px;
   padding-bottom:12px;
 }
-.topbar-actions { display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap; }
+.topbar-actions { display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;width:100%; }
 .topbar a:focus-visible,.topbar button:focus-visible {
   outline:2px solid var(--blue);outline-offset:2px;
 }
@@ -268,7 +268,7 @@ html,body {
 /* Global Find + Operational Attention — quiet, task-focused utilities. */
 .global-find-trigger {
   display:inline-flex;align-items:center;gap:8px;
-  width:218px;height:40px;padding:0 9px 0 12px;
+  width:218px;height:40px;padding:0 9px 0 12px;margin-right:auto;
   background:var(--surface);border:1px solid var(--sep-strong);
   border-radius:var(--r-sm);color:var(--t2);
   font:inherit;font-size:12px;text-align:left;cursor:pointer;
