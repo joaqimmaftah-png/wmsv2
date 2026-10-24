@@ -77,6 +77,7 @@
   --sb-dur:0.22s;
 
   /* Shadows — Apple-style: layered, extremely subtle */
+  --shadow-header:0 2px 8px rgba(0,0,0,0.06);
   --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
   --shadow-raise:0 2px 8px rgba(0,0,0,0.08), 0 12px 28px rgba(0,0,0,0.06);
   --shadow-float:0 4px 20px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06);
@@ -231,14 +232,16 @@ html,body {
 .topbar {
   position:sticky;top:0;z-index:50;
   padding:20px 32px 0;
-  background:var(--bg);
+  background:var(--surface);
+  border-bottom:1px solid var(--sep-strong);
+  box-shadow:none;
 }
+.topbar.is-scrolled { box-shadow:var(--shadow-header); }
 .topbar-row {
   display:flex;align-items:center;justify-content:space-between;
   padding-bottom:18px;
-  border-bottom:1px solid var(--sep);
 }
-.topbar-greeting { font-size:11px;color:var(--t3);font-weight:400;margin-bottom:3px; }
+.topbar-greeting { font-size:11px;color:var(--t2);font-weight:400;margin-bottom:3px; }
 .topbar-greeting strong { color:var(--blue);font-weight:600; }
 .page-heading { font-size:20px;font-weight:700;letter-spacing:-0.5px;color:var(--t1); }
 .topbar-actions { display:flex;align-items:center;gap:10px; }
@@ -246,7 +249,7 @@ html,body {
 /* Live pill */
 .live-pill {
   display:inline-flex;align-items:center;gap:7px;
-  background:var(--surface);border:1px solid var(--sep);
+  background:var(--surface-2);border:1px solid var(--sep-strong);
   padding:6px 14px;border-radius:100px;
   font-size:12px;font-weight:500;color:var(--t2);
 }
@@ -256,7 +259,7 @@ html,body {
 /* User button + dropdown */
 .tb-user {
   display:inline-flex;align-items:center;gap:8px;
-  background:var(--surface);border:1px solid var(--sep);
+  background:var(--surface-2);border:1px solid var(--sep-strong);
   padding:4px 12px 4px 4px;border-radius:100px;
   cursor:pointer;position:relative;transition:background 0.15s,border-color 0.15s;
 }
@@ -268,7 +271,7 @@ html,body {
   font-size:10px;font-weight:600;color:#fff;
 }
 .tb-name { font-size:12.5px;font-weight:600;color:var(--t1); }
-.tb-role { font-size:10px;color:var(--t3); }
+.tb-role { font-size:10px;color:var(--t2); }
 .tb-chevron svg { width:11px;height:11px;stroke:var(--t3);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round; }
 
 .tb-dropdown {
