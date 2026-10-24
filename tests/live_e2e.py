@@ -606,6 +606,76 @@ try:
         check=True,
     )
 
+    # Global Find + Operational Attention: exact identifiers, role scope and direct destinations.
+    def search_doc(path, op):
+        st_search, _, raw_search = get_bytes(path, op)
+        assert st_search == 200, f'Global Find returned HTTP {st_search}: {raw_search[:240]!r}'
+        doc = json.loads(raw_search.decode('utf-8'))
+        assert doc.get('ok') is True, doc
+        return doc
+
+    def find_results(doc, record_type):
+        return [
+            item for group in doc.get('groups', []) for item in group.get('results', [])
+            if item.get('type') == record_type
+        ]
+
+    sup_find = search_doc('/search?q=WO-CI-TEAM-01', opener)
+    sup_wo_results = find_results(sup_find, 'work_order')
+    assert len(sup_wo_results) == 1 and sup_wo_results[0]['identifier'] == 'WO-CI-TEAM-01'
+    assert sup_wo_results[0]['url'].endswith(f'/workorders/view/{wo1_id}')
+    assert sup_wo_results[0]['status'] == 'In Progress' and 'EX 006' in sup_wo_results[0]['context']
+
+    eq_find = search_doc('/search?q=' + urllib.parse.quote('EX 006'), mgr_op)
+    assert any(item['identifier'] == 'EX 006' for item in find_results(eq_find, 'equipment'))
+
+    tech_find = search_doc('/search?q=WO-CI-TEAM-01', tech_op)
+    assert any(item['identifier'] == 'WO-CI-TEAM-01' for item in find_results(tech_find, 'work_order'))
+    tech_peer_find = search_doc('/search?q=WO-CI-HOLD-02', tech_op)
+    assert not find_results(tech_peer_find, 'work_order'), 'Technician found an unrelated WO through Global Find!'
+
+    store_find = search_doc('/search?q=WO-CI-TEAM-01', store_op)
+    assert not find_results(store_find, 'work_order') and not find_results(store_find, 'equipment')
+    store_part_find = search_doc('/search?q=295-5609', store_op)
+    store_items = find_results(store_part_find, 'inventory')
+    assert len(store_items) == 1 and store_items[0]['identifier'] == 'SP-EX-006'
+    assert store_items[0]['status'] == 'In stock' and '295-5609' in store_items[0]['context']
+
+    # The inventory destination filters to the exact SKU and exposes its existing drawer opener.
+    item_url = urllib.parse.urlsplit(store_items[0]['url'])
+    item_id = urllib.parse.parse_qs(item_url.query).get('item', [''])[0]
+    assert item_id and urllib.parse.parse_qs(item_url.query).get('q') == ['SP-EX-006']
+    item_path = item_url.path + '?' + item_url.query
+    st_item_link, _, item_link_b = get_bytes(item_path, store_op)
+    assert st_item_link == 200 and f'data-inv-open="{item_id}"' in item_link_b.decode('utf-8', 'replace')
+
+    # New parts appear for authorized roles, but not in an unrelated technician's attention.
+    _, _, mgr_attention_b = get_bytes('/spareparts/alerts', mgr_op)
+    mgr_attention_html = mgr_attention_b.decode('utf-8', 'replace')
+    mgr_topbar = mgr_attention_html.split('<header class="topbar">', 1)[1].split('</header>', 1)[0]
+    assert 'Parts newly available' in mgr_topbar and 'Kingpin Seal Kit' in mgr_topbar
+    assert f'workorders/view/{wo2_id}' in mgr_topbar and 'spareparts/alerts?status=New' in mgr_topbar
+
+    _, _, tech_attention_b = get_bytes('/spareparts', tech_op)
+    tech_attention_html = tech_attention_b.decode('utf-8', 'replace')
+    tech_topbar = tech_attention_html.split('<header class="topbar">', 1)[1].split('</header>', 1)[0]
+    assert 'Kingpin Seal Kit' not in tech_topbar and 'Parts newly available' not in tech_topbar
+
+    _, _, store_attention_b = get_bytes('/spareparts/alerts', store_op)
+    store_attention_html = store_attention_b.decode('utf-8', 'replace')
+    store_topbar = store_attention_html.split('<header class="topbar">', 1)[1].split('</header>', 1)[0]
+    assert 'Parts newly available' in store_topbar and 'Kingpin Seal Kit' in store_topbar
+    assert 'workorders/view/' not in store_topbar, 'Store attention linked to an unauthorized WO!'
+
+    # CEO is redirected away from the endpoint and receives neither operational utility.
+    ceo_op = session_opener('ceo@ci.local')
+    ceo_response = ceo_op.open(BASE + '/search?q=WO-CI-TEAM-01')
+    ceo_search_html = ceo_response.read().decode('utf-8', 'replace')
+    assert '/dashboard' in ceo_response.geturl() and not ceo_search_html.lstrip().startswith('{')
+    ceo_dashboard = get('/dashboard', ceo_op)
+    ceo_topbar = ceo_dashboard.split('<header class="topbar">', 1)[1].split('</header>', 1)[0]
+    assert 'global-find-trigger' not in ceo_topbar and 'operational-attention' not in ceo_topbar
+
     # Fetch alert ID from Manager alerts page; verify unassigned Technician CANNOT mark it read (SP-01)!
     _, _, m_al_b = get_bytes('/spareparts/alerts', mgr_op)
     m_al_html = m_al_b.decode('utf-8', 'replace')
