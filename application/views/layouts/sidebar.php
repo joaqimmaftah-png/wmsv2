@@ -33,9 +33,21 @@ $is_technician = ($role_id == 2);
 $is_store      = ($role_id == 3);
 $is_manager    = ($role_id == 4);
 $is_ceo        = ($role_id == 5);
+
+// Header state: keep global utilities relevant to the current destination.
+$is_dashboard     = ($uri === '' || $uri === 'dashboard' || $uri === 'dashboard/index');
+$is_spare_alerts  = (strpos($uri, 'spareparts/alerts') === 0);
+$is_security      = (strpos($uri, 'settings/security') === 0);
+$is_wo_create     = (strpos($uri, 'workorders/create') === 0);
+$spare_alert_count = isset($new_spares_alerts) ? (int)$new_spares_alerts : 0;
+$security_alert_count = isset($security_events_open) ? (int)$security_events_open : 0;
+$spare_alert_label = $spare_alert_count > 0
+    ? $spare_alert_count . ' new spare-part availability alert' . ($spare_alert_count === 1 ? '' : 's')
+    : 'Spare part availability alerts';
+$security_alert_label = $security_alert_count . ' security event' . ($security_alert_count === 1 ? '' : 's') . ' to review';
 ?>
 <!-- ═══ SIDEBAR ═══ -->
-<nav id="sidebar">
+<nav id="sidebar" aria-label="Primary navigation">
   <a href="<?= base_url('dashboard'); ?>" class="sb-logo">
     <div class="sb-logo-mark" style="background:transparent;box-shadow:none;overflow:hidden;padding:2px;">
       <img src="<?= base_url('uploads/logoam.png') ?>" alt="Logo"
@@ -423,77 +435,85 @@ $is_ceo        = ($role_id == 5);
 
 <!-- ═══ CANVAS ═══ -->
 <div id="canvas">
-  <div class="topbar">
+  <header class="topbar">
     <div class="topbar-row">
-      <div>
+      <div class="topbar-heading">
+        <?php if ($is_dashboard): ?>
         <div class="topbar-greeting"><?= $greeting; ?>, <strong><?= htmlspecialchars((string)($fn ?: 'there')); ?></strong> &mdash; <?= date('l, d F Y'); ?></div>
+        <?php endif; ?>
         <div class="page-heading"><?= isset($page_title) ? htmlspecialchars((string)($page_title)) : 'Dashboard'; ?></div>
       </div>
       <div class="topbar-actions">
-        <div class="live-pill">
-          <div class="sonar"></div>
-          <span id="clock-display">--:--:--</span>
-        </div>
-        <?php if ($is_supervisor && !empty($security_events_open)): ?>
-        <a href="<?= base_url('settings/security') ?>" class="live-pill"
-           title="<?= (int)$security_events_open ?> sign-in security event(s) awaiting review"
+        <?php if ($is_supervisor && $security_alert_count > 0 && !$is_security): ?>
+        <a href="<?= base_url('settings/security') ?>" class="live-pill security-pill"
+           aria-label="<?= htmlspecialchars((string)$security_alert_label, ENT_QUOTES, 'UTF-8'); ?>"
+           title="<?= htmlspecialchars((string)$security_alert_label, ENT_QUOTES, 'UTF-8'); ?>"
            style="text-decoration:none;color:var(--red);border-color:var(--red);font-weight:700;">
-          <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          <?= (int)$security_events_open ?> sign-in alert<?= (int)$security_events_open === 1 ? '' : 's' ?>
+          <svg aria-hidden="true" viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span class="security-pill-count"><?= $security_alert_count ?></span>
+          <span class="security-pill-label">security event<?= $security_alert_count === 1 ? '' : 's' ?> to review</span>
         </a>
         <?php endif; ?>
-        <?php if (!$is_ceo): ?>
-        <a href="<?= base_url('spareparts/alerts') ?>" class="live-pill" title="Spare part availability alerts<?= !empty($new_spares_alerts) ? ' — '.(int)$new_spares_alerts.' new' : '' ?>" style="text-decoration:none;position:relative;">
-          <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-          <?php if (!empty($new_spares_alerts)): ?>
-          <span style="position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;"><?= (int)$new_spares_alerts ?></span>
+        <?php if (!$is_ceo && !$is_spare_alerts): ?>
+        <a href="<?= base_url('spareparts/alerts') ?>" class="live-pill spare-alerts-pill"
+           aria-label="<?= htmlspecialchars((string)$spare_alert_label, ENT_QUOTES, 'UTF-8'); ?>"
+           title="<?= htmlspecialchars((string)$spare_alert_label, ENT_QUOTES, 'UTF-8'); ?>"
+           style="text-decoration:none;position:relative;">
+          <svg aria-hidden="true" viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+          <?php if ($spare_alert_count > 0): ?>
+          <span aria-hidden="true" style="position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;"><?= $spare_alert_count ?></span>
           <?php endif; ?>
         </a>
         <?php endif; ?>
-        <?php if ($is_supervisor || $is_technician): ?>
-        <a href="<?= base_url('workorders/create'); ?>" class="btn-cta">
-          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New WO
+        <?php if (($is_supervisor || $is_technician) && !$is_wo_create): ?>
+        <a href="<?= base_url('workorders/create'); ?>" class="btn-cta" aria-label="New work order">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span class="cta-label">New WO</span>
         </a>
         <?php endif; ?>
-        <div class="tb-user" id="tb-user-pill" onclick="wmsToggleDD(event)">
-          <div class="tb-avatar"><?= $initials; ?></div>
-          <div>
-            <div class="tb-name"><?= htmlspecialchars((string)($full_name)); ?></div>
-            <div class="tb-role"><?= $role_lbl; ?></div>
-          </div>
-          <div class="tb-chevron"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
-          <div class="tb-dropdown" id="tb-dropdown">
+        <div class="tb-user" id="tb-user-pill">
+          <button type="button" class="tb-user-trigger" id="tb-user-trigger"
+                  aria-label="Account menu" aria-expanded="false" aria-controls="tb-dropdown">
+            <span class="tb-avatar" aria-hidden="true"><?= $initials; ?></span>
+            <span class="tb-user-copy">
+              <span class="tb-name"><?= htmlspecialchars((string)($full_name)); ?></span>
+              <span class="tb-role"><?= $role_lbl; ?></span>
+            </span>
+            <span class="tb-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+          </button>
+          <div class="tb-dropdown" id="tb-dropdown" role="group" aria-label="Account actions">
             <div class="tbd-head">
               <div class="tbd-name"><?= htmlspecialchars((string)($full_name)); ?></div>
               <div class="tbd-email"><?= htmlspecialchars((string)($email)); ?></div>
             </div>
             <?php if ($is_supervisor): ?>
             <a href="<?= base_url('users'); ?>" class="tbd-item">
-              <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg> Manage Users
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg> Manage Users
             </a>
             <a href="<?= base_url('settings'); ?>" class="tbd-item">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M5.34 18.66l-1.41 1.41M21 12h-2M5 12H3"/></svg> Settings
+              <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M5.34 18.66l-1.41 1.41M21 12h-2M5 12H3"/></svg> Settings
             </a>
             <div class="tbd-sep"></div>
             <?php endif; ?>
+            <?php if (!$is_ceo): ?>
             <a href="<?= base_url('users/profile'); ?>" class="tbd-item">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               My Profile &amp; Signature
             </a>
             <a href="<?= base_url('users/change_password'); ?>" class="tbd-item">
-              <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Change Password
+              <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Change Password
             </a>
+            <?php endif; ?>
             <div class="tbd-sep"></div>
             <?= form_open('logout', array('style' => 'margin:0;')) ?>
               <button type="submit" class="tbd-item danger" style="width:100%;border:0;background:transparent;text-align:left;cursor:pointer;font:inherit;">
-                <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Sign Out
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Sign Out
               </button>
             <?= form_close() ?>
           </div>
         </div>
       </div>
     </div>
-  </div><!-- /.topbar -->
+  </header><!-- /.topbar -->
 
   <div class="page">
   <?php if ($this->session->flashdata('success')): ?>
@@ -505,26 +525,46 @@ $is_ceo        = ($role_id == 5);
 
 <script>
 (function(){
-  function tick(){
-    var n=new Date(),h=n.getHours(),m=n.getMinutes(),s=n.getSeconds();
-    var p=function(v){return v<10?'0'+v:v;};
-    var el=document.getElementById('clock-display');
-    if(el) el.textContent=p(h)+':'+p(m)+':'+p(s);
-  }
-  tick(); setInterval(tick,1000);
-})();
-function wmsToggleDD(e){
-  if(e) e.stopPropagation();
-  var d=document.getElementById('tb-dropdown');
-  if(d) d.classList.toggle('open');
-}
-document.addEventListener('click',function(e){
   var pill=document.getElementById('tb-user-pill');
-  if(pill && !pill.contains(e.target)){
-    var d=document.getElementById('tb-dropdown');
-    if(d) d.classList.remove('open');
+  var trigger=document.getElementById('tb-user-trigger');
+  var dropdown=document.getElementById('tb-dropdown');
+  if(!pill||!trigger||!dropdown) return;
+
+  function closeDropdown(restoreFocus){
+    dropdown.classList.remove('open');
+    trigger.setAttribute('aria-expanded','false');
+    if(restoreFocus) trigger.focus();
   }
-});
+
+  trigger.addEventListener('click',function(e){
+    e.stopPropagation();
+    var open=!dropdown.classList.contains('open');
+    dropdown.classList.toggle('open',open);
+    trigger.setAttribute('aria-expanded',open?'true':'false');
+
+    // Keyboard activation benefits from moving into the disclosed links;
+    // pointer users keep their current focus and visual context.
+    if(open && e.detail===0){
+      var first=dropdown.querySelector('a[href],button');
+      if(first) first.focus();
+    }
+  });
+
+  document.addEventListener('click',function(e){
+    if(!pill.contains(e.target)){
+      closeDropdown(dropdown.contains(document.activeElement));
+    }
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape' && dropdown.classList.contains('open')){
+      e.preventDefault();
+      closeDropdown(true);
+    }
+  });
+  pill.addEventListener('focusout',function(e){
+    if(!pill.contains(e.relatedTarget)) closeDropdown(false);
+  });
+})();
 (function(){
   var sb=document.getElementById('sidebar');
   var cv=document.getElementById('canvas');
