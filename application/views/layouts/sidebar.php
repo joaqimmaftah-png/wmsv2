@@ -532,4 +532,20 @@ document.addEventListener('click',function(e){
   sb.addEventListener('mouseenter',function(){ sb.classList.add('expanded'); cv.style.marginLeft='224px'; });
   sb.addEventListener('mouseleave',function(){ sb.classList.remove('expanded'); cv.style.marginLeft='72px'; });
 })();
+(function(){
+  var cv=document.getElementById('canvas');
+  var topbar=cv ? cv.querySelector('.topbar') : null;
+  if(!cv||!topbar) return;
+
+  var isScrolled=null;
+  function syncTopbarElevation(){
+    var next=cv.scrollTop>0;
+    if(next===isScrolled) return;
+    topbar.classList.toggle('is-scrolled',next);
+    isScrolled=next;
+  }
+
+  cv.addEventListener('scroll',syncTopbarElevation,{passive:true});
+  syncTopbarElevation();
+})();
 </script>
