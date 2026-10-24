@@ -38,7 +38,6 @@ $is_ceo        = ($role_id == 5);
 $is_dashboard     = ($uri === '' || $uri === 'dashboard' || $uri === 'dashboard/index');
 $is_spare_alerts  = (strpos($uri, 'spareparts/alerts') === 0);
 $is_security      = (strpos($uri, 'settings/security') === 0);
-$is_wo_create     = (strpos($uri, 'workorders/create') === 0);
 $spare_alert_count = isset($new_spares_alerts) ? (int)$new_spares_alerts : 0;
 $security_alert_count = isset($security_events_open) ? (int)$security_events_open : 0;
 $spare_alert_label = $spare_alert_count > 0
@@ -463,11 +462,6 @@ $security_alert_label = $security_alert_count . ' security event' . ($security_a
           <?php if ($spare_alert_count > 0): ?>
           <span aria-hidden="true" style="position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;"><?= $spare_alert_count ?></span>
           <?php endif; ?>
-        </a>
-        <?php endif; ?>
-        <?php if (($is_supervisor || $is_technician) && !$is_wo_create): ?>
-        <a href="<?= base_url('workorders/create'); ?>" class="btn-cta" aria-label="New work order">
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span class="cta-label">New WO</span>
         </a>
         <?php endif; ?>
         <div class="tb-user" id="tb-user-pill">
