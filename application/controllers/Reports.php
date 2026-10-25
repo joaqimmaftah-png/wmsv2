@@ -18,6 +18,42 @@ class Reports extends MY_Controller {
         $this->load->model(['Dashboard_model','Workorder_model','Team_model','Lubricant_model','Equipment_model','Order_model','Supplier_model','Asset_model','Materials_model','Store_model','Settings_model','Kpi_target_model','Kpi_engine_model','W36_report_model']);
     }
 
+    /**
+     * When a W36 report's publication becomes due.
+     *
+     * The application has NO publication-deadline setting, so the only honest
+     * boundary is the report's own configured reporting week: its last day is
+     * the "due soon" warning window and its last instant is the deadline.
+     * If the business later defines a formal cut-off (e.g. Monday 09:00 or a
+     * settings key), it belongs in this ONE function — no view or report may
+     * compute its own.  Nothing here changes when publishing is allowed.
+     *
+     * @param  string $week_end 'Y-m-d'
+     * @return array{warning_from:string, deadline:string} 'Y-m-d H:i:s'
+     */
+    private function _publication_window($week_end) {
+        return array(
+            'warning_from' => date('Y-m-d 00:00:00', strtotime($week_end)),
+            'deadline'     => date('Y-m-d 23:59:59', strtotime($week_end)),
+        );
+    }
+
+    /**
+     * The pure state classification of one report week.  Kept separate from
+     * the data reads so the five-state ladder can be reasoned about (and
+     * regression-tested) on its own.  Timestamps are 'Y-m-d H:i:s' strings,
+     * which compare lexicographically, so no timezone math is repeated here.
+     *
+     * @return string published | draft_in_progress | draft_due_soon |
+     *                unpublished_action_required
+     */
+    private function _publication_state($is_published, $now, $warning_from, $deadline) {
+        if ($is_published) return 'published';
+        if (strcmp((string)$now, (string)$deadline) >= 0) return 'unpublished_action_required';
+        if (strcmp((string)$now, (string)$warning_from) >= 0) return 'draft_due_soon';
+        return 'draft_in_progress';
+    }
+
     public function index() {
         $data['page_title'] = 'Reports';
         // default week shown by the weekly-report launcher (W0.7)
@@ -57,10 +93,20 @@ class Reports extends MY_Controller {
             'store_available'     => false,
             'targets_ready'       => false,
             'w36_snapshot'        => null,
-            'w36_snapshots_available' => false,
-            'w36_due_count'       => 0,
-            'w36_due_latest'      => null,
-            'w36_due_window'      => self::PUBLICATION_LOOKBACK_WEEKS,
+            // Five-state W36 publication ladder.  Every key has an honest
+            // default so a failed telemetry read never looks like a known
+            // "Draft" or a known published week.
+            'w36_pub'             => array(
+                'checkable'     => false,
+                'state'         => 'unknown',
+                'published_at'  => null,
+                'warning_from'  => null,
+                'deadline'      => null,
+                'previous'      => null,
+                'older_count'   => 0,
+                'older_latest'  => null,
+                'window'        => self::PUBLICATION_LOOKBACK_WEEKS,
+            ),
             'weekly_open_hours'   => 168.0,
             'daily_open_hours'    => 24.0,
         );
@@ -128,34 +174,65 @@ class Reports extends MY_Controller {
             $telemetry['targets_ready']     = (bool)$this->Kpi_target_model->table_ready();
             $telemetry['w36_snapshot']      = $this->W36_report_model->snapshot_of($week_start);
 
-            // The open week's W36 is a draft by design — its figures keep
-            // moving, so the hub reports it as an informational status, not an
-            // alert.  Publication becomes due the day after the configured
-            // reporting week ends: that week's figures are then complete.
-            // Look back a bounded number of completed weeks so a publication
-            // missed three weeks ago does not vanish once a newer week is
-            // published.  No new deadline or setting is introduced: the only
-            // boundaries are Settings_model's configured week start and its
-            // start + 6 days week end.
+            /* ── W36 publication ladder ──────────────────────────────────
+               Current week:  Draft — Week in progress (Informational)
+                              Draft — Publication due soon (Warning)
+                              Unpublished — Action required (High)
+               Previous week: Published (No action) / overdue (High)
+               Only COMPLETED weeks are checked for a missing snapshot, over a
+               bounded window, so a report missed three weeks ago cannot vanish
+               when a newer week is published.  The deadline itself comes from
+               the configured week end — no SLA or setting is invented.      */
             $lookback = self::PUBLICATION_LOOKBACK_WEEKS;
-            $due_from = date('Y-m-d', strtotime($week_start . ' -' . ($lookback * 7) . ' days'));
-            $due_to   = date('Y-m-d', strtotime($week_start . ' -1 day'));
-            $published_starts = $this->W36_report_model->published_week_starts($due_from, $due_to);
-            $telemetry['w36_snapshots_available'] = ($published_starts !== null);
-            if (is_array($published_starts)) {
-                $unpublished = array();
+            $window   = $this->_publication_window($week_end);
+            $now      = date('Y-m-d H:i:s');
+            $from     = date('Y-m-d', strtotime($week_start . ' -' . ($lookback * 7) . ' days'));
+            $to       = date('Y-m-d', strtotime($week_start . ' -1 day'));
+            $published_starts = $this->W36_report_model->published_week_starts($from, $to);
+            $checkable        = ($published_starts !== null);
+
+            $pub = $telemetry['w36_pub'];
+            $pub['checkable']    = $checkable;
+            $pub['window']       = $lookback;
+            $pub['warning_from'] = $window['warning_from'];
+            $pub['deadline']     = $window['deadline'];
+            $pub['state']        = $this->_publication_state(
+                !empty($telemetry['w36_snapshot']),
+                $now, $window['warning_from'], $window['deadline']
+            );
+            if (!empty($telemetry['w36_snapshot']['published_at'])) {
+                $pub['published_at'] = $telemetry['w36_snapshot']['published_at'];
+            }
+
+            if ($checkable) {
+                $completed = array();
                 for ($i = 1; $i <= $lookback; $i++) {
                     $s = date('Y-m-d', strtotime($week_start . ' -' . ($i * 7) . ' days'));
-                    if (isset($published_starts[$s])) continue;
-                    $unpublished[] = array(
+                    $e = date('Y-m-d', strtotime($s . ' +6 days'));
+                    $completed[] = array(
                         'start'     => $s,
-                        'end'       => date('Y-m-d', strtotime($s . ' +6 days')),
+                        'end'       => $e,
                         'iso_label' => $this->Settings_model->iso_week_label($s),
+                        'published' => isset($published_starts[$s]),
                     );
                 }
-                $telemetry['w36_due_count']  = count($unpublished);
-                $telemetry['w36_due_latest'] = $unpublished ? $unpublished[0] : null;
+                // The just-closed week: deadline passed → "Action required".
+                $prev       = $completed[0];
+                $prev_win   = $this->_publication_window($prev['end']);
+                $prev['state'] = $this->_publication_state(
+                    $prev['published'], $now, $prev_win['warning_from'], $prev_win['deadline']
+                );
+                $pub['previous'] = $prev;
+
+                // Older completed weeks with no snapshot: "Overdue".
+                $older = array();
+                for ($i = 1; $i < count($completed); $i++) {
+                    if (!$completed[$i]['published']) $older[] = $completed[$i];
+                }
+                $pub['older_count']  = count($older);
+                $pub['older_latest'] = $older ? $older[0] : null;
             }
+            $telemetry['w36_pub'] = $pub;
 
             $telemetry['available']         = true;
         } catch (Throwable $e) {

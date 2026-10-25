@@ -52,25 +52,45 @@ assert.ok(view.includes('no breakdowns in window'), 'undefined MTTR/MTBF are nam
 assert.ok(view.includes('@media (prefers-reduced-motion:reduce)'), 'reduced motion honoured');
 assert.ok(view.includes('focus-visible'), 'visible keyboard focus');
 
-/* ── The open week's draft is informational; only CLOSED weeks are due ── */
+/* ── Five-state W36 publication ladder ──────────────────────────────── */
 assert.ok(w36model.includes('public function published_week_starts('),
   'W36 exposes a read-only publication census (row presence, not payload decode)');
+assert.ok(controller.includes('_publication_window') && controller.includes('_publication_state'),
+  'deadline and state classification are single, testable helpers');
 assert.ok(controller.includes('PUBLICATION_LOOKBACK_WEEKS'),
-  'the due-week look-back is bounded, not unbounded history');
+  'the look-back over completed weeks is bounded');
 assert.ok(index.includes('published_week_starts('), 'index() checks completed weeks');
-assert.ok(index.includes("'w36_snapshots_available'"), 'index() distinguishes cannot-check from none');
-assert.ok(view.includes("'w36_snapshots_available' => false"), 'publication state has an honest default');
-assert.ok(view.includes('$w36_due_latest'), 'the hub reads the most recent due week');
-assert.ok(view.includes('Draft · informational'), 'the open week is visibly labelled informational');
-assert.ok(!view.includes('if (!$w36_published)'),
-  'the open week’s draft is not pushed into the attention list');
-assert.ok(view.includes('Publication becomes due '), 'the due boundary is explained in words');
-assert.ok(view.includes("'tone' => 'warn'") && view.includes('Review & publish'),
-  'a completed unpublished week is an attention item with a real destination');
+assert.ok(controller.includes('$this->_publication_window($week_end)'),
+  'the deadline derives from the configured week end, not an invented SLA');
+assert.ok(view.includes("'w36_pub'") && view.includes("'state' => 'unknown'"),
+  'publication state has an honest default');
+for (const s of ['unknown', 'published', 'draft_in_progress', 'draft_due_soon', 'unpublished_action_required']) {
+  assert.ok(view.includes("'" + s + "' => array("), `publication state ${s} is declared`);
+}
+for (const [priority, display] of [
+  ['Informational', 'Draft — Week in progress'],
+  ['Warning', 'Draft — Publication due soon'],
+  ['High', 'Unpublished — Action required'],
+  ['No action', 'Published'],
+]) {
+  assert.ok(view.includes(priority) && view.includes(display),
+    `priority ${priority} carries its own display text`);
+}
+assert.ok(view.includes("'crit' => 0, 'high' => 1, 'warn' => 2, 'info' => 3"),
+  'High ranks above Warning and Attention');
+assert.ok(view.includes("'high' => 'High'"), 'High is word-labelled, not colour-only');
+assert.ok(view.includes("'tone' => 'high'") && view.includes('Review & publish'),
+  'High items are actionable with a real destination');
+assert.ok(view.includes('Publication due soon') && view.includes('Review draft'),
+  'the Warning step is actionable on the deadline-approaching day');
+assert.ok(view.includes('was published — no action needed'),
+  'an already published previous week is explicitly No action');
+assert.ok(view.includes('unpublished — Overdue'),
+  'older unpublished completed weeks are Overdue');
 assert.ok(view.includes('reports/weekly_w36?week_start='),
-  'the due item links by exact week start, honouring a non-Monday week start');
-assert.ok(view.includes('strtotime($week_end)'),
-  'the due boundary comes from the configured week end, not an invented deadline');
+  'every publication item links by exact week start, honouring a non-Monday week start');
+assert.ok(!view.includes('if (!$w36_published)'),
+  'the in-progress draft is not blanket-added to the attention list');
 assert.ok(view.includes('$h($item[\'note\'])'), 'the publication note is escaped');
 assert.ok(/\.rpt-exc-act\s*\{[^}]*min-height:24px/.test(view) &&
   /\.rpt-panel-link\s*\{[^}]*min-height:24px/.test(view),
@@ -78,6 +98,7 @@ assert.ok(/\.rpt-exc-act\s*\{[^}]*min-height:24px/.test(view) &&
 
 /* Honest partial states for the publication check itself */
 assert.ok(view.includes('Status unavailable'), 'unreadable DB is not reported as a known draft');
+assert.ok(view.includes("$defaults['w36_pub']"), 'a partial telemetry payload cannot lose state keys');
 assert.ok(view.includes('Publishing is unavailable because the snapshot table'),
   'a missing snapshot table is disclosed, not treated as an unpublished week');
 assert.ok(view.includes('Weekly publication could not be checked'),

@@ -22,10 +22,19 @@
  * lost and the page works with JavaScript disabled.  No dead links, no
  * duplicate ids, no colour-only status, one h1.
  *
- * The CURRENT week's W36 stays a visible, informational "Draft" all week —
- * figures are still moving, so it is not an exception.  Publication becomes
- * due once that configured reporting week has closed; only completed weeks
- * without a published snapshot are raised as actionable attention items.
+ * W36 publication follows a five-state ladder, computed in the controller
+ * from the configured reporting week's own end (the only deadline the system
+ * defines) and shown in words everywhere:
+ *
+ *   current, before the deadline  → Draft — Week in progress  → Informational
+ *   current, deadline approaching → Draft — Publication due soon → Warning
+ *   current, deadline passed      → Unpublished — Action required → High
+ *   previous, published           → Published                  → No action
+ *   previous, not published       → Unpublished — Overdue       → High
+ *
+ * The open week's draft stays visible at all times; it only becomes an
+ * exception at the Warning / High steps.  A missing snapshot table or an
+ * unreadable database is reported as unknown, never as a known draft.
  */
 
 $h = function ($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); };
@@ -61,11 +70,21 @@ $defaults = array(
     'fleet_total' => 0, 'machines_down' => 0, 'equipment_list' => array(),
     'reorder_count' => 0, 'out_of_stock_count' => 0, 'reorder_units' => 0,
     'store_available' => false, 'targets_ready' => false,
-    'w36_snapshot' => null, 'w36_snapshots_available' => false,
-    'w36_due_count' => 0, 'w36_due_latest' => null, 'w36_due_window' => 4,
+    'w36_snapshot' => null,
+    'w36_pub' => array(
+        'checkable' => false, 'state' => 'unknown', 'published_at' => null,
+        'warning_from' => null, 'deadline' => null, 'previous' => null,
+        'older_count' => 0, 'older_latest' => null, 'window' => 4,
+    ),
     'weekly_open_hours' => 168.0, 'daily_open_hours' => 24.0,
 );
 $t = array_merge($defaults, $t);
+// The publication ladder is nested; merge it too so a partial telemetry
+// payload can never leave a state/key undefined.
+$t['w36_pub'] = array_merge(
+    $defaults['w36_pub'],
+    isset($t['w36_pub']) && is_array($t['w36_pub']) ? $t['w36_pub'] : array()
+);
 $live = !empty($t['available']);
 
 $target       = (float)$t['avail_target_pct'];
@@ -100,42 +119,87 @@ $window_txt  = $window_from && $window_to
     ? date('d M', strtotime($window_from)) . ' – ' . date('d M Y', strtotime($window_to))
     : 'last 30 days';
 
-$w36_published = !empty($t['w36_snapshot']);
-$w36_date = '';
-if ($w36_published && !empty($t['w36_snapshot']['published_at'])) {
-    $w36_date = date('d M Y', strtotime($t['w36_snapshot']['published_at']));
+/* ── W36 publication ladder — states are computed in Reports::index() ─── */
+$pub              = $t['w36_pub'];
+$pub_checkable    = !empty($pub['checkable']);
+$pub_state        = $live ? (string)$pub['state'] : 'unknown';
+$pub_window       = max(1, (int)$pub['window']);
+$pub_date         = '';
+if (!empty($pub['published_at'])) {
+    $pub_date = date('d M Y', strtotime($pub['published_at']));
 }
+$deadline_txt = !empty($pub['deadline'])
+    ? date('d M Y', strtotime($pub['deadline']))
+    : date('d M Y', strtotime($week_end));
+$pub_previous = ($live && $pub_checkable && is_array($pub['previous'])
+    && isset($pub['previous']['state'], $pub['previous']['start'],
+             $pub['previous']['end'], $pub['previous']['iso_label']))
+    ? $pub['previous'] : null;
+$pub_older_count = ($live && $pub_checkable) ? (int)$pub['older_count'] : 0;
+// Total includes the just-closed week when it is also unpublished, so the
+// "N of the last 4 completed weeks" sentence can never understate the gap.
+$pub_unpublished_total = $pub_older_count
+    + ($pub_previous !== null && $pub_previous['state'] !== 'published' ? 1 : 0);
+$pub_older = ($pub_older_count > 0 && is_array($pub['older_latest'])
+    && isset($pub['older_latest']['start'], $pub['older_latest']['end'], $pub['older_latest']['iso_label']))
+    ? $pub['older_latest'] : null;
 
-/* Publication timing uses only the configured reporting week's last day.
-   While the week is open the draft is a status: it stays visible in the
-   context pill and on its library row, but never becomes an alert.  A
-   completed week without a snapshot is due, and the controller passes the
-   most recent one from its bounded look-back. */
-$w36_checkable  = !empty($t['w36_snapshots_available']);
-$w36_due_count  = (int)$t['w36_due_count'];
-$w36_due_window = max(1, (int)$t['w36_due_window']);
-$w36_due_latest = ($live && $w36_checkable && $w36_due_count > 0
-    && is_array($t['w36_due_latest'])
-    && isset($t['w36_due_latest']['start'], $t['w36_due_latest']['end'], $t['w36_due_latest']['iso_label']))
-    ? $t['w36_due_latest'] : null;
-$w36_status     = !$live ? 'unknown' : ($w36_published ? 'ok' : 'draft');
-$week_end_txt   = date('d M Y', strtotime($week_end));
+/* One vocabulary for the whole page: display text, priority word, tone and
+   short badge.  The words are always present — colour is never the signal. */
+$pub_states = array(
+    'unknown' => array(
+        'display' => 'Status unavailable', 'priority' => 'Unknown',
+        'class' => 'is-unknown', 'badge' => 'Status unavailable', 'badge_tone' => 'neutral',
+    ),
+    'published' => array(
+        'display' => 'Published' . ($pub_date ? ' ' . $pub_date : ''), 'priority' => 'No action',
+        'class' => 'is-ok', 'badge' => 'Published' . ($pub_date ? ' ' . $pub_date : ''), 'badge_tone' => 'ok',
+    ),
+    'draft_in_progress' => array(
+        'display' => 'Draft — Week in progress', 'priority' => 'Informational',
+        'class' => 'is-draft', 'badge' => 'Draft · in progress', 'badge_tone' => 'neutral',
+    ),
+    'draft_due_soon' => array(
+        'display' => 'Draft — Publication due soon', 'priority' => 'Warning',
+        'class' => 'is-due', 'badge' => 'Draft · due soon', 'badge_tone' => 'warn',
+    ),
+    'unpublished_action_required' => array(
+        'display' => 'Unpublished — Action required', 'priority' => 'High',
+        'class' => 'is-late', 'badge' => 'Unpublished · action required', 'badge_tone' => 'crit',
+    ),
+);
+if (!isset($pub_states[$pub_state])) $pub_state = 'unknown';
+$pub_meta = $pub_states[$pub_state];
 
-/* The library row explains the status in words; the colour never carries it
-   alone.  An unreadable database must not be reported as a known "Draft". */
+/* The library row explains the current state AND the previous week's state
+   in words.  An unreadable database is never reported as a known "Draft". */
+$note = array();
 if (!$live) {
-    $w36_row_note = 'Publication status cannot be read on this request. Open the report to check it.';
-} elseif ($w36_published) {
-    $w36_row_note = 'Published' . ($w36_date ? ' ' . $w36_date : '')
-        . ' — the figures are frozen; re-opening and downloads return this snapshot.';
-} elseif (!$w36_checkable) {
-    $w36_row_note = 'Draft — this week’s figures are live. Publishing is unavailable because the snapshot table '
-        . 'is not installed, so no publication reminder is raised.';
+    $note[] = 'Publication status cannot be read on this request. Open the report to check it.';
 } else {
-    $w36_row_note = 'Draft is expected while the week is open: the figures keep changing. Publication becomes due '
-        . 'after ' . $iso_week . ' ends on ' . $week_end_txt
-        . '; a completed week without a published snapshot then appears under “Requires attention”.';
+    if ($pub_state === 'published') {
+        $note[] = 'Published' . ($pub_date ? ' ' . $pub_date : '') . ' — the figures are frozen; no action needed.';
+    } elseif ($pub_state === 'draft_in_progress') {
+        $note[] = 'Draft — week in progress. The figures keep changing; publication is due by the end of '
+                . $iso_week . ' on ' . $deadline_txt
+                . '. It becomes a Warning on the final day and High once the deadline passes.';
+    } elseif ($pub_state === 'draft_due_soon') {
+        $note[] = 'Draft — publication due soon. ' . $iso_week . ' ends ' . $deadline_txt
+                . '; review the draft now so it can be published on time.';
+    } elseif ($pub_state === 'unpublished_action_required') {
+        $note[] = 'Unpublished — action required. The publication deadline has passed; publish the frozen report now.';
+    }
+    if (!$pub_checkable) {
+        $note[] = 'Publishing is unavailable because the snapshot table is not installed, so no publication reminder is raised.';
+    } elseif ($pub_previous !== null) {
+        if ($pub_previous['state'] === 'published') {
+            $note[] = 'Last week (' . $pub_previous['iso_label'] . ') was published — no action needed.';
+        } else {
+            $note[] = 'Last week (' . $pub_previous['iso_label'] . ') is unpublished — Action required (see “Requires attention”).';
+        }
+    }
 }
+$w36_row_note = implode(' ', $note);
 
 /* ── The 30-day series for the one chart (never fabricated) ──────────── */
 
@@ -211,29 +275,59 @@ if ($live) {
             'href' => $bu('reports/workshop_daily?date=' . $today), 'action' => 'Daily report',
         );
     }
-    // Only a CLOSED week can be due for publication.  The current week's
-    // draft is deliberately absent here; it remains visible as status above
-    // and as a note on its library row below.
-    if ($w36_due_latest !== null) {
-        $due_detail = 'Week ended ' . date('d M Y', strtotime($w36_due_latest['end']))
-                    . ' · publish to freeze the figures';
-        if ($w36_due_count > 1) {
-            $due_detail .= ' · ' . $w36_due_count . ' of the last ' . $w36_due_window
-                         . ' completed weeks are unpublished';
-        }
+    /* Publication ladder → exceptions.  The Informational draft is status
+       only; Warning, High and Overdue are actionable and word-labelled.
+       Every destination is an exact week-start date, not an ISO label, so a
+       non-Monday report_week_start_day still resolves to the right week. */
+    if ($pub_checkable && $pub_state === 'draft_due_soon') {
         $exceptions[] = array(
             'tone' => 'warn',
-            'label' => $w36_due_latest['iso_label'] . ' weekly report is still a draft',
-            'detail' => $due_detail,
+            'label' => $iso_week . ' weekly report — Publication due soon',
+            'detail' => 'Reporting week ends ' . $deadline_txt
+                      . ' · review the draft now so it can be published on time',
             'count' => null,
-            // An exact date, not an ISO label: weekly_w36 resolves it through
-            // Settings_model::week_start(), including a non-Monday week start.
-            'href' => $bu('reports/weekly_w36?week_start=' . $w36_due_latest['start']),
+            'href' => $bu('reports/weekly_w36?week_start=' . $week_start),
+            'action' => 'Review draft',
+        );
+    }
+    if ($pub_checkable && $pub_state === 'unpublished_action_required') {
+        $exceptions[] = array(
+            'tone' => 'high',
+            'label' => $iso_week . ' weekly report — Unpublished — Action required',
+            'detail' => 'Publication deadline was ' . $deadline_txt . ' · publish the frozen report now',
+            'count' => null,
+            'href' => $bu('reports/weekly_w36?week_start=' . $week_start),
+            'action' => 'Review & publish',
+        );
+    }
+    if ($pub_previous !== null && $pub_previous['state'] !== 'published') {
+        $exceptions[] = array(
+            'tone' => 'high',
+            'label' => $pub_previous['iso_label'] . ' weekly report is unpublished — Action required',
+            'detail' => 'Week ended ' . date('d M Y', strtotime($pub_previous['end']))
+                      . ' · deadline passed · publish to freeze the figures',
+            'count' => null,
+            'href' => $bu('reports/weekly_w36?week_start=' . $pub_previous['start']),
+            'action' => 'Review & publish',
+        );
+    }
+    if ($pub_older !== null) {
+        $exceptions[] = array(
+            'tone' => 'high',
+            'label' => $pub_older_count . ' earlier weekly report' . ($pub_older_count === 1 ? '' : 's')
+                     . ' unpublished — Overdue',
+            'detail' => 'Most recent: ' . $pub_older['iso_label'] . ' ended '
+                      . date('d M Y', strtotime($pub_older['end']))
+                      . ' · ' . $pub_unpublished_total . ' of the last ' . $pub_window
+                      . ' completed weeks are unpublished',
+            'count' => $pub_older_count,
+            'href' => $bu('reports/weekly_w36?week_start=' . $pub_older['start']),
             'action' => 'Review & publish',
         );
     }
 }
-$rank = array('crit' => 0, 'warn' => 1, 'info' => 2);
+$rank = array('crit' => 0, 'high' => 1, 'warn' => 2, 'info' => 3);
+$severity_words = array('crit' => 'Critical', 'high' => 'High', 'warn' => 'Attention', 'info' => 'Information');
 usort($exceptions, function ($a, $b) use ($rank) {
     return $rank[$a['tone']] - $rank[$b['tone']];
 });
@@ -241,11 +335,13 @@ usort($exceptions, function ($a, $b) use ($rank) {
 // The all-clear sentence states exactly what was checked — including when
 // publication could not be checked at all — so it can never imply more than
 // the data supports.
-$calm_text = $w36_checkable
-    ? 'Stock, PM, machine status and the ' . $w36_due_window
+$calm_text = !$pub_checkable
+    ? 'No out-of-stock items, overdue PM or out-of-service machines were found. '
+      . 'Weekly publication could not be checked on this database.'
+    : 'Stock, PM, machine status and the ' . $pub_window
       . ' most recent completed weekly reports show nothing that needs action.'
-    : 'No out-of-stock items, overdue PM or out-of-service machines were found. '
-      . 'Weekly publication could not be checked on this database.';
+      . ($pub_previous !== null && $pub_previous['state'] === 'published'
+          ? ' Last week (' . $pub_previous['iso_label'] . ') was published — no action needed.' : '');
 
 /* ── Year / horizon option builders ─────────────────────────────────── */
 
@@ -299,9 +395,8 @@ $sections = array(
                 'title' => $report_name . ' Weekly Report',
                 'desc' => 'The approved weekly sheet generated from the system, with data-quality checks and a frozen publication option.',
                 'meta' => 'Weekly · ' . $iso_week . ' · Screen, Excel, print',
-                'badge' => !$live ? 'Status unavailable'
-                    : ($w36_published ? 'Published' . ($w36_date ? ' ' . $w36_date : '') : 'Draft'),
-                'badge_tone' => $w36_published ? 'ok' : 'neutral',
+                'badge' => $pub_meta['badge'],
+                'badge_tone' => $pub_meta['badge_tone'],
                 'note' => $w36_row_note,
                 'featured' => true,
                 'form' => array(
@@ -599,7 +694,16 @@ $sections = array(
 .rpt-status .dot { width:7px;height:7px;border-radius:50%;background:var(--rpt-faint);flex-shrink:0; }
 .rpt-status.is-ok .dot { background:var(--rpt-ok-fg); }
 .rpt-status.is-draft .dot { background:var(--rpt-info-fg); }
-.rpt-status.is-unknown .dot { background:var(--rpt-warn-fg); }
+.rpt-status.is-due .dot { background:var(--rpt-warn-fg); }
+.rpt-status.is-late .dot { background:var(--rpt-crit-fg); }
+.rpt-status.is-unknown .dot { background:var(--rpt-faint); }
+/* The display text and its priority word are two lines, not colour alone. */
+.rpt-status-txt { display:flex;flex-direction:column;gap:2px;line-height:1.3;min-width:0; }
+.rpt-status-display { min-width:0;overflow-wrap:anywhere; }
+.rpt-status-pri { font-size:10px;font-weight:700;letter-spacing:.055em;text-transform:uppercase;color:var(--rpt-subtle); }
+.rpt-status.is-ok .rpt-status-pri { color:var(--rpt-ok-fg); }
+.rpt-status.is-due .rpt-status-pri { color:var(--rpt-warn-fg); }
+.rpt-status.is-late .rpt-status-pri { color:var(--rpt-crit-fg); }
 
 .rpt-context {
   display:flex;align-items:center;gap:8px 22px;flex-wrap:wrap;
@@ -647,12 +751,15 @@ $sections = array(
 .rpt-exc { display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--rpt-rule); }
 .rpt-exc:last-child { border-bottom:0; }
 .rpt-exc-mark { width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--rpt-faint); }
-.rpt-exc.crit .rpt-exc-mark { background:var(--rpt-crit-fg); }
+.rpt-exc.crit .rpt-exc-mark, .rpt-exc.high .rpt-exc-mark { background:var(--rpt-crit-fg); }
 .rpt-exc.warn .rpt-exc-mark { background:var(--rpt-warn-fg); }
 .rpt-exc.info .rpt-exc-mark { background:var(--rpt-info-fg); }
 .rpt-exc-main { flex:1;min-width:0; }
 .rpt-exc-t { font-size:12.5px;font-weight:600;color:var(--rpt-text); }
-.rpt-exc.crit .rpt-exc-t { color:var(--rpt-crit-fg); }
+.rpt-exc.crit .rpt-exc-t, .rpt-exc.high .rpt-exc-t { color:var(--rpt-crit-fg); }
+/* High sits between Critical and Attention.  It shares the red family but
+   gets its own left rule and its own word, so no two priorities rely on hue. */
+.rpt-exc.high { border-left:3px solid var(--rpt-crit-fg);padding-left:9px; }
 .rpt-exc-d { font-size:11.5px;color:var(--rpt-muted);margin-top:1px;line-height:1.4; }
 .rpt-exc-n { font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--rpt-text); }
 .rpt-exc-act { display:inline-flex;align-items:center;min-height:24px;padding:4px 2px;
@@ -702,9 +809,11 @@ $sections = array(
 .rpt-badge { display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;
   border:1px solid var(--rpt-border);background:#F8FAFC;color:var(--rpt-muted);white-space:nowrap; }
 .rpt-badge.ok { background:var(--rpt-ok-bg);border-color:var(--rpt-ok-bd);color:var(--rpt-ok-fg); }
-/* "Draft" is informational, not a warning: use the same blue as info-level
-   exceptions, with the word itself always present. */
+/* "Draft — Week in progress" is informational (blue); "due soon" is Warning
+   (amber); "action required" is High (red).  The word is always present. */
 .rpt-badge.neutral { background:var(--rpt-info-bg);border-color:var(--rpt-info-bd);color:var(--rpt-info-fg); }
+.rpt-badge.warn { background:var(--rpt-warn-bg);border-color:var(--rpt-warn-bd);color:var(--rpt-warn-fg); }
+.rpt-badge.crit { background:var(--rpt-crit-bg);border-color:var(--rpt-crit-bd);color:var(--rpt-crit-fg); }
 .rpt-row-desc { font-size:12px;line-height:1.5;color:var(--rpt-muted);margin-top:3px;max-width:620px; }
 .rpt-row-meta { font-size:10.5px;color:var(--rpt-subtle);margin-top:6px;letter-spacing:.01em; }
 .rpt-row-note { font-size:11.5px;line-height:1.55;color:var(--rpt-muted);margin:7px 0 0;max-width:680px; }
@@ -759,6 +868,10 @@ $sections = array(
   .rpt-row-ctrl, .rpt-form { justify-content:flex-start; }
   .rpt-context-note { margin-left:0;width:100%; }
   .rpt-context-sep { display:none; }
+  /* The status pill carries two lines of text; give it its own row and let a
+     long report name wrap instead of pushing the page sideways. */
+  .rpt-head { flex-direction:column;align-items:stretch;gap:12px; }
+  .rpt-status { align-self:flex-start;max-width:100%;white-space:normal; }
 }
 @media (max-width:560px){
   .rpt-kpis { grid-template-columns:1fr; }
@@ -798,14 +911,13 @@ $sections = array(
         <span>· <?= $h(number_format((float)$t['daily_open_hours'], 0)) ?> h/day · <?= $h(number_format((float)$t['weekly_open_hours'], 0)) ?> h/week</span></div>
       <div class="rpt-context-note">Figures read <?= $h(date('d M Y, H:i')) ?> · server time</div>
     </div>
-    <a class="rpt-status is-<?= $h($w36_status) ?>"
+    <a class="rpt-status <?= $h($pub_meta['class']) ?>"
        href="<?= $h($bu('reports/weekly_w36?week=' . $iso_week)) ?>">
       <span class="dot" aria-hidden="true"></span>
-      <span><b><?= $h($report_name) ?></b> · <?php
-        if ($w36_status === 'ok') echo 'Published' . ($w36_date ? ' ' . $h($w36_date) : '');
-        elseif ($w36_status === 'unknown') echo 'Status unavailable';
-        else echo 'Draft · informational';
-      ?></span>
+      <span class="rpt-status-txt">
+        <span class="rpt-status-display"><b><?= $h($report_name) ?></b> · <?= $h($pub_meta['display']) ?></span>
+        <span class="rpt-status-pri"><?= $h($pub_meta['priority']) ?></span>
+      </span>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
     </a>
   </div>
@@ -866,7 +978,7 @@ $sections = array(
       <div class="rpt-panel-head">
         <div>
           <h2 class="rpt-panel-title" id="rpt-exc-h">Requires attention</h2>
-          <div class="rpt-panel-sub">Actionable exceptions a report can explain or resolve. The open week’s draft is status, not an alert.</div>
+          <div class="rpt-panel-sub">Ranked by priority: High, Warning, Information. An in-progress draft is status, not an alert.</div>
         </div>
         <?php if ($live && !empty($exceptions)): ?>
         <span class="rpt-badge"><?= count($exceptions) ?> item<?= count($exceptions) === 1 ? '' : 's' ?></span>
@@ -890,7 +1002,7 @@ $sections = array(
             <div class="rpt-exc-main">
               <div class="rpt-exc-t"><?= $h($ex['label']) ?></div>
               <div class="rpt-exc-d">
-                <?= $h($ex['tone'] === 'crit' ? 'Critical' : ($ex['tone'] === 'warn' ? 'Attention' : 'Information')) ?> ·
+                <?= $h(isset($severity_words[$ex['tone']]) ? $severity_words[$ex['tone']] : 'Information') ?> ·
                 <?= $h($ex['detail']) ?>
               </div>
             </div>
@@ -1108,9 +1220,11 @@ $sections = array(
     Figures on this page come from the same KPI engine, store ledger, inventory catalogue and weekly-report model the
     individual reports use. Availability = (required time − downtime) ÷ required time on the configured open hours;
     MTTR / MTBF show “—” when the 30-day window had no breakdown events. A published weekly report is frozen and will
-    not change when work orders do. The open week’s draft is informational; publication becomes due once that configured
-    week has closed, and the hub checks the <?= (int)$w36_due_window ?> most recent completed weeks — there is no
-    separate deadline setting. Nothing here is a cached or sample value.
+    not change when work orders do. Publication priority follows the configured reporting week: an open week is a Draft
+    (Informational), its final day is Publication due soon (Warning), and a closed week without a snapshot is Unpublished
+    (High). The hub checks the <?= (int)$pub_window ?> most recent completed weeks; the week’s own last day is the only
+    deadline the system defines — there is no separate deadline setting and publishing is never blocked by this status.
+    Nothing here is a cached or sample value.
   </p>
 
 </div>

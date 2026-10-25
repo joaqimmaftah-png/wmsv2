@@ -83,15 +83,18 @@ JavaScript disabled (ordinary GET forms where every export inherits the chosen
 period through `formaction`), renders its one trend as an accessible SVG with a
 data table instead of a CDN-dependent canvas, escapes the user-controlled
 weekly report name, and shows honest unavailable / limited-data / all-clear
-states. It also checks the weekly-report publication semantics: the open week's
-"Draft" stays a visible informational status rather than an attention item,
-only a bounded window of *completed* weeks without a published snapshot is
-raised as actionable, and the missing-snapshot-table / unreadable-database
-cases are disclosed rather than reported as a known draft. Also verifies that
-every report launcher resolves to a real controller method and that the hub
-reads the KPI engine, store ledger, inventory catalogue and weekly-report
-model behind a `Throwable` guard. PHP/MySQL and authenticated-browser checks
-are still required.
+states. It also checks the five-state W36 publication ladder: an open week is
+`Draft — Week in progress` (Informational), its final day is `Draft —
+Publication due soon` (Warning), a missed deadline is `Unpublished — Action
+required` (High), an already published previous week is `Published` (No
+action) and older unpublished weeks are `Unpublished — Overdue` (High). It
+verifies the deadline comes from the configured week end, that only a bounded
+window of *completed* weeks is checked, and that the missing-snapshot-table /
+unreadable-database cases are disclosed rather than reported as a known draft.
+Also verifies that every report launcher resolves to a real controller method
+and that the hub reads the KPI engine, store ledger, inventory catalogue and
+weekly-report model behind a `Throwable` guard. PHP/MySQL and
+authenticated-browser checks are still required.
 
 ## Lubricant planning master audit regressions (Node)
 
