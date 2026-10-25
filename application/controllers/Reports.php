@@ -2516,20 +2516,143 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
     }
 
     /* ── RE-ORDER REPORT ───────────────────────────────── */
+
+    /** Read a scalar display parameter without allowing an array query value
+     * to become an "Array to string conversion" warning. */
+    private function _reorder_param($key) {
+        $value = $this->input->get($key, TRUE);
+        return is_scalar($value) ? trim((string)$value) : '';
+    }
+
+    private function _reorder_can_calculate($row, $extended) {
+        if (!$extended) return FALSE;
+        $min = isset($row->min_stock) && $row->min_stock !== null && $row->min_stock !== '';
+        $max = isset($row->max_stock) && $row->max_stock !== null && $row->max_stock !== '';
+        return $min || $max;
+    }
+
+    /**
+     * Sort the same in-memory result set used by the table. The model's
+     * default order remains final_qty ASC / item_code ASC; all other choices
+     * are display-only and do not alter the reorder calculation or export.
+     */
+    private function _reorder_sort_rows($rows, $sort_key, $sort_dir, $extended) {
+        $sort_types = array(
+            'item_code' => 'string', 'category' => 'string', 'description' => 'string',
+            'final_qty' => 'number', 'min_stock' => 'number', 'max_stock' => 'number',
+            'qty_to_order' => 'number', 'unit_price_ugx' => 'number',
+            'location' => 'string', 'supplier_name' => 'string',
+        );
+        if (!isset($sort_types[$sort_key])) $sort_key = 'final_qty';
+        $level_value = function ($row, $key) {
+            return isset($row->{$key}) && $row->{$key} !== null && $row->{$key} !== ''
+                ? (int)$row->{$key} : null;
+        };
+        $value = function ($row) use ($sort_key, $level_value, $extended) {
+            if ($sort_key === 'qty_to_order') {
+                return $this->_reorder_can_calculate($row, $extended)
+                    ? (int)$row->qty_to_order : null;
+            }
+            if ($sort_key === 'min_stock' || $sort_key === 'max_stock') {
+                return $level_value($row, $sort_key);
+            }
+            return isset($row->{$sort_key}) && $row->{$sort_key} !== null && $row->{$sort_key} !== ''
+                ? $row->{$sort_key} : null;
+        };
+        $descending = ($sort_dir === 'desc');
+
+        usort($rows, function ($a, $b) use ($sort_types, $sort_key, $value, $descending) {
+            $va = $value($a);
+            $vb = $value($b);
+            if ($va === null && $vb === null) $cmp = 0;
+            elseif ($va === null) return 1; // missing values stay at the bottom
+            elseif ($vb === null) return -1;
+            elseif ($sort_types[$sort_key] === 'number') $cmp = ((float)$va <=> (float)$vb);
+            else $cmp = strcasecmp((string)$va, (string)$vb);
+            if ($descending) $cmp = -$cmp;
+            if ($cmp !== 0) return $cmp;
+            return strcasecmp((string)$a->item_code, (string)$b->item_code);
+        });
+        return $rows;
+    }
+
     public function reorder() {
         $filter = array(
             'category' => $this->input->get('category'),
             'location' => $this->input->get('location'),
             'search'   => $this->input->get('search'),
         );
-        $rows = $this->Materials_model->get_reorder_items($filter);
+        $all_rows = $this->Materials_model->get_reorder_items($filter);
+        $extended = $this->Materials_model->has_extended_fields();
+
+        $state = strtolower($this->_reorder_param('state'));
+        if (!in_array($state, array('all', 'out', 'in'), TRUE)) $state = 'all';
+        $sort_key = strtolower($this->_reorder_param('sort'));
+        $valid_sort = array(
+            'item_code', 'category', 'description', 'final_qty', 'min_stock',
+            'max_stock', 'qty_to_order', 'unit_price_ugx', 'location', 'supplier_name',
+        );
+        if (!in_array($sort_key, $valid_sort, TRUE)) $sort_key = 'final_qty';
+        $sort_dir = strtolower($this->_reorder_param('dir')) === 'desc' ? 'desc' : 'asc';
+        $view_mode = strtolower($this->_reorder_param('view')) === 'cards' ? 'cards' : 'table';
+
+        // The model already applies the authoritative category/location/search
+        // scope. The state tab is a presentation filter on that same result.
+        $filtered = array();
+        foreach ($all_rows as $row) {
+            $is_out = (int)$row->final_qty <= 0;
+            if ($state === 'out' && !$is_out) continue;
+            if ($state === 'in' && $is_out) continue;
+            $filtered[] = $row;
+        }
+        $filtered = $this->_reorder_sort_rows($filtered, $sort_key, $sort_dir, $extended);
+
+        // Match /team/report exactly: bounded, allow-listed page sizes and a
+        // clamped page number, so a large inventory never creates an endless
+        // HTML table or an invalid empty page after a filter change.
+        $per_page_in = (int)$this->_reorder_param('per_page');
+        $per_page = in_array($per_page_in, array(10, 25, 50, 100), TRUE) ? $per_page_in : 25;
+        $total_filtered = count($filtered);
+        $total_pages = max(1, (int)ceil($total_filtered / $per_page));
+        $page_in = (int)$this->_reorder_param('page');
+        $page = max(1, min($total_pages, $page_in > 0 ? $page_in : 1));
+        $offset = ($page - 1) * $per_page;
+        $paged_rows = array_slice($filtered, $offset, $per_page);
+
+        $out_count = 0; $qty_total = 0; $qty_missing = 0;
+        foreach ($all_rows as $row) {
+            if ((int)$row->final_qty <= 0) $out_count++;
+            if ($this->_reorder_can_calculate($row, $extended)) $qty_total += (int)$row->qty_to_order;
+            else $qty_missing++;
+        }
+
         $data = array(
-            'rows'       => $rows,
+            'rows'       => $paged_rows,
             'categories' => $this->Materials_model->get_categories(),
             'locations'  => $this->Materials_model->get_locations(),
-            'extended'   => $this->Materials_model->has_extended_fields(),
+            'extended'   => $extended,
             'filter'     => $filter,
             'page_title' => 'Re-order Report',
+            'reorder_state' => $state,
+            'reorder_sort' => $sort_key,
+            'reorder_dir' => $sort_dir,
+            'reorder_view' => $view_mode,
+            'reorder_summary' => array(
+                'total_scope' => count($all_rows),
+                'out_count' => $out_count,
+                'in_count' => count($all_rows) - $out_count,
+                'qty_total' => $qty_total,
+                'qty_missing' => $qty_missing,
+            ),
+            'reorder_pagination' => array(
+                'server_paged' => TRUE,
+                'total_filtered' => $total_filtered,
+                'total_pages' => $total_pages,
+                'per_page' => $per_page,
+                'page' => $page,
+                'showing_from' => $total_filtered > 0 ? $offset + 1 : 0,
+                'showing_to' => min($total_filtered, $offset + count($paged_rows)),
+            ),
         );
         $this->render('reports/reorder', $data);
     }

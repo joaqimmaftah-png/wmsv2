@@ -34,6 +34,11 @@ jobs:
       - name: Run shared-layout & page-title regression checks
         run: node tests/page_titles.js
 
+      - name: Run table and report UX structural checks
+        run: |
+          node tests/table_ux.js
+          node tests/reorder_ux.js
+
       - name: Run Global Find & Operational Attention regression checks
         run: |
           node --check assets/js/global-find.js
