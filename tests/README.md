@@ -65,12 +65,18 @@ technology checks remain necessary.
 
 ```bash
 node tests/table_ux.js
+node tests/reorder_ux.js
 ```
 
-Dependency-free source checks for the Suppliers, Lubricants and Lube Budget
-surfaces, grouped-page calculation and the actual inline budget draft calculator.
-These do not substitute for PHP/MySQL or browser/assistive-technology tests.
-See `docs/table-ux-audit.md` for the staging acceptance checklist.
+Dependency-free source checks for the Suppliers, Lubricants, Lube Budget and
+Re-order Report surfaces, grouped-page calculation and the actual inline budget
+draft calculator. The Re-order checks verify that the `/team/report` visual
+language is scoped locally, the existing filters/export/routes remain intact,
+status tabs and table/card views are real GET-driven controls, quantities remain
+honest when min/max levels are unavailable, and semantic/print/reduced-motion
+states are present. These do not substitute for PHP/MySQL or
+browser/assistive-technology tests. See `docs/table-ux-audit.md` for the
+staging acceptance checklist.
 
 ## Reports hub structural checks (Node)
 
