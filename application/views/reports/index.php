@@ -1,788 +1,1038 @@
 <?php
-/*
- * Reports — Apple HIG inspired
- * One task per row. Breathing room. No competing buttons.
- * Typography leads. Color is used once, purposefully.
+/**
+ * Reports — the reporting home for Supervisor / Manager (roles 1, 4).
+ *
+ * This page is a *report catalogue*, not a second operational dashboard.  Its
+ * job is to answer, in order:
+ *
+ *   1. What period am I reporting on, and how fresh is the data?
+ *   2. What is the current operational situation?        (snapshot)
+ *   3. What needs my attention, and where do I act on it? (exceptions)
+ *   4. Is reliability moving in the right direction?      (one trend)
+ *   5. Which report do I open, for which period?          (the library)
+ *
+ * Every number comes from the same models the report itself uses
+ * (Dashboard_model -> Kpi_engine_model, Store_model, Materials_model,
+ * W36_report_model).  Nothing is invented: an unreadable database shows an
+ * honest "unavailable" state, MTTR/MTBF show a dash when the window had no
+ * failures, and the one chart degrades to a "no data" message.
+ *
+ * The library is a set of ordinary GET forms.  One form per report carries its
+ * period to the view AND to every export, so a chosen date/month/week is never
+ * lost and the page works with JavaScript disabled.  No dead links, no
+ * duplicate ids, no colour-only status, one h1.
  */
+
+$h = function ($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); };
+$bu = function ($p) { return base_url($p); };
+
+/* ── Context ─────────────────────────────────────────────────────────── */
+
+$today      = date('Y-m-d');
+$this_month = date('Y-m');
+$this_year  = (int)date('Y');
+
+$week_start = isset($report_week_start) && $report_week_start ? $report_week_start : $today;
+$week_end   = isset($report_week_end) && $report_week_end
+    ? $report_week_end : date('Y-m-d', strtotime($week_start . ' +6 days'));
+$iso_week   = isset($report_iso_week) && $report_iso_week
+    ? $report_iso_week : date('o-\WW', strtotime($week_start));
+$week_short = 'W' . (int)date('W', strtotime($week_start));
+$week_range = date('d M', strtotime($week_start)) . ' – ' . date('d M Y', strtotime($week_end));
+
+$report_name  = isset($weekly_report_name) && $weekly_report_name !== ''
+    ? $weekly_report_name : $week_short;
+
+
+/* ── Telemetry (guarded, honest defaults) ────────────────────────────── */
+
+$t = isset($telemetry) && is_array($telemetry) ? $telemetry : array();
+$defaults = array(
+    'available' => false, 'availability_pct' => 100.0, 'avail_target_pct' => 88.0,
+    'avail_machines_with' => 0, 'avail_from' => null, 'avail_to' => null,
+    'mttr_30d' => 0.0, 'mtbf_30d' => 0.0, 'breakdowns_30d' => 0, 'downtime_30d' => 0.0,
+    'availability_trend' => array(), 'zero_failure_mode' => 'dash',
+    'overdue_pm' => 0, 'pm_due_30d' => 0,
+    'fleet_total' => 0, 'machines_down' => 0, 'equipment_list' => array(),
+    'reorder_count' => 0, 'out_of_stock_count' => 0, 'reorder_units' => 0,
+    'store_available' => false, 'targets_ready' => false,
+    'w36_snapshot' => null,
+    'weekly_open_hours' => 168.0, 'daily_open_hours' => 24.0,
+);
+$t = array_merge($defaults, $t);
+$live = !empty($t['available']);
+
+$target       = (float)$t['avail_target_pct'];
+$avail        = (float)$t['availability_pct'];
+$watch_band   = $target - 10;
+$avail_tone   = $avail >= $target ? 'neutral' : ($avail >= $watch_band ? 'warn' : 'crit');
+$avail_delta  = round($avail - $target, 1);
+$avail_delta_txt = ($avail_delta >= 0 ? '+' : '') . number_format($avail_delta, 1) . ' pp';
+
+$has_failures = (int)$t['breakdowns_30d'] > 0;
+// settings.mtbf_zero_failure_mode = 'uptime' makes MTBF meaningful even with
+// no failures; 'dash' leaves it undefined.  MTTR is always undefined without
+// a repair, so it keeps a dash in either mode.
+$mtbf_defined = $has_failures || $t['zero_failure_mode'] === 'uptime';
+$mttr_txt = $has_failures ? number_format((float)$t['mttr_30d'], 1) : '—';
+$mtbf_txt = $mtbf_defined ? number_format((float)$t['mtbf_30d'], 1) : '—';
+$reliability_meta = number_format((float)$t['downtime_30d'], 1) . ' h downtime';
+if ($mtbf_defined) {
+    $reliability_meta .= ' · MTTR ' . ($has_failures ? $mttr_txt . ' h' : '—') . ' · MTBF ' . $mtbf_txt . ' h';
+} else {
+    $reliability_meta .= ' · no breakdowns in window';
+}
+$store_note = $t['store_available'] ? '' : ' · register columns not installed';
+
+$total_machines = (int)$t['fleet_total'];
+$with_data      = (int)$t['avail_machines_with'];
+$covered        = $total_machines > 0 ? min($with_data, $total_machines) : 0;
+
+$window_from = !empty($t['avail_from']) ? $t['avail_from'] : null;
+$window_to   = !empty($t['avail_to'])   ? $t['avail_to']   : null;
+$window_txt  = $window_from && $window_to
+    ? date('d M', strtotime($window_from)) . ' – ' . date('d M Y', strtotime($window_to))
+    : 'last 30 days';
+
+$w36_published = !empty($t['w36_snapshot']);
+$w36_date = '';
+if ($w36_published && !empty($t['w36_snapshot']['published_at'])) {
+    $w36_date = date('d M Y', strtotime($t['w36_snapshot']['published_at']));
+}
+
+/* ── The 30-day series for the one chart (never fabricated) ──────────── */
+
+$trend_labels = array();
+$trend_vals   = array();
+if (!empty($t['availability_trend']) && is_array($t['availability_trend'])) {
+    foreach ($t['availability_trend'] as $p) {
+        $d = isset($p['date']) ? $p['date'] : null;
+        if (!$d) continue;
+        $trend_labels[] = date('d M', strtotime($d));
+        $trend_vals[]   = isset($p['pct']) ? round((float)$p['pct'], 1) : 100.0;
+    }
+}
+$has_trend = count($trend_vals) >= 2;
+
+/* A server-rendered SVG line chart.  It needs no chart library, prints on
+   paper, and is never a blank canvas when a CDN is unreachable.  Coordinates
+   are 0–100 on both axes, so the single series and the target line stay honest
+   against a fixed 0–100% scale at every viewport width. */
+$chart_pts  = array();
+$chart_poly = '';
+if ($has_trend) {
+    $n = count($trend_vals);
+    foreach ($trend_vals as $i => $v) {
+        $cx = $n > 1 ? ($i / ($n - 1)) * 100 : 0;
+        $cy = 100 - max(0, min(100, (float)$v));
+        $chart_pts[] = array('x' => round($cx, 3), 'y' => round($cy, 3),
+                             'v' => (float)$v, 'd' => $trend_labels[$i]);
+    }
+    $parts = array();
+    foreach ($chart_pts as $p) $parts[] = $p['x'] . ',' . $p['y'];
+    $chart_poly = implode(' ', $parts);
+}
+$chart_target_y = round(100 - max(0, min(100, $target)), 3);
+$chart_step   = $has_trend ? 100 / max(1, count($chart_pts) - 1) : 100;
+$latest_val   = $has_trend ? end($trend_vals) : null;
+$latest_date  = $has_trend ? end($trend_labels) : '';
+
+/* ── Exceptions: genuine, severity-ranked, never colour-only ─────────── */
+
+$exceptions = array();
+if ($live) {
+    if ((int)$t['out_of_stock_count'] > 0) {
+        $exceptions[] = array(
+            'tone' => 'crit', 'label' => 'Items out of stock',
+            'detail' => (int)$t['out_of_stock_count'] . ' stock item(s) at zero balance',
+            'count' => (int)$t['out_of_stock_count'],
+            'href' => $bu('reports/reorder'), 'action' => 'Re-order',
+        );
+    }
+    $below_min = (int)$t['reorder_count'] - (int)$t['out_of_stock_count'];
+    if ($below_min > 0) {
+        $exceptions[] = array(
+            'tone' => 'warn', 'label' => 'Below minimum stock',
+            'detail' => $below_min . ' more item(s) at or below their minimum',
+            'count' => $below_min,
+            'href' => $bu('reports/reorder'), 'action' => 'Re-order',
+        );
+    }
+    if ((int)$t['overdue_pm'] > 0) {
+        $exceptions[] = array(
+            'tone' => 'warn', 'label' => 'Overdue preventive maintenance',
+            'detail' => (int)$t['overdue_pm'] . ' active PM schedule(s) past their due date',
+            'count' => (int)$t['overdue_pm'],
+            'href' => $bu('reports/availability_forecast?horizon=90'), 'action' => 'Forecast',
+        );
+    }
+    if ((int)$t['machines_down'] > 0) {
+        $exceptions[] = array(
+            'tone' => 'info', 'label' => 'Machines out of service',
+            'detail' => (int)$t['machines_down'] . ' of ' . $total_machines . ' machines currently down',
+            'count' => (int)$t['machines_down'],
+            'href' => $bu('reports/workshop_daily?date=' . $today), 'action' => 'Daily report',
+        );
+    }
+    if (!$w36_published) {
+        $exceptions[] = array(
+            'tone' => 'info', 'label' => $report_name . ' is still a draft',
+            'detail' => 'This week’s figures keep changing until the report is published',
+            'count' => null,
+            'href' => $bu('reports/weekly_w36?week=' . $iso_week), 'action' => 'Review',
+        );
+    }
+}
+$rank = array('crit' => 0, 'warn' => 1, 'info' => 2);
+usort($exceptions, function ($a, $b) use ($rank) {
+    return $rank[$a['tone']] - $rank[$b['tone']];
+});
+
+/* ── Year / horizon option builders ─────────────────────────────────── */
+
+$year_opts = function ($from, $to) {
+    $o = array();
+    for ($y = (int)$from; $y >= (int)$to; $y--) $o[(string)$y] = (string)$y;
+    return $o;
+};
+$years_back  = $year_opts($this_year, 2020);
+$years_plan  = $year_opts($this_year + 1, 2020);
+$years_store = $year_opts($this_year, $this_year - 4);
+
+/* ══════════════════════════════════════════════════════════════════
+   REPORT LIBRARY SPECIFICATION
+   One GET form per row: the chosen period reaches the view and every export.
+   ══════════════════════════════════════════════════════════════════ */
+
+$sections = array(
+    array(
+        'id' => 'operations', 'num' => '01',
+        'title' => 'Daily & weekly operations',
+        'desc' => 'What happened on the floor, and the weekly number the business signs off.',
+        'items' => array(
+            array(
+                'title' => 'Workshop Daily Report',
+                'desc' => 'Fleet availability, breakdowns and field interventions, grouped by machine type.',
+                'meta' => 'Daily · Screen, Excel, print',
+                'form' => array(
+                    'action' => 'reports/workshop_daily',
+                    'control' => array('type' => 'date', 'name' => 'date', 'label' => 'Date', 'value' => $today, 'max' => $today),
+                    'buttons' => array(
+                        array('action' => 'reports/export_workshop_daily_xlsx', 'label' => 'Excel'),
+                        array('action' => 'reports/export_workshop_daily_pdf', 'label' => 'Print', 'target' => '_blank'),
+                    ),
+                ),
+            ),
+            array(
+                'title' => 'Workshop Weekly Report',
+                'desc' => 'Seven-day fleet performance, target analysis and KPI charts per machine type.',
+                'meta' => 'Weekly · Screen, Excel, print',
+                'form' => array(
+                    'action' => 'reports/workshop_weekly',
+                    'control' => array('type' => 'date', 'name' => 'week_start', 'label' => 'Week from', 'value' => $week_start, 'max' => $today),
+                    'buttons' => array(
+                        array('action' => 'reports/export_workshop_weekly_xlsx', 'label' => 'Excel'),
+                        array('action' => 'reports/export_workshop_weekly_pdf', 'label' => 'Print', 'target' => '_blank'),
+                    ),
+                ),
+            ),
+            array(
+                'title' => $report_name . ' Weekly Report',
+                'desc' => 'The approved weekly sheet generated from the system, with data-quality checks and a frozen publication option.',
+                'meta' => 'Weekly · ' . $iso_week . ' · Screen, Excel, print',
+                'badge' => $w36_published ? 'Published' . ($w36_date ? ' ' . $w36_date : '') : 'Draft',
+                'badge_tone' => $w36_published ? 'ok' : 'neutral',
+                'featured' => true,
+                'form' => array(
+                    'action' => 'reports/weekly_w36',
+                    'control' => array('type' => 'date', 'name' => 'week_start', 'label' => 'Week from', 'value' => $week_start),
+                    'buttons' => array(
+                        array('action' => 'reports/export_weekly_w36_xlsx', 'label' => 'Excel'),
+                        array('action' => 'reports/export_weekly_w36_pdf', 'label' => 'Print', 'target' => '_blank'),
+                    ),
+                ),
+            ),
+            array(
+                'title' => 'Availability Targets',
+                'desc' => 'The daily target KPI per machine and per group, with single-day overrides.',
+                'meta' => 'Weekly · Screen' . ($t['targets_ready'] ? '' : ' · targets table not installed'),
+                'form' => array(
+                    'action' => 'reports/weekly_targets',
+                    'control' => array('type' => 'date', 'name' => 'week_start', 'label' => 'Week from', 'value' => $week_start),
+                    'buttons' => array(),
+                ),
+            ),
+            array(
+                'title' => 'Daily Activity',
+                'desc' => 'Work orders, team attendance and PM completions for one selected day.',
+                'meta' => 'Daily · Screen, print',
+                'form' => array(
+                    'action' => 'reports/daily',
+                    'control' => array('type' => 'date', 'name' => 'date', 'label' => 'Date', 'value' => $today, 'max' => $today),
+                    'buttons' => array(
+                        array('action' => 'reports/pdf_daily', 'label' => 'Print', 'target' => '_blank'),
+                    ),
+                ),
+            ),
+            array(
+                'title' => 'Weekly Snapshot',
+                'desc' => 'Work-order count, team performance and PM status across a selected week.',
+                'meta' => 'Weekly · Screen',
+                'form' => array(
+                    'action' => 'reports/weekly',
+                    'control' => array('type' => 'date', 'name' => 'week', 'label' => 'Week from', 'value' => $week_start),
+                    'buttons' => array(
+                        array('href' => 'reports/weekly', 'label' => 'This week'),
+                    ),
+                ),
+            ),
+        ),
+    ),
+    array(
+        'id' => 'reliability', 'num' => '02',
+        'title' => 'Reliability & performance',
+        'desc' => 'Is the fleet becoming more reliable, and which machines need attention?',
+        'items' => array(
+            array(
+                'title' => 'MTTR / MTBF Report',
+                'desc' => 'Repair and failure-interval trend with a per-equipment reliability ranking.',
+                'meta' => '3–24 months · Screen',
+                'form' => array(
+                    'action' => 'reports/mttr_mtbf',
+                    'control' => array('type' => 'select', 'name' => 'months', 'label' => 'Window',
+                        'options' => array('3' => '3 months', '6' => '6 months', '12' => '12 months', '18' => '18 months', '24' => '24 months'),
+                        'selected' => '12'),
+                    'buttons' => array(),
+                ),
+            ),
+            array(
+                'title' => 'PM Due Forecast',
+                'desc' => 'Preventive-maintenance schedules falling due over a chosen horizon, split by machine type.',
+                'meta' => '30–180 days · Screen',
+                'form' => array(
+                    'action' => 'reports/availability_forecast',
+                    'control' => array('type' => 'select', 'name' => 'horizon', 'label' => 'Horizon',
+                        'options' => array('30' => '30 days', '60' => '60 days', '90' => '90 days', '120' => '120 days', '180' => '180 days'),
+                        'selected' => '90'),
+                    'buttons' => array(),
+                ),
+            ),
+            array(
+                'title' => 'Monthly Summary',
+                'desc' => 'KPIs, availability trend, work-order breakdown, attendance and lubricant usage for a month.',
+                'meta' => 'Monthly · Screen',
+                'form' => array(
+                    'action' => 'reports/monthly',
+                    'control' => array('type' => 'month', 'name' => 'month', 'label' => 'Month', 'value' => $this_month),
+                    'buttons' => array(),
+                ),
+            ),
+            array(
+                'title' => 'Annual Report',
+                'desc' => 'Full-year executive summary: monthly KPI trend, reliability ranking, top faults, lube and parts spend.',
+                'meta' => 'Annual · Screen, Excel',
+                'form' => array(
+                    'action' => 'reports/annual_report',
+                    'control' => array('type' => 'select', 'name' => 'year', 'label' => 'Year', 'options' => $years_back, 'selected' => (string)$this_year),
+                    'buttons' => array(
+                        array('action' => 'reports/export_annual_report_xlsx', 'label' => 'Excel'),
+                    ),
+                ),
+            ),
+            array(
+                'title' => 'Individual Attendance Sheets (AML)',
+                'desc' => 'Print-ready per-worker and batch AML sign-off sheets for a month or half-month.',
+                'meta' => 'Monthly · Screen, PDF, Excel',
+                'form' => array(
+                    'action' => 'team/report',
+                    'control' => array('type' => 'month', 'name' => 'month', 'label' => 'Month', 'value' => $this_month),
+                    'buttons' => array(
+                        array('action' => 'team/timesheets_batch', 'label' => 'All PDF', 'target' => '_blank'),
+                        array('action' => 'team/timesheets_batch', 'label' => 'All XLSX', 'name' => 'format', 'value' => 'xlsx'),
+                    ),
+                ),
+            ),
+        ),
+    ),
+    array(
+        'id' => 'planning', 'num' => '03',
+        'title' => 'Maintenance planning',
+        'desc' => 'What work is scheduled, and what should be stocked to carry it out.',
+        'items' => array(
+            array(
+                'title' => 'Monthly Maintenance Plan',
+                'desc' => 'PM jobs grouped by week plus all open corrective work orders, ready for a team briefing.',
+                'meta' => 'Monthly · Screen, Excel',
+                'form' => array(
+                    'action' => 'reports/monthly_plan',
+                    'control' => array('type' => 'month', 'name' => 'month', 'label' => 'Month', 'value' => $this_month),
+                    'buttons' => array(
+                        array('action' => 'reports/export_monthly_plan_xlsx', 'label' => 'Excel'),
+                    ),
+                ),
+            ),
+            array(
+                'title' => 'Annual Maintenance Plan',
+                'desc' => 'All PM jobs across twelve months with due dates, hours and a heatmap overview.',
+                'meta' => 'Annual · Screen, Excel',
+                'form' => array(
+                    'action' => 'reports/annual_plan',
+                    'control' => array('type' => 'select', 'name' => 'year', 'label' => 'Year', 'options' => $years_plan, 'selected' => (string)$this_year),
+                    'buttons' => array(
+                        array('action' => 'reports/export_annual_plan_xlsx', 'label' => 'Excel'),
+                    ),
+                ),
+            ),
+            array(
+                'title' => 'Service Kit Recommendations',
+                'desc' => 'Per-machine spare parts and lubricants derived from historical work orders and oil records.',
+                'meta' => 'On demand · Screen, Excel',
+                'form' => array(
+                    'action' => 'reports/service_kits',
+                    'buttons' => array(
+                        array('action' => 'reports/export_service_kits_xlsx', 'label' => 'Excel'),
+                    ),
+                ),
+            ),
+            array(
+                'title' => 'Lubricant Compliance',
+                'desc' => 'PM-driven lubricant requirement against actual consumption, by month or full year.',
+                'meta' => 'Monthly / annual · Screen',
+                'form' => array(
+                    'action' => 'reports/lube_compliance',
+                    'control' => array('type' => 'month', 'name' => 'month', 'label' => 'Month', 'value' => $this_month),
+                    'buttons' => array(
+                        array('href' => 'reports/lube_compliance_yearly?year=' . $this_year, 'label' => 'Yearly'),
+                    ),
+                ),
+            ),
+        ),
+    ),
+    array(
+        'id' => 'store', 'num' => '04',
+        'title' => 'Store & inventory',
+        'desc' => 'What moved, what we spent, and what must be bought.',
+        'items' => array(
+            array(
+                'title' => 'Store Analytics',
+                'desc' => 'Supplier spend (one total per currency) and learned lead times by route.',
+                'meta' => 'Annual · Screen',
+                'form' => array(
+                    'action' => 'reports/store_analytics',
+                    'control' => array('type' => 'select', 'name' => 'year', 'label' => 'Year', 'options' => $years_store, 'selected' => (string)$this_year),
+                    'buttons' => array(),
+                ),
+            ),
+            array(
+                'title' => 'Store Issue Register (Sortie)',
+                'desc' => 'Every item issued, with requisition number, allocation, receiver and full filtering.',
+                'meta' => 'Date range · Screen, Excel' . $store_note,
+                'form' => array(
+                    'action' => 'reports/issue_register',
+                    'control' => array('type' => 'range', 'label' => 'Period',
+                        'from_name' => 'date_from', 'from_value' => date('Y-m-01'),
+                        'to_name' => 'date_to', 'to_value' => $today),
+                    'buttons' => array(
+                        array('action' => 'reports/export_issue_register_xlsx', 'label' => 'Excel'),
+                    ),
+                ),
+            ),
+            array(
+                'title' => 'Store Receipt Register',
+                'desc' => 'Goods received by MRN / delivery note, with approved vs delivered quantity and line value.',
+                'meta' => 'Date range · Screen, Excel' . $store_note,
+                'form' => array(
+                    'action' => 'reports/receipt_register',
+                    'control' => array('type' => 'range', 'label' => 'Period',
+                        'from_name' => 'date_from', 'from_value' => date('Y-m-01'),
+                        'to_name' => 'date_to', 'to_value' => $today),
+                    'buttons' => array(
+                        array('action' => 'reports/export_receipt_register_xlsx', 'label' => 'Excel'),
+                    ),
+                ),
+            ),
+            array(
+                'title' => 'Re-order Report',
+                'desc' => 'Items at or below minimum stock with the calculated quantity to order and preferred supplier.',
+                'meta' => 'On demand · Screen, Excel',
+                'form' => array(
+                    'action' => 'reports/reorder',
+                    'buttons' => array(
+                        array('action' => 'reports/export_reorder_xlsx', 'label' => 'Excel'),
+                    ),
+                ),
+            ),
+            array(
+                'title' => 'Materials Movement',
+                'desc' => 'Stock levels, receipts and issues across all inventory categories.',
+                'meta' => 'On demand · Screen, Excel',
+                'form' => array(
+                    'action' => 'reports/materials_movement',
+                    'buttons' => array(
+                        array('action' => 'reports/export_materials_xlsx', 'label' => 'Excel'),
+                        array('href' => 'materials/inventory', 'label' => 'Inventory list'),
+                    ),
+                ),
+            ),
+        ),
+    ),
+    array(
+        'id' => 'assets', 'num' => '05',
+        'title' => 'Assets & records',
+        'desc' => 'The master fleet data and the history behind one machine.',
+        'items' => array(
+            array(
+                'title' => 'Asset Register',
+                'desc' => 'Full fleet master — serial numbers, hours, warranty status, lifetime work orders and next PM. Import and template controls live on the register itself.',
+                'meta' => 'On demand · Screen, Excel, template',
+                'form' => array(
+                    'action' => 'reports/asset_register',
+                    'buttons' => array(
+                        array('action' => 'reports/export_asset_register_xlsx', 'label' => 'Excel'),
+                        array('action' => 'reports/asset_template_xlsx', 'label' => 'Template'),
+                    ),
+                ),
+            ),
+            array(
+                'title' => 'Equipment History',
+                'desc' => 'Maintenance record, oil history and downtime log for one machine.',
+                'meta' => 'On demand · Screen',
+                'form' => array(
+                    'action' => 'reports/equipment_history',
+                    'equipment_select' => array('name' => 'id', 'label' => 'Machine', 'options' => $t['equipment_list']),
+                    'buttons' => array(
+                        array('href' => 'equipment', 'label' => 'Browse fleet'),
+                    ),
+                ),
+            ),
+        ),
+    ),
+);
 ?>
 
 <style>
-/* ── Report row list ─────────────────────────────── */
-.rpt-group {
-  background: rgba(255,255,255,0.033);
-  border: 1px solid var(--sep);
-  border-radius: var(--r3);
-  overflow: hidden;
-  margin-bottom: 10px;
-  animation: rise .45s cubic-bezier(0.16,1,.3,1) both;
+/* ── Reports shell — the /materials / /dashboard Slate language, scoped ── */
+#reportsShell {
+  --rpt-text:#0F172A; --rpt-muted:#475569; --rpt-subtle:#64748B; --rpt-faint:#94A3B8;
+  --rpt-border:#E2E8F0; --rpt-border-strong:#8593A5; --rpt-rule:#EEF2F7;
+  --rpt-accent:#1D4ED8; --rpt-accent-soft:#EFF6FF;
+  --rpt-ok-fg:#047857;   --rpt-ok-bg:#ECFDF5;   --rpt-ok-bd:#A7F3D0;
+  --rpt-warn-fg:#B45309; --rpt-warn-bg:#FFFBEB; --rpt-warn-bd:#FDE68A;
+  --rpt-crit-fg:#B91C1C; --rpt-crit-bg:#FEF2F2; --rpt-crit-bd:#FECACA;
+  --rpt-info-fg:#0369A1; --rpt-info-bg:#F0F9FF; --rpt-info-bd:#BAE6FD;
+  color:var(--rpt-text);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  max-width:1240px;
 }
-.rpt-group-label {
-  font-family:inherit, sans-serif;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  color: var(--t4);
-  padding: 18px 22px 6px;
-}
-.rpt-row {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 14px 22px;
-  border-bottom: 1px solid var(--sep);
-  transition: background .15s;
-}
-.rpt-row:last-child { border-bottom: none; }
-.rpt-row:hover { background: rgba(255,255,255,0.028); }
+#reportsShell *, #reportsShell *::before, #reportsShell *::after { box-sizing:border-box; }
+.rpt-sr { position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0; }
+.rpt-sr caption { position:absolute;left:0;top:0;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap; }
 
-/* Icon */
-.rpt-icon {
-  width: 38px; height: 38px; min-width: 38px;
-  border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.rpt-icon svg {
-  width: 18px; height: 18px;
-  stroke: currentColor; fill: none;
-  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
-}
+/* Page identity + context */
+.rpt-head { display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:18px; }
+.rpt-subtitle { font-size:13px;color:var(--rpt-muted);line-height:1.55;margin-top:5px;max-width:640px; }
+.rpt-status { display:inline-flex;align-items:center;gap:9px;padding:7px 11px;border:1px solid var(--rpt-border);
+  border-radius:9px;background:#fff;font-size:12px;color:var(--rpt-muted);text-decoration:none;white-space:nowrap; }
+.rpt-status:hover { border-color:var(--rpt-border-strong);color:var(--rpt-text); }
+.rpt-status b { color:var(--rpt-text);font-weight:600; }
+.rpt-status .dot { width:7px;height:7px;border-radius:50%;background:var(--rpt-faint);flex-shrink:0; }
+.rpt-status.is-ok .dot { background:var(--rpt-ok-fg); }
+.rpt-status.is-draft .dot { background:var(--rpt-warn-fg); }
 
-/* Text */
-.rpt-text { flex: 1; min-width: 0; }
-.rpt-title {
-  font-size: 13.5px; font-weight: 600;
-  color: var(--t1); letter-spacing: -.1px;
-  margin-bottom: 2px;
+.rpt-context {
+  display:flex;align-items:center;gap:8px 22px;flex-wrap:wrap;
+  padding:12px 16px;margin-bottom:20px;
+  background:#fff;border:1px solid var(--rpt-border);border-radius:12px;
 }
-.rpt-desc {
-  font-size: 11.5px; color: var(--t3); line-height: 1.4;
-}
+.rpt-context-item { display:flex;align-items:baseline;gap:7px;font-size:12px;color:var(--rpt-muted);min-width:0; }
+.rpt-context-item .k { font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--rpt-subtle); }
+.rpt-context-item .v { color:var(--rpt-text);font-weight:600;font-variant-numeric:tabular-nums; }
+.rpt-context-sep { width:1px;height:16px;background:var(--rpt-border); }
+.rpt-context-note { margin-left:auto;font-size:11.5px;color:var(--rpt-subtle); }
 
-/* Controls */
-.rpt-controls {
-  display: flex; align-items: center; gap: 8px;
-  flex-shrink: 0;
+/* KPI strip */
+.rpt-kpis { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px; }
+.rpt-kpi {
+  display:flex;flex-direction:column;gap:5px;padding:15px 17px;
+  background:#fff;border:1px solid var(--rpt-border);border-radius:12px;
+  text-decoration:none;color:var(--rpt-text);
+  box-shadow:0 1px 2px rgba(15,23,42,.03);
+  transition:border-color .14s ease,box-shadow .14s ease,transform .14s ease;
 }
-.rpt-date {
-  background: var(--g1); border: 1px solid var(--sep);
-  border-radius: 8px; padding: 6px 10px;
-  color: var(--t1); font-family: 'Outfit'; font-size: 12px;
-  outline: none; transition: border-color .15s;
-}
-.rpt-date:focus { border-color: var(--blue); }
-.rpt-btn-primary {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--blue); color:var(--t1); border: none;
-  padding: 7px 16px; border-radius: 20px;
-  font-family: 'Outfit'; font-size: 12.5px; font-weight: 600;
-  cursor: pointer; white-space: nowrap; text-decoration: none;
-  transition: background .15s, transform .15s;
-}
-.rpt-btn-primary:hover {
-  background: #2b94ff; color:var(--t1); transform: translateY(-1px);
-}
-.rpt-btn-ghost {
-  display: inline-flex; align-items: center; gap: 5px;
-  background: transparent; color: var(--t3);
-  border: 1px solid var(--sep);
-  padding: 6px 13px; border-radius: 20px;
-  font-family: 'Outfit'; font-size: 11.5px; font-weight: 500;
-  cursor: pointer; white-space: nowrap; text-decoration: none;
-  transition: all .15s;
-}
-.rpt-btn-ghost:hover {
-  color: var(--t1); border-color: var(--sep-strong);
-  background: var(--g2);
-}
-.rpt-btn-ghost svg {
-  width: 12px; height: 12px; flex-shrink: 0;
-  stroke: currentColor; fill: none;
-  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
-}
-.rpt-btn-primary svg {
-  width: 13px; height: 13px; flex-shrink: 0;
-  stroke: currentColor; fill: none;
-  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
-}
+.rpt-kpi:hover { border-color:var(--rpt-border-strong);box-shadow:0 4px 12px rgba(15,23,42,.06);transform:translateY(-1px); }
+.rpt-kpi-lbl { font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--rpt-subtle); }
+.rpt-kpi-val { font-size:27px;font-weight:700;letter-spacing:-.02em;line-height:1.12;font-variant-numeric:tabular-nums; }
+.rpt-kpi-val sup { font-size:14px;font-weight:600;color:var(--rpt-muted);letter-spacing:0; }
+.rpt-kpi-val.is-crit { color:var(--rpt-crit-fg); }
+.rpt-kpi-val.is-warn { color:var(--rpt-warn-fg); }
+.rpt-kpi-val.is-accent { color:var(--rpt-accent); }
+.rpt-kpi-meta { font-size:11.5px;line-height:1.4;color:var(--rpt-muted);font-variant-numeric:tabular-nums; }
+.rpt-kpi-action { display:block;margin-top:3px;font-size:11px;font-weight:600;color:var(--rpt-accent); }
 
-/* Export strip */
-.export-strip {
-  display: flex; align-items: center; gap: 10px;
-  flex-wrap: wrap;
-  background: rgba(255,255,255,0.033);
-  border: 1px solid var(--sep);
-  border-radius: var(--r3);
-  padding: 16px 22px;
-  animation: rise .55s cubic-bezier(0.16,1,.3,1) both;
-  animation-delay: .2s;
-}
-.export-label {
-  font-family:inherit; font-size: 9px; font-weight: 700;
-  letter-spacing: 1.1px; text-transform: uppercase;
-  color: var(--t4); margin-right: 4px;
-}
+/* Analysis: exceptions + one trend */
+.rpt-analysis { display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:26px;align-items:stretch; }
+.rpt-panel { background:#fff;border:1px solid var(--rpt-border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column; }
+.rpt-panel-head { display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:15px 17px 12px;border-bottom:1px solid var(--rpt-rule); }
+.rpt-panel-title { font-size:13px;font-weight:700;letter-spacing:-.01em; }
+.rpt-panel-sub { font-size:11.5px;color:var(--rpt-subtle);margin-top:2px; }
+.rpt-panel-link { font-size:11.5px;font-weight:600;color:var(--rpt-accent);text-decoration:none;white-space:nowrap; }
+.rpt-panel-link:hover { text-decoration:underline; }
+.rpt-panel-body { flex:1;padding:6px 17px 14px; }
 
-@media (max-width: 768px) {
-  .rpt-controls { flex-wrap: wrap; justify-content: flex-end; }
-  .rpt-row { flex-wrap: wrap; gap: 12px; }
+.rpt-exc { display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--rpt-rule); }
+.rpt-exc:last-child { border-bottom:0; }
+.rpt-exc-mark { width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--rpt-faint); }
+.rpt-exc.crit .rpt-exc-mark { background:var(--rpt-crit-fg); }
+.rpt-exc.warn .rpt-exc-mark { background:var(--rpt-warn-fg); }
+.rpt-exc.info .rpt-exc-mark { background:var(--rpt-info-fg); }
+.rpt-exc-main { flex:1;min-width:0; }
+.rpt-exc-t { font-size:12.5px;font-weight:600;color:var(--rpt-text); }
+.rpt-exc.crit .rpt-exc-t { color:var(--rpt-crit-fg); }
+.rpt-exc-d { font-size:11.5px;color:var(--rpt-muted);margin-top:1px;line-height:1.4; }
+.rpt-exc-n { font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--rpt-text); }
+.rpt-exc-act { font-size:11.5px;font-weight:600;color:var(--rpt-accent);text-decoration:none;white-space:nowrap; }
+.rpt-exc-act:hover { text-decoration:underline; }
+
+.rpt-empty { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  min-height:150px;text-align:center;padding:22px 16px;color:var(--rpt-muted); }
+.rpt-empty strong { font-size:13px;font-weight:700;color:var(--rpt-text); }
+.rpt-empty span { font-size:11.5px;line-height:1.45;max-width:340px; }
+
+.rpt-chart-wrap { padding:14px 17px 8px;flex:1;min-height:224px;display:flex;flex-direction:column; }
+.rpt-chart { flex:1;display:grid;grid-template-columns:38px minmax(0,1fr);grid-template-rows:minmax(170px,1fr) 18px;min-height:196px;max-height:300px; }
+.rpt-chart-y { grid-column:1;grid-row:1;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;
+  padding-right:7px;font-size:9.5px;color:var(--rpt-subtle);font-variant-numeric:tabular-nums; }
+.rpt-chart-y span { transform:translateY(-.5em); }
+.rpt-chart-y span:last-child { transform:translateY(.4em); }
+.rpt-chart-svg { grid-column:2;grid-row:1;display:block;width:100%;height:100%;overflow:hidden; }
+.rpt-chart-x { grid-column:2;grid-row:2;display:flex;justify-content:space-between;padding-top:4px;
+  font-size:10px;color:var(--rpt-subtle);font-variant-numeric:tabular-nums; }
+.rpt-chart-note { padding:0 17px 13px;font-size:11px;line-height:1.45;color:var(--rpt-subtle); }
+
+/* Library */
+.rpt-lib-head { display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px; }
+.rpt-lib-title { font-size:15px;font-weight:700;letter-spacing:-.02em; }
+.rpt-lib-sub { font-size:11.5px;color:var(--rpt-subtle); }
+.rpt-jumps { display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px; }
+.rpt-jump { font-size:11.5px;font-weight:600;color:var(--rpt-muted);text-decoration:none;
+  padding:5px 10px;border:1px solid var(--rpt-border);border-radius:999px;background:#fff; }
+.rpt-jump:hover { border-color:var(--rpt-border-strong);color:var(--rpt-text); }
+
+.rpt-section { margin-bottom:22px;scroll-margin-top:86px; }
+.rpt-section-head { display:flex;align-items:baseline;gap:11px;padding:0 2px 9px;border-bottom:1px solid var(--rpt-border);margin-bottom:0; }
+.rpt-section-num { font-size:11px;font-weight:700;color:var(--rpt-subtle);font-variant-numeric:tabular-nums; }
+.rpt-section-title { font-size:13px;font-weight:700;letter-spacing:-.01em; }
+.rpt-section-desc { font-size:11.5px;color:var(--rpt-subtle);margin-left:auto;text-align:right; }
+.rpt-section-count { font-size:11px;color:var(--rpt-subtle);font-variant-numeric:tabular-nums; }
+
+.rpt-surface { background:#fff;border:1px solid var(--rpt-border);border-radius:12px;border-top-left-radius:0;border-top-right-radius:0;overflow:hidden; }
+.rpt-row { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;
+  padding:15px 18px;border-bottom:1px solid var(--rpt-rule); }
+.rpt-row:last-child { border-bottom:0; }
+.rpt-row.is-featured { background:#FAFCFF; }
+.rpt-row-main { min-width:0; }
+.rpt-row-titleline { display:flex;align-items:center;gap:9px;flex-wrap:wrap; }
+.rpt-row-title { font-size:13.5px;font-weight:650;letter-spacing:-.01em;color:var(--rpt-text);margin:0; }
+.rpt-badge { display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;
+  border:1px solid var(--rpt-border);background:#F8FAFC;color:var(--rpt-muted);white-space:nowrap; }
+.rpt-badge.ok { background:var(--rpt-ok-bg);border-color:var(--rpt-ok-bd);color:var(--rpt-ok-fg); }
+.rpt-badge.neutral { background:var(--rpt-warn-bg);border-color:var(--rpt-warn-bd);color:var(--rpt-warn-fg); }
+.rpt-row-desc { font-size:12px;line-height:1.5;color:var(--rpt-muted);margin-top:3px;max-width:620px; }
+.rpt-row-meta { font-size:10.5px;color:var(--rpt-subtle);margin-top:6px;letter-spacing:.01em; }
+
+.rpt-row-ctrl { display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;justify-content:flex-end; }
+.rpt-form { display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;justify-content:flex-end; }
+.rpt-period { display:flex;flex-direction:column;gap:4px; }
+.rpt-period-label { font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--rpt-subtle); }
+.rpt-input {
+  height:34px;min-width:132px;padding:0 10px;
+  background:#fff;border:1px solid var(--rpt-border-strong);border-radius:8px;
+  color:var(--rpt-text);font:inherit;font-size:12.5px;line-height:1;font-variant-numeric:tabular-nums;
+}
+.rpt-input:focus-visible, .rpt-btn:focus-visible, .rpt-status:focus-visible,
+.rpt-jump:focus-visible, .rpt-panel-link:focus-visible, .rpt-exc-act:focus-visible,
+.rpt-kpi:focus-visible, .rpt-quick select:focus-visible {
+  outline:2px solid var(--rpt-accent);outline-offset:2px;
+}
+.rpt-range { display:flex;align-items:center;gap:5px; }
+.rpt-range .rpt-input { min-width:126px; }
+.rpt-range-sep { color:var(--rpt-faint);font-size:12px; }
+.rpt-select { min-width:150px; }
+
+.rpt-btn {
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;padding:0 12px;
+  border-radius:8px;border:1px solid var(--rpt-border-strong);background:#fff;
+  color:var(--rpt-text);font:inherit;font-size:12px;font-weight:600;
+  text-decoration:none;cursor:pointer;white-space:nowrap;
+  transition:background .14s ease,border-color .14s ease,color .14s ease;
+}
+.rpt-btn:hover { background:#F1F5F9;border-color:#94A3B8; }
+.rpt-btn-primary { background:var(--rpt-accent);border-color:var(--rpt-accent);color:#fff; }
+.rpt-btn-primary:hover { background:#1E40AF;border-color:#1E40AF;color:#fff; }
+.rpt-btn svg { width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round; }
+
+/* Quick exports */
+.rpt-quick { display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:14px 17px;background:#fff;border:1px solid var(--rpt-border);border-radius:12px; }
+.rpt-quick-label { font-size:12px;font-weight:700;color:var(--rpt-text);margin-right:4px; }
+.rpt-quick-note { font-size:11.5px;color:var(--rpt-subtle);margin-left:auto; }
+
+.rpt-source { margin-top:20px;padding-top:14px;border-top:1px solid var(--rpt-border);
+  font-size:11px;line-height:1.6;color:var(--rpt-subtle); }
+
+@media (max-width:1080px){
+  .rpt-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .rpt-analysis { grid-template-columns:1fr; }
+  .rpt-section-desc { display:none; }
+}
+@media (max-width:820px){
+  .rpt-row { grid-template-columns:1fr;gap:12px;align-items:start; }
+  .rpt-row-ctrl, .rpt-form { justify-content:flex-start; }
+  .rpt-context-note { margin-left:0;width:100%; }
+  .rpt-context-sep { display:none; }
+}
+@media (max-width:560px){
+  .rpt-kpis { grid-template-columns:1fr; }
+  .rpt-head { align-items:flex-start; }
+  .rpt-row { padding:14px; }
+  .rpt-input, .rpt-btn { height:40px; }
+  .rpt-range { flex-wrap:wrap; }
+  .rpt-quick-note { margin-left:0;width:100%; }
+}
+@media (prefers-reduced-motion:reduce){
+  #reportsShell * { transition:none!important;animation:none!important; }
+}
+@media print {
+  .rpt-jumps,.rpt-row-ctrl,.rpt-status,.rpt-quick { display:none!important; }
+  .rpt-panel,.rpt-surface,.rpt-kpi { box-shadow:none!important; }
 }
 </style>
 
-<header class="main-page-head">
-  <h1 class="main-page-title"><?= htmlspecialchars((string)(isset($page_title) ? $page_title : 'Reports'), ENT_QUOTES, 'UTF-8') ?></h1>
-</header>
+<div id="reportsShell">
 
-<!-- ══════════════════════════════════════════════
-     GROUP 1 — DAILY OPERATIONS
-══════════════════════════════════════════════ -->
-<div class="rpt-group" style="animation-delay:.04s">
-  <div class="rpt-group-label">Daily Operations</div>
-
-  <!-- Workshop Daily Report -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(192,57,43,0.12);color:var(--red);">
-      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+  <!-- ══ 1. IDENTITY + CONTEXT ══ -->
+  <header class="main-page-head" style="margin-bottom:14px;">
+    <h1 class="main-page-title"><?= $h(isset($page_title) ? $page_title : 'Reports') ?></h1>
+    <p class="rpt-subtitle">The reporting home for the workshop. Read the current situation, then open the report that explains it.</p>
+  </header>
+  <div class="rpt-head">
+    <div class="rpt-context" style="flex:1;margin-bottom:0;">
+      <div class="rpt-context-item"><span class="k">Reporting week</span>
+        <span class="v"><?= $h($iso_week) ?></span>
+        <time datetime="<?= $h($week_start) ?>"><?= $h($week_range) ?></time>
+      </div>
+      <div class="rpt-context-sep" aria-hidden="true"></div>
+      <div class="rpt-context-item"><span class="k">Availability window</span><span class="v">30 days</span>
+        <span><?= $h($window_txt) ?></span></div>
+      <div class="rpt-context-sep" aria-hidden="true"></div>
+      <div class="rpt-context-item"><span class="k">Target</span><span class="v"><?= $h(number_format($target, 1)) ?>%</span>
+        <span>· <?= $h(number_format((float)$t['daily_open_hours'], 0)) ?> h/day · <?= $h(number_format((float)$t['weekly_open_hours'], 0)) ?> h/week</span></div>
+      <div class="rpt-context-note">Figures read <?= $h(date('d M Y, H:i')) ?> · server time</div>
     </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Workshop Daily Report</div>
-      <div class="rpt-desc">Fleet availability, breakdowns, and field interventions — grouped by machine type</div>
-    </div>
-    <div class="rpt-controls">
-      <input type="date" class="rpt-date" id="wdr-date"
-             value="<?= date('Y-m-d') ?>" max="<?= date('Y-m-d') ?>">
-      <a class="rpt-btn-primary" id="wdr-view" href="<?= base_url('reports/workshop_daily?date='.date('Y-m-d')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" id="wdr-excel" href="<?= base_url('reports/export_workshop_daily_xlsx?date='.date('Y-m-d')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Excel
-      </a>
-    </div>
+    <a class="rpt-status <?= $w36_published ? 'is-ok' : 'is-draft' ?>"
+       href="<?= $h($bu('reports/weekly_w36?week=' . $iso_week)) ?>">
+      <span class="dot" aria-hidden="true"></span>
+      <span><b><?= $h($report_name) ?></b> · <?= $w36_published ? 'Published' . ($w36_date ? ' ' . $h($w36_date) : '') : 'Draft' ?></span>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+    </a>
   </div>
 
-  <!-- Workshop Weekly Report -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(28,140,60,0.12);color:var(--green);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>
+  <?php if (!$live): ?>
+  <div class="rpt-panel" style="border-color:var(--rpt-warn-bd);background:var(--rpt-warn-bg);margin-bottom:20px;">
+    <div class="rpt-panel-body" style="padding:14px 17px;color:var(--rpt-warn-fg);font-size:12.5px;line-height:1.5;">
+      <strong>Operational figures are unavailable.</strong> The reporting database could not be read on this request, so the
+      snapshot, exceptions and trend below are shown as “—” rather than as zeros. The report library is unaffected.
     </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Workshop Weekly Report</div>
-      <div class="rpt-desc">7-day fleet performance — availability, interventions, target analysis and KPI charts per machine type</div>
+  </div>
+  <?php endif; ?>
+
+  <!-- ══ 2. EXECUTIVE SNAPSHOT ══ -->
+  <section aria-labelledby="rpt-snapshot-h">
+    <h2 class="rpt-sr" id="rpt-snapshot-h">Operational snapshot, last 30 days</h2>
+    <div class="rpt-kpis">
+      <a class="rpt-kpi" href="<?= $h($bu('reports/mttr_mtbf?months=12')) ?>">
+        <span class="rpt-kpi-lbl">Fleet availability · 30 d</span>
+        <span class="rpt-kpi-val <?= $live ? ($avail_tone === 'crit' ? 'is-crit' : ($avail_tone === 'warn' ? 'is-warn' : '')) : '' ?>">
+          <?= $live ? $h(number_format($avail, 1)) . '<sup>%</sup>' : '—' ?>
+        </span>
+        <span class="rpt-kpi-meta"><?= $live
+            ? $h('Target ≥' . number_format($target, 1) . '% · ' . $avail_delta_txt . ' · ' . $covered . '/' . $total_machines . ' machines')
+            : 'Not available' ?></span>
+        <span class="rpt-kpi-action">Reliability report →</span>
+      </a>
+      <a class="rpt-kpi" href="<?= $h($bu('reports/workshop_weekly?week_start=' . $week_start)) ?>">
+        <span class="rpt-kpi-lbl">Breakdowns · 30 d</span>
+        <span class="rpt-kpi-val"><?= $live ? $h(number_format((int)$t['breakdowns_30d'])) : '—' ?></span>
+        <span class="rpt-kpi-meta"><?= $live ? $h($reliability_meta) : 'Not available' ?></span>
+        <span class="rpt-kpi-action">Workshop weekly →</span>
+      </a>
+      <a class="rpt-kpi" href="<?= $h($bu('reports/availability_forecast?horizon=90')) ?>">
+        <span class="rpt-kpi-lbl">Overdue PM</span>
+        <span class="rpt-kpi-val <?= ($live && (int)$t['overdue_pm'] > 0) ? 'is-crit' : '' ?>"><?= $live ? $h(number_format((int)$t['overdue_pm'])) : '—' ?></span>
+        <span class="rpt-kpi-meta"><?= $live
+            ? $h(number_format((int)$t['pm_due_30d']) . ' PM jobs due in the next 30 days')
+            : 'Not available' ?></span>
+        <span class="rpt-kpi-action">PM due forecast →</span>
+      </a>
+      <a class="rpt-kpi" href="<?= $h($bu('reports/reorder')) ?>">
+        <span class="rpt-kpi-lbl">Items to re-order</span>
+        <span class="rpt-kpi-val <?= ($live && (int)$t['out_of_stock_count'] > 0) ? 'is-crit' : (($live && (int)$t['reorder_count'] > 0) ? 'is-warn' : '') ?>">
+          <?= $live ? $h(number_format((int)$t['reorder_count'])) : '—' ?>
+        </span>
+        <span class="rpt-kpi-meta"><?= $live
+            ? $h(number_format((int)$t['out_of_stock_count']) . ' out of stock · ' . number_format((int)$t['reorder_units']) . ' units to order')
+            : 'Not available' ?></span>
+        <span class="rpt-kpi-action">Re-order report →</span>
+      </a>
     </div>
-    <div class="rpt-controls">
-      <?php $wwr_ws = isset($report_week_start) ? $report_week_start : date('Y-m-d');
-            $wwr_iso = sprintf('%04d-W%02d', (int)date('o', strtotime($wwr_ws)), (int)date('W', strtotime($wwr_ws))); ?>
-      <input type="date" class="rpt-date" id="wwr-date"
-             value="<?= $wwr_ws ?>"
-             max="<?= date('Y-m-d') ?>">
-      <a class="rpt-btn-primary" id="wwr-view" href="<?= base_url('reports/workshop_weekly?week_start='.$wwr_ws) ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" id="wwr-excel" href="<?= base_url('reports/export_workshop_weekly_xlsx?week_start='.$wwr_ws) ?>">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Excel
-      </a>
-      <a class="rpt-btn-ghost" id="wwr-pdf" href="<?= base_url('reports/export_workshop_weekly_pdf?week_start='.$wwr_ws) ?>">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        PDF
-      </a>
-    </div>
+  </section>
+
+  <!-- ══ 3. EXCEPTIONS + 4. TREND ══ -->
+  <div class="rpt-analysis">
+    <section class="rpt-panel" aria-labelledby="rpt-exc-h">
+      <div class="rpt-panel-head">
+        <div>
+          <h2 class="rpt-panel-title" id="rpt-exc-h">Requires attention</h2>
+          <div class="rpt-panel-sub">Exceptions that a report can explain or resolve</div>
+        </div>
+        <?php if ($live && !empty($exceptions)): ?>
+        <span class="rpt-badge"><?= count($exceptions) ?> item<?= count($exceptions) === 1 ? '' : 's' ?></span>
+        <?php endif; ?>
+      </div>
+      <div class="rpt-panel-body">
+        <?php if (!$live): ?>
+          <div class="rpt-empty">
+            <strong>Operational figures unavailable</strong>
+            <span>Exceptions cannot be calculated until the reporting database can be read. Reports are still available below.</span>
+          </div>
+        <?php elseif (empty($exceptions)): ?>
+          <div class="rpt-empty">
+            <strong>Nothing needs attention</strong>
+            <span>No out-of-stock items, overdue PM, out-of-service machines or unpublished weekly report was found.</span>
+          </div>
+        <?php else: ?>
+          <?php foreach ($exceptions as $ex): ?>
+          <div class="rpt-exc <?= $h($ex['tone']) ?>">
+            <span class="rpt-exc-mark" aria-hidden="true"></span>
+            <div class="rpt-exc-main">
+              <div class="rpt-exc-t"><?= $h($ex['label']) ?></div>
+              <div class="rpt-exc-d">
+                <?= $h($ex['tone'] === 'crit' ? 'Critical' : ($ex['tone'] === 'warn' ? 'Attention' : 'Information')) ?> ·
+                <?= $h($ex['detail']) ?>
+              </div>
+            </div>
+            <?php if ($ex['count'] !== null): ?><div class="rpt-exc-n"><?= (int)$ex['count'] ?></div><?php endif; ?>
+            <a class="rpt-exc-act" href="<?= $h($ex['href']) ?>"><?= $h($ex['action']) ?> →</a>
+          </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
+    </section>
+
+    <section class="rpt-panel" aria-labelledby="rpt-trend-h">
+      <div class="rpt-panel-head">
+        <div>
+          <h2 class="rpt-panel-title" id="rpt-trend-h">Fleet availability · last 30 days</h2>
+          <div class="rpt-panel-sub">Daily availability against the <?= $h(number_format($target, 1)) ?>% target</div>
+        </div>
+        <a class="rpt-panel-link" href="<?= $h($bu('reports/monthly?month=' . $this_month)) ?>">Monthly summary →</a>
+      </div>
+      <?php if ($live && $has_trend): ?>
+      <div class="rpt-chart-wrap">
+        <div class="rpt-chart">
+          <div class="rpt-chart-y" aria-hidden="true"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div>
+          <svg class="rpt-chart-svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img"
+               aria-label="Line chart of daily fleet availability over the last 30 days. The dashed horizontal line marks the <?= $h(number_format($target, 1)) ?> percent target. Latest available reading: <?= $h(number_format((float)$latest_val, 1)) ?> percent on <?= $h($latest_date) ?>.">
+            <g stroke="rgba(15,23,42,0.08)" stroke-width="1" vector-effect="non-scaling-stroke">
+              <line x1="0" y1="0" x2="100" y2="0"/><line x1="0" y1="25" x2="100" y2="25"/>
+              <line x1="0" y1="50" x2="100" y2="50"/><line x1="0" y1="75" x2="100" y2="75"/>
+              <line x1="0" y1="100" x2="100" y2="100"/>
+            </g>
+            <line x1="0" y1="<?= $h($chart_target_y) ?>" x2="100" y2="<?= $h($chart_target_y) ?>"
+                  stroke="rgba(15,23,42,0.32)" stroke-width="1.5" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>
+            <polyline points="<?= $h($chart_poly) ?>" fill="none" stroke="#1D4ED8" stroke-width="2"
+                      stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+            <?php foreach ($chart_pts as $i => $p):
+              $bx = max(0, $p['x'] - $chart_step / 2);
+              $bw = $chart_step; ?>
+            <rect x="<?= $h(round($bx, 3)) ?>" y="0" width="<?= $h(round($bw, 3)) ?>" height="100"
+                  fill="transparent" pointer-events="all">
+              <title><?= $h($p['d'] . ': ' . number_format($p['v'], 1) . '% availability') ?></title>
+            </rect>
+            <?php endforeach; ?>
+          </svg>
+          <div class="rpt-chart-x" aria-hidden="true">
+            <span><?= $h($trend_labels[0]) ?></span>
+            <span><?= $h($trend_labels[(int)floor((count($trend_labels) - 1) / 2)]) ?></span>
+            <span><?= $h(end($trend_labels)) ?></span>
+          </div>
+        </div>
+        <table class="rpt-sr">
+          <caption>Daily fleet availability over the last 30 days, percent</caption>
+          <thead><tr><th scope="col">Date</th><th scope="col">Availability</th></tr></thead>
+          <tbody>
+          <?php foreach ($t['availability_trend'] as $p): ?>
+            <tr><td><?= $h(isset($p['date']) ? $p['date'] : '') ?></td><td><?= $h(number_format(isset($p['pct']) ? (float)$p['pct'] : 100, 1)) ?>%</td></tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+      <p class="rpt-chart-note">Latest: <?= $h(number_format((float)$latest_val, 1)) ?>% on <?= $h($latest_date) ?>.
+        Dashed line = <?= $h(number_format($target, 1)) ?>% target, on a fixed 0–100% scale. From the KPI engine on the
+        configured open hours<?= ($total_machines > 0 && $covered < $total_machines)
+            ? ', with data from ' . $h($covered) . ' of ' . $h($total_machines) . ' machines' : '' ?>;
+        days with no scheduled operating time are reported as 100% by that engine.</p>
+      <?php else: ?>
+      <div class="rpt-empty">
+        <strong><?= $live ? 'Not enough data for a trend' : 'Trend unavailable' ?></strong>
+        <span><?= $live
+            ? 'Daily availability needs at least two days of engine output. Open the monthly summary for the underlying figures.'
+            : 'The reporting database could not be read on this request.' ?></span>
+      </div>
+      <?php endif; ?>
+    </section>
   </div>
 
-  <?php $weekly_report_name = isset($weekly_report_name) && $weekly_report_name !== '' ? $weekly_report_name : 'W'.(int)date('W', strtotime(isset($report_week_start) ? $report_week_start : 'today')); ?>
-  <!-- Weekly report preview (the name follows the selected week and can be changed on the dashboard) -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(52,199,89,0.14);color:#34c759;">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 15l2 2 4-4"/></svg>
+  <!-- ══ 5. REPORT LIBRARY ══ -->
+  <section aria-labelledby="rpt-lib-h">
+    <div class="rpt-lib-head">
+      <div>
+        <h2 class="rpt-lib-title" id="rpt-lib-h">Report library</h2>
+        <div class="rpt-lib-sub">Choose a period, then open the report or download it. The same period is applied to every export.</div>
+      </div>
     </div>
-    <div class="rpt-text">
-      <div class="rpt-title"><?= htmlspecialchars((string)($weekly_report_name)) ?> Weekly Report</div>
-      <div class="rpt-desc">The approved weekly sheet, generated from the system: pick the ISO week and set its report name, read the fleet grid, the per-type block and what the data still needs — the Excel download follows</div>
-    </div>
-    <div class="rpt-controls">
-      <a class="rpt-btn-primary" href="<?= base_url('reports/weekly_w36?week='.$wwr_iso) ?>">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-        Preview <?= $wwr_iso ?>
-      </a>
-    </div>
-  </div>
+    <nav class="rpt-jumps" aria-label="Jump to a report group">
+      <?php foreach ($sections as $s): ?>
+      <a class="rpt-jump" href="#<?= $h($s['id']) ?>"><?= $h($s['title']) ?></a>
+      <?php endforeach; ?>
+      <a class="rpt-jump" href="#quick-exports">Quick exports</a>
+    </nav>
 
-  <!-- Availability Targets -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(255,159,10,0.14);color:#ff9f0a;">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="21"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Availability Targets</div>
-      <div class="rpt-desc">Daily target KPI per machine and per group, with single-day overrides — the numbers the weekly report measures against</div>
-    </div>
-    <div class="rpt-controls">
-      <a class="rpt-btn-primary" href="<?= base_url('reports/weekly_targets?week_start='.$wwr_ws) ?>">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1.08-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-        Set targets
-      </a>
-    </div>
-  </div>
+    <?php foreach ($sections as $s): ?>
+    <section class="rpt-section" id="<?= $h($s['id']) ?>" aria-labelledby="rpt-sec-<?= $h($s['id']) ?>">
+      <div class="rpt-section-head">
+        <span class="rpt-section-num" aria-hidden="true"><?= $h($s['num']) ?></span>
+        <h3 class="rpt-section-title" id="rpt-sec-<?= $h($s['id']) ?>"><?= $h($s['title']) ?></h3>
+        <span class="rpt-section-count"><?= count($s['items']) ?></span>
+        <span class="rpt-section-desc"><?= $h($s['desc']) ?></span>
+      </div>
+      <div class="rpt-surface">
+        <?php foreach ($s['items'] as $item): ?>
+        <?php $form = isset($item['form']) ? $item['form'] : array(); ?>
+        <div class="rpt-row <?= !empty($item['featured']) ? 'is-featured' : '' ?>">
+          <div class="rpt-row-main">
+            <div class="rpt-row-titleline">
+              <h4 class="rpt-row-title"><?= $h($item['title']) ?></h4>
+              <?php if (!empty($item['badge'])): ?>
+              <span class="rpt-badge <?= $h(isset($item['badge_tone']) ? $item['badge_tone'] : '') ?>"><?= $h($item['badge']) ?></span>
+              <?php endif; ?>
+            </div>
+            <div class="rpt-row-desc"><?= $h($item['desc']) ?></div>
+            <div class="rpt-row-meta"><?= $h($item['meta']) ?></div>
+          </div>
+          <div class="rpt-row-ctrl">
+            <form method="get" action="<?= $h($bu($form['action'])) ?>" class="rpt-form">
+              <?php
+              $c = isset($form['control']) ? $form['control'] : null;
+              if ($c && $c['type'] === 'date'): ?>
+              <span class="rpt-period">
+                <label class="rpt-period-label" for="rpt-<?= $h($s['id']) . '-' . $h($c['name']) ?>-<?= $h(substr(md5($item['title']),0,6)) ?>"><?= $h($c['label']) ?></label>
+                <input class="rpt-input" type="date" id="rpt-<?= $h($s['id']) . '-' . $h($c['name']) ?>-<?= $h(substr(md5($item['title']),0,6)) ?>"
+                       name="<?= $h($c['name']) ?>" value="<?= $h($c['value']) ?>"<?= !empty($c['max']) ? ' max="' . $h($c['max']) . '"' : '' ?>>
+              </span>
+              <?php elseif ($c && $c['type'] === 'month'): ?>
+              <span class="rpt-period">
+                <label class="rpt-period-label" for="rpt-<?= $h($s['id']) . '-' . $h($c['name']) ?>-<?= $h(substr(md5($item['title']),0,6)) ?>"><?= $h($c['label']) ?></label>
+                <input class="rpt-input" type="month" id="rpt-<?= $h($s['id']) . '-' . $h($c['name']) ?>-<?= $h(substr(md5($item['title']),0,6)) ?>"
+                       name="<?= $h($c['name']) ?>" value="<?= $h($c['value']) ?>">
+              </span>
+              <?php elseif ($c && $c['type'] === 'select'): ?>
+              <span class="rpt-period">
+                <label class="rpt-period-label" for="rpt-<?= $h($s['id']) . '-' . $h($c['name']) ?>-<?= $h(substr(md5($item['title']),0,6)) ?>"><?= $h($c['label']) ?></label>
+                <select class="rpt-input rpt-select" id="rpt-<?= $h($s['id']) . '-' . $h($c['name']) ?>-<?= $h(substr(md5($item['title']),0,6)) ?>" name="<?= $h($c['name']) ?>">
+                  <?php foreach ($c['options'] as $ov => $ol): ?>
+                  <option value="<?= $h($ov) ?>" <?= (string)$ov === (string)$c['selected'] ? 'selected' : '' ?>><?= $h($ol) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </span>
+              <?php elseif ($c && $c['type'] === 'range'):
+                $uid = substr(md5($item['title']), 0, 6); ?>
+              <span class="rpt-period">
+                <span class="rpt-period-label" id="rpt-range-<?= $h($uid) ?>"><?= $h($c['label']) ?></span>
+                <span class="rpt-range" role="group" aria-labelledby="rpt-range-<?= $h($uid) ?>">
+                  <label class="rpt-sr" for="rpt-from-<?= $h($uid) ?>">From date</label>
+                  <input class="rpt-input" type="date" id="rpt-from-<?= $h($uid) ?>" name="<?= $h($c['from_name']) ?>" value="<?= $h($c['from_value']) ?>">
+                  <span class="rpt-range-sep" aria-hidden="true">–</span>
+                  <label class="rpt-sr" for="rpt-to-<?= $h($uid) ?>">To date</label>
+                  <input class="rpt-input" type="date" id="rpt-to-<?= $h($uid) ?>" name="<?= $h($c['to_name']) ?>" value="<?= $h($c['to_value']) ?>">
+                </span>
+              </span>
+              <?php endif; ?>
 
-  <!-- Daily Activity -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(0,113,227,0.12);color:var(--blue);">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Daily Activity</div>
-      <div class="rpt-desc">Work orders, team attendance, and PM completions for any selected day</div>
-    </div>
-    <div class="rpt-controls">
-      <input type="date" class="rpt-date" id="daily-date"
-             value="<?= date('Y-m-d') ?>" max="<?= date('Y-m-d') ?>">
-      <a class="rpt-btn-primary" id="daily-view" href="<?= base_url('reports/daily?date='.date('Y-m-d')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" id="daily-print" href="<?= base_url('reports/pdf_daily?date='.date('Y-m-d')) ?>" target="_blank">
-        <svg viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-        Print
-      </a>
-    </div>
-  </div>
+              <?php if (!empty($form['equipment_select'])):
+                $es = $form['equipment_select']; $euid = substr(md5($item['title']), 0, 6); ?>
+              <span class="rpt-period">
+                <label class="rpt-period-label" for="rpt-eq-<?= $h($euid) ?>"><?= $h($es['label']) ?></label>
+                <select class="rpt-input rpt-select" id="rpt-eq-<?= $h($euid) ?>" name="<?= $h($es['name']) ?>" required>
+                  <option value="">Choose a machine…</option>
+                  <?php foreach ($es['options'] as $eq): ?>
+                  <?php $lbl = trim((string)$eq->registration_no . ($eq->brand || $eq->model ? ' · ' . trim($eq->brand . ' ' . $eq->model) : '')); ?>
+                  <option value="<?= (int)$eq->id ?>"><?= $h($lbl) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </span>
+              <button type="submit" class="rpt-btn rpt-btn-primary">Open history
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+              <?php else: ?>
+              <button type="submit" class="rpt-btn rpt-btn-primary">Open
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+              <?php endif; ?>
+
+              <?php if (!empty($form['buttons'])): foreach ($form['buttons'] as $b): if ($b === null) continue; ?>
+                <?php if (!empty($b['href'])): ?>
+              <a class="rpt-btn" href="<?= $h($bu($b['href'])) ?>"<?= !empty($b['target']) ? ' target="' . $h($b['target']) . '" rel="noopener"' : '' ?>><?= $h($b['label']) ?></a>
+                <?php else: ?>
+              <button type="submit" class="rpt-btn"
+                      formaction="<?= $h($bu($b['action'])) ?>"
+                      <?= !empty($b['name']) ? 'name="' . $h($b['name']) . '" value="' . $h($b['value']) . '"' : '' ?>
+                      <?= !empty($b['target']) ? 'formtarget="' . $h($b['target']) . '"' : '' ?>><?= $h($b['label']) ?></button>
+                <?php endif; ?>
+              <?php endforeach; endif; ?>
+            </form>
+          </div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+    </section>
+    <?php endforeach; ?>
+
+    <!-- Quick exports -->
+    <section class="rpt-section" id="quick-exports" aria-labelledby="rpt-quick-h" style="scroll-margin-top:86px;">
+      <div class="rpt-section-head">
+        <span class="rpt-section-num" aria-hidden="true">06</span>
+        <h3 class="rpt-section-title" id="rpt-quick-h">Quick exports</h3>
+        <span class="rpt-section-count">3</span>
+        <span class="rpt-section-desc">Raw CSV extracts for a chosen month</span>
+      </div>
+      <form method="get" action="<?= $h($bu('reports/export_excel/workorders')) ?>" class="rpt-quick">
+        <span class="rpt-quick-label">Download</span>
+        <span class="rpt-period">
+          <label class="rpt-period-label" for="rpt-quick-month">Month</label>
+          <input class="rpt-input" type="month" id="rpt-quick-month" name="month" value="<?= $h($this_month) ?>">
+        </span>
+        <button type="submit" class="rpt-btn">Work orders</button>
+        <button type="submit" class="rpt-btn" formaction="<?= $h($bu('reports/export_excel/attendance')) ?>">Attendance</button>
+        <button type="submit" class="rpt-btn" formaction="<?= $h($bu('reports/export_excel/lubricants')) ?>">Lubricants</button>
+        <span class="rpt-quick-note">These three endpoints return CSV files, despite their historical “excel” URL.</span>
+      </form>
+    </section>
+  </section>
+
+  <p class="rpt-source">
+    Figures on this page come from the same KPI engine, store ledger, inventory catalogue and weekly-report model the
+    individual reports use. Availability = (required time − downtime) ÷ required time on the configured open hours;
+    MTTR / MTBF show “—” when the 30-day window had no breakdown events. A published weekly report is frozen and will
+    not change when work orders do. Nothing here is a cached or sample value.
+  </p>
+
 </div>
-
-
-<!-- ══════════════════════════════════════════════
-     GROUP 2 — RELIABILITY & PERFORMANCE
-══════════════════════════════════════════════ -->
-<div class="rpt-group" style="animation-delay:.08s">
-  <div class="rpt-group-label">Reliability &amp; Performance</div>
-
-  <!-- MTTR / MTBF -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(180,83,9,0.12);color:var(--amber);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">MTTR / MTBF Report</div>
-      <div class="rpt-desc">Mean Time To Repair &amp; Mean Time Between Failures — 12-month trend and per-equipment reliability table</div>
-    </div>
-    <div class="rpt-controls">
-      <select class="rpt-date" id="mttr-months" style="width:130px;">
-        <option value="3">3 months</option>
-        <option value="6">6 months</option>
-        <option value="12" selected>12 months</option>
-        <option value="18">18 months</option>
-        <option value="24">24 months</option>
-      </select>
-      <a class="rpt-btn-primary" id="mttr-view" href="<?= base_url('reports/mttr_mtbf?months=12') ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-    </div>
-  </div>
-
-  <!-- PM Due Forecast -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(109,63,192,0.12);color:var(--purple);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">PM Due Forecast</div>
-      <div class="rpt-desc">Preventive-maintenance schedules falling due — 30 to 180-day horizon, per machine type</div>
-    </div>
-    <div class="rpt-controls">
-      <select class="rpt-date" id="fc-horizon" style="width:130px;">
-        <option value="30">30 days</option>
-        <option value="60">60 days</option>
-        <option value="90" selected>90 days</option>
-        <option value="120">120 days</option>
-        <option value="180">180 days</option>
-      </select>
-      <a class="rpt-btn-primary" id="fc-view" href="<?= base_url('reports/availability_forecast?horizon=90') ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-    </div>
-  </div>
-
-  <!-- Annual Report -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(28,140,60,0.12);color:var(--green);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><polyline points="4 20 20 20"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Annual Report</div>
-      <div class="rpt-desc">Full-year executive summary — monthly KPI trend, equipment reliability ranking, top faults, lubricant usage, and parts spend</div>
-    </div>
-    <div class="rpt-controls">
-      <select class="rpt-date" id="annual-year" style="width:110px;">
-        <?php for($y=date('Y');$y>=2020;$y--): ?>
-        <option value="<?=$y?>" <?=$y==(int)date('Y')?'selected':''?>><?=$y?></option>
-        <?php endfor; ?>
-      </select>
-      <a class="rpt-btn-primary" id="annual-view" href="<?= base_url('reports/annual_report?year='.date('Y')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" id="annual-excel" href="<?= base_url('reports/export_annual_report_xlsx?year='.date('Y')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Excel
-      </a>
-    </div>
-  </div>
-
-  <!-- Monthly Summary (existing) -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(180,83,9,0.12);color:var(--amber);">
-      <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Monthly Summary</div>
-      <div class="rpt-desc">KPIs, availability trend, work order breakdown, attendance, and lubricant usage</div>
-    </div>
-    <div class="rpt-controls">
-      <input type="month" class="rpt-date" id="monthly-date" value="<?= date('Y-m') ?>">
-      <a class="rpt-btn-primary" id="monthly-view" href="<?= base_url('reports/monthly?month='.date('Y-m')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-    </div>
-  </div>
-
-  <!-- AML Individual Attendance Sheets -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(34,197,94,0.12);color:#16a34a;">
-      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Individual Attendance Sheets (AML)</div>
-      <div class="rpt-desc">Print-ready per-worker &amp; batch AML attendance sign-off sheets (PDF &amp; Excel) for half-month or full-month periods</div>
-    </div>
-    <div class="rpt-controls">
-      <input type="month" class="rpt-date" id="timesheet-month" value="<?= date('Y-m') ?>">
-      <a class="rpt-btn-primary" id="timesheet-view" href="<?= base_url('team/report?month='.date('Y-m')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" id="timesheet-pdf" href="<?= base_url('team/timesheets_batch?month='.date('Y-m')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        All PDF
-      </a>
-      <a class="rpt-btn-ghost" id="timesheet-xlsx" href="<?= base_url('team/timesheets_batch?format=xlsx&month='.date('Y-m')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        All XLSX
-      </a>
-    </div>
-  </div>
-
-</div>
-
-
-<!-- ══════════════════════════════════════════════
-     GROUP 3 — MAINTENANCE PLANNING
-══════════════════════════════════════════════ -->
-<div class="rpt-group" style="animation-delay:.12s">
-  <div class="rpt-group-label">Maintenance Planning</div>
-
-  <!-- Monthly Maintenance Plan -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(28,140,60,0.12);color:var(--green);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Monthly Maintenance Plan</div>
-      <div class="rpt-desc">PM jobs scheduled by week + all open corrective work orders — export-ready for team briefings</div>
-    </div>
-    <div class="rpt-controls">
-      <input type="month" class="rpt-date" id="mplan-month" value="<?= date('Y-m') ?>">
-      <a class="rpt-btn-primary" id="mplan-view" href="<?= base_url('reports/monthly_plan?month='.date('Y-m')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" id="mplan-excel" href="<?= base_url('reports/export_monthly_plan_xlsx?month='.date('Y-m')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Excel
-      </a>
-    </div>
-  </div>
-
-  <!-- Lubricant Compliance -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(0,113,227,0.12);color:var(--blue);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/><polyline points="9 12 11 14 15 10"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Lubricant Compliance</div>
-      <div class="rpt-desc">PM-driven lube requirement (date + hours based) vs. actual consumption, by month or full year</div>
-    </div>
-    <div class="rpt-controls">
-      <input type="month" class="rpt-date" id="lube-month" value="<?= date('Y-m') ?>">
-      <a class="rpt-btn-primary" id="lube-view" href="<?= base_url('reports/lube_compliance?month='.date('Y-m')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" href="<?= base_url('reports/lube_compliance_yearly?year='.date('Y')) ?>">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        Yearly
-      </a>
-    </div>
-  </div>
-
-  <!-- Store Analytics -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(0,113,227,0.12);color:var(--blue);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Store Analytics</div>
-      <div class="rpt-desc">Supplier spend breakdown and learned lead-times by country + shipping method</div>
-    </div>
-    <div class="rpt-controls">
-      <select class="rpt-date" id="store-year" style="width:90px;">
-        <?php for ($y = date('Y'); $y >= date('Y')-4; $y--): ?>
-        <option value="<?= $y ?>"><?= $y ?></option>
-        <?php endfor; ?>
-      </select>
-      <a class="rpt-btn-primary" id="store-view" href="<?= base_url('reports/store_analytics?year='.date('Y')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-    </div>
-  </div>
-
-  <!-- Store Issue Register -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(255,159,10,0.12);color:var(--amber);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v4H3z"/><path d="M5 7v14h14V7"/><path d="M9 12h6"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Store Issue Register (Sortie)</div>
-      <div class="rpt-desc">Every item issued — date, requisition no, machine or department it was charged to, receiver — with full filtering and Excel export. Replaces the manual Sortie sheet.</div>
-    </div>
-    <div class="rpt-controls">
-      <a class="rpt-btn-primary" href="<?= base_url('reports/issue_register?date_from='.date('Y-m-01').'&date_to='.date('Y-m-d')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" href="<?= base_url('reports/export_issue_register_xlsx?date_from='.date('Y-m-01').'&date_to='.date('Y-m-d')) ?>">Excel</a>
-    </div>
-  </div>
-
-  <!-- Store Receipt Register -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(48,209,88,0.12);color:var(--green);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M12 22V12"/><path d="M3.3 7L12 12l8.7-5"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Store Receipt Register</div>
-      <div class="rpt-desc">Goods received by MRN / delivery note — supplier, quantity approved vs delivered, unit price and line value. Replaces the manual Receipts sheet.</div>
-    </div>
-    <div class="rpt-controls">
-      <a class="rpt-btn-primary" href="<?= base_url('reports/receipt_register?date_from='.date('Y-m-01').'&date_to='.date('Y-m-d')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" href="<?= base_url('reports/export_receipt_register_xlsx?date_from='.date('Y-m-01').'&date_to='.date('Y-m-d')) ?>">Excel</a>
-    </div>
-  </div>
-
-  <!-- Re-order Report -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(255,69,58,0.12);color:var(--red);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Re-order Report</div>
-      <div class="rpt-desc">Items at or below their minimum stock, with the quantity to order up to the maximum, estimated value and preferred supplier. Replaces the manual "Alerte / Qty to order" columns.</div>
-    </div>
-    <div class="rpt-controls">
-      <a class="rpt-btn-primary" href="<?= base_url('reports/reorder') ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" href="<?= base_url('reports/export_reorder_xlsx') ?>">Excel</a>
-    </div>
-  </div>
-
-  <!-- Annual Maintenance Plan -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(0,113,227,0.12);color:var(--blue);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h8M8 18h5"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Annual Maintenance Plan</div>
-      <div class="rpt-desc">All PM jobs across 12 months — visual heatmap overview + month-by-month breakdown with due dates and hours</div>
-    </div>
-    <div class="rpt-controls">
-      <select class="rpt-date" id="aplan-year" style="width:110px;">
-        <?php for($y=date('Y')+1;$y>=2020;$y--): ?>
-        <option value="<?=$y?>" <?=$y==(int)date('Y')?'selected':''?>><?=$y?></option>
-        <?php endfor; ?>
-      </select>
-      <a class="rpt-btn-primary" id="aplan-view" href="<?= base_url('reports/annual_plan?year='.date('Y')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" id="aplan-excel" href="<?= base_url('reports/export_annual_plan_xlsx?year='.date('Y')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Excel
-      </a>
-    </div>
-  </div>
-
-  <!-- Service Kit Recommendations -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(192,57,43,0.12);color:var(--red);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Service Kit Recommendations</div>
-      <div class="rpt-desc">Per-machine recommended spare parts and lubricants — built automatically from historical WO parts and oil records</div>
-    </div>
-    <div class="rpt-controls">
-      <a class="rpt-btn-primary" href="<?= base_url('reports/service_kits') ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" href="<?= base_url('reports/export_service_kits_xlsx') ?>">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Excel
-      </a>
-    </div>
-  </div>
-
-  <!-- Weekly Snapshot (existing) -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(0,113,227,0.12);color:var(--blue);">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Weekly Snapshot</div>
-      <div class="rpt-desc">Work order count, team performance, and PM status for a selected week</div>
-    </div>
-    <div class="rpt-controls">
-      <input type="week" class="rpt-date" id="weekly-date">
-      <button class="rpt-btn-primary" onclick="gotoWeek()">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </button>
-      <a class="rpt-btn-ghost" href="<?= base_url('reports/weekly') ?>">This Week</a>
-    </div>
-  </div>
-
-  <!-- Daily Activity (existing) -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(0,113,227,0.12);color:var(--blue);">
-      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Daily Activity</div>
-      <div class="rpt-desc">Work orders, team attendance, and PM completions for any selected day</div>
-    </div>
-    <div class="rpt-controls">
-      <input type="date" class="rpt-date" id="daily-date"
-             value="<?= date('Y-m-d') ?>" max="<?= date('Y-m-d') ?>">
-      <a class="rpt-btn-primary" id="daily-view" href="<?= base_url('reports/daily?date='.date('Y-m-d')) ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" id="daily-print" href="<?= base_url('reports/pdf_daily?date='.date('Y-m-d')) ?>" target="_blank">
-        <svg viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-        Print
-      </a>
-    </div>
-  </div>
-</div>
-
-
-<!-- ══════════════════════════════════════════════
-     GROUP 4 — ASSETS & INVENTORY
-══════════════════════════════════════════════ -->
-<div class="rpt-group" style="animation-delay:.16s">
-  <div class="rpt-group-label">Assets &amp; Inventory</div>
-
-  <!-- Asset Register -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(50,173,230,0.12);color:var(--cyan);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8l4 1 3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Asset Register</div>
-      <div class="rpt-desc">Full fleet inventory — serial numbers, hours, warranty status, lifetime WOs, availability and next PM</div>
-    </div>
-    <div class="rpt-controls">
-      <a class="rpt-btn-primary" href="<?= base_url('reports/asset_register') ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" href="<?= base_url('reports/export_asset_register_xlsx') ?>">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Export Excel
-      </a>
-      <a class="rpt-btn-ghost" href="<?= base_url('reports/asset_template_xlsx') ?>">
-        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        Template
-      </a>
-      <a class="rpt-btn-ghost" href="<?= base_url('reports/asset_register') ?>#assetImportPanel">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        Import Excel
-      </a>
-    </div>
-  </div>
-
-  <!-- Equipment History (existing) -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(109,63,192,0.12);color:var(--purple);">
-      <svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8l4 1 3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Equipment History</div>
-      <div class="rpt-desc">Full maintenance record, oil history, and downtime log for any individual machine</div>
-    </div>
-    <div class="rpt-controls">
-      <a class="rpt-btn-primary" href="<?= base_url('equipment') ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        Select Machine
-      </a>
-    </div>
-  </div>
-
-  <!-- Materials Movement (existing) -->
-  <div class="rpt-row">
-    <div class="rpt-icon" style="background:rgba(50,173,230,0.12);color:var(--cyan);">
-      <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-    </div>
-    <div class="rpt-text">
-      <div class="rpt-title">Materials Movement</div>
-      <div class="rpt-desc">Stock levels, receipts, and issues across all inventory categories</div>
-    </div>
-    <div class="rpt-controls">
-      <a class="rpt-btn-primary" href="<?= base_url('materials/inventory') ?>">
-        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        View
-      </a>
-      <a class="rpt-btn-ghost" href="<?= base_url('materials/export_xlsx') ?>">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Excel
-      </a>
-    </div>
-  </div>
-</div>
-
-
-<!-- ══════════════════════════════════════════════
-     EXPORT STRIP
-══════════════════════════════════════════════ -->
-<div class="export-strip">
-  <span class="export-label">Export</span>
-  <input type="month" class="rpt-date" id="exportMonth" value="<?= date('Y-m') ?>">
-  <button onclick="exportData('workorders')" class="rpt-btn-ghost">
-    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    Work Orders
-  </button>
-  <button onclick="exportData('attendance')" class="rpt-btn-ghost">
-    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    Attendance
-  </button>
-  <button onclick="exportData('lubricants')" class="rpt-btn-ghost">
-    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    Lubricants
-  </button>
-</div>
-
-
-<script>
-var BASE = '<?= base_url() ?>';
-
-// Live date → URL sync for date pickers
-function bind(inputId, linkId, baseUrl, param) {
-  var inp  = document.getElementById(inputId);
-  var link = document.getElementById(linkId);
-  if (!inp || !link) return;
-  inp.addEventListener('change', function() {
-    link.href = BASE + baseUrl + '?' + param + '=' + this.value;
-  });
-}
-bind('wdr-date',    'wdr-view',    'reports/workshop_daily',           'date');
-bind('wdr-date',    'wdr-excel',   'reports/export_workshop_daily_xlsx','date');
-bind('wwr-date',    'wwr-view',    'reports/workshop_weekly',           'week_start');
-bind('wwr-date',    'wwr-excel',   'reports/export_workshop_weekly_xlsx','week_start');
-bind('wwr-date',    'wwr-pdf',     'reports/export_workshop_weekly_pdf', 'week_start');
-bind('monthly-date','monthly-view','reports/monthly',                   'month');
-bind('timesheet-month','timesheet-view','team/report',                  'month');
-bind('timesheet-month','timesheet-pdf', 'team/timesheets_batch',        'month');
-(function(){
-  var tm = document.getElementById('timesheet-month');
-  var tx = document.getElementById('timesheet-xlsx');
-  if (tm && tx) {
-    tm.addEventListener('change', function() {
-      tx.href = BASE + 'team/timesheets_batch?format=xlsx&month=' + this.value;
-    });
-  }
-})();
-bind('mplan-month', 'mplan-view',  'reports/monthly_plan',              'month');
-bind('mplan-month', 'mplan-excel', 'reports/export_monthly_plan_xlsx',  'month');
-bind('lube-month',  'lube-view',   'reports/lube_compliance',           'month');
-bind('store-year',  'store-view',  'reports/store_analytics',           'year');
-bind('daily-date',  'daily-view',  'reports/daily',                     'date');
-bind('daily-date',  'daily-print', 'reports/pdf_daily',                 'date');
-
-// MTTR selector
-(function(){
-  var sel=document.getElementById('mttr-months'),link=document.getElementById('mttr-view');
-  if(sel&&link) sel.addEventListener('change',function(){ link.href=BASE+'reports/mttr_mtbf?months='+this.value; });
-})();
-
-// Availability Forecast horizon
-(function(){
-  var sel=document.getElementById('fc-horizon'),link=document.getElementById('fc-view');
-  if(sel&&link) sel.addEventListener('change',function(){ link.href=BASE+'reports/availability_forecast?horizon='+this.value; });
-})();
-
-// Annual Report year
-(function(){
-  var sel=document.getElementById('annual-year');
-  var vl=document.getElementById('annual-view');
-  var el=document.getElementById('annual-excel');
-  if(!sel) return;
-  sel.addEventListener('change',function(){
-    var y=this.value;
-    if(vl) vl.href=BASE+'reports/annual_report?year='+y;
-    if(el) el.href=BASE+'reports/export_annual_report_xlsx?year='+y;
-  });
-})();
-
-// Annual Plan year
-(function(){
-  var sel=document.getElementById('aplan-year');
-  var vl=document.getElementById('aplan-view');
-  var el=document.getElementById('aplan-excel');
-  if(!sel) return;
-  sel.addEventListener('change',function(){
-    var y=this.value;
-    if(vl) vl.href=BASE+'reports/annual_plan?year='+y;
-    if(el) el.href=BASE+'reports/export_annual_plan_xlsx?year='+y;
-  });
-})();
-bind('daily-date',  'daily-view',  'reports/daily',                    'date');
-bind('daily-date',  'daily-print', 'reports/pdf_daily',                'date');
-bind('monthly-date','monthly-view','reports/monthly',                   'month');
-
-function gotoWeek() {
-  var w = document.getElementById('weekly-date').value; // 2024-W08
-  if (!w) { location.href = BASE + 'reports/weekly'; return; }
-  var parts = w.split('-W');
-  var d     = new Date(parts[0], 0, 1 + (parseInt(parts[1])-1)*7);
-  var day   = d.getDay();
-  var diff  = d.getDate() - day + (day===0 ? -6 : 1);
-  d.setDate(diff);
-  location.href = BASE + 'reports/weekly?week=' + d.toISOString().split('T')[0];
-}
-
-function exportData(type) {
-  var month = document.getElementById('exportMonth').value;
-  location.href = BASE + 'reports/export_excel/' + type + '?month=' + month;
-}
-</script>
