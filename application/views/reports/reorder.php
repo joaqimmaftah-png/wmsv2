@@ -1059,7 +1059,7 @@ $roText = function ($raw) use ($h) {
       <nav class="ro-pages" aria-label="Re-order report pagination">
         <a class="ro-page-link <?= $page <= 1 ? 'is-disabled' : '' ?>"
            href="<?= $h($roUrl(array('page' => max(1, $page - 1)))) ?>"
-           <?= $page <= 1 ? 'aria-disabled="true"' : '' ?>>Prev</a>
+           <?= $page <= 1 ? 'aria-disabled="true" tabindex="-1"' : '' ?>>Prev</a>
         <?php
         $pageWindowStart = max(1, $page - 2);
         $pageWindowEnd   = min((int)$pagination['total_pages'], $page + 2);
@@ -1078,7 +1078,7 @@ $roText = function ($raw) use ($h) {
         <?php endif; ?>
         <a class="ro-page-link <?= $page >= (int)$pagination['total_pages'] ? 'is-disabled' : '' ?>"
            href="<?= $h($roUrl(array('page' => min((int)$pagination['total_pages'], $page + 1)))) ?>"
-           <?= $page >= (int)$pagination['total_pages'] ? 'aria-disabled="true"' : '' ?>>Next</a>
+           <?= $page >= (int)$pagination['total_pages'] ? 'aria-disabled="true" tabindex="-1"' : '' ?>>Next</a>
       </nav>
       <?php endif; ?>
 
