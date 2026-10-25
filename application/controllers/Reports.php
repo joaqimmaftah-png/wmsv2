@@ -10,16 +10,236 @@ class Reports extends MY_Controller {
     /** Import results are parked here while the user reads the summary */
     const ASSET_IMPORT_TMP = 'uploads/tmp/';
 
+    /** How many *completed* reporting weeks /reports checks for an unpublished W36. */
+    const PUBLICATION_LOOKBACK_WEEKS = 4;
+
     public function __construct() {
         parent::__construct();
         $this->load->model(['Dashboard_model','Workorder_model','Team_model','Lubricant_model','Equipment_model','Order_model','Supplier_model','Asset_model','Materials_model','Store_model','Settings_model','Kpi_target_model','Kpi_engine_model','W36_report_model']);
     }
 
+    /**
+     * When a W36 report's publication becomes due.
+     *
+     * The application has NO publication-deadline setting, so the only honest
+     * boundary is the report's own configured reporting week: its last day is
+     * the "due soon" warning window and its last instant is the deadline.
+     * If the business later defines a formal cut-off (e.g. Monday 09:00 or a
+     * settings key), it belongs in this ONE function — no view or report may
+     * compute its own.  Nothing here changes when publishing is allowed.
+     *
+     * @param  string $week_end 'Y-m-d'
+     * @return array{warning_from:string, deadline:string} 'Y-m-d H:i:s'
+     */
+    private function _publication_window($week_end) {
+        return array(
+            'warning_from' => date('Y-m-d 00:00:00', strtotime($week_end)),
+            'deadline'     => date('Y-m-d 23:59:59', strtotime($week_end)),
+        );
+    }
+
+    /**
+     * The pure state classification of one report week.  Kept separate from
+     * the data reads so the five-state ladder can be reasoned about (and
+     * regression-tested) on its own.  Timestamps are 'Y-m-d H:i:s' strings,
+     * which compare lexicographically, so no timezone math is repeated here.
+     *
+     * @return string published | draft_in_progress | draft_due_soon |
+     *                unpublished_action_required
+     */
+    private function _publication_state($is_published, $now, $warning_from, $deadline) {
+        if ($is_published) return 'published';
+        if (strcmp((string)$now, (string)$deadline) >= 0) return 'unpublished_action_required';
+        if (strcmp((string)$now, (string)$warning_from) >= 0) return 'draft_due_soon';
+        return 'draft_in_progress';
+    }
+
     public function index() {
         $data['page_title'] = 'Reports';
         // default week shown by the weekly-report launcher (W0.7)
-        $data['report_week_start'] = $this->Settings_model->week_start();
-        $data['weekly_report_name'] = $this->W36_report_model->report_name($data['report_week_start']);
+        $week_start = $this->Settings_model->week_start();
+        $bounds     = $this->Settings_model->week_bounds($week_start);
+        $week_end   = isset($bounds['end']) ? $bounds['end'] : date('Y-m-d', strtotime($week_start . ' +6 days'));
+        $iso_week   = $this->Settings_model->iso_week_label($week_start);
+
+        $data['report_week_start']  = $week_start;
+        $data['report_week_end']    = $week_end;
+        $data['report_iso_week']    = $iso_week;
+        $data['weekly_report_name'] = $this->W36_report_model->report_name($week_start);
+
+        // Operational reporting telemetry — wrapped defensively so a missing
+        // optional table never prevents the Reports hub from rendering.
+        $telemetry = array(
+            'available'           => false,
+            'availability_pct'    => 100.0,
+            'avail_target_pct'    => 88.0,
+            'avail_machines_with' => 0,
+            'avail_from'          => null,
+            'avail_to'            => null,
+            'mttr_30d'            => 0.0,
+            'mtbf_30d'            => 0.0,
+            'breakdowns_30d'      => 0,
+            'downtime_30d'        => 0.0,
+            'availability_trend'  => array(),
+            'zero_failure_mode'   => 'dash',
+            'overdue_pm'          => 0,
+            'pm_due_30d'          => 0,
+            'fleet_total'         => 0,
+            'machines_down'       => 0,
+            'equipment_list'      => array(),
+            'reorder_count'       => 0,
+            'out_of_stock_count'  => 0,
+            'reorder_units'       => 0,
+            'store_available'     => false,
+            'targets_ready'       => false,
+            'w36_snapshot'        => null,
+            // Five-state W36 publication ladder.  Every key has an honest
+            // default so a failed telemetry read never looks like a known
+            // "Draft" or a known published week.
+            'w36_pub'             => array(
+                'checkable'     => false,
+                'state'         => 'unknown',
+                'published_at'  => null,
+                'warning_from'  => null,
+                'deadline'      => null,
+                'previous'      => null,
+                'older_count'   => 0,
+                'older_latest'  => null,
+                'window'        => self::PUBLICATION_LOOKBACK_WEEKS,
+            ),
+            'weekly_open_hours'   => 168.0,
+            'daily_open_hours'    => 24.0,
+        );
+
+        try {
+            $telemetry['weekly_open_hours'] = (float)$this->Settings_model->period_open_hours(7);
+            $telemetry['daily_open_hours']  = (float)$this->Settings_model->daily_open_hours();
+            $telemetry['zero_failure_mode'] = $this->Kpi_engine_model->zero_failure_mode();
+            $telemetry['avail_target_pct']  = (float)$this->Dashboard_model->availability_target_pct();
+
+            $avail_win = $this->Dashboard_model->get_availability_window();
+            $telemetry['availability_pct']    = isset($avail_win['pct']) ? (float)$avail_win['pct'] : 100.0;
+            $telemetry['avail_machines_with'] = isset($avail_win['machines_with']) ? (int)$avail_win['machines_with'] : 0;
+            $telemetry['avail_from']          = isset($avail_win['from']) ? $avail_win['from'] : null;
+            $telemetry['avail_to']            = isset($avail_win['to']) ? $avail_win['to'] : null;
+
+            $telemetry['mttr_30d']       = (float)$this->Dashboard_model->get_mttr_30d();
+            $telemetry['mtbf_30d']       = (float)$this->Dashboard_model->get_mtbf_30d();
+            $telemetry['breakdowns_30d'] = (int)$this->Dashboard_model->count_breakdowns_30d();
+            $telemetry['downtime_30d']   = (float)$this->Dashboard_model->get_total_downtime_30d();
+
+            // One 30-day series for the reporting-context trend.  It is the
+            // engine's own daily_fleet() output, never a fabricated fallback.
+            $trend = $this->Dashboard_model->get_availability_trend(30);
+            $telemetry['availability_trend'] = is_array($trend) ? $trend : array();
+
+            $telemetry['overdue_pm'] = (int)$this->Dashboard_model->count_overdue_pm();
+
+            if ($this->db && $this->db->table_exists('pm_schedules')) {
+                $telemetry['pm_due_30d'] = (int)$this->db
+                    ->where('status', 'Active')
+                    ->where('next_due_date <=', date('Y-m-d', strtotime('+30 days')))
+                    ->count_all_results('pm_schedules');
+            }
+
+            // Roll the fleet up from the same per-type status definition the
+            // dashboard uses; no second status taxonomy is invented here.
+            $by_type = $this->Dashboard_model->get_fleet_kpi_by_type();
+            if (is_array($by_type)) {
+                foreach ($by_type as $g) {
+                    $telemetry['fleet_total']   += isset($g['total']) ? (int)$g['total'] : 0;
+                    $telemetry['machines_down'] += isset($g['down']) ? (int)$g['down'] : 0;
+                }
+            }
+
+            if ($this->db && $this->db->table_exists('equipment')) {
+                $telemetry['equipment_list'] = $this->db
+                    ->select('id, registration_no, brand, model')
+                    ->from('equipment')
+                    ->where('status !=', 'Retired')
+                    ->order_by('registration_no', 'ASC')
+                    ->get()->result();
+            }
+
+            $telemetry['store_available'] = (bool)$this->Store_model->available();
+            $reorder_rows = $this->Materials_model->get_reorder_items();
+            if (is_array($reorder_rows)) {
+                $telemetry['reorder_count'] = count($reorder_rows);
+                foreach ($reorder_rows as $rr) {
+                    if ((int)$rr->final_qty <= 0) $telemetry['out_of_stock_count']++;
+                    $telemetry['reorder_units'] += isset($rr->qty_to_order) ? (int)$rr->qty_to_order : 0;
+                }
+            }
+
+            $telemetry['targets_ready']     = (bool)$this->Kpi_target_model->table_ready();
+            $telemetry['w36_snapshot']      = $this->W36_report_model->snapshot_of($week_start);
+
+            /* ── W36 publication ladder ──────────────────────────────────
+               Current week:  Draft — Week in progress (Informational)
+                              Draft — Publication due soon (Warning)
+                              Unpublished — Action required (High)
+               Previous week: Published (No action) / overdue (High)
+               Only COMPLETED weeks are checked for a missing snapshot, over a
+               bounded window, so a report missed three weeks ago cannot vanish
+               when a newer week is published.  The deadline itself comes from
+               the configured week end — no SLA or setting is invented.      */
+            $lookback = self::PUBLICATION_LOOKBACK_WEEKS;
+            $window   = $this->_publication_window($week_end);
+            $now      = date('Y-m-d H:i:s');
+            $from     = date('Y-m-d', strtotime($week_start . ' -' . ($lookback * 7) . ' days'));
+            $to       = date('Y-m-d', strtotime($week_start . ' -1 day'));
+            $published_starts = $this->W36_report_model->published_week_starts($from, $to);
+            $checkable        = ($published_starts !== null);
+
+            $pub = $telemetry['w36_pub'];
+            $pub['checkable']    = $checkable;
+            $pub['window']       = $lookback;
+            $pub['warning_from'] = $window['warning_from'];
+            $pub['deadline']     = $window['deadline'];
+            $pub['state']        = $this->_publication_state(
+                !empty($telemetry['w36_snapshot']),
+                $now, $window['warning_from'], $window['deadline']
+            );
+            if (!empty($telemetry['w36_snapshot']['published_at'])) {
+                $pub['published_at'] = $telemetry['w36_snapshot']['published_at'];
+            }
+
+            if ($checkable) {
+                $completed = array();
+                for ($i = 1; $i <= $lookback; $i++) {
+                    $s = date('Y-m-d', strtotime($week_start . ' -' . ($i * 7) . ' days'));
+                    $e = date('Y-m-d', strtotime($s . ' +6 days'));
+                    $completed[] = array(
+                        'start'     => $s,
+                        'end'       => $e,
+                        'iso_label' => $this->Settings_model->iso_week_label($s),
+                        'published' => isset($published_starts[$s]),
+                    );
+                }
+                // The just-closed week: deadline passed → "Action required".
+                $prev       = $completed[0];
+                $prev_win   = $this->_publication_window($prev['end']);
+                $prev['state'] = $this->_publication_state(
+                    $prev['published'], $now, $prev_win['warning_from'], $prev_win['deadline']
+                );
+                $pub['previous'] = $prev;
+
+                // Older completed weeks with no snapshot: "Overdue".
+                $older = array();
+                for ($i = 1; $i < count($completed); $i++) {
+                    if (!$completed[$i]['published']) $older[] = $completed[$i];
+                }
+                $pub['older_count']  = count($older);
+                $pub['older_latest'] = $older ? $older[0] : null;
+            }
+            $telemetry['w36_pub'] = $pub;
+
+            $telemetry['available']         = true;
+        } catch (Throwable $e) {
+            log_message('error', 'Reports::index telemetry fallback: ' . $e->getMessage());
+        }
+
+        $data['telemetry'] = $telemetry;
         $this->render('reports/index', $data);
     }
 
@@ -767,7 +987,13 @@ class Reports extends MY_Controller {
         readfile($tmp); unlink($tmp); exit;
     }
 
-    public function equipment_history($id) {
+    public function equipment_history($id = null) {
+        // The Reports hub offers a machine picker (a GET form).  The canonical
+        // route still passes the id as a path segment; accepting the same id
+        // from the query string keeps that picker usable without JavaScript.
+        if ($id === null || $id === '') $id = $this->input->get('id', TRUE);
+        $id = is_scalar($id) ? (int)$id : 0;
+        if ($id <= 0) show_404();
         $data['equipment']   = $this->Equipment_model->get_by_id($id);
         if (!$data['equipment']) show_404();
         $data['work_orders'] = $this->Workorder_model->get_by_equipment($id, 100);
