@@ -10,6 +10,9 @@ class Reports extends MY_Controller {
     /** Import results are parked here while the user reads the summary */
     const ASSET_IMPORT_TMP = 'uploads/tmp/';
 
+    /** How many *completed* reporting weeks /reports checks for an unpublished W36. */
+    const PUBLICATION_LOOKBACK_WEEKS = 4;
+
     public function __construct() {
         parent::__construct();
         $this->load->model(['Dashboard_model','Workorder_model','Team_model','Lubricant_model','Equipment_model','Order_model','Supplier_model','Asset_model','Materials_model','Store_model','Settings_model','Kpi_target_model','Kpi_engine_model','W36_report_model']);
@@ -54,6 +57,10 @@ class Reports extends MY_Controller {
             'store_available'     => false,
             'targets_ready'       => false,
             'w36_snapshot'        => null,
+            'w36_snapshots_available' => false,
+            'w36_due_count'       => 0,
+            'w36_due_latest'      => null,
+            'w36_due_window'      => self::PUBLICATION_LOOKBACK_WEEKS,
             'weekly_open_hours'   => 168.0,
             'daily_open_hours'    => 24.0,
         );
@@ -120,6 +127,36 @@ class Reports extends MY_Controller {
 
             $telemetry['targets_ready']     = (bool)$this->Kpi_target_model->table_ready();
             $telemetry['w36_snapshot']      = $this->W36_report_model->snapshot_of($week_start);
+
+            // The open week's W36 is a draft by design — its figures keep
+            // moving, so the hub reports it as an informational status, not an
+            // alert.  Publication becomes due the day after the configured
+            // reporting week ends: that week's figures are then complete.
+            // Look back a bounded number of completed weeks so a publication
+            // missed three weeks ago does not vanish once a newer week is
+            // published.  No new deadline or setting is introduced: the only
+            // boundaries are Settings_model's configured week start and its
+            // start + 6 days week end.
+            $lookback = self::PUBLICATION_LOOKBACK_WEEKS;
+            $due_from = date('Y-m-d', strtotime($week_start . ' -' . ($lookback * 7) . ' days'));
+            $due_to   = date('Y-m-d', strtotime($week_start . ' -1 day'));
+            $published_starts = $this->W36_report_model->published_week_starts($due_from, $due_to);
+            $telemetry['w36_snapshots_available'] = ($published_starts !== null);
+            if (is_array($published_starts)) {
+                $unpublished = array();
+                for ($i = 1; $i <= $lookback; $i++) {
+                    $s = date('Y-m-d', strtotime($week_start . ' -' . ($i * 7) . ' days'));
+                    if (isset($published_starts[$s])) continue;
+                    $unpublished[] = array(
+                        'start'     => $s,
+                        'end'       => date('Y-m-d', strtotime($s . ' +6 days')),
+                        'iso_label' => $this->Settings_model->iso_week_label($s),
+                    );
+                }
+                $telemetry['w36_due_count']  = count($unpublished);
+                $telemetry['w36_due_latest'] = $unpublished ? $unpublished[0] : null;
+            }
+
             $telemetry['available']         = true;
         } catch (Throwable $e) {
             log_message('error', 'Reports::index telemetry fallback: ' . $e->getMessage());

@@ -1524,6 +1524,38 @@ class W36_report_model extends CI_Model {
     }
 
     /**
+     * A light, read-only publication census for a range of week starts.
+     *
+     * Unlike is_published(), this reads the *snapshot row*, not the decoded
+     * payload: a week whose stored payload is unreadable is still published —
+     * its problem is data quality, and telling the user to publish it again
+     * would be wrong.  The /reports hub uses it to find completed weeks that
+     * are still due for publication without decoding four full reports.
+     *
+     * @param  string $from 'Y-m-d', inclusive
+     * @param  string $to   'Y-m-d', inclusive
+     * @return array<string,true>|null  map of published week starts; null when
+     *         the snapshot table is not installed (so a caller can tell
+     *         "cannot check" apart from "nothing published")
+     */
+    public function published_week_starts($from, $to) {
+        if (!$this->snapshots_available()) return null;
+
+        $rows = $this->db->select('week_start')
+                         ->from(self::SNAPSHOT_TABLE)
+                         ->where('week_start >=', $from)
+                         ->where('week_start <=', $to)
+                         ->get()->result();
+
+        $out = array();
+        foreach ($rows as $row) {
+            $start = isset($row->week_start) ? substr((string)$row->week_start, 0, 10) : '';
+            if ($start !== '') $out[$start] = true;
+        }
+        return $out;
+    }
+
+    /**
      * Publish (freeze) a week.
      *
      * The report is built with its **own cut-off** — the last day of the week —

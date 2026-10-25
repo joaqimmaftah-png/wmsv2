@@ -9,9 +9,14 @@ const source = file => fs.readFileSync(path.join(root, file), 'utf8');
 
 const view       = source('application/views/reports/index.php');
 const controller = source('application/controllers/Reports.php');
+const w36model   = source('application/models/W36_report_model.php');
 const team       = source('application/controllers/Team.php');
 const materials  = source('application/controllers/Materials.php');
 const equipment  = source('application/controllers/Equipment.php');
+
+const cStart = controller.indexOf('public function index()');
+const cEnd   = controller.indexOf('public function daily()');
+const index  = controller.slice(cStart, cEnd);
 
 /* ── Page ownership and semantics ───────────────────────────────────── */
 assert.equal((view.match(/<h1\b/g) || []).length, 1, 'exactly one main h1');
@@ -47,6 +52,39 @@ assert.ok(view.includes('no breakdowns in window'), 'undefined MTTR/MTBF are nam
 assert.ok(view.includes('@media (prefers-reduced-motion:reduce)'), 'reduced motion honoured');
 assert.ok(view.includes('focus-visible'), 'visible keyboard focus');
 
+/* ── The open week's draft is informational; only CLOSED weeks are due ── */
+assert.ok(w36model.includes('public function published_week_starts('),
+  'W36 exposes a read-only publication census (row presence, not payload decode)');
+assert.ok(controller.includes('PUBLICATION_LOOKBACK_WEEKS'),
+  'the due-week look-back is bounded, not unbounded history');
+assert.ok(index.includes('published_week_starts('), 'index() checks completed weeks');
+assert.ok(index.includes("'w36_snapshots_available'"), 'index() distinguishes cannot-check from none');
+assert.ok(view.includes("'w36_snapshots_available' => false"), 'publication state has an honest default');
+assert.ok(view.includes('$w36_due_latest'), 'the hub reads the most recent due week');
+assert.ok(view.includes('Draft · informational'), 'the open week is visibly labelled informational');
+assert.ok(!view.includes('if (!$w36_published)'),
+  'the open week’s draft is not pushed into the attention list');
+assert.ok(view.includes('Publication becomes due '), 'the due boundary is explained in words');
+assert.ok(view.includes("'tone' => 'warn'") && view.includes('Review & publish'),
+  'a completed unpublished week is an attention item with a real destination');
+assert.ok(view.includes('reports/weekly_w36?week_start='),
+  'the due item links by exact week start, honouring a non-Monday week start');
+assert.ok(view.includes('strtotime($week_end)'),
+  'the due boundary comes from the configured week end, not an invented deadline');
+assert.ok(view.includes('$h($item[\'note\'])'), 'the publication note is escaped');
+assert.ok(/\.rpt-exc-act\s*\{[^}]*min-height:24px/.test(view) &&
+  /\.rpt-panel-link\s*\{[^}]*min-height:24px/.test(view),
+  'inline report links meet the 24px target-size minimum');
+
+/* Honest partial states for the publication check itself */
+assert.ok(view.includes('Status unavailable'), 'unreadable DB is not reported as a known draft');
+assert.ok(view.includes('Publishing is unavailable because the snapshot table'),
+  'a missing snapshot table is disclosed, not treated as an unpublished week');
+assert.ok(view.includes('Weekly publication could not be checked'),
+  'the all-clear sentence admits when publication could not be checked');
+assert.ok(view.includes('most recent completed weekly reports'),
+  'the all-clear sentence names the bounded window it checked');
+
 /* ── User-controlled weekly report name is escaped, never trusted ────── */
 assert.ok(view.includes("'title' => $report_name . ' Weekly Report'"), 'name stays raw in the spec');
 assert.ok(view.includes("$h($item['title'])"), 'row titles are escaped at render');
@@ -54,10 +92,7 @@ assert.ok(view.includes("$h($ex['label'])"), 'exception labels are escaped at re
 assert.ok(!/<\?=\s*\$report_name\s*\?>/.test(view), 'no raw report name in markup');
 
 /* ── The hub reads real models, guarded, and keeps the picker JS-free ─── */
-const start = controller.indexOf('public function index()');
-const end   = controller.indexOf('public function daily()');
-assert.ok(start !== -1 && end > start, 'index() located');
-const index = controller.slice(start, end);
+assert.ok(cStart !== -1 && cEnd > cStart, 'index() located');
 for (const call of [
   'get_availability_window()', 'get_availability_trend(30)', 'count_overdue_pm()',
   'get_reorder_items()', 'snapshot_of($week_start)', 'availability_target_pct()',
