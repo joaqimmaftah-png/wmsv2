@@ -11,7 +11,8 @@
  * All figures come from Materials_model::get_reorder_items(). Nothing here
  * changes the query, the min/max calculation, the filter contract, RBAC, the
  * CSV/XLSX export or the routes. The extra `state`, `sort`, `dir` and `view`
- * query keys are display-only and are read by this view alone.
+ * query keys are display-only; the controller validates and paginates them before
+ * passing the bounded page plus full-scope metadata into this view.
  */
 
 /* ── Scope and escaping helpers ─────────────────────────────────────────── */
@@ -39,9 +40,12 @@ $exportQs  = http_build_query($filterQs);
 $exportUrl = base_url('reports/export_reorder_xlsx') . ($exportQs !== '' ? '?' . $exportQs : '');
 
 /* Display-only URL state, validated against allowlists. Scalars only: an
-   array query value (e.g. ?state[]=x) must never reach a string cast. */
+   array query value (e.g. ?state[]=x) must never reach a string cast. The
+   controller supplies the same validated state on a real request; the GET
+   fallback keeps this view safe and renderable in isolation. */
 $qsParam = function ($key) { return (isset($_GET[$key]) && is_scalar($_GET[$key])) ? (string)$_GET[$key] : ''; };
 $state = $qsParam('state');
+if (isset($reorder_state) && is_scalar($reorder_state)) $state = (string)$reorder_state;
 if (!in_array($state, array('all', 'out', 'in'), true)) $state = 'all';
 
 $sortCols = array(
@@ -57,12 +61,38 @@ $sortCols = array(
     'supplier_name'  => 'string',
 );
 $sortKey = $qsParam('sort');
+if (isset($reorder_sort) && is_scalar($reorder_sort)) $sortKey = (string)$reorder_sort;
 if (!isset($sortCols[$sortKey])) $sortKey = 'final_qty';
 $sortDir = (strtolower($qsParam('dir')) === 'desc') ? 'desc' : 'asc';
+if (isset($reorder_dir) && is_scalar($reorder_dir)) $sortDir = strtolower((string)$reorder_dir) === 'desc' ? 'desc' : 'asc';
 
 $viewRaw = $qsParam('view');
+if (isset($reorder_view) && is_scalar($reorder_view)) $viewRaw = (string)$reorder_view;
 $viewMode = ($viewRaw === 'cards') ? 'cards' : 'table';
-$viewExplicit = in_array($viewRaw, array('table', 'cards'), true);
+/* Keep responsive defaults honest: table is forced on small screens only
+   when the user actually supplied view=table, not merely because the
+   controller normalised an omitted parameter to its table default. */
+$viewExplicit = in_array($qsParam('view'), array('table', 'cards'), true);
+
+$serverPaged = isset($reorder_pagination) && is_array($reorder_pagination)
+    && !empty($reorder_pagination['server_paged']);
+$pagination = array(
+    'total_filtered' => 0, 'total_pages' => 1, 'per_page' => 25,
+    'page' => 1, 'showing_from' => 0, 'showing_to' => 0,
+);
+if ($serverPaged) {
+    $pagination = array_merge($pagination, $reorder_pagination);
+} else {
+    $perPageParam = (int)$qsParam('per_page');
+    $pagination['per_page'] = in_array($perPageParam, array(10, 25, 50, 100), true) ? $perPageParam : 25;
+    $pageParam = (int)$qsParam('page');
+    $pagination['page'] = $pageParam > 0 ? $pageParam : 1;
+}
+$pagination['per_page'] = in_array((int)$pagination['per_page'], array(10, 25, 50, 100), true)
+    ? (int)$pagination['per_page'] : 25;
+$pagination['page'] = max(1, (int)$pagination['page']);
+$perPage = $pagination['per_page'];
+$page = $pagination['page'];
 
 $roParams = array(
     'category' => $g('category'),
@@ -72,8 +102,13 @@ $roParams = array(
     'sort'     => $sortKey,
     'dir'      => $sortDir,
     'view'     => $viewMode,
+    'per_page' => $perPage,
+    'page'     => $page,
 );
-$roDefaults = array('state' => 'all', 'sort' => 'final_qty', 'dir' => 'asc', 'view' => 'table');
+$roDefaults = array(
+    'state' => 'all', 'sort' => 'final_qty', 'dir' => 'asc', 'view' => 'table',
+    'per_page' => 25, 'page' => 1,
+);
 $roUrl = function (array $over = array()) use ($roParams, $roDefaults, $viewExplicit) {
     $p = array_merge($roParams, $over);
     $viewWasExplicit = $viewExplicit || array_key_exists('view', $over);
@@ -97,15 +132,30 @@ $canCalc = function ($m) use ($extended, $levelVal) {
 };
 $isOut = function ($m) { return (int)$m->final_qty <= 0; };
 
-$out = 0; $inStock = 0; $qtyTotal = 0; $qtyMissing = 0;
-foreach ($rows as $m) {
-    if ($isOut($m)) $out++; else $inStock++;
-    if ($canCalc($m)) $qtyTotal += (int)$m->qty_to_order;
-    else $qtyMissing++;
+/* The controller calculates these across the complete filtered scope before
+   slicing the page. The fallback calculation keeps direct view renders useful
+   in tests and does not change the production path. */
+if ($serverPaged && isset($reorder_summary) && is_array($reorder_summary)) {
+    $summary = array_merge(array(
+        'total_scope' => count($rows), 'out_count' => 0, 'in_count' => 0,
+        'qty_total' => 0, 'qty_missing' => 0,
+    ), $reorder_summary);
+    $out = (int)$summary['out_count'];
+    $inStock = (int)$summary['in_count'];
+    $qtyTotal = (int)$summary['qty_total'];
+    $qtyMissing = (int)$summary['qty_missing'];
+    $total = (int)$summary['total_scope'];
+} else {
+    $out = 0; $inStock = 0; $qtyTotal = 0; $qtyMissing = 0;
+    foreach ($rows as $m) {
+        if ($isOut($m)) $out++; else $inStock++;
+        if ($canCalc($m)) $qtyTotal += (int)$m->qty_to_order;
+        else $qtyMissing++;
+    }
+    $total = count($rows);
 }
-$total = count($rows);
 
-/* Status tabs partition the same rows; counts always describe the full scope. */
+/* Status tabs partition the complete scope, not just the visible page. */
 $tabDefs = array(
     'all' => array('label' => 'All items',    'count' => $total),
     'out' => array('label' => 'Out of stock', 'count' => $out),
@@ -117,13 +167,18 @@ $tabHelp = array(
     'in'  => 'Items still above zero but at or below the reorder level',
 );
 
-/* Apply the status tab, then sort a copy. Default order matches the model
-   (final_qty ASC, item_code ASC) so an untouched URL renders identically. */
+/* On a real request Reports::reorder() has already status-filtered, sorted
+   and sliced this page. The fallback retains safe standalone rendering for
+   fixtures and keeps the old view contract useful outside the controller. */
 $displayRows = array();
-foreach ($rows as $m) {
-    if ($state === 'out' && !$isOut($m)) continue;
-    if ($state === 'in'  &&  $isOut($m)) continue;
-    $displayRows[] = $m;
+if ($serverPaged) {
+    $displayRows = $rows;
+} else {
+    foreach ($rows as $m) {
+        if ($state === 'out' && !$isOut($m)) continue;
+        if ($state === 'in'  &&  $isOut($m)) continue;
+        $displayRows[] = $m;
+    }
 }
 $sortVal = function ($m, $k) use ($sortCols, $levelVal, $canCalc) {
     if ($k === 'qty_to_order') return $canCalc($m) ? (int)$m->qty_to_order : null;
@@ -131,19 +186,35 @@ $sortVal = function ($m, $k) use ($sortCols, $levelVal, $canCalc) {
     if (!isset($m->{$k}) || $m->{$k} === null || $m->{$k} === '') return null;
     return $m->{$k};
 };
-usort($displayRows, function ($a, $b) use ($sortKey, $sortCols, $sortDir, $sortVal) {
-    $va = $sortVal($a, $sortKey);
-    $vb = $sortVal($b, $sortKey);
-    /* Missing values always sort last, in either direction. */
-    if ($va === null && $vb === null) $c = 0;
-    elseif ($va === null) return 1;
-    elseif ($vb === null) return -1;
-    elseif ($sortCols[$sortKey] === 'number') $c = ((float)$va <=> (float)$vb);
-    else $c = strcasecmp((string)$va, (string)$vb);
-    if ($sortDir === 'desc') $c = -$c;
-    if ($c !== 0) return $c;
-    return strcasecmp((string)$a->item_code, (string)$b->item_code);
-});
+if (!$serverPaged) {
+    usort($displayRows, function ($a, $b) use ($sortKey, $sortCols, $sortDir, $sortVal) {
+        $va = $sortVal($a, $sortKey);
+        $vb = $sortVal($b, $sortKey);
+        /* Missing values always sort last, in either direction. */
+        if ($va === null && $vb === null) $c = 0;
+        elseif ($va === null) return 1;
+        elseif ($vb === null) return -1;
+        elseif ($sortCols[$sortKey] === 'number') $c = ((float)$va <=> (float)$vb);
+        else $c = strcasecmp((string)$va, (string)$vb);
+        if ($sortDir === 'desc') $c = -$c;
+        if ($c !== 0) return $c;
+        return strcasecmp((string)$a->item_code, (string)$b->item_code);
+    });
+
+    $pagination['total_filtered'] = count($displayRows);
+    $pagination['total_pages'] = max(1, (int)ceil($pagination['total_filtered'] / $perPage));
+    $pagination['page'] = min($pagination['page'], $pagination['total_pages']);
+    $page = $pagination['page'];
+    $offset = ($page - 1) * $perPage;
+    $pagination['showing_from'] = $pagination['total_filtered'] > 0 ? $offset + 1 : 0;
+    $pagination['showing_to'] = min($offset + $perPage, $pagination['total_filtered']);
+    $displayRows = array_slice($displayRows, $offset, $perPage);
+} else {
+    $pagination['total_filtered'] = max(0, (int)$pagination['total_filtered']);
+    $pagination['total_pages'] = max(1, (int)$pagination['total_pages']);
+    $pagination['page'] = min($pagination['page'], $pagination['total_pages']);
+    $page = $pagination['page'];
+}
 
 $hasActiveFilters = ($g('category') !== '' || $g('location') !== '' || $g('search') !== '' || $state !== 'all');
 $noStockData      = ($total === 0 && empty($categories));
@@ -524,6 +595,28 @@ $roText = function ($raw) use ($h) {
 .ro-empty h3 { font-size:15px;font-weight:600;color:var(--t1);margin-bottom:4px; }
 .ro-empty p { font-size:13px;color:var(--t2);max-width:48ch;margin:0 auto 14px;line-height:1.5; }
 
+/* ── Pagination footer ── */
+.ro-pagination {
+  padding:11px 16px;border-top:1px solid var(--sep);background:var(--surface-2);
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  flex-wrap:wrap;font-size:12.5px;color:var(--t2);
+}
+.ro-pagination strong { color:var(--t1);font-variant-numeric:tabular-nums; }
+.ro-pages { display:inline-flex;align-items:center;gap:4px; }
+.ro-page-link {
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:30px;height:28px;padding:0 8px;border-radius:6px;
+  border:1px solid var(--ro-sep-opaque);background:var(--surface);
+  color:var(--t1);font-size:12px;font-weight:500;text-decoration:none;
+  font-variant-numeric:tabular-nums;
+}
+.ro-page-link:hover { background:var(--ro-fill); }
+.ro-page-link.is-current { background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600; }
+.ro-page-link.is-disabled { opacity:.42;pointer-events:none; }
+.ro-page-size { display:inline-flex;align-items:center;gap:6px; }
+.ro-page-size label { font-size:12px;color:var(--t2);margin:0; }
+.ro-page-size select { height:28px;font-size:12px; }
+
 /* ── Footer ── */
 .ro-footer {
   padding:11px 16px;border-top:1px solid var(--sep);background:var(--surface-2);
@@ -587,7 +680,7 @@ $roText = function ($raw) use ($h) {
   }
   .ro-print-banner h2 { font-size:16px;margin:0 0 3px;letter-spacing:0.01em; }
   .ro-print-banner p { font-size:11px;color:#333;margin:0;line-height:1.5; }
-  .ro-head,.ro-scope-bar,.ro-toolbar,.ro-chips-bar,.ro-footer,.ro-cards-container,.ro-notice { display:none!important; }
+  .ro-head,.ro-scope-bar,.ro-toolbar,.ro-chips-bar,.ro-pagination,.ro-footer,.ro-cards-container,.ro-notice { display:none!important; }
   .ro-kpis { grid-template-columns:repeat(3,1fr);margin-bottom:10px; }
   .ro-kpi { box-shadow:none!important;border:1px solid #ddd!important;min-height:0;padding:8px 10px; }
   .ro-kpi-val { font-size:17px; }
@@ -702,6 +795,7 @@ $roText = function ($raw) use ($h) {
       <input type="hidden" name="state" value="<?= $h($state) ?>">
       <input type="hidden" name="sort" value="<?= $h($sortKey) ?>">
       <input type="hidden" name="dir" value="<?= $h($sortDir) ?>">
+      <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
       <?php if ($viewExplicit): ?><input type="hidden" name="view" value="<?= $h($viewMode) ?>">
       <?php endif; ?>
 
@@ -877,18 +971,15 @@ $roText = function ($raw) use ($h) {
         </tbody>
         <tfoot>
           <tr>
-            <td colspan="8" class="ro-total-label">Total qty to order &middot; <?= $h(number_format(count($displayRows))) ?> visible item(s)</td>
+            <td colspan="8" class="ro-total-label">Total qty to order &middot; <?= $h(number_format($total)) ?> item(s) in full scope</td>
             <td class="ro-num">
-              <?php
-              $visibleQty = 0; $visibleMissing = 0; $visibleHas = 0;
-              foreach ($displayRows as $m) {
-                  if ($canCalc($m)) { $visibleQty += (int)$m->qty_to_order; $visibleHas++; }
-                  else $visibleMissing++;
-              }
-              if ($visibleHas === 0) echo '<span class="ro-na" title="Not calculable without min / max levels">—</span>';
-              else echo '<span class="ro-total-val">' . $h(number_format($visibleQty)) . '</span>';
-              if ($visibleMissing > 0): ?>
-              <span class="ro-na" title="<?= $h(number_format($visibleMissing)) ?> item(s) have no min / max levels and are excluded">partial</span>
+              <?php if ($qtyMissing === $total): ?>
+                <span class="ro-na" title="Not calculable without min / max levels">—</span>
+              <?php else: ?>
+                <span class="ro-total-val"><?= $h(number_format($qtyTotal)) ?></span>
+                <?php if ($qtyMissing > 0): ?>
+                <span class="ro-na" title="<?= $h(number_format($qtyMissing)) ?> item(s) have no min / max levels and are excluded">partial</span>
+                <?php endif; ?>
               <?php endif; ?>
             </td>
             <td colspan="4"></td>
@@ -949,11 +1040,64 @@ $roText = function ($raw) use ($h) {
 
     <?php endif; ?>
 
+    <!-- Pagination & page-size footer: the rows selector and links preserve
+         every active filter, status tab, sort and display-mode query value. -->
+    <div class="ro-pagination no-print">
+      <div>
+        <?php if ((int)$pagination['total_filtered'] > 0): ?>
+          Showing <strong><?= $h(number_format((int)$pagination['showing_from'])) ?>&ndash;<?= $h(number_format((int)$pagination['showing_to'])) ?></strong>
+          of <strong><?= $h(number_format((int)$pagination['total_filtered'])) ?></strong> item(s)
+          <?php if ((int)$pagination['total_filtered'] < $total): ?>
+            <span>(filtered from <?= $h(number_format($total)) ?>)</span>
+          <?php endif; ?>
+        <?php else: ?>
+          0 matching item(s)
+        <?php endif; ?>
+      </div>
+
+      <?php if ((int)$pagination['total_pages'] > 1): ?>
+      <nav class="ro-pages" aria-label="Re-order report pagination">
+        <a class="ro-page-link <?= $page <= 1 ? 'is-disabled' : '' ?>"
+           href="<?= $h($roUrl(array('page' => max(1, $page - 1)))) ?>"
+           <?= $page <= 1 ? 'aria-disabled="true"' : '' ?>>Prev</a>
+        <?php
+        $pageWindowStart = max(1, $page - 2);
+        $pageWindowEnd   = min((int)$pagination['total_pages'], $page + 2);
+        if ($pageWindowStart > 1): ?>
+          <a class="ro-page-link" href="<?= $h($roUrl(array('page' => 1))) ?>">1</a>
+          <?php if ($pageWindowStart > 2): ?><span aria-hidden="true" style="padding:0 4px;color:var(--t2);">&hellip;</span><?php endif; ?>
+        <?php endif;
+        for ($p = $pageWindowStart; $p <= $pageWindowEnd; $p++): ?>
+          <a class="ro-page-link <?= $p === $page ? 'is-current' : '' ?>"
+             <?= $p === $page ? 'aria-current="page"' : '' ?>
+             href="<?= $h($roUrl(array('page' => $p))) ?>"><?= $p ?></a>
+        <?php endfor;
+        if ($pageWindowEnd < (int)$pagination['total_pages']): ?>
+          <?php if ($pageWindowEnd < (int)$pagination['total_pages'] - 1): ?><span aria-hidden="true" style="padding:0 4px;color:var(--t2);">&hellip;</span><?php endif; ?>
+          <a class="ro-page-link" href="<?= $h($roUrl(array('page' => (int)$pagination['total_pages']))) ?>"><?= (int)$pagination['total_pages'] ?></a>
+        <?php endif; ?>
+        <a class="ro-page-link <?= $page >= (int)$pagination['total_pages'] ? 'is-disabled' : '' ?>"
+           href="<?= $h($roUrl(array('page' => min((int)$pagination['total_pages'], $page + 1)))) ?>"
+           <?= $page >= (int)$pagination['total_pages'] ? 'aria-disabled="true"' : '' ?>>Next</a>
+      </nav>
+      <?php endif; ?>
+
+      <div class="ro-page-size">
+        <label for="roPerPage">Rows:</label>
+        <select id="roPerPage" class="ro-select">
+          <?php foreach (array(10, 25, 50, 100) as $pp): ?>
+            <option value="<?= $h($roUrl(array('per_page' => $pp, 'page' => 1))) ?>"
+                    <?= $perPage === $pp ? 'selected' : '' ?>><?= $pp ?> / page</option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+    </div>
+
     <!-- Footer: honest scope, calculation and export provenance -->
     <div class="ro-footer no-print">
       <div>
-        Showing <strong><?= $h(number_format(count($displayRows))) ?></strong> of
-        <strong><?= $h(number_format($total)) ?></strong> item(s) in this scope.
+        Full filtered scope: <strong><?= $h(number_format($total)) ?></strong> item(s).
+        KPIs and quantity totals cover this scope; the table and cards above show the current page.
       </div>
       <div class="ro-footer-notes">
         <p>
@@ -974,6 +1118,15 @@ $roText = function ($raw) use ($h) {
 (function () {
   var form = document.getElementById('roFilterForm');
   var search = document.getElementById('roSearchInput');
+  var perPage = document.getElementById('roPerPage');
+
+  /* Page-size changes are GET links so the URL remains shareable and the
+     control degrades cleanly to the numbered links when JavaScript is off. */
+  if (perPage) {
+    perPage.addEventListener('change', function () {
+      if (perPage.value) window.location.href = perPage.value;
+    });
+  }
 
   /* Selects apply immediately; the Apply button remains the explicit fallback. */
   var autos = document.querySelectorAll('.ro-autosubmit');

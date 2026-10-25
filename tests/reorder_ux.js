@@ -55,8 +55,26 @@ assert.ok(view.includes('aria-label="Display layout"'), 'view switch is labelled
 assert.ok(view.includes('prefers-reduced-motion:reduce'), 'reduced motion is handled');
 assert.ok(view.includes(':focus-visible'), 'keyboard focus is visible');
 assert.ok(view.includes('@media print'), 'print output is explicitly designed');
+assert.ok(view.includes('.ro-pagination'), 'pagination footer has scoped styling');
+assert.ok(view.includes('.ro-pagination,.ro-footer'), 'pagination is hidden from print output');
 assert.ok(view.includes('addEventListener(\'keydown\''), 'search shortcut is a real enhancement');
 assert.ok(!/<a[^>]+href="#">/.test(view), 'no placeholder links');
+
+/* Server-side pagination mirrors /team/report and keeps the full-scope
+   summary separate from the bounded page rows. */
+assert.ok(reports.includes("array(10, 25, 50, 100)"), 'controller allow-lists report page sizes');
+assert.ok(reports.includes('$total_filtered') && reports.includes('$total_pages'), 'controller exposes filtered pagination totals');
+assert.ok(reports.includes('array_slice($filtered, $offset, $per_page)'), 'controller slices rows server-side');
+assert.ok(reports.includes("'showing_from'") && reports.includes("'showing_to'"), 'controller exposes the showing range');
+assert.ok(view.includes('class="ro-pagination no-print"'), 'view has a pagination footer');
+assert.ok(view.includes('aria-label="Re-order report pagination"'), 'pagination navigation is labelled');
+assert.ok(view.includes('id="roPerPage"'), 'view has a real rows selector');
+assert.ok(view.includes('name="per_page" value="<?= (int)$perPage ?>"'), 'filter form preserves the selected page size');
+assert.ok(view.includes('foreach (array(10, 25, 50, 100) as $pp)'), 'rows selector uses the four /team/report sizes');
+assert.ok(view.includes('Total qty to order &middot; <?= $h(number_format($total)) ?> item(s) in full scope'),
+  'table quantity total is full-scope, not page-only');
+assert.ok(view.includes('$reorder_summary') && view.includes('$reorder_pagination'),
+  'view consumes controller full-scope metadata');
 
 /* All user-controlled values are escaped through the view helper. */
 assert.ok(view.includes('htmlspecialchars((string)$v, ENT_QUOTES, \'UTF-8\')'), 'view escaping helper is present');

@@ -72,7 +72,9 @@ Dependency-free source checks for the Suppliers, Lubricants, Lube Budget and
 Re-order Report surfaces, grouped-page calculation and the actual inline budget
 draft calculator. The Re-order checks verify that the `/team/report` visual
 language is scoped locally, the existing filters/export/routes remain intact,
-status tabs and table/card views are real GET-driven controls, quantities remain
+status tabs and table/card views are real GET-driven controls, server-side
+pagination uses the allow-listed `10 / 25 / 50 / 100` sizes and preserves URL
+state, full-scope totals are separated from bounded page rows, quantities remain
 honest when min/max levels are unavailable, and semantic/print/reduced-motion
 states are present. These do not substitute for PHP/MySQL or
 browser/assistive-technology tests. See `docs/table-ux-audit.md` for the
