@@ -113,6 +113,38 @@ assert.match(jobs, /onsubmit="return confirm\('/, 'job removal requires confirma
 assert.match(jobs, /csrf_field\(\)/, 'job forms carry CSRF protection');
 assert.match(jobs, /\$job_status_badge\s*=/, 'job view maps statuses to shared badge classes');
 assert.match(jobs, /class="badge /, 'job status renders through the shared badge system');
+assert.match(jobs, /for="jobs-machine"[\s\S]*id="jobs-machine"/, 'machine selector has an associated label');
+assert.match(jobs, /for="jobs-date"[\s\S]*id="jobs-date"/, 'day selector has an associated label');
+assert.match(jobs, /for="job-hours"[\s\S]*id="job-hours"/, 'hours field has an associated label');
+assert.match(jobs, /<caption class="jobs-sr-only">/, 'job table has an accessible caption');
+assert.match(jobs, /<th scope="col">CODE<\/th>/, 'job table headers declare column scope');
+assert.match(jobs, /No reportable machines are available for this week/, 'jobs view distinguishes an empty machine list');
+assert.match(jobs, /Choose a machine and day above to view its planned hours and jobs/, 'jobs view explains the unselected machine state');
+assert.match(jobs, /You have view-only access\. A supervisor can change jobs/, 'read-only users get an explanation when the editor is hidden');
+assert.match(jobs, /wo_hold_codes\(\)/, 'hold labels use the shared business-approved vocabulary');
+assert.match(jobs, /\$hold_labels\[\$c\]/, 'hold options render a label alongside each unchanged code');
+assert.match(source('application/helpers/wo_helper.php'), /'WSP'\s*=>\s*'Waiting for Spare Part'/, 'the shared helper retains the approved WSP meaning');
+assert.match(jobs, /A multi-day repair is one job with an end date/, 'multi-day job behavior remains explained');
+assert.match(jobs, /jobs-table th:nth-child\(2\),\.jobs-table td:nth-child\(2\) \{ position:sticky/, 'job identity stays visible during horizontal table scrolling');
+assert.match(jobs, /aria-label="Edit job:/, 'repeated edit actions have job-specific accessible names');
+assert.match(jobs, /aria-label="Remove job:/, 'repeated remove actions have job-specific accessible names');
+assert.match(jobs, /hours\.required = !isStandby/, 'hours requirement follows the existing Standby exception');
+const jobsScript = jobs.match(/<script>\s*([\s\S]*?)\s*<\/script>/)[1];
+const jobElements = {
+  'job-type': {value: 'Inspection', handlers: {}, addEventListener(type, cb) { this.handlers[type] = cb; }},
+  'job-hours': {value: '', disabled: false, required: true},
+  'job-hours-help': {textContent: ''}
+};
+vm.runInNewContext(jobsScript, {document: {getElementById: id => jobElements[id]}});
+assert.equal(jobElements['job-hours'].required, true, 'non-Standby job hours are required');
+jobElements['job-type'].value = 'Standby';
+jobElements['job-type'].handlers.change();
+assert.equal(jobElements['job-hours'].disabled, true, 'Standby does not request hours that the model ignores');
+assert.equal(jobElements['job-hours'].value, '0', 'Standby is clearly represented as zero hours');
+jobElements['job-type'].value = 'Repair';
+jobElements['job-type'].handlers.change();
+assert.equal(jobElements['job-hours'].disabled, false, 'hours become editable for other job types');
+assert.equal(jobElements['job-hours'].required, true, 'hours are required again for other job types');
 // Rolling: the three-week comparison stays a matrix, with meaningful filters,
 // visible weekly status, model-owned downtime, and the established profile link.
 const rolling = source('application/views/forecast/rolling.php');
