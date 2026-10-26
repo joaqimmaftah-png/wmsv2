@@ -668,6 +668,8 @@ class Forecast extends MY_Controller {
     public function allowances() {
         $week_start = $this->_resolve_week();
         $derived    = $this->Forecast_model->derived_unplanned_allowances($week_start);
+        $history_window = $this->Forecast_model->unplanned_allowance_history_window($week_start);
+        $mode = $this->_setting_value('unplanned_allowance_mode', 'flat') === 'derived' ? 'derived' : 'flat';
 
         $rows = array();
         foreach ($this->db->select('e.id, e.registration_no, et.name AS equip_type')
@@ -679,6 +681,7 @@ class Forecast extends MY_Controller {
             $eid = (int)$m->id;
             if (!isset($derived[$eid])) continue;
             $rows[] = array(
+                'equipment_id'    => $eid,
                 'registration_no' => $m->registration_no,
                 'type'            => $m->equip_type,
                 'standing'        => $this->Forecast_model->standing_allowance_for($m->equip_type),
@@ -690,13 +693,16 @@ class Forecast extends MY_Controller {
         }
 
         $this->render('forecast/allowances', array(
-            'rows'         => $rows,
-            'mode'         => $this->_setting_value('unplanned_allowance_mode', 'flat'),
-            'lookback'     => $this->_setting_value('unplanned_allowance_lookback_weeks', '12'),
-            'standing'     => $this->Forecast_model->standing_allowances(),
-            'iso_label'    => $this->Forecast_model->iso_label($week_start),
-            'week_input'   => $this->input->get('week'),
-            'page_title'   => 'Planned Allowances — ' . $this->Forecast_model->iso_label($week_start),
+            'rows'                 => $rows,
+            'mode'                 => $mode,
+            'lookback'             => $history_window['weeks'],
+            'lookback_from'        => $history_window['from'],
+            'lookback_to'          => $history_window['to'],
+            'standing'             => $this->Forecast_model->standing_allowances(),
+            'iso_label'            => $this->Forecast_model->iso_label($week_start),
+            'week_input'           => $this->input->get('week'),
+            'can_edit_settings'    => $this->is_supervisor(),
+            'page_title'           => 'Planned Allowances — ' . $this->Forecast_model->iso_label($week_start),
         ));
     }
 }

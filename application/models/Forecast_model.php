@@ -1700,6 +1700,20 @@ class Forecast_model extends CI_Model {
      * ──────────────────────────────────────────────────────────────── */
 
     /**
+     * The complete corrective-history window used for an allowance preview.
+     * It ends the day before the target ISO week and spans full weeks.
+     *
+     * @return array{weeks:int,from:string,to:string,days:int}
+     */
+    public function unplanned_allowance_history_window($week_start) {
+        $weeks = max(1, (int)$this->_setting('unplanned_allowance_lookback_weeks', 12));
+        $to    = date('Y-m-d', strtotime($week_start . ' -1 day'));
+        $from  = date('Y-m-d', strtotime($to . ' -' . ($weeks * 7 - 1) . ' days'));
+        $days  = max(1, (int)round((strtotime($to) - strtotime($from)) / 86400) + 1);
+        return array('weeks' => $weeks, 'from' => $from, 'to' => $to, 'days' => $days);
+    }
+
+    /**
      * Replace the workbook's flat 1 h/day on every machine with a per-machine
      * figure derived from its own failure history (rule R4).
      *
@@ -1712,12 +1726,13 @@ class Forecast_model extends CI_Model {
      * @return array equipment_id => ['hours'=>float,'source'=>string,'events'=>int]
      */
     public function derived_unplanned_allowances($week_start) {
-        $weeks    = max(1, (int)$this->_setting('unplanned_allowance_lookback_weeks', 12));
+        $window   = $this->unplanned_allowance_history_window($week_start);
+        $weeks    = $window['weeks'];
+        $days     = $window['days'];
+        $from     = $window['from'];
+        $to       = $window['to'];
         $flat     = (float)$this->_setting('unplanned_allowance_default_hours', 1);
         $mode     = $this->_setting('unplanned_allowance_mode', 'flat');
-        $to       = date('Y-m-d', strtotime($week_start . ' -1 day'));
-        $from     = date('Y-m-d', strtotime($to . ' -' . ($weeks * 7 - 1) . ' days'));
-        $days     = max(1, (int)round((strtotime($to) - strtotime($from)) / 86400) + 1);
 
         $machines = $this->_machines();
         $ids      = array();
