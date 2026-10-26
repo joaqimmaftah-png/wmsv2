@@ -108,11 +108,56 @@ assert.match(planned, /onsubmit="return confirm\('/, 'publish requires explicit 
 assert.match(planned, /csrf_field\(\)/, 'planned mutation forms carry CSRF protection');
 assert.doesNotMatch(planned, /kpi-glow/, 'planned view drops the inert decorative glow');
 // Jobs: destructive row actions confirm and carry CSRF; status uses shared badges.
+const pva = source('application/views/forecast/plan_vs_actual.php');
+assert.match(pva, /for="pva-week"[\s\S]*id="pva-week"/, 'plan-vs-actual week selector has an associated label');
+assert.match(pva, /snapshot_tables_ready[\s\S]*Forecast snapshot table is not set up/, 'plan-vs-actual distinguishes missing snapshot tables');
+assert.match(pva, /published baseline could not be read[\s\S]*\$h\(\$error\)/, 'plan-vs-actual distinguishes an unreadable baseline snapshot');
+assert.match(pva, /No published plan for/, 'plan-vs-actual retains a separate unpublished-week state');
+assert.match(pva, /actual and variance values show —, not zero/, 'unavailable actuals are not represented as zero');
+assert.match(pva, /Some planned groups have no usable matching actual value/, 'partial group actual gaps are disclosed');
+assert.match(pva, /<caption class="pva-sr-only">/, 'plan-vs-actual table has an accessible caption');
+assert.match(pva, /<th scope="col">GROUP<\/th>/, 'plan-vs-actual table headers declare column scope');
+assert.match(pva, /pva-group-table th:first-child,.pva-group-table td:first-child \{ position:sticky/, 'group identity stays visible while the comparison table scrolls');
+assert.match(pva, /@media \(max-width:900px\) \{ \.pva-kpis \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\); \} \}/, 'plan-vs-actual KPIs adapt at tablet widths');
+assert.match(pva, /@media \(max-width:560px\)[\s\S]*\.pva-kpis \{ grid-template-columns:1fr;/, 'plan-vs-actual KPIs and week controls adapt on phones');
+assert.match(pva, /Back to the published week plan[\s\S]*forecast\?week=/, 'published comparison links back to the same planned week');
 const jobs = source('application/views/forecast/jobs.php');
 assert.match(jobs, /onsubmit="return confirm\('/, 'job removal requires confirmation');
 assert.match(jobs, /csrf_field\(\)/, 'job forms carry CSRF protection');
 assert.match(jobs, /\$job_status_badge\s*=/, 'job view maps statuses to shared badge classes');
 assert.match(jobs, /class="badge /, 'job status renders through the shared badge system');
+assert.match(jobs, /for="jobs-machine"[\s\S]*id="jobs-machine"/, 'machine selector has an associated label');
+assert.match(jobs, /for="jobs-date"[\s\S]*id="jobs-date"/, 'day selector has an associated label');
+assert.match(jobs, /for="job-hours"[\s\S]*id="job-hours"/, 'hours field has an associated label');
+assert.match(jobs, /<caption class="jobs-sr-only">/, 'job table has an accessible caption');
+assert.match(jobs, /<th scope="col">CODE<\/th>/, 'job table headers declare column scope');
+assert.match(jobs, /No reportable machines are available for this week/, 'jobs view distinguishes an empty machine list');
+assert.match(jobs, /Choose a machine and day above to view its planned hours and jobs/, 'jobs view explains the unselected machine state');
+assert.match(jobs, /You have view-only access\. A supervisor can change jobs/, 'read-only users get an explanation when the editor is hidden');
+assert.match(jobs, /wo_hold_codes\(\)/, 'hold labels use the shared business-approved vocabulary');
+assert.match(jobs, /\$hold_labels\[\$c\]/, 'hold options render a label alongside each unchanged code');
+assert.match(source('application/helpers/wo_helper.php'), /'WSP'\s*=>\s*'Waiting for Spare Part'/, 'the shared helper retains the approved WSP meaning');
+assert.match(jobs, /A multi-day repair is one job with an end date/, 'multi-day job behavior remains explained');
+assert.match(jobs, /jobs-table th:nth-child\(2\),\.jobs-table td:nth-child\(2\) \{ position:sticky/, 'job identity stays visible during horizontal table scrolling');
+assert.match(jobs, /aria-label="Edit job:/, 'repeated edit actions have job-specific accessible names');
+assert.match(jobs, /aria-label="Remove job:/, 'repeated remove actions have job-specific accessible names');
+assert.match(jobs, /hours\.required = !isStandby/, 'hours requirement follows the existing Standby exception');
+const jobsScript = jobs.match(/<script>\s*([\s\S]*?)\s*<\/script>/)[1];
+const jobElements = {
+  'job-type': {value: 'Inspection', handlers: {}, addEventListener(type, cb) { this.handlers[type] = cb; }},
+  'job-hours': {value: '', disabled: false, required: true},
+  'job-hours-help': {textContent: ''}
+};
+vm.runInNewContext(jobsScript, {document: {getElementById: id => jobElements[id]}});
+assert.equal(jobElements['job-hours'].required, true, 'non-Standby job hours are required');
+jobElements['job-type'].value = 'Standby';
+jobElements['job-type'].handlers.change();
+assert.equal(jobElements['job-hours'].disabled, true, 'Standby does not request hours that the model ignores');
+assert.equal(jobElements['job-hours'].value, '0', 'Standby is clearly represented as zero hours');
+jobElements['job-type'].value = 'Repair';
+jobElements['job-type'].handlers.change();
+assert.equal(jobElements['job-hours'].disabled, false, 'hours become editable for other job types');
+assert.equal(jobElements['job-hours'].required, true, 'hours are required again for other job types');
 // Rolling: the three-week comparison stays a matrix, with meaningful filters,
 // visible weekly status, model-owned downtime, and the established profile link.
 const rolling = source('application/views/forecast/rolling.php');
@@ -207,8 +252,49 @@ const forecastModel = source('application/models/Forecast_model.php');
 assert.match(forecastModel, /function unplanned_allowance_history_window\(\$week_start\)/, 'model owns the allowance history window');
 assert.match(forecastModel, /\$window\s*=\s*\$this->unplanned_allowance_history_window\(\$week_start\)/, 'allowance calculation reuses its displayed history window');
 assert.match(forecastModel, /max\(0\.5, min\(24\.0, \$per_day\)\)/, 'allowance floor and ceiling remain in the calculation');
-assert.match(source('application/views/forecast/parts.php'), /onsubmit="return confirm\('/, 'part removal requires confirmation');
-assert.match(source('application/views/forecast/parts.php'), /csrf_field\(\)/, 'part forms carry CSRF protection');
+assert.match(partsView, /onsubmit="return confirm\('Remove this part from the service\?'\);"/, 'part removal confirmation does not interpolate catalogue text into JavaScript');
+assert.match(partsView, /csrf_field\(\)/, 'part forms carry CSRF protection');
+assert.match(partsView, /for="parts-material-id"[\s\S]*id="parts-material-id"/, 'part selector has an associated label');
+assert.match(partsView, /for="parts-qty"[\s\S]*id="parts-qty"/, 'quantity field has an associated label');
+assert.match(partsView, /for="parts-note"[\s\S]*id="parts-note"/, 'note field has an associated label');
+assert.match(partsView, /<caption class="parts-sr-only">/, 'parts table has an accessible caption');
+assert.match(partsView, /<th scope="col">ITEM<\/th>/, 'parts table headers declare column scope');
+assert.match(partsView, /\$parts_h\(\$unit\)[\s\S]*ON HAND|ON HAND[\s\S]*\$parts_h\(\$unit\)/, 'on-hand quantities carry the material unit');
+assert.match(partsView, /spares forecast accounts for[\s\S]*open orders/i, 'parts view explains the difference between current stock and forecast shortage');
+assert.doesNotMatch(partsView, /\$r\['on_hand'\]\s*<\s*\$r\['qty'\]/, 'on-hand comparison is not presented as an unqualified shortage');
+assert.match(partsView, /class="badge b-critical"/, 'critical parts use the shared badge system');
+assert.match(partsView, /materials\/inventory\?[\s\S]*'item'\s*=>\s*\(int\)\$row\['material_id'\]/, 'part codes link to the existing inventory item drawer');
+assert.match(partsView, /type="search"[\s\S]*parts-material-search/, 'the material picker has a searchable enhancement');
+assert.match(partsView, /option\.textContent\.toLocaleLowerCase\(\)\.indexOf\(query\)/, 'the picker search matches the visible code and description');
+assert.match(partsView, /No inventory items are available to choose/, 'the add form explains an empty inventory catalogue');
+assert.match(partsView, /@media \(max-width:760px\)[\s\S]*parts-form-grid \{ grid-template-columns:1fr;/, 'parts form stacks on narrow screens');
+assert.match(partsView, /parts-table th:first-child,.parts-table td:first-child \{ position:sticky/, 'part identity stays visible while the table scrolls');
+assert.match(source('application/controllers/Forecast.php'), /'materials_ready'\s*=>\s*\$this->db->table_exists\('materials'\)/, 'parts controller distinguishes an unavailable inventory catalogue');
+assert.match(partsView, /id="parts-search-controls" hidden/, 'the search control is progressively enhanced when JavaScript is available');
+const partsScript = partsView.match(/<script>\s*([\s\S]*?)\s*<\/script>/)[1];
+const partOption = text => ({textContent: text, hidden: false, selected: false});
+const partOptions = [
+  {textContent: '— choose a part —', hidden: false, selected: true},
+  partOption('AB-1 — oil filter (2 each on hand)'),
+  partOption('ZX-9 — drive belt (0 each on hand)')
+];
+const partsElements = {
+  'parts-search-controls': {hidden: true},
+  'parts-material-search': {value: '', handlers: {}, addEventListener(type, cb) { this.handlers[type] = cb; }},
+  'parts-material-id': {options: partOptions, value: '1'},
+  'parts-no-match': {hidden: true}
+};
+vm.runInNewContext(partsScript, {document: {getElementById: id => partsElements[id]}, Array});
+assert.equal(partsElements['parts-search-controls'].hidden, false, 'search activates only after its JavaScript is ready');
+const filterParts = partsElements['parts-material-search'].handlers.input;
+partsElements['parts-material-search'].value = 'drive';
+filterParts();
+assert.equal(partOptions[1].hidden, true, 'picker search hides nonmatching parts');
+assert.equal(partOptions[2].hidden, false, 'picker search retains a description match');
+assert.equal(partsElements['parts-no-match'].hidden, true, 'a matching part hides the no-results message');
+partsElements['parts-material-search'].value = 'no such material';
+filterParts();
+assert.equal(partsElements['parts-no-match'].hidden, false, 'an empty search result is explained');
 
 // ── Lubricants suite: one shared design system across all six surfaces ──
 // The suite partial owns the shell chrome (nav, page head, KPI cards, bars,

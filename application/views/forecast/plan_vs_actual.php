@@ -30,45 +30,92 @@ $signed = function ($v) {
     if ($v === null) return '—';
     return ($v > 0 ? '+' : '') . number_format((float)($v), 2);
 };
+$h = function ($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); };
+$snapshot_tables_ready = !isset($snapshot_tables_ready) || (bool)$snapshot_tables_ready;
+$has_group_actual_gap = false;
+foreach ((array)$groups as $g) {
+    if (!isset($g['actual_availability']) || $g['actual_availability'] === null) {
+        $has_group_actual_gap = true;
+        break;
+    }
+}
 ?>
+
+<style>
+  .pva-sr-only { position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important; }
+  .pva-toolbar { display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap; }
+  .pva-kpis { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .pva-table-wrap { overflow-x:auto; }
+  .pva-group-table { min-width:960px; }
+  .pva-group-table th:first-child,.pva-group-table td:first-child { position:sticky;left:0;z-index:1;background:var(--surface);box-shadow:2px 0 6px -3px rgba(0,0,0,.25); }
+  .pva-group-table thead th:first-child { z-index:2;background:var(--surface-2); }
+  .pva-week-link:focus-visible { outline:2px solid var(--blue);outline-offset:2px;border-radius:3px; }
+  @media (max-width:900px) { .pva-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (max-width:560px) {
+    .pva-kpis { grid-template-columns:1fr; }
+    .pva-toolbar form { width:100%;flex-wrap:wrap; }
+    .pva-week-input { width:min(100%,230px)!important; }
+  }
+</style>
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <h1 class="page-heading" style="font-size:16px;">Plan vs Actual — <?=htmlspecialchars((string)($iso_label))?></h1>
+    <h1 class="page-heading" style="font-size:16px;">Plan vs Actual — <?=$h($iso_label)?></h1>
     <div class="cs"><?=date('d M Y', strtotime($week_start))?> – <?=date('d M Y', strtotime($week_end))?></div>
   </div>
-  <form method="get" class="flex ai-c gap-10">
-    <label style="font-size:11px;color:var(--t3);">Week</label>
-    <input type="week" name="week" class="form-control" style="width:170px;" value="<?=htmlspecialchars((string)($iso_label))?>">
-    <button class="btn btn-sm btn-primary" type="submit">Open</button>
-  </form>
+  <div class="pva-toolbar">
+    <form method="get" class="flex ai-c gap-10">
+      <label for="pva-week" style="font-size:11px;color:var(--t3);">Week</label>
+      <input id="pva-week" type="week" name="week" class="form-control pva-week-input" style="width:170px;" value="<?=$h($iso_label)?>">
+      <button class="btn btn-sm btn-primary" type="submit">Open</button>
+    </form>
+    <?php if ($published): ?>
+    <a class="btn btn-sm pva-week-link" href="<?=base_url('forecast?week=' . urlencode($iso_label))?>">Back to the published week plan</a>
+    <?php endif; ?>
+  </div>
 </div>
 
-<?php if (!$published): ?>
+<?php if (!$snapshot_tables_ready): ?>
+<div class="card" role="status" style="padding:34px;border-left:3px solid var(--amber);">
+  <div style="font-weight:700;margin-bottom:6px;">Forecast snapshot table is not set up</div>
+  <div class="cs" style="font-size:12px;line-height:1.7;">
+    The snapshot table needed to compare a published baseline does not exist on this database. Import the database dump shipped with this repository, then reload this page.
+  </div>
+</div>
+<?php elseif (!$published && !empty($error)): ?>
+<div class="card" role="alert" style="padding:34px;border-left:3px solid var(--red);">
+  <div style="font-weight:700;margin-bottom:6px;">The published baseline could not be read</div>
+  <div class="cs" style="font-size:12px;line-height:1.7;">
+    A snapshot exists for <?= $h($iso_label) ?>, but its saved plan could not be used for this comparison.
+    <span style="color:var(--red);">Detail: <?=$h($error)?></span>
+  </div>
+  <a class="btn btn-sm mt-4" href="<?=base_url('forecast?week=' . urlencode($iso_label))?>">Return to the planned week</a>
+</div>
+<?php elseif (!$published): ?>
 <div class="card" style="padding:44px;text-align:center;">
-  <div style="font-weight:700;margin-bottom:8px;">No published plan for <?=htmlspecialchars((string)($iso_label))?></div>
+  <div style="font-weight:700;margin-bottom:8px;">No published plan for <?=$h($iso_label)?></div>
   <div class="cs" style="font-size:12px;line-height:1.8;max-width:520px;margin:0 auto;">
     A week has to be <strong>published</strong> before it can be compared — the plan is frozen at
     publication so the variance measures what was actually committed, not what the draft says now.
-    <?php if (!empty($error)): ?><br><span style="color:var(--red);"><?=htmlspecialchars((string)($error))?></span><?php endif; ?>
   </div>
-  <a class="btn btn-sm btn-primary mt-4" href="<?= base_url('forecast?week=' . urlencode($iso_label)) ?>">
+  <a class="btn btn-sm btn-primary mt-4" href="<?=base_url('forecast?week=' . urlencode($iso_label))?>">
     Go to the plan
   </a>
 </div>
 <?php else: ?>
 
 <div class="cs mb-4" style="font-size:11px;">
-  Compared against the <strong>frozen baseline</strong> — revision <?=htmlspecialchars((string)$revision)?>,
+  Compared against the <strong>frozen baseline</strong> — revision <?=$h($revision)?>,
   published <?= $published_at ? date('d M Y H:i', strtotime($published_at)) : '(timestamp not recorded)' ?>.
   <?php if ($actual_missing): ?>
-    <span style="color:var(--amber);">The weekly actual could not be read for this week, so the actual
-    column is blank.</span>
+    <span style="color:var(--amber);">The weekly actual is unavailable; actual and variance values show —, not zero.</span>
+  <?php elseif ($has_group_actual_gap): ?>
+    <span style="color:var(--amber);">Some planned groups have no usable matching actual value; their actual and variance cells show —, not zero.</span>
   <?php endif; ?>
 </div>
 
 <!-- ── fleet headline ────────────────────────────────────────────────── -->
-<div class="grid g-4 mb-4">
+<div class="grid g-4 mb-4 pva-kpis">
   <div class="kpi">
     <span class="kpi-tag">Planned fleet availability</span>
     <div class="kpi-num"><?=$pct($fleet['planned'])?></div>
@@ -93,23 +140,24 @@ $signed = function ($v) {
 </div>
 
 <!-- ── per group, with the variance explained ────────────────────────── -->
-<div class="card mb-3" style="overflow-x:auto;">
+<div class="card mb-3 pva-table-wrap">
   <div class="ch" style="padding:12px 18px 10px;">
     <div class="ct" style="font-size:12px;">Variance by group, worst first</div>
-    <div class="cs">A negative variance is a miss. The last two columns say whether it was PM over-run or unplanned loss.</div>
+    <div class="cs">A negative availability variance is a miss. The last two columns explain PM over-run and unplanned downtime differences.</div>
   </div>
-  <table class="tbl">
+  <table class="tbl pva-group-table">
+    <caption class="pva-sr-only">Planned versus actual availability and downtime by group for <?=$h($iso_label)?></caption>
     <thead>
       <tr>
-        <th>GROUP</th>
-        <th style="text-align:center;">MACHINES</th>
-        <th style="text-align:right;">PLANNED</th>
-        <th style="text-align:right;">ACTUAL</th>
-        <th style="text-align:right;">VARIANCE</th>
-        <th style="text-align:right;">PM h<br><span style="font-weight:400;color:var(--t3);font-size:9px;">plan → actual</span></th>
-        <th style="text-align:right;">PM VARIANCE h</th>
-        <th style="text-align:right;">DOWNTIME h<br><span style="font-weight:400;color:var(--t3);font-size:9px;">plan → actual</span></th>
-        <th style="text-align:right;">UNPLANNED VARIANCE h</th>
+        <th scope="col">GROUP</th>
+        <th scope="col" style="text-align:center;">MACHINES</th>
+        <th scope="col" style="text-align:right;">PLANNED AVAILABILITY</th>
+        <th scope="col" style="text-align:right;">ACTUAL AVAILABILITY</th>
+        <th scope="col" style="text-align:right;">VARIANCE (pp)</th>
+        <th scope="col" style="text-align:right;">PM h<br><span style="font-weight:400;color:var(--t3);font-size:9px;">plan → actual</span></th>
+        <th scope="col" style="text-align:right;">PM VARIANCE h</th>
+        <th scope="col" style="text-align:right;">DOWNTIME h<br><span style="font-weight:400;color:var(--t3);font-size:9px;">plan → actual</span></th>
+        <th scope="col" style="text-align:right;">UNPLANNED VARIANCE h</th>
       </tr>
     </thead>
     <tbody>

@@ -12,20 +12,49 @@
  */
 $role_id       = isset($role_id) ? (int)$role_id : 0;
 $is_supervisor = $role_id === 1;
+$materials     = isset($materials) && is_array($materials) ? $materials : array();
+$materials_ready = isset($materials_ready) ? (bool)$materials_ready : true;
+$parts_h = function ($value) {
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+};
+$inventory_url = function ($row) {
+    return base_url('materials/inventory?' . http_build_query(array(
+        'q'    => (string)$row['item_code'],
+        'item' => (int)$row['material_id'],
+    )));
+};
 ?>
+
+<style>
+  .parts-sr-only { position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important; }
+  .parts-table-wrap { overflow-x:auto; }
+  .parts-table { min-width:860px; }
+  .parts-table th:first-child,.parts-table td:first-child { position:sticky;left:0;z-index:1;background:var(--surface); }
+  .parts-table thead th:first-child { z-index:2;background:var(--surface-2); }
+  .parts-item-link { color:var(--blue);text-decoration:none; }
+  .parts-item-link:hover { text-decoration:underline; }
+  .parts-item-link:focus-visible { outline:2px solid var(--blue);outline-offset:2px;border-radius:2px; }
+  .parts-form-grid { gap:14px; }
+  .parts-search { margin-top:6px; }
+  .parts-no-match { margin-top:6px;color:var(--t3);font-size:11px; }
+  @media (max-width:760px) {
+    .parts-form-grid { grid-template-columns:1fr; }
+    .parts-table { min-width:780px; }
+  }
+</style>
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <h1 class="page-heading" style="font-size:16px;">Parts — <?=htmlspecialchars((string)($schedule->schedule_name))?></h1>
+    <h1 class="page-heading" style="font-size:16px;">Parts — <?=$parts_h($schedule->schedule_name)?></h1>
     <div class="cs">
-      <?=htmlspecialchars((string)(isset($schedule->registration_no) ? (string)$schedule->registration_no : '—'))?>
-      · every <?=htmlspecialchars((string)$schedule->interval_value)?> <?=htmlspecialchars((string)$schedule->interval_type)?>
+      <?=$parts_h(isset($schedule->registration_no) ? $schedule->registration_no : '—')?>
+      · every <?=$parts_h($schedule->interval_value)?> <?=$parts_h($schedule->interval_type)?>
       <?php if (!empty($schedule->next_due_date)): ?>
         · next due <?=date('d M Y', strtotime($schedule->next_due_date))?>
       <?php endif; ?>
     </div>
   </div>
-  <a class="btn btn-sm" href="<?= base_url('pm') ?>">Back to the PM planner</a>
+  <a class="btn btn-sm" href="<?=base_url('pm')?>">Back to the PM planner</a>
 </div>
 
 <?php if (!$table_ready): ?>
@@ -49,52 +78,62 @@ $is_supervisor = $role_id === 1;
 </div>
 
 <!-- ── what this service consumes ────────────────────────────────────── -->
-<div class="card mb-4" style="overflow-x:auto;">
+<div class="card mb-4 parts-table-wrap">
   <div class="ch" style="padding:12px 18px 10px;">
     <div class="ct" style="font-size:12px;">Parts list</div>
     <div class="cs"><?=count($requirements)?> part<?=count($requirements) === 1 ? '' : 's'?> recorded for this service</div>
   </div>
-  <table class="tbl">
+  <table class="tbl parts-table">
+    <caption class="parts-sr-only">Parts configured for <?=$parts_h($schedule->schedule_name)?></caption>
     <thead>
       <tr>
-        <th>ITEM</th><th>DESCRIPTION</th>
-        <th style="text-align:right;">QTY / SERVICE</th>
-        <th style="text-align:right;">ON HAND</th>
-        <th style="text-align:center;">CRITICAL</th>
-        <th>NOTE</th>
-        <?php if ($is_supervisor): ?><th style="width:1%;"></th><?php endif; ?>
+        <th scope="col">ITEM</th><th scope="col">DESCRIPTION</th>
+        <th scope="col" style="text-align:right;">QTY / SERVICE</th>
+        <th scope="col" style="text-align:right;">ON HAND</th>
+        <th scope="col" style="text-align:center;">CRITICAL</th>
+        <th scope="col">NOTE</th>
+        <?php if ($is_supervisor): ?><th scope="col" style="width:1%;">ACTIONS</th><?php endif; ?>
       </tr>
     </thead>
     <tbody>
     <?php foreach ($requirements as $r): ?>
+      <?php $unit = isset($r['unit']) ? trim((string)$r['unit']) : ''; ?>
       <tr>
-        <td class="mono" style="font-weight:600;color:var(--blue);">
-          <?=htmlspecialchars((string)$r['item_code'])?>
+        <td class="mono" style="font-weight:600;">
+          <?php if ((int)$r['material_id'] > 0 && !empty($r['item_code'])): ?>
+            <a class="parts-item-link" href="<?=$parts_h($inventory_url($r))?>"
+               aria-label="View inventory for <?=$parts_h($r['item_code'])?>">
+              <?=$parts_h($r['item_code'])?>
+            </a>
+          <?php else: ?>
+            <?=$parts_h($r['item_code'] !== null ? $r['item_code'] : 'Unavailable')?>
+          <?php endif; ?>
         </td>
-        <td style="color:var(--t2);font-size:11px;"><?=htmlspecialchars((string)$r['description'])?></td>
+        <td style="color:var(--t2);font-size:11px;"><?=$parts_h($r['description'])?></td>
         <td class="mono" style="text-align:right;font-weight:700;">
-          <?=rtrim(rtrim((string)(number_format((float)($r['qty']), 3, '.', '')), '0'), '.')?>
-          <span style="color:var(--t3);font-size:9.5px;"><?=htmlspecialchars((string)$r['unit'])?></span>
+          <?=rtrim(rtrim((string)(number_format((float)$r['qty'], 3, '.', '')), '0'), '.')?>
+          <?php if ($unit !== ''): ?><span style="color:var(--t3);font-size:9.5px;"> <?=$parts_h($unit)?></span><?php endif; ?>
         </td>
-        <td class="mono" style="text-align:right;color:<?= $r['on_hand'] < $r['qty'] ? 'var(--red)' : 'var(--t3)' ?>;">
-          <?=rtrim(rtrim((string)(number_format((float)($r['on_hand']), 3, '.', '')), '0'), '.')?>
+        <td class="mono" style="text-align:right;color:var(--t2);">
+          <?=rtrim(rtrim((string)(number_format((float)$r['on_hand'], 3, '.', '')), '0'), '.')?>
+          <?php if ($unit !== ''): ?><span style="color:var(--t3);font-size:9.5px;"> <?=$parts_h($unit)?></span><?php endif; ?>
         </td>
         <td style="text-align:center;">
           <?php if ($r['is_critical']): ?>
-            <span style="padding:2px 7px;border-radius:5px;font-size:9.5px;font-weight:700;color:var(--red);background:var(--red-d);">CRITICAL</span>
+            <span class="badge b-critical">CRITICAL</span>
           <?php else: ?>
             <span style="color:var(--t3);">—</span>
           <?php endif; ?>
         </td>
-        <td style="font-size:10.5px;color:var(--t3);"><?=htmlspecialchars((string)$r['note'])?></td>
+        <td style="font-size:10.5px;color:var(--t3);"><?=$parts_h($r['note'])?></td>
         <?php if ($is_supervisor): ?>
         <td>
-          <form method="post" action="<?= base_url('forecast/delete_part') ?>"
-                onsubmit="return confirm('Remove <?=htmlspecialchars((string)$r['item_code'], ENT_QUOTES)?> from this service?');">
-            <?= csrf_field() ?>
-            <input type="hidden" name="pm_schedule_id" value="<?= (int)$schedule->id ?>">
-            <input type="hidden" name="requirement_id" value="<?= (int)$r['id'] ?>">
-            <button class="btn btn-sm btn-ghost" type="submit" style="color:var(--red);">Remove</button>
+          <form method="post" action="<?=base_url('forecast/delete_part')?>"
+                onsubmit="return confirm('Remove this part from the service?');">
+            <?=csrf_field()?>
+            <input type="hidden" name="pm_schedule_id" value="<?=(int)$schedule->id?>">
+            <input type="hidden" name="requirement_id" value="<?=(int)$r['id']?>">
+            <button class="btn btn-sm btn-ghost" type="submit" aria-label="Remove <?=$parts_h($r['item_code'])?> from this service" style="color:var(--red);">Remove</button>
           </form>
         </td>
         <?php endif; ?>
@@ -103,48 +142,72 @@ $is_supervisor = $role_id === 1;
     <?php if (!$requirements): ?>
       <tr><td colspan="<?=$is_supervisor ? 7 : 6?>" style="text-align:center;color:var(--t3);padding:26px;">
         No parts recorded. Until this service has a parts list it is counted as a gap on
-        <a href="<?= base_url('forecast/spares') ?>" style="color:var(--blue);">the spares forecast</a>.
+        <a href="<?=base_url('forecast/spares')?>" style="color:var(--blue);">the spares forecast</a>.
       </td></tr>
     <?php endif; ?>
     </tbody>
   </table>
+</div>
+<div class="cs mb-4" style="font-size:11px;line-height:1.7;">
+  On-hand values show current inventory. Where a material unit is defined, it appears beside both quantities.
+  Comparing stock with one service’s requirement is a quick reference, not the forecast-window shortage; the
+  spares forecast accounts for open orders when it calculates shortage.
 </div>
 
 <!-- ── add or change one ─────────────────────────────────────────────── -->
 <?php if ($is_supervisor): ?>
 <div class="card" style="padding:16px 18px;">
   <div class="ct" style="font-size:12px;margin-bottom:12px;">Add a part</div>
-  <form method="post" action="<?= base_url('forecast/save_part') ?>">
-    <?= csrf_field() ?>
-    <input type="hidden" name="pm_schedule_id" value="<?= (int)$schedule->id ?>">
+  <?php if (!$materials_ready): ?>
+    <div class="cs" role="status" style="font-size:11.5px;line-height:1.7;">
+      The inventory catalogue is not available right now, so a part cannot be selected. Contact an administrator.
+    </div>
+  <?php elseif (!$materials): ?>
+    <div class="cs" role="status" style="font-size:11.5px;line-height:1.7;">
+      No inventory items are available to choose. Add the item in
+      <a href="<?=base_url('materials/inventory')?>" style="color:var(--blue);">Inventory</a> first.
+    </div>
+  <?php else: ?>
+  <form method="post" action="<?=base_url('forecast/save_part')?>">
+    <?=csrf_field()?>
+    <input type="hidden" name="pm_schedule_id" value="<?=(int)$schedule->id?>">
 
-    <div class="form-grid cols-2" style="gap:14px;">
+    <div class="form-grid cols-2 parts-form-grid">
       <div>
-        <label class="form-label">Part</label>
-        <select name="material_id" class="form-select" required>
+        <div id="parts-search-controls" hidden>
+          <label class="form-label" for="parts-material-search">Search available parts</label>
+          <input type="search" id="parts-material-search" class="form-control parts-search"
+                 placeholder="Item code or description" autocomplete="off" aria-controls="parts-material-id">
+        </div>
+        <label class="form-label" for="parts-material-id" style="margin-top:10px;">Part</label>
+        <select id="parts-material-id" name="material_id" class="form-select" required>
           <option value="">— choose a part —</option>
           <?php foreach ($materials as $mat): ?>
-          <option value="<?= (int)$mat->id ?>">
-            <?=htmlspecialchars((string)($mat->item_code . ' — ' . $mat->description))?>
-            (<?= (int)$mat->final_qty ?> on hand)
+          <?php $mat_unit = isset($mat->unit) ? trim((string)$mat->unit) : ''; ?>
+          <option value="<?=(int)$mat->id?>">
+            <?=$parts_h($mat->item_code . ' — ' . $mat->description)?>
+            (<?=(int)$mat->final_qty?><?php if ($mat_unit !== ''): ?> <?=$parts_h($mat_unit)?><?php endif; ?> on hand)
           </option>
           <?php endforeach; ?>
         </select>
+        <div id="parts-no-match" class="parts-no-match" role="status" aria-live="polite" hidden>
+          No inventory items match that search. Clear the search to see all parts.
+        </div>
         <div class="cs" style="margin-top:4px;">
           Choosing a part already on this list updates its quantity rather than adding a second line.
         </div>
       </div>
       <div>
-        <label class="form-label">Quantity per service</label>
-        <input type="number" name="qty" class="form-control" min="0.001" step="0.001" value="1" required>
+        <label class="form-label" for="parts-qty">Quantity per service</label>
+        <input id="parts-qty" type="number" name="qty" class="form-control" min="0.001" step="0.001" value="1" required>
         <div class="cs" style="margin-top:4px;">Per one occurrence of this service.</div>
       </div>
     </div>
 
-    <div class="form-grid cols-2" style="gap:14px;margin-top:14px;">
+    <div class="form-grid cols-2 parts-form-grid" style="margin-top:14px;">
       <div>
-        <label class="form-label">Note <span style="color:var(--t3);font-weight:400;">(optional)</span></label>
-        <input type="text" name="note" class="form-control" maxlength="255"
+        <label class="form-label" for="parts-note">Note <span style="color:var(--t3);font-weight:400;">(optional)</span></label>
+        <input id="parts-note" type="text" name="note" class="form-control" maxlength="255"
                placeholder="e.g. change at every 250 h service">
       </div>
       <div style="display:flex;align-items:flex-end;padding-bottom:6px;">
@@ -159,6 +222,7 @@ $is_supervisor = $role_id === 1;
       <button class="btn btn-sm btn-primary" type="submit">Save part</button>
     </div>
   </form>
+  <?php endif; ?>
 </div>
 <?php else: ?>
 <div class="card" style="padding:14px 18px;">
@@ -169,11 +233,35 @@ $is_supervisor = $role_id === 1;
 <?php endif; ?>
 
 <div class="cs mt-4" style="font-size:11px;line-height:1.8;">
-  These rows feed <a href="<?= base_url('forecast/spares') ?>" style="color:var(--blue);">Forecast &rsaquo;
+  These rows feed <a href="<?=base_url('forecast/spares')?>" style="color:var(--blue);">Forecast &rsaquo;
   PM Spare-Parts Forecast</a>, which turns them into
   <em>required − on hand − on order = shortage</em> for active PM schedules whose recorded next due dates fall in the selected window.
   A service with no parts list is counted and shown as a gap there, so an incomplete bill is never
   mistaken for a complete one.
 </div>
+
+<script>
+(function () {
+  var controls = document.getElementById('parts-search-controls');
+  var search = document.getElementById('parts-material-search');
+  var select = document.getElementById('parts-material-id');
+  var noMatch = document.getElementById('parts-no-match');
+  if (!controls || !search || !select || !noMatch) return;
+  controls.hidden = false;
+
+  search.addEventListener('input', function () {
+    var query = search.value.trim().toLocaleLowerCase();
+    var visible = 0;
+    Array.prototype.forEach.call(select.options, function (option, index) {
+      if (index === 0) return;
+      var matches = option.textContent.toLocaleLowerCase().indexOf(query) !== -1;
+      option.hidden = !matches;
+      if (matches) visible++;
+      if (option.selected && !matches) select.value = '';
+    });
+    noMatch.hidden = visible > 0;
+  });
+}());
+</script>
 
 <?php endif; ?>

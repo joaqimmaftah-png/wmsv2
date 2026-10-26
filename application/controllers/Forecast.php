@@ -382,8 +382,9 @@ class Forecast extends MY_Controller {
         $data['week_start']     = $week_start;
         $data['week_end']       = $this->Forecast_model->week_end($week_start);
         $data['week_input']     = $this->input->get('week');
-        $data['actual_missing'] = $actual === null;
-        $data['page_title']     = 'Plan vs Actual — ' . $label;
+        $data['actual_missing']        = $actual === null;
+        $data['snapshot_tables_ready'] = $this->Forecast_model->snapshots_ready();
+        $data['page_title']            = 'Plan vs Actual — ' . $label;
         $this->render('forecast/plan_vs_actual', $data);
     }
 
@@ -516,11 +517,12 @@ class Forecast extends MY_Controller {
         }
 
         $this->render('forecast/parts', array(
-            'schedule'     => $schedule,
-            'requirements' => $this->Forecast_model->part_requirements($id),
-            'materials'    => $this->Materials_model->get_all(array()),
-            'table_ready'  => $this->db->table_exists('pm_part_requirements'),
-            'page_title'   => 'Parts for ' . $schedule->schedule_name,
+            'schedule'        => $schedule,
+            'requirements'    => $this->Forecast_model->part_requirements($id),
+            'materials'       => $this->Materials_model->get_all(array()),
+            'materials_ready' => $this->db->table_exists('materials'),
+            'table_ready'     => $this->db->table_exists('pm_part_requirements'),
+            'page_title'      => 'Parts for ' . $schedule->schedule_name,
         ));
     }
 
