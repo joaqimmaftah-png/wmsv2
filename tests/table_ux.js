@@ -156,7 +156,31 @@ assert.match(rollingExcel, /\$r\['downtime_hours'\]/, 'rolling workbook uses the
 assert.match(rollingExcel, /\$r\['availability'\]/, 'rolling workbook retains model availability values');
 // Spares / allowances / parts: shared badge classes instead of hand-rolled chips.
 assert.match(source('application/views/forecast/spares.php'), /class="badge b-/, 'spares view uses the shared badge system');
-assert.match(source('application/views/forecast/allowances.php'), /class="badge b-/, 'allowances view uses the shared badge system');
+const allowances = source('application/views/forecast/allowances.php');
+assert.match(allowances, /class="badge b-/, 'allowances view uses the shared badge system');
+assert.match(allowances, /for="allowanceWeek"[\s\S]*id="allowanceWeek"/, 'week selector has an associated accessible label');
+assert.match(allowances, /<caption class="allowance-sr-only">/, 'allowances table has an accessible caption');
+assert.match(allowances, /<th scope="col">MACHINE<\/th>/, 'allowances table headers declare column scope');
+assert.match(allowances, /type="search" name="q"/, 'allowances has a searchable machine table');
+assert.match(allowances, /name="type" class="form-select allowance-type-filter"/, 'allowances can filter by equipment type');
+assert.match(allowances, /name="source" class="form-select allowance-source-filter"/, 'allowances can filter by rate source');
+assert.match(allowances, /name="per_page" onchange="this\.form\.submit\(\)"/, 'allowances table has an adjustable page size');
+assert.match(allowances, /class="allowance-pages" aria-label="Allowance pagination"/, 'allowance pagination has an accessible navigation label');
+assert.match(allowances, /base_url\('equipment\/view\/' \. \(int\)\$row\['equipment_id'\]\)/, 'machine registration links to its existing equipment profile');
+assert.match(allowances, /History window:<\/strong>/, 'derived rate preview shows exact history dates');
+assert.match(allowances, /bounded to 0\.5–24 h\/day/, 'allowance methodology states both the floor and cap');
+assert.doesNotMatch(allowances, /historical week-40 forecast|1 894|966|253/, 'allowance view does not show historical figures without a known year/source');
+assert.match(allowances, /max-width:820px[\s\S]*allowance-kpis[\s\S]*max-width:480px/, 'allowance KPI layout adapts at tablet and phone widths');
+const allowanceController = source('application/controllers/Forecast.php');
+assert.match(allowanceController, /'can_edit_settings'\s*=>\s*\$this->is_supervisor\(\)/, 'only supervisor role gets the Settings link flag');
+assert.match(allowances, /if \(!empty\(\$can_edit_settings\)\):[\s\S]*base_url\('settings'\)/, 'Settings link is hidden for non-supervisors');
+assert.match(allowances, /not a promise that every day receives an entry/, 'rate preview does not promise that every allowance will be written');
+assert.doesNotMatch(allowances, /what the generators will write/, 'allowance heading avoids overpromising generator output');
+assert.match(allowanceController, /'lookback_from'\s*=>\s*\$history_window\['from'\]/, 'allowances controller passes the model-owned history start');
+const forecastModel = source('application/models/Forecast_model.php');
+assert.match(forecastModel, /function unplanned_allowance_history_window\(\$week_start\)/, 'model owns the allowance history window');
+assert.match(forecastModel, /\$window\s*=\s*\$this->unplanned_allowance_history_window\(\$week_start\)/, 'allowance calculation reuses its displayed history window');
+assert.match(forecastModel, /max\(0\.5, min\(24\.0, \$per_day\)\)/, 'allowance floor and ceiling remain in the calculation');
 assert.match(source('application/views/forecast/parts.php'), /onsubmit="return confirm\('/, 'part removal requires confirmation');
 assert.match(source('application/views/forecast/parts.php'), /csrf_field\(\)/, 'part forms carry CSRF protection');
 
