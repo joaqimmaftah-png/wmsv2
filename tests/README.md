@@ -78,7 +78,8 @@ state, full-scope totals are separated from bounded page rows, quantities remain
 honest when min/max levels are unavailable, and semantic/print/reduced-motion
 states are present. Forecast checks cover the planned-week and rolling tables;
 rolling assertions include grouped three-week headers, GET search/type/status
-filters, count scope, model-owned downtime in screen and workbook, and the
+filters, 25/50/100 pagination after filtering with preserved URL state, full-scope
+count/export semantics, model-owned downtime in screen and workbook, and the
 existing equipment-profile link. These are source checks, not PHP/MySQL or
 browser/assistive-technology tests. See `docs/table-ux-audit.md`,
 `docs/forecast-table-ux-audit.md`, and `docs/forecast-rolling-table-audit.md` for
