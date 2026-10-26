@@ -187,4 +187,30 @@ assert.match(lubeForecast, /position: sticky; left: 0/, 'forecast pins the month
 assert.match(lubeForecast, /\.lub-forecast-months \{ display: grid/, 'forecast swaps to month cards on small screens');
 assert.doesNotMatch(lubeForecast, /kpi-glow/, 'forecast drops the inert decorative glow');
 
-console.log('Table surface and budget calculator regressions: passed');
+// ── Reports / Asset Register: actual register data, actions, and table UX ──
+const assetRegister = source('application/views/reports/asset_register.php');
+const assetModel = source('application/models/Asset_model.php');
+for (const control of ['id="assetSearch"', 'id="assetTypeFilter"', 'id="assetPageSize"', 'data-asset-status=', 'data-asset-view=', 'id="assetPrevPage"', 'id="assetNextPage"']) {
+  assert.ok(assetRegister.includes(control), 'asset register keeps ' + control);
+}
+for (const [field, label] of [
+  ['registration_no', 'Machine ID'], ['type_name', 'Type'], ['brand_model', 'Brand / model'],
+  ['serial_number', 'Serial no.'], ['engine_model', 'Engine'], ['current_hours', 'Hours'],
+  ['current_km', 'KM'], ['total_wo', 'Work orders'], ['breakdowns', 'Breakdowns'],
+  ['total_down', 'Downtime hours'], ['availability', 'Availability'],
+  ['warranty_expiry', 'Warranty'], ['next_pm_date', 'Next PM'], ['notes', 'Notes']
+]) {
+  assert.ok(assetRegister.includes('data-card-label="' + label + '"'), 'asset register retains ' + field);
+}
+assert.match(assetRegister, /data-search="<\?= \$asset_h\(implode\(' ', \$searchable\)\) \?>"/, 'search indexes the record values emitted by the server');
+assert.match(assetRegister, /function update\(\)[\s\S]*activeStatus[\s\S]*selectedType[\s\S]*term/, 'status, type, and search filters combine in the results pass');
+assert.match(assetRegister, /function sortRows\(\)[\s\S]*sortDirection/, 'table headers drive real client-side sorting');
+assert.match(assetRegister, /matches\.slice\(first, last\)/, 'pagination controls visible records rather than just styling the toolbar');
+assert.match(assetRegister, /function makeCard\(row\)/, 'card view is built from each actual table row');
+assert.match(assetRegister, /base_url\('equipment\/view\/'\./, 'asset identifiers open the existing equipment profile');
+assert.match(assetRegister, /reports\/export_asset_register_xlsx/, 'full workbook export remains available');
+assert.match(assetRegister, /reports\/import_asset_register/, 'existing import flow remains available');
+assert.match(assetRegister, /if \(\$role_id == 1\)/, 'asset creation and import affordances remain supervisor-gated');
+assert.match(assetModel, /\$a\['warranty_days'\] <= 0/, 'expired-today assets are included in the expired-warranty KPI');
+
+console.log('Table surface, budget calculator, and Asset Register regressions: passed');
