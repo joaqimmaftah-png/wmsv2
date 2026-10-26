@@ -426,12 +426,18 @@ class Forecast extends MY_Controller {
      */
     public function rolling() {
         $base = $this->_resolve_week();
-        list($weeks, $machines) = $this->_rolling_data($base);
+        $tables_ready = $this->Forecast_model->tables_ready();
+        if ($tables_ready) {
+            list($weeks, $machines) = $this->_rolling_data($base);
+        } else {
+            $weeks = $machines = array();
+        }
 
         $this->render('forecast/rolling', array(
-            'weeks'       => $weeks,
-            'machines'    => $machines,
-            'base_label'  => $this->Forecast_model->iso_label($base),
+            'weeks'        => $weeks,
+            'machines'     => $machines,
+            'tables_ready' => $tables_ready,
+            'base_label'   => $this->Forecast_model->iso_label($base),
             'week_input'  => $this->input->get('week'),
             'page_title'  => 'Rolling Maintenance Plan — 3 weeks from ' . $this->Forecast_model->iso_label($base),
         ));
@@ -465,6 +471,7 @@ class Forecast extends MY_Controller {
                 $key = $r['registration_no'];
                 if (!isset($machines[$key])) {
                     $machines[$key] = array(
+                        'equipment_id'    => (int)$r['equipment_id'],
                         'registration_no' => $r['registration_no'],
                         'type'            => $r['type'],
                         'location'        => $r['location'],

@@ -3,7 +3,9 @@
 **Application:** WMS v2 (Workshop / Warehouse Management System) — CodeIgniter 3, PHP 8.2+, MySQL/MariaDB
 **Module:** Planned-availability forecast (`Forecast` controller, `Forecast_model`)
 **Branch:** `arena/771c510e-wmsv2`
-**Access mode:** Local source review; implementation limited to view-layer (templates + vanilla JS). No PHP/MySQL runtime is available in this sandbox, so server-side execution, PHP unit tests and browser E2E tests could NOT be run here (see §12).
+**Access mode:** Local source review; the original implementation was limited to view-layer (templates + vanilla JS). No PHP/MySQL runtime is available in this sandbox, so server-side execution, PHP unit tests and browser E2E tests could NOT be run here (see §12).
+
+**Rolling-table follow-up:** A later focused audit corrects the rolling three-week grid's local sticky behavior, weekly status/column structure, model-owned downtime display and Excel parity, search/type/status filters, and missing-table state. That follow-up touches `Forecast.php` and `Forecast_excel.php` without changing forecast calculations, routes, schema, or permission policy. See `docs/forecast-rolling-table-audit.md` for the current scope and verification status.
 
 ---
 

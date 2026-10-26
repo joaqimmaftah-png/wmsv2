@@ -113,8 +113,34 @@ assert.match(jobs, /onsubmit="return confirm\('/, 'job removal requires confirma
 assert.match(jobs, /csrf_field\(\)/, 'job forms carry CSRF protection');
 assert.match(jobs, /\$job_status_badge\s*=/, 'job view maps statuses to shared badge classes');
 assert.match(jobs, /class="badge /, 'job status renders through the shared badge system');
-// Rolling: sticky machine column on the three-week grid.
-assert.match(source('application/views/forecast/rolling.php'), /tbl-sticky-first/, 'rolling grid pins the machine column');
+// Rolling: the three-week comparison stays a matrix, with meaningful filters,
+// visible weekly status, model-owned downtime, and the established profile link.
+const rolling = source('application/views/forecast/rolling.php');
+assert.match(rolling, /tbl-sticky-first/, 'rolling grid pins the machine column');
+assert.match(rolling, /\.rolling-table th:first-child,.rolling-table td:first-child \{ position:sticky; left:0;/, 'rolling view defines its own sticky machine-column CSS');
+assert.match(rolling, /\.rolling-kpi-grid \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\); \}/, 'rolling weekly KPI cards adapt at tablet widths');
+assert.match(rolling, /\.rolling-kpi-grid \{ grid-template-columns:1fr; \}/, 'rolling weekly KPI cards stack on phones');
+assert.match(rolling, /<colgroup><col><col><col><\/colgroup>[\s\S]*?<colgroup span="3"><\/colgroup>/, 'rolling table defines column groups for the week headers');
+assert.match(rolling, /colspan="3" class="rolling-week-head"/, 'rolling weeks are grouped across their three metrics');
+assert.match(rolling, /scope="col" class="rolling-week-start">STATUS/, 'each week has a labelled status column');
+assert.match(rolling, /DOWNTIME h/, 'downtime metric has an explicit unit');
+assert.match(rolling, /PLAN AVAIL/, 'availability is identified as a planned metric');
+assert.match(rolling, /name="q"/, 'rolling plan has a real GET search field');
+assert.match(rolling, /name="equipment_type"/, 'rolling plan can filter by observed equipment type');
+assert.match(rolling, /Out-of-service time in any week/, 'rolling filters disclose the three-week condition');
+assert.match(rolling, /conditions can overlap/, 'rolling overlapping status counts are explained');
+assert.match(rolling, /\$r\['downtime_hours'\]/, 'screen uses the model-owned downtime value');
+assert.doesNotMatch(rolling, /standing_hours\s*\+\s*\$r\['unplanned_hours'\]/, 'screen does not omit corrective downtime by recomputing it');
+assert.match(rolling, /base_url\('equipment\/view\/'\s*\.\s*\(int\)\$machine\['equipment_id'\]/, 'machine identifier links to the existing profile route');
+const rollingController = source('application/controllers/Forecast.php');
+assert.match(rollingController, /'equipment_id'\s*=>\s*\(int\)\$r\['equipment_id'\]/, 'rolling rows carry the existing equipment key for profile navigation');
+assert.match(rollingController, /'tables_ready'\s*=>\s*\$tables_ready/, 'rolling controller sends forecast-table readiness to the view');
+assert.match(rolling, /The forecast tables are not set up yet/, 'rolling view distinguishes missing tables from an empty draft');
+const forecastExcel = source('application/libraries/Forecast_excel.php');
+const rollingExcel = forecastExcel.slice(forecastExcel.indexOf('public function build_rolling('), forecastExcel.indexOf('public function paint('));
+assert.match(rollingExcel, /' STATUS'/, 'rolling workbook includes weekly status columns');
+assert.match(rollingExcel, /\$r\['downtime_hours'\]/, 'rolling workbook uses the model-owned downtime value');
+assert.match(rollingExcel, /\$r\['availability'\]/, 'rolling workbook retains model availability values');
 // Spares / allowances / parts: shared badge classes instead of hand-rolled chips.
 assert.match(source('application/views/forecast/spares.php'), /class="badge b-/, 'spares view uses the shared badge system');
 assert.match(source('application/views/forecast/allowances.php'), /class="badge b-/, 'allowances view uses the shared badge system');

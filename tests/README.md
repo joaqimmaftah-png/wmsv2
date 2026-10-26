@@ -76,9 +76,13 @@ status tabs and table/card views are real GET-driven controls, server-side
 pagination uses the allow-listed `10 / 25 / 50 / 100` sizes and preserves URL
 state, full-scope totals are separated from bounded page rows, quantities remain
 honest when min/max levels are unavailable, and semantic/print/reduced-motion
-states are present. These do not substitute for PHP/MySQL or
-browser/assistive-technology tests. See `docs/table-ux-audit.md` for the
-staging acceptance checklist.
+states are present. Forecast checks cover the planned-week and rolling tables;
+rolling assertions include grouped three-week headers, GET search/type/status
+filters, count scope, model-owned downtime in screen and workbook, and the
+existing equipment-profile link. These are source checks, not PHP/MySQL or
+browser/assistive-technology tests. See `docs/table-ux-audit.md`,
+`docs/forecast-table-ux-audit.md`, and `docs/forecast-rolling-table-audit.md` for
+the corresponding acceptance checklists.
 
 ## Reports hub structural checks (Node)
 

@@ -373,13 +373,14 @@ class Forecast_excel {
 
         $hdr = 4;
         $put('A', $hdr, 'MACHINE', self::S_HDR);
-        $put('B', $hdr, 'TYPE',    self::S_HDR);
-        $put('C', $hdr, 'LOCATION',self::S_HDR);
+        $put('B', $hdr, 'TYPE', self::S_HDR);
+        $put('C', $hdr, 'LOCATION', self::S_HDR);
         $col = 4;
         foreach ($weeks as $w) {
-            $put(self::col_letter($col),     $hdr, $w['iso_label'] . ' DT h', self::S_HDR);
-            $put(self::col_letter($col + 1), $hdr, $w['iso_label'] . ' AVAIL', self::S_HDR);
-            $col += 2;
+            $put(self::col_letter($col),     $hdr, $w['iso_label'] . ' STATUS', self::S_HDR);
+            $put(self::col_letter($col + 1), $hdr, $w['iso_label'] . ' DOWNTIME h', self::S_HDR);
+            $put(self::col_letter($col + 2), $hdr, $w['iso_label'] . ' PLAN AVAIL', self::S_HDR);
+            $col += 3;
         }
         $last_col = $col - 1;
 
@@ -394,20 +395,40 @@ class Forecast_excel {
                 if (!$r) {
                     $put(self::col_letter($col),     $row, '', self::S_TXT_C);
                     $put(self::col_letter($col + 1), $row, '', self::S_TXT_C);
-                } elseif ($r['out_of_service']) {
-                    $put(self::col_letter($col),     $row, 'OUT', self::S_OUT);
-                    $put(self::col_letter($col + 1), $row, 'OUT OF SERVICE', self::S_OUT);
+                    $put(self::col_letter($col + 2), $row, '', self::S_TXT_C);
                 } else {
-                    $put(self::col_letter($col),     $row,
-                        round($r['standing_hours'] + $r['unplanned_hours'], 2), self::S_NUM);
-                    $put(self::col_letter($col + 1), $row, $r['availability'], self::S_PCT);
+                    if (!empty($r['out_of_service'])) {
+                        $status = 'OUT OF SERVICE';
+                        $status_style = self::S_OUT;
+                    } elseif (!empty($r['out_days'])) {
+                        $out_days = (int)$r['out_days'];
+                        $status = 'OUT ' . $out_days . ' DAY' . ($out_days === 1 ? '' : 'S');
+                        $status_style = self::S_OUT;
+                    } elseif (!empty($r['standby'])) {
+                        $status = 'STAND-BY';
+                        $status_style = self::S_TXT_C;
+                    } elseif (empty($r['has_plan'])) {
+                        $status = 'NO PLAN';
+                        $status_style = self::S_TXT_C;
+                    } else {
+                        $status = 'PLANNED';
+                        $status_style = self::S_TXT_C;
+                    }
+                    $put(self::col_letter($col), $row, $status, $status_style);
+                    // Use the model's own metric; it includes corrective work
+                    // and follows the same capped downtime rule as availability.
+                    $put(self::col_letter($col + 1), $row,
+                        round((float)$r['downtime_hours'], 2), self::S_HRS);
+                    $put(self::col_letter($col + 2), $row,
+                        !empty($r['out_of_service']) ? '' : $r['availability'],
+                        !empty($r['out_of_service']) ? self::S_TXT_C : self::S_PCT);
                 }
-                $col += 2;
+                $col += 3;
             }
             $row++;
         }
 
-        // the three fleet headlines under the grid
+        // The three fleet headlines under the grid.
         $row++;
         $put('A', $row, 'FLEET AVAILABILITY BY WEEK', self::S_TITLE);
         $row++;
@@ -419,8 +440,14 @@ class Forecast_excel {
             $col += 2;
         }
 
-        $w = array('A' => 14, 'B' => 18, 'C' => 16);
-        for ($c = 4; $c <= $last_col; $c++) $w[self::col_letter($c)] = 13;
+        $widths = array('A' => 16, 'B' => 18, 'C' => 18);
+        $col = 4;
+        foreach ($weeks as $w) {
+            $widths[self::col_letter($col)] = 18;
+            $widths[self::col_letter($col + 1)] = 14;
+            $widths[self::col_letter($col + 2)] = 14;
+            $col += 3;
+        }
 
         return array(
             'sheet'    => 'ROLLING 3-WEEK',
@@ -429,7 +456,7 @@ class Forecast_excel {
             'last_row' => $row,
             'last_col' => $last_col,
             'freeze'   => 'D5',
-            'widths'   => $w,
+            'widths'   => $widths,
         );
     }
 
