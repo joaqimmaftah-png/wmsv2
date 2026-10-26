@@ -35,6 +35,10 @@ $rolling_search = function ($value) {
     return function_exists('mb_strtolower') ? mb_strtolower($value, 'UTF-8') : strtolower($value);
 };
 $rolling_query_normalized = $rolling_search($rolling_query);
+$rolling_page_sizes = array(25, 50, 100);
+$rolling_page_size_input = isset($_GET['per_page']) && is_scalar($_GET['per_page']) ? trim((string)$_GET['per_page']) : '';
+$rolling_per_page = ctype_digit($rolling_page_size_input) ? (int)$rolling_page_size_input : 50;
+if (!in_array($rolling_per_page, $rolling_page_sizes, true)) $rolling_per_page = 50;
 
 foreach ($machines as $machine) {
     $flags = array('out_of_service' => false, 'standby' => false, 'no_plan' => false, 'planned_all' => count($weeks) > 0);
@@ -82,6 +86,16 @@ foreach ($machines as $machine) {
         $rolling_filtered[] = $machine;
     }
 }
+$rolling_total_filtered = count($rolling_filtered);
+$rolling_page_count = max(1, (int)ceil($rolling_total_filtered / $rolling_per_page));
+$rolling_page = isset($_GET['page']) && is_scalar($_GET['page']) ? (int)$_GET['page'] : 1;
+$rolling_page = max(1, min($rolling_page, $rolling_page_count));
+$rolling_page_offset = ($rolling_page - 1) * $rolling_per_page;
+$rolling_page_rows = array_slice($rolling_filtered, $rolling_page_offset, $rolling_per_page);
+$rolling_show_start = $rolling_total_filtered > 0 ? $rolling_page_offset + 1 : 0;
+$rolling_show_end = min($rolling_page_offset + count($rolling_page_rows), $rolling_total_filtered);
+$rolling_filters_active = $rolling_query !== '' || $rolling_type !== '' || $rolling_status !== 'all';
+
 $rolling_status_labels = array(
     'all'            => 'All machines',
     'out_of_service' => 'Out-of-service time in any week',
@@ -89,12 +103,54 @@ $rolling_status_labels = array(
     'no_plan'        => 'Missing a plan in any week',
     'planned_all'    => 'Planned in all 3 weeks',
 );
-$rolling_status_params = function ($status_value) use ($base_label, $rolling_query, $rolling_type) {
-    $params = array('week' => $base_label);
+$rolling_status_params = function ($status_value) use ($base_label, $rolling_query, $rolling_type, $rolling_per_page) {
+    $params = array('week' => $base_label, 'per_page' => $rolling_per_page);
     if ($rolling_query !== '') $params['q'] = $rolling_query;
     if ($rolling_type !== '') $params['equipment_type'] = $rolling_type;
     if ($status_value !== 'all') $params['status'] = $status_value;
     return '?' . http_build_query($params);
+};
+$rolling_page_url = function ($page_number) use ($base_label, $rolling_query, $rolling_type, $rolling_status, $rolling_per_page) {
+    $params = array('week' => $base_label, 'per_page' => $rolling_per_page, 'page' => (int)$page_number);
+    if ($rolling_query !== '') $params['q'] = $rolling_query;
+    if ($rolling_type !== '') $params['equipment_type'] = $rolling_type;
+    if ($rolling_status !== 'all') $params['status'] = $rolling_status;
+    return base_url('forecast/rolling?' . http_build_query($params));
+};
+$rolling_clear_url = base_url('forecast/rolling?' . http_build_query(array(
+    'week' => $base_label, 'per_page' => $rolling_per_page,
+)));
+
+$rolling_pagination = function () use ($rolling_page, $rolling_page_count, $rolling_page_url, $rolling_h) {
+    if ($rolling_page_count <= 1) return '';
+    $link = function ($target, $label, $aria_label = '') use ($rolling_page_url, $rolling_h) {
+        $aria = $aria_label !== '' ? ' aria-label="' . $rolling_h($aria_label) . '"' : '';
+        return '<a class="btn btn-sm rolling-page-link" href="' . $rolling_h($rolling_page_url($target)) . '"' . $aria . '>' . $rolling_h($label) . '</a>';
+    };
+    $out = '<nav class="rolling-pagination" aria-label="Rolling plan pages">';
+    $out .= '<span class="rolling-page-indicator">Page ' . number_format($rolling_page) . ' of ' . number_format($rolling_page_count) . '</span>';
+    $out .= '<div class="rolling-page-links">';
+    $out .= $rolling_page > 1
+        ? $link(1, 'First', 'First page') . $link($rolling_page - 1, 'Previous', 'Previous page')
+        : '<span class="btn btn-sm rolling-page-disabled" aria-disabled="true">First</span><span class="btn btn-sm rolling-page-disabled" aria-disabled="true">Previous</span>';
+
+    $start_page = max(1, $rolling_page - 2);
+    $end_page = min($rolling_page_count, $rolling_page + 2);
+    if ($start_page > 1) $out .= '<span class="rolling-page-ellipsis" aria-hidden="true">…</span>';
+    for ($page_number = $start_page; $page_number <= $end_page; $page_number++) {
+        if ($page_number === $rolling_page) {
+            $out .= '<span class="btn btn-sm rolling-page-current" aria-current="page">' . number_format($page_number) . '</span>';
+        } else {
+            $out .= $link($page_number, number_format($page_number), 'Page ' . $page_number);
+        }
+    }
+    if ($end_page < $rolling_page_count) $out .= '<span class="rolling-page-ellipsis" aria-hidden="true">…</span>';
+
+    $out .= $rolling_page < $rolling_page_count
+        ? $link($rolling_page + 1, 'Next', 'Next page') . $link($rolling_page_count, 'Last', 'Last page')
+        : '<span class="btn btn-sm rolling-page-disabled" aria-disabled="true">Next</span><span class="btn btn-sm rolling-page-disabled" aria-disabled="true">Last</span>';
+    $out .= '</div></nav>';
+    return $out;
 };
 ?>
 
@@ -106,6 +162,15 @@ $rolling_status_params = function ($status_value) use ($base_label, $rolling_que
   .rolling-search svg { width:15px; height:15px; color:var(--t3); flex:none; }
   .rolling-search input { width:220px; }
   .rolling-type { width:180px; }
+  .rolling-page-size { width:90px; }
+  .rolling-pagination { display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:8px 0; }
+  .rolling-page-indicator { color:var(--t3);font-size:10.5px;font-variant-numeric:tabular-nums; }
+  .rolling-page-links { display:flex;align-items:center;gap:5px;flex-wrap:wrap; }
+  .rolling-page-link,.rolling-page-current,.rolling-page-disabled { min-width:34px;text-align:center;padding:5px 8px; }
+  .rolling-page-current { background:var(--blue-d);border-color:var(--blue);color:var(--blue); }
+  .rolling-page-disabled { color:var(--t3);opacity:.6; }
+  .rolling-page-ellipsis { padding:0 2px;color:var(--t3); }
+  .rolling-print-note { display:none; }
   .rolling-status-tabs { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:0 0 7px; }
   .rolling-status-tab { border:1px solid var(--sep); border-radius:7px; padding:6px 9px; color:var(--t2); background:var(--surface); text-decoration:none; font-size:11px; font-weight:600; }
   .rolling-status-tab:hover { border-color:var(--blue); color:var(--blue); }
@@ -146,7 +211,8 @@ $rolling_status_params = function ($status_value) use ($base_label, $rolling_que
     .rolling-status-tab { flex:none; }
   }
   @media print {
-    .rolling-toolbar,.rolling-status-tabs,.rolling-filter-note,.rolling-summary,.rolling-no-print { display:none!important; }
+    .rolling-toolbar,.rolling-status-tabs,.rolling-filter-note,.rolling-summary,.rolling-pagination,.rolling-no-print { display:none!important; }
+    .rolling-print-note { display:block;margin:8px 0;font-size:9pt;color:#333; }
     .rolling-table-wrap { overflow:visible!important; }
     .rolling-table { min-width:0; width:100%; }
     .rolling-table th,.rolling-table td { white-space:normal; padding:4px!important; font-size:7pt!important; }
@@ -160,11 +226,12 @@ $rolling_status_params = function ($status_value) use ($base_label, $rolling_que
     <div class="cs">Three weeks from <?= $rolling_h($base_label) ?> — one row per machine, status and plan metrics by week</div>
   </div>
   <?php if (!empty($tables_ready)): ?>
-  <div class="flex ai-c gap-10" style="flex-wrap:wrap;">
+  <div class="flex ai-c gap-10 rolling-no-print" style="flex-wrap:wrap;">
     <form method="get" action="<?= $rolling_h(base_url('forecast/rolling')) ?>" class="flex ai-c gap-10" style="flex-wrap:wrap;">
       <input type="hidden" name="q" value="<?= $rolling_h($rolling_query) ?>">
       <input type="hidden" name="equipment_type" value="<?= $rolling_h($rolling_type) ?>">
       <input type="hidden" name="status" value="<?= $rolling_h($rolling_status) ?>">
+      <input type="hidden" name="per_page" value="<?= (int)$rolling_per_page ?>">
       <label for="rollingWeek" style="font-size:11px;color:var(--t3);">From week</label>
       <input type="week" id="rollingWeek" name="week" class="form-control" style="width:170px;" value="<?= $rolling_h($base_label) ?>">
       <button class="btn btn-sm btn-primary" type="submit">Open</button>
@@ -214,8 +281,14 @@ $rolling_status_params = function ($status_value) use ($base_label, $rolling_que
       <option value="<?= $rolling_h($optionType) ?>" <?= $rolling_type === $optionType ? 'selected' : '' ?>><?= $rolling_h($optionType) ?></option>
       <?php endforeach; ?>
     </select>
+    <label for="rollingPageSize" style="font-size:10.5px;color:var(--t3);">Rows/page</label>
+    <select id="rollingPageSize" name="per_page" class="form-select rolling-page-size" aria-label="Machines per page">
+      <?php foreach ($rolling_page_sizes as $pageSize): ?>
+      <option value="<?= (int)$pageSize ?>" <?= $rolling_per_page === $pageSize ? 'selected' : '' ?>><?= (int)$pageSize ?></option>
+      <?php endforeach; ?>
+    </select>
     <button type="submit" class="btn btn-primary btn-sm">Apply filters</button>
-    <a class="btn btn-ghost btn-sm" href="<?= $rolling_h(base_url('forecast/rolling?week=' . urlencode($base_label))) ?>">Clear filters</a>
+    <a class="btn btn-ghost btn-sm" href="<?= $rolling_h($rolling_clear_url) ?>">Clear filters</a>
   </form>
 </div>
 
@@ -230,15 +303,17 @@ $rolling_status_params = function ($status_value) use ($base_label, $rolling_que
   Status counts cover the full three-week machine set and are independent of search/type filters. “Any week” conditions can overlap, so exception counts need not add up to the total. Filters apply to this table only; the week summary cards and XLSX export remain full-scope.
 </div>
 <div class="rolling-summary" aria-live="polite">
-  Showing <?= number_format(count($rolling_filtered)) ?> of <?= number_format(count($machines)) ?> machines<?= ($rolling_query !== '' || $rolling_type !== '' || $rolling_status !== 'all') ? ' matching current filters' : '' ?>.
+  Showing <?= number_format($rolling_show_start) ?>–<?= number_format($rolling_show_end) ?> of <?= number_format($rolling_total_filtered) ?> machines<?= $rolling_filters_active ? ' matching current filters (' . number_format(count($machines)) . ' total fleet)' : ' (full fleet)' ?>.
 </div>
+<div class="rolling-print-note">This printout contains the current page only. Use “Export complete plan XLSX” for the full fleet.</div>
+<?php if ($rolling_page_count > 1 && !empty($rolling_page_rows)): ?><?= $rolling_pagination() ?><?php endif; ?>
 
 <?php if (empty($machines)): ?>
 <div class="card rolling-empty" role="status">No machines are available in this three-week forecast window.</div>
 <?php elseif (empty($rolling_filtered)): ?>
 <div class="card rolling-empty" role="status">
   <strong>No machines match these filters.</strong><br>
-  Try another search or filter, or <a href="<?= $rolling_h(base_url('forecast/rolling?week=' . urlencode($base_label))) ?>">clear filters</a>.
+  Try another search or filter, or <a href="<?= $rolling_h($rolling_clear_url) ?>">clear filters</a>.
 </div>
 <?php else: ?>
 <div class="card" style="overflow:hidden;">
@@ -273,7 +348,7 @@ $rolling_status_params = function ($status_value) use ($base_label, $rolling_que
         </tr>
       </thead>
       <tbody>
-      <?php foreach ($rolling_filtered as $machine): ?>
+      <?php foreach ($rolling_page_rows as $machine): ?>
         <tr>
           <td class="mono">
             <a class="rolling-machine-link" href="<?= $rolling_h(base_url('equipment/view/' . (int)$machine['equipment_id'])) ?>"><?= $rolling_h($machine['registration_no']) ?></a>
@@ -316,6 +391,7 @@ $rolling_status_params = function ($status_value) use ($base_label, $rolling_que
     </table>
   </div>
 </div>
+<?php if ($rolling_page_count > 1 && !empty($rolling_page_rows)): ?><?= $rolling_pagination() ?><?php endif; ?>
 <?php endif; ?>
 
 <div id="rolling-help" class="rolling-help">

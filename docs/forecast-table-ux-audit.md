@@ -44,7 +44,7 @@ The audit's data-integrity findings are largely PASS. The UX findings concentrat
 | **Primary record identifier** | Equipment registration number (`equipment.registration_no`) within a week (ISO week label `YYYY-Wnn`) |
 | **Key statuses** | Plan status per machine-row: PLANNED / OUT OF SERVICE / OUT n DAYS / STAND-BY / NO PLAN; job statuses: Planned / Issued / Done / Missed / Cancelled; ledger categories: PM, Standing, Unplanned, OutOfService, Corrective; ledger sources: Default, Manual, FromPM, Derived, FromPlan |
 | **Actions** | Generate (PM / inspections / standing / unplanned), save cell override, save/delete job, create inspection rounds, publish (+revision with note), export XLSX (planned / rolling), add/remove part requirements |
-| **Data volume** | One week × reportable fleet (non-retired, reportable machines). Order of dozens to low hundreds of machine rows per week — small enough that all rows are rendered server-side; pagination unnecessary |
+| **Data volume** | One week × reportable fleet (non-retired, reportable machines). The prior “dozens to low hundreds” estimate was not measured against a live database; actual row count and response time are unknown, so pagination necessity is unverified. |
 | **Tech stack** | CodeIgniter 3, vanilla PHP views, shared light-theme design system (`layouts/header.php`: `.tbl`, `.card`, `.kpi`, `.badge`, `.btn`, `.form-control`), dark variant `header-apple.php` (not used by forecast). No JS framework |
 | **Existing issues known from code comments** | Historical workbook defects the engine deliberately avoids: silent clamping of overbooked days, dropped out-of-service machines, split groups on untrimmed report-group names, `#REF!` sheet references in the old `WEEK 40 SCHEDULE` |
 
@@ -96,7 +96,7 @@ Rating key: PASS / PARTIAL / FAIL / NOT APPLICABLE / NOT VERIFIED.
 | 5 | Record detail panel / page | **PARTIAL** | `forecast/jobs` is the machine-day detail, reachable from grid cells; no single machine-week summary |
 | 6 | Contextual row actions | **PARTIAL** | Edit/Remove per job with confirm + server guards; no overflow menu needed (few actions) |
 | 7 | Semantic color system | **PARTIAL** | Availability/spares/allowances colors consistent; badges hand-rolled instead of shared classes |
-| 8 | Pagination and data navigation | **NOT APPLICABLE** | Fleet-per-week is small; all rows shown server-side; pagination would add clicks |
+| 8 | Pagination and data navigation | **NOT VERIFIED** | All reportable rows are shown server-side, but no live fleet count or response-time benchmark is available. The complete-fleet workflow is a reason to avoid unnecessary pagination, not evidence that pagination is unnecessary. |
 | 9 | Responsive design | **PARTIAL** | `overflow:auto` tables wrap; no sticky first column; KPI grid has no mobile adaptation |
 | 10 | Micro-interactions, accessibility, feedback | **PARTIAL** | Hover rows, flash feedback, confirm() on destroy; title-only tooltips, no ARIA, no focus-visible |
 
@@ -116,7 +116,7 @@ Rating key: PASS / PARTIAL / FAIL / NOT APPLICABLE / NOT VERIFIED.
 - Evidence: `planned.php` toolbar markup. `spares.php` has a horizon weeks select (relevant filter) and week input — good.
 - Impact: Finding a machine by registration number or location requires scanning rows.
 - Severity: High.
-- Recommendation: Add client-side search (registration/location) plus the status tabs from F-01. Page-size selector: NOT APPLICABLE — no pagination, dataset is one week's fleet. View toggle (list/card): NOT APPLICABLE — the matrix is the comparison tool.
+- Recommendation: Add client-side search (registration/location) plus the status tabs from F-01. A page-size selector depends on the unresolved pagination decision; measure the live reportable row count and response time first. View toggle (list/card): NOT APPLICABLE — the matrix is the comparison tool.
 - Implemented: search input (`role="search"`, `onsubmit="return false"`, client-only) and status tabs in `planned.php`.
 - Verification: tests assert `type="search"` and `role="tablist"`.
 
@@ -152,9 +152,11 @@ Rating key: PASS / PARTIAL / FAIL / NOT APPLICABLE / NOT VERIFIED.
 - Recommendation: Migrate to shared classes (implemented); keep color meanings unchanged.
 - Verification: tests assert `class="badge b-` on planned/spares/allowances.
 
-**F-08 — Principle 8: NOT APPLICABLE — Pagination**
-- Justification: One week's reportable fleet is rendered in full (server-side). No "Showing 1–25 of N" is needed; adding pagination would force extra clicks for a monitoring/planning table where the full fleet is the unit of work. Revisit if the fleet grows beyond ~300 machines or if multi-week views are paginated.
-- Verification: n/a.
+**F-08 — Principle 8: NOT VERIFIED — Pagination**
+- Current behavior: The page renders the full reportable fleet server-side.
+- Rationale: Keeping the fleet together supports the monitoring/planning workflow, but no live reportable row count or response-time benchmark is available. The earlier estimate (dozens to low hundreds) was not measured, so it cannot establish whether pagination is necessary.
+- Recommendation: Measure representative fleet size, route response time and browser render behavior first; then compare a complete matrix with pagination without splitting a machine's time-series context unnecessarily.
+- Verification: Not performed; no live database or PHP/MySQL runtime is available in this workspace.
 
 **F-09 — Principle 9: PARTIAL — Responsive design**
 - Current behavior: All tables sit in `overflow:auto` cards, so they scroll horizontally on narrow screens; week form wraps (`flex-wrap:wrap`); fixed-width selects (170px) may cramp below ~360px.
@@ -252,7 +254,7 @@ Rating key: PASS / PARTIAL / FAIL / NOT APPLICABLE / NOT VERIFIED.
 - Colors: shared `.badge b-*` semantic fills; availability `$col` scale unchanged.
 - Focus: `focus-visible` outline on tabs; native focus elsewhere.
 
-Every recommendation maps to the forecast's purpose: the planner's job is to spot exceptions across the fleet quickly, so status-first filtering and an always-visible machine column beat generic pagination or card views.
+Every recommendation maps to the forecast's purpose: status-first filtering and a visible machine identifier improve fleet scanning. Whether pagination is needed remains a separate, measurement-dependent decision; any paginated design should preserve useful machine/week context.
 
 ---
 
