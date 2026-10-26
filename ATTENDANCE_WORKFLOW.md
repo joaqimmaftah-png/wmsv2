@@ -17,7 +17,7 @@ This is a practical site-presence check, not absolute proof: GPS can be inaccura
 ## One-time site setup
 
 1. A supervisor configures the site latitude and longitude and an allowed GPS radius (geofence). Choose a radius that fits the actual worksite and expected phone accuracy; there is no assumed default radius.
-2. The WMS must be served over **HTTPS** so mobile browsers can request location and use secure browser features.
+2. The WMS must be served over **trusted HTTPS** so mobile browsers can request location and use secure browser features. `localhost` is a browser exception for development only; an HTTP LAN hostname/IP is not secure. This is enforced by browsers and cannot be bypassed in application code. For use from phones or other devices, configure TLS for the hostname (for example, a public domain with a valid certificate, or a private CA certificate trusted by each device) and have users open the WMS with `https://`. The site setup and punch pages offer a same-host HTTPS link when opened over HTTP, but the web server must be configured for TLS first.
 3. Recommended: display a **short-lived, rotating QR code** on a screen at the site entrance. The QR should contain only a short-lived signed token, not technician information. A printed, fixed QR is a simpler fallback, but is easier to copy and share.
 4. Technicians need their own WMS accounts and must already be signed in on their phones before punching.
 
