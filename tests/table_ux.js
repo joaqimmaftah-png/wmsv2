@@ -108,6 +108,19 @@ assert.match(planned, /onsubmit="return confirm\('/, 'publish requires explicit 
 assert.match(planned, /csrf_field\(\)/, 'planned mutation forms carry CSRF protection');
 assert.doesNotMatch(planned, /kpi-glow/, 'planned view drops the inert decorative glow');
 // Jobs: destructive row actions confirm and carry CSRF; status uses shared badges.
+const pva = source('application/views/forecast/plan_vs_actual.php');
+assert.match(pva, /for="pva-week"[\s\S]*id="pva-week"/, 'plan-vs-actual week selector has an associated label');
+assert.match(pva, /snapshot_tables_ready[\s\S]*Forecast snapshot table is not set up/, 'plan-vs-actual distinguishes missing snapshot tables');
+assert.match(pva, /published baseline could not be read[\s\S]*\$h\(\$error\)/, 'plan-vs-actual distinguishes an unreadable baseline snapshot');
+assert.match(pva, /No published plan for/, 'plan-vs-actual retains a separate unpublished-week state');
+assert.match(pva, /actual and variance values show —, not zero/, 'unavailable actuals are not represented as zero');
+assert.match(pva, /Some planned groups have no usable matching actual value/, 'partial group actual gaps are disclosed');
+assert.match(pva, /<caption class="pva-sr-only">/, 'plan-vs-actual table has an accessible caption');
+assert.match(pva, /<th scope="col">GROUP<\/th>/, 'plan-vs-actual table headers declare column scope');
+assert.match(pva, /pva-group-table th:first-child,.pva-group-table td:first-child \{ position:sticky/, 'group identity stays visible while the comparison table scrolls');
+assert.match(pva, /@media \(max-width:900px\) \{ \.pva-kpis \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\); \} \}/, 'plan-vs-actual KPIs adapt at tablet widths');
+assert.match(pva, /@media \(max-width:560px\)[\s\S]*\.pva-kpis \{ grid-template-columns:1fr;/, 'plan-vs-actual KPIs and week controls adapt on phones');
+assert.match(pva, /Back to the published week plan[\s\S]*forecast\?week=/, 'published comparison links back to the same planned week');
 const jobs = source('application/views/forecast/jobs.php');
 assert.match(jobs, /onsubmit="return confirm\('/, 'job removal requires confirmation');
 assert.match(jobs, /csrf_field\(\)/, 'job forms carry CSRF protection');

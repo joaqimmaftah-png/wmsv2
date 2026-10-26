@@ -382,8 +382,9 @@ class Forecast extends MY_Controller {
         $data['week_start']     = $week_start;
         $data['week_end']       = $this->Forecast_model->week_end($week_start);
         $data['week_input']     = $this->input->get('week');
-        $data['actual_missing'] = $actual === null;
-        $data['page_title']     = 'Plan vs Actual — ' . $label;
+        $data['actual_missing']        = $actual === null;
+        $data['snapshot_tables_ready'] = $this->Forecast_model->snapshots_ready();
+        $data['page_title']            = 'Plan vs Actual — ' . $label;
         $this->render('forecast/plan_vs_actual', $data);
     }
 

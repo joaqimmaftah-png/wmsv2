@@ -87,8 +87,9 @@ states. PM-parts checks cover associated labels and table semantics, unit and st
 context disclosures, the searchable material picker, inventory deep links, responsive
 layout, and safe removal confirmation. Forecast/jobs checks cover labeled selectors
 and editor fields, explicit empty/read-only states, approved hold-code meanings,
-responsive job identity, and the Standby hours rule. These are source checks, not
-PHP/MySQL or browser/assistive-technology tests.
+responsive job identity, and the Standby hours rule. Plan-vs-actual checks cover
+snapshot/actual availability states, table semantics, responsive layout and return
+navigation. These are source checks, not PHP/MySQL or browser/assistive-technology tests.
 See `docs/table-ux-audit.md`, `docs/forecast-table-ux-audit.md`, and
 `docs/forecast-rolling-table-audit.md` for the corresponding acceptance checklists.
 
