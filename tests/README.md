@@ -83,7 +83,10 @@ URL state, full-scope count/export semantics, model-owned downtime in screen and
 workbook, and the existing equipment-profile link. Allowance and spares assertions
 cover provenance wording, accessible controls/table headers, responsive layout,
 search/filter/sort/page state, equipment/material deep links, and honest empty/data
-states. These are source checks, not PHP/MySQL or browser/assistive-technology tests.
+states. PM-parts checks cover associated labels and table semantics, unit and stock-
+context disclosures, the searchable material picker, inventory deep links, responsive
+layout, and safe removal confirmation. These are source checks, not PHP/MySQL or
+browser/assistive-technology tests.
 See `docs/table-ux-audit.md`, `docs/forecast-table-ux-audit.md`, and
 `docs/forecast-rolling-table-audit.md` for the corresponding acceptance checklists.
 

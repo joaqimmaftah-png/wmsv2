@@ -207,8 +207,49 @@ const forecastModel = source('application/models/Forecast_model.php');
 assert.match(forecastModel, /function unplanned_allowance_history_window\(\$week_start\)/, 'model owns the allowance history window');
 assert.match(forecastModel, /\$window\s*=\s*\$this->unplanned_allowance_history_window\(\$week_start\)/, 'allowance calculation reuses its displayed history window');
 assert.match(forecastModel, /max\(0\.5, min\(24\.0, \$per_day\)\)/, 'allowance floor and ceiling remain in the calculation');
-assert.match(source('application/views/forecast/parts.php'), /onsubmit="return confirm\('/, 'part removal requires confirmation');
-assert.match(source('application/views/forecast/parts.php'), /csrf_field\(\)/, 'part forms carry CSRF protection');
+assert.match(partsView, /onsubmit="return confirm\('Remove this part from the service\?'\);"/, 'part removal confirmation does not interpolate catalogue text into JavaScript');
+assert.match(partsView, /csrf_field\(\)/, 'part forms carry CSRF protection');
+assert.match(partsView, /for="parts-material-id"[\s\S]*id="parts-material-id"/, 'part selector has an associated label');
+assert.match(partsView, /for="parts-qty"[\s\S]*id="parts-qty"/, 'quantity field has an associated label');
+assert.match(partsView, /for="parts-note"[\s\S]*id="parts-note"/, 'note field has an associated label');
+assert.match(partsView, /<caption class="parts-sr-only">/, 'parts table has an accessible caption');
+assert.match(partsView, /<th scope="col">ITEM<\/th>/, 'parts table headers declare column scope');
+assert.match(partsView, /\$parts_h\(\$unit\)[\s\S]*ON HAND|ON HAND[\s\S]*\$parts_h\(\$unit\)/, 'on-hand quantities carry the material unit');
+assert.match(partsView, /spares forecast accounts for[\s\S]*open orders/i, 'parts view explains the difference between current stock and forecast shortage');
+assert.doesNotMatch(partsView, /\$r\['on_hand'\]\s*<\s*\$r\['qty'\]/, 'on-hand comparison is not presented as an unqualified shortage');
+assert.match(partsView, /class="badge b-critical"/, 'critical parts use the shared badge system');
+assert.match(partsView, /materials\/inventory\?[\s\S]*'item'\s*=>\s*\(int\)\$row\['material_id'\]/, 'part codes link to the existing inventory item drawer');
+assert.match(partsView, /type="search"[\s\S]*parts-material-search/, 'the material picker has a searchable enhancement');
+assert.match(partsView, /option\.textContent\.toLocaleLowerCase\(\)\.indexOf\(query\)/, 'the picker search matches the visible code and description');
+assert.match(partsView, /No inventory items are available to choose/, 'the add form explains an empty inventory catalogue');
+assert.match(partsView, /@media \(max-width:760px\)[\s\S]*parts-form-grid \{ grid-template-columns:1fr;/, 'parts form stacks on narrow screens');
+assert.match(partsView, /parts-table th:first-child,.parts-table td:first-child \{ position:sticky/, 'part identity stays visible while the table scrolls');
+assert.match(source('application/controllers/Forecast.php'), /'materials_ready'\s*=>\s*\$this->db->table_exists\('materials'\)/, 'parts controller distinguishes an unavailable inventory catalogue');
+assert.match(partsView, /id="parts-search-controls" hidden/, 'the search control is progressively enhanced when JavaScript is available');
+const partsScript = partsView.match(/<script>\s*([\s\S]*?)\s*<\/script>/)[1];
+const partOption = text => ({textContent: text, hidden: false, selected: false});
+const partOptions = [
+  {textContent: '— choose a part —', hidden: false, selected: true},
+  partOption('AB-1 — oil filter (2 each on hand)'),
+  partOption('ZX-9 — drive belt (0 each on hand)')
+];
+const partsElements = {
+  'parts-search-controls': {hidden: true},
+  'parts-material-search': {value: '', handlers: {}, addEventListener(type, cb) { this.handlers[type] = cb; }},
+  'parts-material-id': {options: partOptions, value: '1'},
+  'parts-no-match': {hidden: true}
+};
+vm.runInNewContext(partsScript, {document: {getElementById: id => partsElements[id]}, Array});
+assert.equal(partsElements['parts-search-controls'].hidden, false, 'search activates only after its JavaScript is ready');
+const filterParts = partsElements['parts-material-search'].handlers.input;
+partsElements['parts-material-search'].value = 'drive';
+filterParts();
+assert.equal(partOptions[1].hidden, true, 'picker search hides nonmatching parts');
+assert.equal(partOptions[2].hidden, false, 'picker search retains a description match');
+assert.equal(partsElements['parts-no-match'].hidden, true, 'a matching part hides the no-results message');
+partsElements['parts-material-search'].value = 'no such material';
+filterParts();
+assert.equal(partsElements['parts-no-match'].hidden, false, 'an empty search result is explained');
 
 // ── Lubricants suite: one shared design system across all six surfaces ──
 // The suite partial owns the shell chrome (nav, page head, KPI cards, bars,
