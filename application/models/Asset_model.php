@@ -124,7 +124,7 @@ class Asset_model extends CI_Model {
             'total'       => count($assets),
             'active'      => count(array_filter($assets, function($a){ return $a['status'] !== 'Retired'; })),
             'breakdown'   => count(array_filter($assets, function($a){ return $a['status'] === 'Breakdown'; })),
-            'warranty_exp'=> count(array_filter($assets, function($a){ return $a['warranty_days'] !== null && $a['warranty_days'] < 0; })),
+            'warranty_exp'=> count(array_filter($assets, function($a){ return $a['warranty_days'] !== null && $a['warranty_days'] <= 0; })),
         );
     }
 
