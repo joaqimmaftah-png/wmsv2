@@ -638,6 +638,9 @@ class Forecast extends MY_Controller {
         // check is done here and passed down
         $data['table_ready']  = $this->db->table_exists('pm_part_requirements');
         $data['lead_times'] = $this->_lead_times();
+        $data['lead_times_source_ready'] = $this->db->table_exists('spare_orders');
+        $data['on_order_source_ready'] = $this->db->table_exists('spare_orders')
+            && $this->db->table_exists('spare_order_items');
         $data['horizon']    = $horizon;
         $data['week_input'] = $this->input->get('week');
         $data['iso_label']  = $this->Forecast_model->iso_label($week_start);

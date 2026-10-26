@@ -154,8 +154,34 @@ const rollingExcel = forecastExcel.slice(forecastExcel.indexOf('public function 
 assert.match(rollingExcel, /' STATUS'/, 'rolling workbook includes weekly status columns');
 assert.match(rollingExcel, /\$r\['downtime_hours'\]/, 'rolling workbook uses the model-owned downtime value');
 assert.match(rollingExcel, /\$r\['availability'\]/, 'rolling workbook retains model availability values');
-// Spares / allowances / parts: shared badge classes instead of hand-rolled chips.
-assert.match(source('application/views/forecast/spares.php'), /class="badge b-/, 'spares view uses the shared badge system');
+// Spares / allowances / parts: shared badges, accessible semantics, usable navigation, and state clarity.
+const spares = source('application/views/forecast/spares.php');
+assert.match(spares, /class="badge b-/, 'spares view uses the shared badge system');
+assert.match(spares, /for="sparesWeek"[\s\S]*id="sparesWeek"/, 'spares week selector has an associated label');
+assert.match(spares, /for="sparesHorizon"[\s\S]*id="sparesHorizon"/, 'spares horizon selector has an associated label');
+assert.match(spares, /<caption class="spares-sr-only">/, 'spares material table has an accessible caption');
+assert.match(spares, /<th scope="col">ITEM<\/th>/, 'spares table headers declare column scope');
+assert.match(spares, /type="search" name="q"/, 'spares has item search');
+assert.match(spares, /name="coverage" class="form-select spares-coverage"/, 'spares can filter coverage');
+assert.match(spares, /name="critical" class="form-select spares-critical"/, 'spares can filter critical items');
+assert.match(spares, /name="per_page" onchange="this\.form\.submit\(\)"/, 'spares exposes a page-size selector');
+assert.match(spares, /class="spares-pages" aria-label="Spares forecast pagination"/, 'spares pagination has an accessible label');
+assert.match(spares, /materials\/inventory\?' \. http_build_query/, 'spares item codes deep-link to inventory details');
+assert.match(spares, /elseif \(\(int\)\$schedules === 0\)/, 'spares distinguishes a no-due-schedules state');
+assert.match(spares, /empty\(\$table_ready\)/, 'spares distinguishes a missing requirements table');
+assert.doesNotMatch(spares, /No PM services fall due in this window/, 'spares no-results state does not mislabel missing parts lists');
+assert.match(spares, /one occurrence for each active PM schedule/, 'spares discloses one-next-due schedule scope');
+assert.match(spares, /not an item-specific ETA/, 'route lead-time averages are not presented as item ETAs');
+assert.match(spares, /outstanding-order tables are unavailable/i, 'spares discloses when open-order quantities cannot be read');
+assert.match(spares, /max-width:1000px[\s\S]*spares-kpis[\s\S]*max-width:700px[\s\S]*spares-kpis/, 'spares KPI grid adapts for tablet and mobile');
+assert.doesNotMatch(spares, /675 hours|across 44 machines|found out on Thursday/, 'spares page removes historical claims without a source/year');
+const partsView = source('application/views/forecast/parts.php');
+assert.match(partsView, /does not estimate additional recurring due dates/, 'PM parts editor describes the current forecast scope accurately');
+const sparesModel = source('application/models/Forecast_model.php');
+assert.match(sparesModel, /next_due_date falls within the supplied window/, 'spares model documentation states the actual input date scope');
+assert.match(sparesModel, /date\('d M Y', strtotime\(\$p->next_due_date\)\)/, 'needed-by rows retain the year');
+const sparesController = source('application/controllers/Forecast.php');
+assert.match(sparesController, /\$data\['on_order_source_ready'\]\s*=\s*\$this->db->table_exists\('spare_orders'\)/, 'spares controller reports on-order source availability');
 const allowances = source('application/views/forecast/allowances.php');
 assert.match(allowances, /class="badge b-/, 'allowances view uses the shared badge system');
 assert.match(allowances, /for="allowanceWeek"[\s\S]*id="allowanceWeek"/, 'week selector has an associated accessible label');

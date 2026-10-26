@@ -76,14 +76,16 @@ status tabs and table/card views are real GET-driven controls, server-side
 pagination uses the allow-listed `10 / 25 / 50 / 100` sizes and preserves URL
 state, full-scope totals are separated from bounded page rows, quantities remain
 honest when min/max levels are unavailable, and semantic/print/reduced-motion
-states are present. Forecast checks cover the planned-week and rolling tables;
-rolling assertions include grouped three-week headers, GET search/type/status
-filters, 10/25/50/100 pagination after filtering with preserved URL state, full-scope
-count/export semantics, model-owned downtime in screen and workbook, and the
-existing equipment-profile link. These are source checks, not PHP/MySQL or
-browser/assistive-technology tests. See `docs/table-ux-audit.md`,
-`docs/forecast-table-ux-audit.md`, and `docs/forecast-rolling-table-audit.md` for
-the corresponding acceptance checklists.
+states are present. Forecast checks cover planned-week, rolling, allowance, and
+spare-parts surfaces. Rolling assertions include grouped three-week headers, GET
+search/type/status filters, 10/25/50/100 pagination after filtering with preserved
+URL state, full-scope count/export semantics, model-owned downtime in screen and
+workbook, and the existing equipment-profile link. Allowance and spares assertions
+cover provenance wording, accessible controls/table headers, responsive layout,
+search/filter/sort/page state, equipment/material deep links, and honest empty/data
+states. These are source checks, not PHP/MySQL or browser/assistive-technology tests.
+See `docs/table-ux-audit.md`, `docs/forecast-table-ux-audit.md`, and
+`docs/forecast-rolling-table-audit.md` for the corresponding acceptance checklists.
 
 ## Reports hub structural checks (Node)
 
