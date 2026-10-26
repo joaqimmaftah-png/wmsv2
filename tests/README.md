@@ -104,6 +104,20 @@ and that the hub reads the KPI engine, store ledger, inventory catalogue and
 weekly-report model behind a `Throwable` guard. PHP/MySQL and
 authenticated-browser checks are still required.
 
+## Service Kit report audit regressions (Node)
+
+```bash
+node tests/service_kits_ux.js
+```
+
+Dependency-free structural/source checks for batched recommendation queries,
+the preserved New-part and top-15 semantics, status/search/pagination controls,
+empty states, the existing equipment profile link, site-currency labels, and
+Excel inclusion of work-order oil records. It parses the inline report JavaScript
+with PHP-rendered literals substituted; it does not replace PHP/MySQL or
+browser verification. See `docs/service-kits-report-audit.md` for the audit and
+acceptance checklist.
+
 ## Lubricant planning master audit regressions (Node)
 
 ```bash
