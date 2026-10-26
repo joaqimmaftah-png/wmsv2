@@ -35,7 +35,7 @@ $rolling_search = function ($value) {
     return function_exists('mb_strtolower') ? mb_strtolower($value, 'UTF-8') : strtolower($value);
 };
 $rolling_query_normalized = $rolling_search($rolling_query);
-$rolling_page_sizes = array(25, 50, 100);
+$rolling_page_sizes = array(10, 25, 50, 100);
 $rolling_page_size_input = isset($_GET['per_page']) && is_scalar($_GET['per_page']) ? trim((string)$_GET['per_page']) : '';
 $rolling_per_page = ctype_digit($rolling_page_size_input) ? (int)$rolling_page_size_input : 50;
 if (!in_array($rolling_per_page, $rolling_page_sizes, true)) $rolling_per_page = 50;
@@ -121,37 +121,7 @@ $rolling_clear_url = base_url('forecast/rolling?' . http_build_query(array(
     'week' => $base_label, 'per_page' => $rolling_per_page,
 )));
 
-$rolling_pagination = function () use ($rolling_page, $rolling_page_count, $rolling_page_url, $rolling_h) {
-    if ($rolling_page_count <= 1) return '';
-    $link = function ($target, $label, $aria_label = '') use ($rolling_page_url, $rolling_h) {
-        $aria = $aria_label !== '' ? ' aria-label="' . $rolling_h($aria_label) . '"' : '';
-        return '<a class="btn btn-sm rolling-page-link" href="' . $rolling_h($rolling_page_url($target)) . '"' . $aria . '>' . $rolling_h($label) . '</a>';
-    };
-    $out = '<nav class="rolling-pagination" aria-label="Rolling plan pages">';
-    $out .= '<span class="rolling-page-indicator">Page ' . number_format($rolling_page) . ' of ' . number_format($rolling_page_count) . '</span>';
-    $out .= '<div class="rolling-page-links">';
-    $out .= $rolling_page > 1
-        ? $link(1, 'First', 'First page') . $link($rolling_page - 1, 'Previous', 'Previous page')
-        : '<span class="btn btn-sm rolling-page-disabled" aria-disabled="true">First</span><span class="btn btn-sm rolling-page-disabled" aria-disabled="true">Previous</span>';
 
-    $start_page = max(1, $rolling_page - 2);
-    $end_page = min($rolling_page_count, $rolling_page + 2);
-    if ($start_page > 1) $out .= '<span class="rolling-page-ellipsis" aria-hidden="true">…</span>';
-    for ($page_number = $start_page; $page_number <= $end_page; $page_number++) {
-        if ($page_number === $rolling_page) {
-            $out .= '<span class="btn btn-sm rolling-page-current" aria-current="page">' . number_format($page_number) . '</span>';
-        } else {
-            $out .= $link($page_number, number_format($page_number), 'Page ' . $page_number);
-        }
-    }
-    if ($end_page < $rolling_page_count) $out .= '<span class="rolling-page-ellipsis" aria-hidden="true">…</span>';
-
-    $out .= $rolling_page < $rolling_page_count
-        ? $link($rolling_page + 1, 'Next', 'Next page') . $link($rolling_page_count, 'Last', 'Last page')
-        : '<span class="btn btn-sm rolling-page-disabled" aria-disabled="true">Next</span><span class="btn btn-sm rolling-page-disabled" aria-disabled="true">Last</span>';
-    $out .= '</div></nav>';
-    return $out;
-};
 ?>
 
 <style>
@@ -162,22 +132,30 @@ $rolling_pagination = function () use ($rolling_page, $rolling_page_count, $roll
   .rolling-search svg { width:15px; height:15px; color:var(--t3); flex:none; }
   .rolling-search input { width:220px; }
   .rolling-type { width:180px; }
-  .rolling-page-size { width:90px; }
-  .rolling-pagination { display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:8px 0; }
-  .rolling-page-indicator { color:var(--t3);font-size:10.5px;font-variant-numeric:tabular-nums; }
-  .rolling-page-links { display:flex;align-items:center;gap:5px;flex-wrap:wrap; }
-  .rolling-page-link,.rolling-page-current,.rolling-page-disabled { min-width:34px;text-align:center;padding:5px 8px; }
-  .rolling-page-current { background:var(--blue-d);border-color:var(--blue);color:var(--blue); }
-  .rolling-page-disabled { color:var(--t3);opacity:.6; }
-  .rolling-page-ellipsis { padding:0 2px;color:var(--t3); }
+  .rolling-footer {
+    padding:11px 16px; border-top:1px solid var(--sep); background:var(--surface-2);
+    border-radius:0 0 var(--r-lg) var(--r-lg); display:flex; align-items:center;
+    justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:12.5px; color:var(--t2);
+  }
+  .rolling-pages { display:inline-flex;align-items:center;gap:4px; }
+  .rolling-page-link {
+    display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:28px;padding:0 8px;
+    border-radius:6px;border:1px solid var(--sep-opaque);background:var(--surface);color:var(--t1);
+    font-size:12px;font-weight:500;text-decoration:none;font-variant-numeric:tabular-nums;
+  }
+  .rolling-page-link:hover { background:var(--fill); }
+  .rolling-page-link.is-current { background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600; }
+  .rolling-page-link.is-disabled { opacity:.42;pointer-events:none; }
+  .rolling-page-size-form { display:inline-flex;align-items:center;gap:6px; }
+  .rolling-page-size-form label { font-size:12px;color:var(--t3);margin:0; }
+  .rolling-page-size-form select { height:28px;font-size:12px; }
   .rolling-print-note { display:none; }
   .rolling-status-tabs { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:0 0 7px; }
   .rolling-status-tab { border:1px solid var(--sep); border-radius:7px; padding:6px 9px; color:var(--t2); background:var(--surface); text-decoration:none; font-size:11px; font-weight:600; }
   .rolling-status-tab:hover { border-color:var(--blue); color:var(--blue); }
   .rolling-status-tab[aria-current="page"] { border-color:var(--blue); background:var(--blue-d); color:var(--blue); }
   .rolling-status-tab span { margin-left:4px; opacity:.8; font-variant-numeric:tabular-nums; }
-  .rolling-filter-note,.rolling-summary { color:var(--t3); font-size:10.5px; line-height:1.55; }
-  .rolling-summary { margin:8px 2px 10px; }
+  .rolling-filter-note { color:var(--t3); font-size:10.5px; line-height:1.55; }
   .rolling-table-wrap { overflow-x:auto; overscroll-behavior-x:contain; }
   .rolling-table { min-width:1260px; table-layout:auto; }
   .rolling-table th,.rolling-table td { white-space:nowrap; }
@@ -211,7 +189,7 @@ $rolling_pagination = function () use ($rolling_page, $rolling_page_count, $roll
     .rolling-status-tab { flex:none; }
   }
   @media print {
-    .rolling-toolbar,.rolling-status-tabs,.rolling-filter-note,.rolling-summary,.rolling-pagination,.rolling-no-print { display:none!important; }
+    .rolling-toolbar,.rolling-status-tabs,.rolling-filter-note,.rolling-footer,.rolling-no-print { display:none!important; }
     .rolling-print-note { display:block;margin:8px 0;font-size:9pt;color:#333; }
     .rolling-table-wrap { overflow:visible!important; }
     .rolling-table { min-width:0; width:100%; }
@@ -281,12 +259,6 @@ $rolling_pagination = function () use ($rolling_page, $rolling_page_count, $roll
       <option value="<?= $rolling_h($optionType) ?>" <?= $rolling_type === $optionType ? 'selected' : '' ?>><?= $rolling_h($optionType) ?></option>
       <?php endforeach; ?>
     </select>
-    <label for="rollingPageSize" style="font-size:10.5px;color:var(--t3);">Rows/page</label>
-    <select id="rollingPageSize" name="per_page" class="form-select rolling-page-size" aria-label="Machines per page">
-      <?php foreach ($rolling_page_sizes as $pageSize): ?>
-      <option value="<?= (int)$pageSize ?>" <?= $rolling_per_page === $pageSize ? 'selected' : '' ?>><?= (int)$pageSize ?></option>
-      <?php endforeach; ?>
-    </select>
     <button type="submit" class="btn btn-primary btn-sm">Apply filters</button>
     <a class="btn btn-ghost btn-sm" href="<?= $rolling_h($rolling_clear_url) ?>">Clear filters</a>
   </form>
@@ -302,11 +274,7 @@ $rolling_pagination = function () use ($rolling_page, $rolling_page_count, $roll
 <div class="rolling-filter-note">
   Status counts cover the full three-week machine set and are independent of search/type filters. “Any week” conditions can overlap, so exception counts need not add up to the total. Filters apply to this table only; the week summary cards and XLSX export remain full-scope.
 </div>
-<div class="rolling-summary" aria-live="polite">
-  Showing <?= number_format($rolling_show_start) ?>–<?= number_format($rolling_show_end) ?> of <?= number_format($rolling_total_filtered) ?> machines<?= $rolling_filters_active ? ' matching current filters (' . number_format(count($machines)) . ' total fleet)' : ' (full fleet)' ?>.
-</div>
 <div class="rolling-print-note">This printout contains the current page only. Use “Export complete plan XLSX” for the full fleet.</div>
-<?php if ($rolling_page_count > 1 && !empty($rolling_page_rows)): ?><?= $rolling_pagination() ?><?php endif; ?>
 
 <?php if (empty($machines)): ?>
 <div class="card rolling-empty" role="status">No machines are available in this three-week forecast window.</div>
@@ -390,8 +358,62 @@ $rolling_pagination = function () use ($rolling_page, $rolling_page_count, $roll
       </tbody>
     </table>
   </div>
+  <div class="rolling-footer no-print">
+    <div aria-live="polite">
+      <?php if ($rolling_total_filtered > 0): ?>
+        Showing <strong class="mono"><?= (int)$rolling_show_start ?>–<?= (int)$rolling_show_end ?></strong>
+        of <strong class="mono"><?= (int)$rolling_total_filtered ?></strong> machines
+        <?php if ($rolling_total_filtered < count($machines)): ?>
+          <span>(filtered from <?= (int)count($machines) ?>)</span>
+        <?php endif; ?>
+      <?php else: ?>
+        0 matching machines
+      <?php endif; ?>
+    </div>
+
+    <?php if ($rolling_page_count > 1): ?>
+      <nav class="rolling-pages" aria-label="Rolling plan pagination">
+        <a class="rolling-page-link <?= $rolling_page <= 1 ? 'is-disabled' : '' ?>"
+           href="<?= $rolling_h($rolling_page_url(max(1, $rolling_page - 1))) ?>"
+           <?= $rolling_page <= 1 ? 'aria-disabled="true" tabindex="-1"' : 'rel="prev"' ?>>Prev</a>
+        <?php
+        $rolling_win_start = max(1, $rolling_page - 2);
+        $rolling_win_end   = min($rolling_page_count, $rolling_page + 2);
+        if ($rolling_win_start > 1): ?>
+          <a class="rolling-page-link" href="<?= $rolling_h($rolling_page_url(1)) ?>">1</a>
+          <?php if ($rolling_win_start > 2): ?><span style="padding:0 4px;color:var(--t3);">&hellip;</span><?php endif; ?>
+        <?php endif;
+        for ($rolling_p = $rolling_win_start; $rolling_p <= $rolling_win_end; $rolling_p++): ?>
+          <a class="rolling-page-link <?= $rolling_p === $rolling_page ? 'is-current' : '' ?>"
+             <?= $rolling_p === $rolling_page ? 'aria-current="page"' : '' ?>
+             href="<?= $rolling_h($rolling_page_url($rolling_p)) ?>"><?= $rolling_p ?></a>
+        <?php endfor;
+        if ($rolling_win_end < $rolling_page_count): ?>
+          <?php if ($rolling_win_end < $rolling_page_count - 1): ?><span style="padding:0 4px;color:var(--t3);">&hellip;</span><?php endif; ?>
+          <a class="rolling-page-link" href="<?= $rolling_h($rolling_page_url($rolling_page_count)) ?>"><?= $rolling_page_count ?></a>
+        <?php endif; ?>
+        <a class="rolling-page-link <?= $rolling_page >= $rolling_page_count ? 'is-disabled' : '' ?>"
+           href="<?= $rolling_h($rolling_page_url(min($rolling_page_count, $rolling_page + 1))) ?>"
+           <?= $rolling_page >= $rolling_page_count ? 'aria-disabled="true" tabindex="-1"' : 'rel="next"' ?>>Next</a>
+      </nav>
+    <?php endif; ?>
+
+    <form method="get" action="<?= $rolling_h(base_url('forecast/rolling')) ?>" class="rolling-page-size-form">
+      <input type="hidden" name="week" value="<?= $rolling_h($base_label) ?>">
+      <input type="hidden" name="q" value="<?= $rolling_h($rolling_query) ?>">
+      <input type="hidden" name="equipment_type" value="<?= $rolling_h($rolling_type) ?>">
+      <input type="hidden" name="status" value="<?= $rolling_h($rolling_status) ?>">
+      <input type="hidden" name="page" value="1">
+      <label for="rollingPageSize">Rows:</label>
+      <select id="rollingPageSize" name="per_page" onchange="this.form.submit()">
+        <?php foreach ($rolling_page_sizes as $pageSize): ?>
+          <option value="<?= (int)$pageSize ?>" <?= $rolling_per_page === $pageSize ? 'selected' : '' ?>><?= (int)$pageSize ?> / page</option>
+        <?php endforeach; ?>
+      </select>
+      <noscript><button type="submit" class="btn btn-sm">Apply</button></noscript>
+    </form>
+  </div>
 </div>
-<?php if ($rolling_page_count > 1 && !empty($rolling_page_rows)): ?><?= $rolling_pagination() ?><?php endif; ?>
 <?php endif; ?>
 
 <div id="rolling-help" class="rolling-help">
