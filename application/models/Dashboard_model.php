@@ -825,87 +825,131 @@ class Dashboard_model extends CI_Model {
             ->order_by('et.name, e.registration_no')
             ->get()->result();
 
-        $kits = [];
+        $equipmentIds = array();
+        foreach ($equipment as $eq) $equipmentIds[] = (int)$eq->id;
+        if (empty($equipmentIds)) {
+            return array('kits' => array(), 'grouped' => array(), 'total_eq' => 0,
+                         'generated_at' => date('d F Y H:i'));
+        }
+
+        // Batch all per-machine histories into a fixed number of reads instead
+        // of repeating the history queries for every non-retired machine (N+1 scaling).
+        $schedulesByEquipment = array();
+        $schedules = $this->db
+            ->select('equipment_id, id, schedule_name, interval_type, interval_value, next_due_date, next_due_hours, tasks_checklist')
+            ->where_in('equipment_id', $equipmentIds)
+            ->where('status','Active')
+            ->order_by('equipment_id', 'ASC')
+            ->order_by('interval_value', 'ASC')
+            ->get('pm_schedules')->result();
+        foreach ($schedules as $schedule) {
+            $schedulesByEquipment[(int)$schedule->equipment_id][] = $schedule;
+        }
+
+        $partsByEquipment = array();
+        // MySQL 8+ / MariaDB 10.4+ support window functions (the project DB
+        // baseline). Rank after grouping so only the existing top 15 groups per
+        // machine cross the DB boundary; cast IDs before composing the IN list.
+        $equipmentIdSql = implode(',', array_map('intval', $equipmentIds));
+        $sparePartsTable = $this->db->dbprefix('wo_spare_parts');
+        $workOrdersTable = $this->db->dbprefix('work_orders');
+        $partsSql = "SELECT ranked_parts.* FROM (
+            SELECT grouped_parts.*,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY equipment_id
+                       ORDER BY times_used DESC, total_qty DESC
+                   ) AS equipment_part_rank
+            FROM (
+                SELECT wo.equipment_id, wsp.part_name, wsp.part_number, wsp.unit,
+                       SUM(wsp.quantity) AS total_qty,
+                       COUNT(*) AS times_used,
+                       AVG(wsp.unit_cost) AS avg_cost
+                FROM {$sparePartsTable} wsp
+                INNER JOIN {$workOrdersTable} wo ON wo.id = wsp.work_order_id
+                WHERE wo.equipment_id IN ({$equipmentIdSql})
+                  AND wsp.spare_type = 'New'
+                GROUP BY wo.equipment_id, wsp.part_name, wsp.part_number
+            ) grouped_parts
+        ) ranked_parts
+        WHERE equipment_part_rank <= 15
+        ORDER BY equipment_id ASC, times_used DESC, total_qty DESC";
+        $parts = $this->db->query($partsSql)->result();
+        foreach ($parts as $part) {
+            $partsByEquipment[(int)$part->equipment_id][] = $part;
+        }
+
+        $lubesByEquipment = array();
+        $lubes = $this->db
+            ->select('lc.equipment_id, lt.name, lt.category, lt.grade, lt.unit,
+                      SUM(lc.quantity_used) as total_used, COUNT(*) as times')
+            ->from('lube_consumption lc')
+            ->join('lube_types lt','lt.id=lc.lube_type_id','left')
+            ->where_in('lc.equipment_id', $equipmentIds)
+            ->group_by('lc.equipment_id, lt.id, lt.name, lt.category, lt.grade, lt.unit')
+            ->order_by('lc.equipment_id', 'ASC')
+            ->order_by('total_used', 'DESC')
+            ->get()->result();
+        foreach ($lubes as $lube) $lubesByEquipment[(int)$lube->equipment_id][] = $lube;
+
+        $oilsByEquipment = array();
+        $oils = $this->db
+            ->select('wo.equipment_id, wor.system_location, wor.oil_type, wor.grade,
+                      SUM(wor.quantity) as total_qty, COUNT(*) as times')
+            ->from('wo_oil_records wor')
+            ->join('work_orders wo','wo.id=wor.work_order_id')
+            ->where_in('wo.equipment_id', $equipmentIds)
+            ->where('wor.oil_type IS NOT NULL', null, false)
+            ->group_by('wo.equipment_id, wor.oil_type, wor.grade, wor.system_location')
+            ->order_by('wo.equipment_id', 'ASC')
+            ->order_by('times', 'DESC')
+            ->get()->result();
+        foreach ($oils as $oil) $oilsByEquipment[(int)$oil->equipment_id][] = $oil;
+
+        $kits = array();
         foreach ($equipment as $eq) {
-            // PM schedules for this machine
-            $schedules = $this->db
-                ->select('id, schedule_name, interval_type, interval_value, next_due_date, next_due_hours, tasks_checklist')
-                ->where('equipment_id', $eq->id)
-                ->where('status','Active')
-                ->order_by('interval_value ASC')
-                ->get('pm_schedules')->result();
+            $id = (int)$eq->id;
+            $eqSchedules = isset($schedulesByEquipment[$id]) ? $schedulesByEquipment[$id] : array();
+            $eqParts = isset($partsByEquipment[$id]) ? $partsByEquipment[$id] : array();
+            $eqLubes = isset($lubesByEquipment[$id]) ? $lubesByEquipment[$id] : array();
+            $eqOils = isset($oilsByEquipment[$id]) ? $oilsByEquipment[$id] : array();
 
-            // Parts most used for this machine historically
-            $parts = $this->db
-                ->select('wsp.part_name, wsp.part_number, wsp.unit, SUM(wsp.quantity) as total_qty,
-                          COUNT(*) as times_used, AVG(wsp.unit_cost) as avg_cost')
-                ->from('wo_spare_parts wsp')
-                ->join('work_orders wo','wo.id=wsp.work_order_id')
-                ->where('wo.equipment_id', $eq->id)
-                ->where('wsp.spare_type','New')
-                ->group_by('wsp.part_name, wsp.part_number')
-                ->order_by('times_used DESC, total_qty DESC')
-                ->limit(15)
-                ->get()->result();
+            // Only include machines with recommendation/history data.
+            if (empty($eqParts) && empty($eqLubes) && empty($eqOils) && empty($eqSchedules)) continue;
 
-            // Lubricants/oils used for this machine
-            $lubes = $this->db
-                ->select('lt.name, lt.category, lt.grade, lt.unit,
-                          SUM(lc.quantity_used) as total_used, COUNT(*) as times')
-                ->from('lube_consumption lc')
-                ->join('lube_types lt','lt.id=lc.lube_type_id','left')
-                ->where('lc.equipment_id', $eq->id)
-                ->group_by('lt.id, lt.name, lt.category, lt.grade, lt.unit')
-                ->order_by('total_used DESC')
-                ->get()->result();
-
-            // Oils from WO oil records
-            $oils = $this->db
-                ->select('system_location, oil_type, grade, SUM(quantity) as total_qty, COUNT(*) as times')
-                ->from('wo_oil_records wor')
-                ->join('work_orders wo','wo.id=wor.work_order_id')
-                ->where('wo.equipment_id', $eq->id)
-                ->where('wor.oil_type IS NOT NULL', null, false)
-                ->group_by('oil_type, grade, system_location')
-                ->order_by('times DESC')
-                ->get()->result();
-
-            // Only include machines with data
-            if (empty($parts) && empty($lubes) && empty($oils) && empty($schedules)) continue;
-
-            // Next PM due
-            $nextPm = !empty($schedules) ? $schedules[0] : null;
+            // Next PM is the first active schedule by interval, matching the
+            // prior per-equipment query ordering.
+            $nextPm = !empty($eqSchedules) ? $eqSchedules[0] : null;
             $daysUntil = null;
             if ($nextPm && $nextPm->next_due_date) {
                 $daysUntil = (int)ceil((strtotime($nextPm->next_due_date) - time()) / 86400);
             }
 
-            $kits[] = [
+            $kits[] = array(
+                'equipment_id' => $id,
                 'machine_id'  => $eq->registration_no,
                 'type'        => strtoupper((string)($eq->equip_type ?: 'OTHER')),
                 'model'       => ($eq->brand?$eq->brand.' ':'').$eq->model,
                 'location'    => $eq->location,
                 'hours'       => (float)$eq->current_hours,
                 'status'      => $eq->equip_status,
-                'schedules'   => $schedules,
-                'parts'       => $parts,
-                'lubes'       => $lubes,
-                'oils'        => $oils,
+                'schedules'   => $eqSchedules,
+                'parts'       => $eqParts,
+                'lubes'       => $eqLubes,
+                'oils'        => $eqOils,
                 'next_pm'     => $nextPm ? $nextPm->schedule_name : null,
                 'next_pm_date'=> $nextPm ? $nextPm->next_due_date : null,
                 'days_until'  => $daysUntil,
-            ];
+            );
         }
 
-        // Group by type
-        $grouped = [];
-        foreach ($kits as $k) { $grouped[$k['type']][] = $k; }
+        $grouped = array();
+        foreach ($kits as $kit) $grouped[$kit['type']][] = $kit;
 
-        return [
-            'kits'        => $kits,
-            'grouped'     => $grouped,
-            'total_eq'    => count($kits),
-            'generated_at'=> date('d F Y H:i'),
-        ];
+        return array(
+            'kits'         => $kits,
+            'grouped'      => $grouped,
+            'total_eq'     => count($kits),
+            'generated_at' => date('d F Y H:i'),
+        );
     }
 }

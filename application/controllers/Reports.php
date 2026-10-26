@@ -913,6 +913,15 @@ class Reports extends MY_Controller {
         $sCellC='fontSize:9|align:center|valign:middle|border:thin';
         $sNum  ='fontSize:9|align:center|valign:middle|border:thin|numFmt:#,##0.00';
         foreach([$sTitle,$sHdr,$sMach,$sSec,$sCell,$sCellC,$sNum] as $s) $xlsx->registerStyle($s);
+        $currency = wms_site_currency();
+
+        if (empty($data['grouped'])) {
+            $xlsx->addSheet('Service Kits');
+            $xlsx->writeRowStyled([['v'=>'SERVICE KIT RECOMMENDATIONS — '.date('d F Y'),'s'=>$sTitle]]);
+            $xlsx->mergeCells('A1','G1');
+            $xlsx->writeRow(['No recommendation history or active PM schedule data is available.'],$sCell);
+            $xlsx->mergeCells('A2','G2');
+        }
 
         foreach ($data['grouped'] as $type => $kits) {
             $xlsx->addSheet($type.'s');
@@ -938,7 +947,7 @@ class Reports extends MY_Controller {
                     for($i=1;$i<7;$i++) $sh[]=['v'=>'','s'=>$sSec];
                     $xlsx->writeRowStyled($sh); $xlsx->mergeCells("A{$row}","G{$row}"); $row++;
                     $xlsx->setRowHeight($row,28);
-                    $xlsx->writeRow(['PART NAME','PART NUMBER','UNIT','TIMES USED','TOTAL QTY','AVG COST','NOTES'],$sHdr); $row++;
+                    $xlsx->writeRow(['PART NAME','PART NUMBER','UNIT','ENTRY COUNT (ROWS)','TOTAL QTY','AVG COST ('.$currency.')','NOTES'],$sHdr); $row++;
                     foreach ($kit['parts'] as $p) {
                         $xlsx->setRowHeight($row,20);
                         $xlsx->writeRowStyled([
@@ -956,11 +965,11 @@ class Reports extends MY_Controller {
                 // Lubricants section
                 if (!empty($kit['lubes'])) {
                     $xlsx->setRowHeight($row,20);
-                    $sl=[['v'=>'LUBRICANTS & OILS','s'=>$sSec]];
+                    $sl=[['v'=>'LUBRICANT CONSUMPTION RECORDS','s'=>$sSec]];
                     for($i=1;$i<7;$i++) $sl[]=['v'=>'','s'=>$sSec];
                     $xlsx->writeRowStyled($sl); $xlsx->mergeCells("A{$row}","G{$row}"); $row++;
                     $xlsx->setRowHeight($row,28);
-                    $xlsx->writeRow(['LUBRICANT NAME','CATEGORY','GRADE','UNIT','TOTAL USED','TIMES',''],$sHdr); $row++;
+                    $xlsx->writeRow(['LUBRICANT NAME','CATEGORY','GRADE','UNIT','TOTAL USED','ENTRY COUNT (ROWS)',''],$sHdr); $row++;
                     foreach ($kit['lubes'] as $l) {
                         $xlsx->setRowHeight($row,20);
                         $xlsx->writeRowStyled([
@@ -970,6 +979,29 @@ class Reports extends MY_Controller {
                             ['v'=>$l->unit,'s'=>$sCellC],
                             ['v'=>(float)$l->total_used,'s'=>$sCellC],
                             ['v'=>(int)$l->times,'s'=>$sCellC],
+                            ['v'=>'','s'=>$sCell],
+                        ]); $row++;
+                    }
+                }
+
+                // Work-order oil records are distinct from lubricant consumption
+                // records and are included because the on-screen kit shows both.
+                if (!empty($kit['oils'])) {
+                    $xlsx->setRowHeight($row,20);
+                    $so=[['v'=>'WORK ORDER OIL RECORDS','s'=>$sSec]];
+                    for($i=1;$i<7;$i++) $so[]=['v'=>'','s'=>$sSec];
+                    $xlsx->writeRowStyled($so); $xlsx->mergeCells("A{$row}","G{$row}"); $row++;
+                    $xlsx->setRowHeight($row,28);
+                    $xlsx->writeRow(['SYSTEM / LOCATION','OIL TYPE','GRADE','ENTRY COUNT (ROWS)','TOTAL QTY','',''],$sHdr); $row++;
+                    foreach ($kit['oils'] as $o) {
+                        $xlsx->setRowHeight($row,20);
+                        $xlsx->writeRowStyled([
+                            ['v'=>$o->system_location??'','s'=>$sCell],
+                            ['v'=>$o->oil_type??'','s'=>$sCell],
+                            ['v'=>$o->grade??'','s'=>$sCellC],
+                            ['v'=>(int)$o->times,'s'=>$sCellC],
+                            ['v'=>(float)($o->total_qty??0),'s'=>$sNum],
+                            ['v'=>'','s'=>$sCell],
                             ['v'=>'','s'=>$sCell],
                         ]); $row++;
                     }
