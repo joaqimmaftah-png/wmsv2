@@ -356,6 +356,7 @@ optional at runtime; see `database/migrations/README.md`.
 | Symptom | Likely cause / fix |
 |---|---|
 | "🗄️ Database Setup Required" page | `database.local.php` missing or host/user/database empty. Create it from the `.example` file, then import `database/schema.sql` |
+| Attendance says GPS/location requires HTTPS | Browsers block geolocation on plain HTTP network addresses; localhost is only a development exception. Configure a trusted TLS certificate for the WMS hostname, open the app using `https://`, and set `WMS_BASE_URL=https://your-host/` (or pin the same URL in `config.local.php`) so generated attendance QR links also use HTTPS. The attendance pages offer a same-host HTTPS link, but it only works after the web server has TLS enabled. |
 | Sign-in page loads but every login says the database is not answering | DB reachable by config but schema not imported (or user lacks SELECT). Import the dump |
 | Blank/500 page right after sign-in | `ci_sessions` or `settings` table missing — re-import; check `application/logs/php_errors.log` and the dated CI log in the same folder |
 | "The action you have requested is not allowed" (403) on submit | CSRF token missing/expired — reload the form and resubmit; do not open the same form in two tabs for a long time (tokens regenerate) |

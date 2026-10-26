@@ -430,6 +430,15 @@ check('Attendance sites UI: provides prominent Capture current location button, 
     && strpos($sitesView, 'parseCoordinateText') !== FALSE
     && strpos($sitesView, 'enableHighAccuracy: false') !== FALSE
     && strpos($sitesView, 'autolocate=1') !== FALSE);
+check('Attendance location UI: explains the HTTPS browser requirement and offers same-host HTTPS links rather than localhost-only guidance',
+    strpos($sitesView, 'trusted HTTPS for the WMS host') !== FALSE
+    && strpos($sitesView, "secureAddress.protocol = 'https:'") !== FALSE
+    && strpos($sitesView, 'http://localhost') === FALSE);
+$punchView = file_get_contents(__DIR__ . '/../application/views/attendance/punch.php');
+check('Attendance punch UI: explains HTTPS GPS requirement and offers same-host secure URL when opened over HTTP',
+    strpos($punchView, 'Trusted HTTPS is required for attendance punches') !== FALSE
+    && strpos($punchView, 'https-address-link') !== FALSE
+    && strpos($punchView, "secureAddress.protocol = 'https:'") !== FALSE);
 check('Attendance sites UI: respects "no assumed default radius" and exposes grace window, retention policy & printed QR fallback controls',
     strpos($sitesView, "radInput.value = '150'") === FALSE
     && strpos($sitesView, 'attendance_qr_grace_seconds') !== FALSE

@@ -154,6 +154,10 @@ $label       = ($next_type === 'check_out') ? 'Check out' : 'Check in';
         <span class="dot wait" id="geo-dot"></span>
         <span id="geo-text">Reading your position…</span>
       </div>
+      <p id="https-address-row" class="tiny" style="display:none;margin-top:8px;">
+        GPS works on HTTPS only (except localhost). Configure trusted HTTPS for this WMS host, then open the secure address:
+        <a id="https-address-link" href="#" style="color:var(--blue);text-decoration:underline;">Try HTTPS</a>.
+      </p>
 
       <?= form_open('attendance/record', array('id' => 'punchForm', 'autocomplete' => 'off')) ?>
         <input type="hidden" name="t"   value="<?= $h($token) ?>">
@@ -211,6 +215,23 @@ $label       = ($next_type === 'check_out') ? 'Check out' : 'Check in';
   var lngInput   = document.getElementById('lng');
   var accInput   = document.getElementById('acc');
   var form       = document.getElementById('punchForm');
+  var httpsRow   = document.getElementById('https-address-row');
+  var httpsLink  = document.getElementById('https-address-link');
+
+  function showHttpsAddress() {
+    if (!httpsRow || window.location.protocol !== 'http:') return;
+    try {
+      var secureAddress = new URL(window.location.href);
+      secureAddress.protocol = 'https:';
+      if (secureAddress.port === '80') secureAddress.port = '';
+      httpsLink.href = secureAddress.href;
+      httpsRow.style.display = 'block';
+    } catch (e) {
+      // Keep the plain-text HTTPS guidance visible if URL parsing is unavailable.
+      httpsRow.style.display = 'block';
+      httpsLink.style.display = 'none';
+    }
+  }
 
   function say(kind, text) {
     statusDot.className = 'dot ' + kind;
@@ -219,12 +240,13 @@ $label       = ($next_type === 'check_out') ? 'Check out' : 'Check in';
 
   function locate() {
     button.disabled = true;
-    if (!('geolocation' in navigator)) {
-      say('bad', 'This browser cannot read a position, so it cannot punch. Use a modern browser on the phone.');
+    if (window.isSecureContext === false) {
+      say('bad', 'GPS is blocked because this WMS page is using plain HTTP. Trusted HTTPS is required for attendance punches on phones and other devices.');
+      showHttpsAddress();
       return;
     }
-    if (window.isSecureContext === false) {
-      say('bad', 'Location needs HTTPS. Ask the site to serve the WMS over HTTPS.');
+    if (!('geolocation' in navigator)) {
+      say('bad', 'This browser cannot read a position, so it cannot punch. Use a modern browser on the phone.');
       return;
     }
 

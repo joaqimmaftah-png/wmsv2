@@ -394,17 +394,36 @@ $has_saved_point = $editing && $editing->latitude !== NULL && $editing->longitud
   // Two-tier GPS acquisition:
   //   1. Hardware GNSS (`enableHighAccuracy: true`) with optional 3s satellite refinement if initial fix > 25m
   //   2. Automatic fallback to OS / Wi-Fi positioning (`enableHighAccuracy: false`) so laptops & desktops without GPS chips succeed immediately
+  function addHttpsAddressLink() {
+    if (!out || window.location.protocol !== 'http:') return;
+    try {
+      var secureAddress = new URL(window.location.href);
+      secureAddress.protocol = 'https:';
+      if (secureAddress.port === '80') secureAddress.port = '';
+      var link = document.createElement('a');
+      link.href = secureAddress.href;
+      link.textContent = 'Try this page over HTTPS';
+      link.style.color = 'var(--blue)';
+      link.style.textDecoration = 'underline';
+      out.appendChild(document.createElement('br'));
+      out.appendChild(link);
+      out.appendChild(document.createTextNode(' (works only after HTTPS is configured for this host).'));
+    } catch (e) {
+      // Keep the instructions useful even in an unusually old browser.
+    }
+  }
+
   function here(cb) {
-    if (!('geolocation' in navigator)) {
-      showStatus('bad', 'This browser does not support GPS geolocation. Use <strong>Pick on map</strong> or <strong>Paste Maps link</strong> above.');
+    if (window.isSecureContext === false) {
+      showStatus('warn',
+        'This page is using plain HTTP on <code>' + window.location.host + '</code>. Browsers block GPS on HTTP network addresses; this is a browser security rule, not an app setting. ' +
+        'To capture location from any phone or computer, configure trusted HTTPS for the WMS host and open the HTTPS address. ' +
+        'For site setup, <strong>Pick on map</strong> or <strong>Paste Maps link</strong> still works without GPS.');
+      addHttpsAddressLink();
       return;
     }
-    if (window.isSecureContext === false) {
-      var localUrl = 'http://localhost' + window.location.pathname + window.location.search;
-      showStatus('warn',
-        'Browsers block direct GPS on plain HTTP LAN addresses (<code>' + window.location.host + '</code>). ' +
-        'Open <a href="' + localUrl + '" style="color:var(--blue);text-decoration:underline;">' + localUrl + '</a> on the XAMPP host, serve over HTTPS, ' +
-        'or click <strong>Pick on map</strong> / <strong>Paste Maps link</strong> above.');
+    if (!('geolocation' in navigator)) {
+      showStatus('bad', 'This browser does not support GPS geolocation. Use <strong>Pick on map</strong> or <strong>Paste Maps link</strong> above.');
       return;
     }
 
