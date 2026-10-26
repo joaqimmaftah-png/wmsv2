@@ -6,8 +6,9 @@
  * rows; without a way to write them the forecast can only ever report that
  * nothing is configured.
  *
- * `qty` is per ONE occurrence of the schedule — the forecast multiplies by the
- * occurrences in the window, so entering a total here would multiply twice.
+ * `qty` is per ONE occurrence of the schedule. The current spares preview
+ * counts one occurrence for each active schedule whose recorded next_due_date
+ * falls in the window; it does not infer later recurring dates from the interval or meter.
  */
 $role_id       = isset($role_id) ? (int)$role_id : 0;
 $is_supervisor = $role_id === 1;
@@ -40,9 +41,10 @@ $is_supervisor = $role_id === 1;
 <div class="card mb-4" style="padding:14px 18px;border-left:3px solid var(--blue);">
   <div style="font-size:11.5px;color:var(--t2);line-height:1.8;">
     <strong>Quantity is per one occurrence of this service</strong>, not per week. A 250-hour
-    service taking four filters is <strong>4</strong> — the forecast multiplies by however many
-    times the service falls due in the window it is looking at. Entering a total here would count
-    it twice.
+    service taking four filters is <strong>4</strong>. The current spares preview includes one
+    occurrence for each active schedule whose recorded next due date falls in the selected window;
+    it does not estimate additional recurring due dates from the schedule interval or meter. Enter
+    the per-service quantity, not a window total.
   </div>
 </div>
 
@@ -169,7 +171,7 @@ $is_supervisor = $role_id === 1;
 <div class="cs mt-4" style="font-size:11px;line-height:1.8;">
   These rows feed <a href="<?= base_url('forecast/spares') ?>" style="color:var(--blue);">Forecast &rsaquo;
   PM Spare-Parts Forecast</a>, which turns them into
-  <em>required − on hand − on order = shortage</em> for whatever window the plan covers.
+  <em>required − on hand − on order = shortage</em> for active PM schedules whose recorded next due dates fall in the selected window.
   A service with no parts list is counted and shown as a gap there, so an incomplete bill is never
   mistaken for a complete one.
 </div>

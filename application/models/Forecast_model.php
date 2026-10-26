@@ -1423,9 +1423,9 @@ class Forecast_model extends CI_Model {
      * Add or change one requirement.
      *
      * `qty` is consumed per ONE occurrence of the schedule — a 250-hour service
-     * taking four filters is 4, not 4 × however many times it falls due.  The
-     * forecast multiplies by the occurrences in the window, so entering the
-     * total here would multiply twice.
+     * taking four filters is 4. The current spares preview counts one occurrence
+     * for each active schedule whose recorded next_due_date is in the window;
+     * it does not infer later recurring dates from the schedule interval or meter.
      *
      * The UNIQUE (pm_schedule_id, material_id) key means a second entry for the
      * same part replaces the first rather than doubling it — a re-typed line
@@ -1521,19 +1521,19 @@ class Forecast_model extends CI_Model {
     }
 
     /* ─────────────────────────────────────────────────────────────────
-     |  F10 — SPARE PARTS REQUIRED BY THE PM PLAN
+     |  F10 — SPARE PARTS FOR DUE PM SCHEDULES
      * ──────────────────────────────────────────────────────────────── */
 
     /**
-     * Turn the PMs falling due in a window into a parts bill, and compare it
-     * with what the store holds and what is already on order:
+     * Aggregate the configured part quantities for active PM schedules whose
+     * next_due_date falls within the supplied window, and compare them with
+     * current stock and outstanding supplier-order quantities:
      *
-     *     required − on hand − on order = shortage
+     *     shortage = max(round(required − on hand − on order, 3), 0)
      *
-     * This is the half of the workbook's forecast it never had: 675 hours of
-     * planned PM across 44 machines is a parts requirement nobody had written
-     * down.  It generalises the pattern `Lubricant_model` already proves
-     * for lubricants.
+     * Each matching schedule row contributes one occurrence. This method does
+     * not infer additional recurring service dates from meter usage or the
+     * schedule interval. It generalises the forecast pattern used for lubricants.
      *
      * @param  string $week_start Monday of the first week
      * @param  int    $weeks      how many weeks ahead to look
@@ -1644,7 +1644,7 @@ class Forecast_model extends CI_Model {
                 $need[$mid]['required'] += (float)$r->qty;
                 if ((int)$r->is_critical === 1) $need[$mid]['is_critical'] = true;
                 $who = isset($reg[(int)$p->equipment_id]) ? $reg[(int)$p->equipment_id] : ('#' . $p->equipment_id);
-                $need[$mid]['needed_by'][] = $who . ' · ' . date('d M', strtotime($p->next_due_date));
+                $need[$mid]['needed_by'][] = $who . ' · ' . date('d M Y', strtotime($p->next_due_date));
                 if ($need[$mid]['earliest'] === null || $p->next_due_date < $need[$mid]['earliest']) {
                     $need[$mid]['earliest'] = $p->next_due_date;
                 }
