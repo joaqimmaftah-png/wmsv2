@@ -23,6 +23,17 @@ class Attention_model extends CI_Model {
             if ($overdue_pm) $groups[] = $overdue_pm;
         }
 
+        // Certificate expiry: supervisors & managers see every active
+        // worker's certificates; technicians & store keepers see only their
+        // own (docs/team-certifications-view-ux-audit.md §8). Alerts are
+        // state, not messages — they clear by themselves once the
+        // certificate is renewed or removed, so there is no read state.
+        if (in_array($role, array(1, 2, 3, 4), TRUE)) {
+            foreach ($this->_certificate_alerts((int)$user_id, $role) as $cert_group) {
+                $groups[] = $cert_group;
+            }
+        }
+
         // Verification is a supervisor action, not a read-only manager alert.
         if ($role === 1) {
             $verification = $this->_awaiting_verification();
@@ -233,6 +244,140 @@ class Attention_model extends CI_Model {
             'url'   => base_url('spareparts/alerts?status=New'),
             'items' => $items,
         );
+    }
+
+    /* ── Certificate expiry ──────────────────────────────────────────
+       Tiered like the rest of the compliance tooling: already expired,
+       expiring inside the configured alert window (Settings →
+       cert_alert_days, default 30), and an early-warning band out to 90
+       days for renewals with long lead times. Computed from expiry_date
+       directly — the stored status column is never refreshed (written)
+       here, because this model runs on every page render. */
+
+    /** @return array[] attention groups, most urgent first */
+    private function _certificate_alerts($user_id, $role_id) {
+        if (!$this->db->table_exists('certifications') || !$this->db->table_exists('users')) return array();
+
+        $today      = date('Y-m-d');
+        $alert_days = $this->_cert_alert_days();
+        $own        = in_array((int)$role_id, array(2, 3), TRUE);
+
+        $tiers = array(
+            array(
+                'key'   => 'certs_expired',
+                'label' => 'Certificates expired',
+                'tone'  => 'critical',
+                'where' => array('c.expiry_date <' => $today),
+            ),
+            array(
+                'key'   => 'certs_expiring',
+                'label' => 'Certificates expiring soon',
+                'tone'  => 'warning',
+                'where' => array(
+                    'c.expiry_date >=' => $today,
+                    'c.expiry_date <=' => date('Y-m-d', strtotime('+' . $alert_days . ' days')),
+                ),
+            ),
+        );
+        if ($alert_days < 90) {
+            $tiers[] = array(
+                'key'   => 'certs_upcoming',
+                'label' => 'Certificates expiring in ' . ($alert_days + 1) . '–90 days',
+                'tone'  => 'info',
+                'where' => array(
+                    'c.expiry_date >'  => date('Y-m-d', strtotime('+' . $alert_days . ' days')),
+                    'c.expiry_date <=' => date('Y-m-d', strtotime('+90 days')),
+                ),
+            );
+        }
+
+        $groups = array();
+        foreach ($tiers as $tier) {
+            $group = $this->_certificate_group($tier, $user_id, (int)$role_id, $own);
+            if ($group) $groups[] = $group;
+        }
+        return $groups;
+    }
+
+    private function _certificate_group($tier, $user_id, $role_id, $own) {
+        $rows = $this->_certificate_query($user_id, $role_id, $tier['where'])
+            ->order_by('c.expiry_date', 'ASC')
+            ->order_by('c.id', 'ASC')
+            ->limit(self::PREVIEW_LIMIT + 1)
+            ->get()->result();
+        $total = count($rows);
+        if ($total > self::PREVIEW_LIMIT) {
+            $total = (int)$this->_certificate_query($user_id, $role_id, $tier['where'])->count_all_results();
+        }
+        if ($total === 0) return NULL;
+
+        $items = array();
+        foreach (array_slice($rows, 0, self::PREVIEW_LIMIT) as $row) {
+            $items[] = array(
+                // Holders recognise their own certificate by name; supervisors
+                // and managers triage by worker, certificate as context.
+                'label'  => $own ? (string)$row->cert_name : (string)$row->worker_name,
+                'detail' => $own
+                    ? $this->_context(array($row->issuing_body, $row->cert_number))
+                    : (string)$row->cert_name,
+                'meta'   => $this->_certificate_meta($row->expiry_date),
+                'url'    => base_url('team/view/' . (int)$row->user_id),
+            );
+        }
+
+        return array(
+            'key'    => $tier['key'],
+            'label'  => $tier['label'],
+            'count'  => $total,
+            'tone'   => $tier['tone'],
+            // The workforce tracker is supervisor/manager scope; a holder's
+            // "view all" is their own profile, never the company-wide list.
+            'url'    => $own ? base_url('team/view/' . (int)$user_id) : base_url('team/certifications'),
+            'action' => $own ? 'My certifications' : 'View all',
+            'items'  => $items,
+        );
+    }
+
+    private function _certificate_query($user_id, $role_id, $where) {
+        $this->db
+            ->select('c.id, c.user_id, c.cert_name, c.cert_number, c.issuing_body, c.expiry_date,
+                CONCAT(u.first_name, " ", u.last_name) AS worker_name')
+            ->from('certifications c')
+            ->join('users u', 'u.id = c.user_id', 'inner')
+            ->where('c.expiry_date IS NOT NULL', NULL, FALSE);
+
+        foreach ($where as $field => $value) {
+            $this->db->where($field, $value);
+        }
+
+        if (in_array((int)$role_id, array(1, 4), TRUE)) {
+            // Workforce scope: certificates of staff who have left are not
+            // actionable exceptions (same population as the directory).
+            $this->db->where('u.status', 'Active');
+        } else {
+            $this->db->where('c.user_id', (int)$user_id);
+        }
+        return $this->db;
+    }
+
+    private function _certificate_meta($expiry_date) {
+        $days = (int)floor((strtotime(substr((string)$expiry_date, 0, 10)) - strtotime(date('Y-m-d'))) / 86400);
+        $when = date('d M Y', strtotime((string)$expiry_date));
+        if ($days < 0)  return 'Expired ' . abs($days) . 'd · ' . $when;
+        if ($days === 0) return 'Expires today · ' . $when;
+        return 'Expires in ' . $days . 'd · ' . $when;
+    }
+
+    /** `cert_alert_days` setting (seeded at 30), clamped like Team_model's copy. */
+    private function _cert_alert_days() {
+        try {
+            $CI =& get_instance();
+            if (!isset($CI->Settings_model)) $CI->load->model('Settings_model');
+            $v = isset($CI->Settings_model) ? (int)$CI->Settings_model->get('cert_alert_days', 30) : 30;
+        } catch (Throwable $e) {
+            $v = 30;
+        }
+        return ($v > 0 && $v <= 365) ? $v : 30;
     }
 
     /** Exact CSV membership, matching Search_model and Spareparts_model. */
