@@ -82,4 +82,27 @@ assert.ok(inventory.includes('window.location.search.match(/[?&]item='),
 assert.ok(inventory.includes('openDrawer(initialItemId, initialOpener)'),
   'inventory deep-links open the existing item drawer');
 
+assert.ok(attentionModel.includes('_certificate_alerts((int)$user_id, $role)'),
+  'certificate expiry alerts are wired into the attention feed');
+assert.ok(attentionModel.includes("in_array($role, array(1, 2, 3, 4), TRUE)"),
+  'certificate alerts reach supervisors, managers, technicians, and store keepers (not CEO)');
+assert.ok(attentionModel.includes("'certs_expired'") && attentionModel.includes("'certs_expiring'")
+  && attentionModel.includes("'certs_upcoming'"), 'certificate alerts are tiered: expired / soon / 31-90 days');
+assert.ok(attentionModel.includes("'tone'  => 'critical'") && attentionModel.includes("strtotime('+90 days')"),
+  'expired certificates are critical and the early-warning band ends at 90 days');
+assert.ok(attentionModel.includes("_cert_alert_days()") && attentionModel.includes("'cert_alert_days', 30"),
+  'the expiring-soon tier honours the cert_alert_days setting (default 30)');
+assert.ok(attentionModel.includes("->where('u.status', 'Active')"),
+  'workforce-scope certificate alerts exclude inactive workers');
+assert.ok(attentionModel.includes("->where('c.user_id', (int)$user_id)"),
+  'holder certificate alerts are scoped to their own records only');
+assert.ok(attentionModel.includes("'c.expiry_date IS NOT NULL'"),
+  'certificates without an expiry date never alert');
+assert.ok(attentionModel.includes("base_url('team/certifications')"),
+  'supervisor/manager certificate alerts link to the tracker');
+assert.ok(attentionModel.includes("'My certifications'"),
+  'holder certificate alerts link to their own profile, not the company-wide tracker');
+assert.ok(!attentionModel.includes('refresh_cert_status'),
+  'attention computation never writes certificate status on page render');
+
 console.log('Global Find and Operational Attention structural checks passed.');

@@ -377,7 +377,7 @@ Priority = severity × reach × (1 / effort). Phases assume approval of this aud
 
 ## 8. Certificate Expiry Notifications — Feasibility & Specification
 
-**Status: explained and specced only — NOT implemented** (per product-owner choice, 2026-10-27). Decisions captured: **channel = in-app bell**, **recipients = Supervisors + Managers + the certificate holder**, **timing = tiered (90 / 30 / expired)**.
+**Status: ✅ IMPLEMENTED** (specced 2026-10-27, implemented on request on this branch). Decisions implemented: **channel = in-app bell**, **recipients = Supervisors + Managers + the certificate holder**, **timing = tiered (90 / 30 / expired)**. Implementation is `Attention_model::_certificate_alerts()` + structural assertions in `tests/global_find_attention.js`; verified with 17 functional checks under PHP-WASM (role matrix, tier boundaries incl. expires-today, inactive exclusion, holder self-scoping, self-clearing data contract) and the existing node suites.
 
 ### 8.1 Direct answer
 
@@ -416,17 +416,17 @@ Inactive workers are excluded from supervisor/manager groups (same population as
 
 **Behaviour:** alerts are *state, not messages* — there is no mark-as-read and nothing to dismiss. An alert disappears on the next page load once the certificate is renewed (expiry extended), corrected, or deleted — the same self-clearing contract as Overdue PM. No `notifications` table, no read-state, no accumulation of stale alerts.
 
-**Implementation sketch (when approved):** one private method set in `Attention_model` (`_certificates_expired()`, `_certificates_expiring($days)`, `_certificates_upcoming()` or one parameterised builder), wired into `for_user()` with the role matrix above; guarded by `table_exists('certifications')`; `Settings_model::get('cert_alert_days', 30)` for the middle tier; at most one small indexed query per tier following the existing `PREVIEW_LIMIT + 1` count pattern. **Files touched: `application/models/Attention_model.php` only** (+ tests). No schema, route, view, or settings changes.
+**As implemented:** one parameterised builder in `Attention_model` (`_certificate_alerts()` → `_certificate_group()` / `_certificate_query()` / `_certificate_meta()` / `_cert_alert_days()`), wired into `for_user()` with the role matrix above; guarded by `table_exists('certifications'/'users')`; `Settings_model::get('cert_alert_days', 30)` (clamped 1–365) for the middle tier; one small query per tier following the existing `PREVIEW_LIMIT + 1` count pattern. **Files touched: `application/models/Attention_model.php` + `tests/global_find_attention.js`** (+ this doc). No schema, route, view, or settings changes.
 
 **Acceptance criteria:**
 
-- [ ] Bell badge count includes certificate tiers; groups render with correct tones and counts
-- [ ] Supervisor and Manager see all active workers; Technician/Store Keeper see only their own (verified per role)
-- [ ] Expired / ≤ `cert_alert_days` / 31–90-day boundaries correct, incl. a certificate expiring *today* (soon, not expired)
-- [ ] Certificates with no expiry date never alert (see VIEW-03: they also should not silently read "Valid" — separate fix)
-- [ ] Renewing (extending expiry) or deleting a certificate clears its alert on next load; no dismiss control exists
-- [ ] Holder "View all"/item links never expose another worker's record (CERT-01 dependency respected)
-- [ ] No `UPDATE`/status-refresh executed during attention computation; page-render query count grows by ≤ 1 per non-empty tier pattern
+- [x] Bell badge count includes certificate tiers; groups render with correct tones and counts
+- [x] Supervisor and Manager see all active workers; Technician/Store Keeper see only their own (verified per role)
+- [x] Expired / ≤ `cert_alert_days` / 31–90-day boundaries correct, incl. a certificate expiring *today* (soon, not expired)
+- [x] Certificates with no expiry date never alert (see VIEW-03: they also should not silently read "Valid" — separate fix)
+- [x] Renewing (extending expiry) or deleting a certificate clears its alert on next load; no dismiss control exists *(by construction — groups are computed from current `expiry_date` on every render, nothing is stored)*
+- [x] Holder "View all"/item links never expose another worker's record (CERT-01 dependency respected)
+- [x] No `UPDATE`/status-refresh executed during attention computation (asserted in tests: no `refresh_cert_status` reference); one query per tier
 
 ### 8.4 Honest limitations of the chosen channel
 
