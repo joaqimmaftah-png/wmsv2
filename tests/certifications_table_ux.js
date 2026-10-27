@@ -90,4 +90,28 @@ assert.ok(!view.includes('bg-success') && !view.includes('bg-warning text-dark')
 assert.ok(!/#1a3c5e|#dc2626|#94a3b8/.test(view),
   'hard-coded hex colours replaced by design tokens');
 
+
+// --- Renew/Edit, inspector drawer, early-warning band (2026-10-27) ------------
+const modelSrc = src('application/models/Team_model.php');
+const profileSrc = src('application/views/team/view.php');
+assert.ok(modelSrc.includes('function update_certification'),
+  'Team_model.update_certification missing');
+assert.ok(controller.includes('function edit_certification'), 'Team::edit_certification missing');
+assert.ok(controller.includes('function certifications_json'), 'Team::certifications_json missing');
+const editBlock = controller.slice(controller.indexOf('function edit_certification'), controller.indexOf('function edit_certification') + 3200);
+assert.ok(editBlock.includes('require_post()'), 'edit endpoint must be POST-only');
+assert.ok(editBlock.includes('is_supervisor()'), 'edit endpoint must be supervisor-only server-side');
+const jsonBlock = controller.slice(controller.indexOf('function certifications_json'), controller.indexOf('function certifications_json') + 2600);
+assert.ok(jsonBlock.includes('You can only inspect your own certificates'),
+  'inspector must scope non-privileged roles to their own records');
+assert.ok(controller.includes("'upcoming'") && view.includes("'upcoming'"),
+  'early-warning band tab exists in builder and view');
+assert.ok(view.includes('Valid (>90d)'), 'valid tab relabelled when the band exists');
+assert.ok(view.includes('ctDrawer') && view.includes('data-cert-inspect') && view.includes('team/certifications_json/'),
+  'inspector drawer fed by the JSON endpoint');
+assert.ok(view.includes('ctEditDialog') && view.includes('data-cert-edit') && view.includes('team/edit_certification/'),
+  'tracker has supervisor Renew/Edit dialog wired to the endpoint');
+assert.ok(profileSrc.includes('editCertDialog') && profileSrc.includes('data-cert-edit-btn') && profileSrc.includes('team/edit_certification/'),
+  'profile has Renew/Edit dialog wired to the same endpoint');
+
 console.log('Certifications Tracker table UX structural checks passed.');

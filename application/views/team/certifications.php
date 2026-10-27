@@ -67,17 +67,31 @@ $initials_of = function ($name) {
     $b = isset($parts[1][0]) ? $parts[1][0] : '';
     return strtoupper($a . $b);
 };
+$has_upcoming = ($alert_days < 90);
 $tab_defs = array(
     'all'       => array('label' => 'All Certificates', 'count' => (int)$tab_counts['all']),
     'expired'   => array('label' => 'Expired',          'count' => (int)$tab_counts['expired']),
     'expiring'  => array('label' => 'Expiring Soon',    'count' => (int)$tab_counts['expiring']),
-    'valid'     => array('label' => 'Valid',            'count' => (int)$tab_counts['valid']),
+    'valid'     => array('label' => $has_upcoming ? 'Valid (>90d)' : 'Valid', 'count' => (int)$tab_counts['valid']),
     'no_expiry' => array('label' => 'No Expiry Date',   'count' => (int)$tab_counts['no_expiry']),
     'none'      => array('label' => 'None Recorded',    'count' => (int)$tab_counts['none']),
 );
+if ($has_upcoming) {
+    // Insert the early-warning band after Expiring Soon, keeping tab order
+    // by urgency: expired -> soon -> 31-90d -> valid -> no expiry -> none.
+    $rebuilt = array();
+    foreach ($tab_defs as $k => $def) {
+        $rebuilt[$k] = $def;
+        if ($k === 'expiring') {
+            $rebuilt['upcoming'] = array('label' => 'Expiring in ' . ($alert_days + 1) . '–90d', 'count' => (int)$tab_counts['upcoming']);
+        }
+    }
+    $tab_defs = $rebuilt;
+}
 $has_filters = ($search_query !== '' || $cert_filter !== '' || $doc_filter !== '' || $active_tab !== 'all');
 $is_none_mode = ($active_tab === 'none');
 $valid_pct = ((int)$summary['total'] > 0) ? (int)round((int)$summary['valid'] / (int)$summary['total'] * 100) : NULL;
+$tracker_qs = http_build_query(array_filter($base_params));
 ?>
 
 <style>
@@ -158,6 +172,24 @@ $valid_pct = ((int)$summary['total'] > 0) ? (int)round((int)$summary['valid'] / 
 .ct-page.is-active{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
 .ct-page.is-disabled{opacity:.4;pointer-events:none}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden;clip:rect(0,0,0,0)!important;white-space:nowrap}
+.ct-drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.34);z-index:600;opacity:0;pointer-events:none;transition:opacity .16s}
+.ct-drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,100%);background:var(--surface);z-index:601;box-shadow:var(--shadow-float);transform:translateX(102%);transition:transform .18s ease;display:flex;flex-direction:column}
+.ct-drawer.is-open{transform:none}.ct-drawer-overlay.is-open{opacity:1;pointer-events:auto}
+.ct-drawer-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px;border-bottom:1px solid var(--sep)}
+.ct-drawer-body{padding:16px;overflow-y:auto;flex:1}
+.ct-drawer-sec{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin:16px 0 8px}
+.ct-drawer-sec:first-child{margin-top:0}
+.ct-kv{display:grid;grid-template-columns:118px 1fr;gap:6px 12px;font-size:12.5px}
+.ct-kv dt{color:var(--t3)}.ct-kv dd{margin:0;color:var(--t1);font-weight:500;overflow-wrap:anywhere}
+.ct-drawer-foot{padding:12px 16px;border-top:1px solid var(--sep);display:flex;gap:8px;flex-wrap:wrap}
+.ct-x{border:0;background:transparent;font-size:22px;line-height:1;color:var(--t3);cursor:pointer;padding:2px 6px}
+.wms-dialog{border:1px solid var(--sep);border-radius:14px;padding:0;max-width:560px;width:calc(100% - 32px);background:var(--surface);color:var(--t1);box-shadow:0 24px 60px rgba(0,0,0,.28)}
+.wms-dialog::backdrop{background:rgba(0,0,0,.42)}
+.wms-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--sep)}
+.wms-dialog-title{font-size:14px;font-weight:600}
+.wms-dialog form .modal-body{padding:18px 20px}
+.wms-dialog-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--sep)}
+@media (prefers-reduced-motion:reduce){.ct-drawer,.ct-drawer-overlay{transition:none}}
 @media(max-width:1100px){.ct-kpis{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:760px){
  .ct-kpis{grid-template-columns:repeat(2,1fr)}
@@ -361,6 +393,7 @@ $valid_pct = ((int)$summary['total'] > 0) ? (int)round((int)$summary['valid'] / 
         <dt>Issuing body</dt><dd><?= htmlspecialchars((string)(!empty($c->issuing_body) ? $c->issuing_body : '—'), ENT_QUOTES, 'UTF-8') ?></dd>
       </dl>
       <div class="ct-actions" style="justify-content:flex-start;">
+        <button type="button" class="btn btn-ghost btn-sm" data-cert-inspect="<?= (int)$c->id ?>" aria-label="Inspect <?= htmlspecialchars((string)$c->cert_name, ENT_QUOTES, 'UTF-8') ?> for <?= htmlspecialchars((string)$c->worker_name, ENT_QUOTES, 'UTF-8') ?>">Inspect</button>
         <a href="<?= site_url('team/view/' . (int)$c->user_id) ?>" class="btn btn-ghost btn-sm">Profile</a>
         <?php if (!empty($c->document)): ?><a class="ct-doc-link" href="<?= base_url(htmlspecialchars((string)$c->document, ENT_QUOTES, 'UTF-8')) ?>" target="_blank" rel="noopener" aria-label="Open <?= htmlspecialchars((string)$c->cert_name, ENT_QUOTES, 'UTF-8') ?> document<?= $ext !== '' ? ' (' . $ext . ')' : '' ?>">Open<?= $ext !== '' ? ' ' . $ext : ' document' ?></a><?php endif; ?>
       </div>
@@ -412,8 +445,10 @@ $valid_pct = ((int)$summary['total'] > 0) ? (int)round((int)$summary['valid'] / 
           </td>
           <td>
             <div class="ct-actions">
+              <button type="button" class="btn btn-ghost btn-sm" data-cert-inspect="<?= (int)$c->id ?>" aria-label="Inspect <?= htmlspecialchars((string)$c->cert_name, ENT_QUOTES, 'UTF-8') ?> for <?= htmlspecialchars((string)$c->worker_name, ENT_QUOTES, 'UTF-8') ?>">Inspect</button>
               <a href="<?= site_url('team/view/' . (int)$c->user_id) ?>" class="btn btn-ghost btn-sm" aria-label="Open profile of <?= htmlspecialchars((string)$c->worker_name, ENT_QUOTES, 'UTF-8') ?>">Profile</a>
               <?php if (!empty($is_supervisor)): ?>
+              <button type="button" class="btn btn-ghost btn-sm" data-cert-edit="<?= (int)$c->id ?>" aria-label="Renew or edit <?= htmlspecialchars((string)$c->cert_name, ENT_QUOTES, 'UTF-8') ?> for <?= htmlspecialchars((string)$c->worker_name, ENT_QUOTES, 'UTF-8') ?>">Renew</button>
               <?= form_open('team/delete_certification/' . (int)$c->id, array('style' => 'display:inline;')) ?>
                 <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--red);" aria-label="Delete <?= htmlspecialchars((string)$c->cert_name, ENT_QUOTES, 'UTF-8') ?> for <?= htmlspecialchars((string)$c->worker_name, ENT_QUOTES, 'UTF-8') ?>"
                         onclick="return confirm('Delete this certification? The attached document is removed too.');">Delete</button>
@@ -467,6 +502,66 @@ $valid_pct = ((int)$summary['total'] > 0) ? (int)round((int)$summary['valid'] / 
   <?php endif; ?>
 </div>
 
+<!-- Certificate Inspector Drawer -->
+<div class="ct-drawer-overlay no-print" id="ctDrawerOverlay" hidden></div>
+<aside class="ct-drawer no-print" id="ctDrawer" role="dialog" aria-modal="false" aria-labelledby="ctDrawerTitle" aria-hidden="true">
+  <div class="ct-drawer-head">
+    <div>
+      <div class="ct-sub2" id="ctDrawerWorker">Certificate</div>
+      <div id="ctDrawerTitle" style="font-size:16px;font-weight:700;color:var(--t1);">Loading…</div>
+    </div>
+    <button type="button" class="ct-x" id="ctDrawerClose" aria-label="Close inspector">×</button>
+  </div>
+  <div class="ct-drawer-body" id="ctDrawerBody">
+    <p style="font-size:12.5px;color:var(--t3);">Loading certificate…</p>
+  </div>
+  <div class="ct-drawer-foot">
+    <button type="button" class="btn btn-ghost btn-sm" id="ctDrawerPrev">‹ Prev</button>
+    <button type="button" class="btn btn-ghost btn-sm" id="ctDrawerNext">Next ›</button>
+    <span style="flex:1;"></span>
+    <a href="#" class="btn btn-ghost btn-sm" id="ctDrawerDoc" target="_blank" rel="noopener" hidden>Open Document</a>
+    <?php if (!empty($is_supervisor)): ?>
+    <button type="button" class="btn btn-primary btn-sm" id="ctDrawerRenew">Renew / Edit</button>
+    <?php endif; ?>
+    <a href="#" class="btn btn-primary btn-sm" id="ctDrawerProfile">Open Profile</a>
+  </div>
+</aside>
+
+<?php if (!empty($is_supervisor)): ?>
+<!-- Renew / Edit Certification dialog (posts to Team::edit_certification) -->
+<dialog id="ctEditDialog" class="wms-dialog" aria-labelledby="ctEditTitle">
+  <div class="wms-dialog-head">
+    <span class="wms-dialog-title" id="ctEditTitle">Renew / Edit Certification</span>
+    <button type="button" class="ct-x" id="ctEditClose" aria-label="Close">×</button>
+  </div>
+  <?= form_open_multipart('', array('id' => 'ctEditForm')) ?>
+    <input type="hidden" name="return_to" value="tracker">
+    <input type="hidden" name="tracker_qs" value="<?= htmlspecialchars($tracker_qs, ENT_QUOTES, 'UTF-8') ?>">
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:12px;" id="ctEditWorker"></div>
+      <div class="row g-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div style="grid-column:1/-1;"><label class="form-label" for="ctEditName">Certificate Name *</label><input type="text" id="ctEditName" name="cert_name" class="form-control" required list="ctCertNames" placeholder="e.g. Forklift Operator License"><datalist id="ctCertNames"><?php foreach ($cert_types as $ctn): ?><option value="<?= htmlspecialchars($ctn, ENT_QUOTES, 'UTF-8') ?>"></option><?php endforeach; ?></datalist></div>
+        <div><label class="form-label" for="ctEditNumber">Certificate Number</label><input type="text" id="ctEditNumber" name="cert_number" class="form-control"></div>
+        <div><label class="form-label" for="ctEditBody">Issuing Body</label><input type="text" id="ctEditBody" name="issuing_body" class="form-control"></div>
+        <div><label class="form-label" for="ctEditIssued">Issued Date</label><input type="date" id="ctEditIssued" name="issued_date" class="form-control"></div>
+        <div><label class="form-label" for="ctEditExpiry">Expiry Date</label><input type="date" id="ctEditExpiry" name="expiry_date" class="form-control"></div>
+        <div style="grid-column:1/-1;">
+          <label class="form-label" for="ctEditDoc">Replacement Document <span style="font-weight:400;color:var(--t3);">(PDF / JPG / PNG, max 8 MB — leave empty to keep current)</span></label>
+          <input type="file" id="ctEditDoc" name="document" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+          <div style="font-size:11.5px;color:var(--t3);margin-top:4px;" id="ctEditCurrentDoc"></div>
+          <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:6px;"><input type="checkbox" name="remove_document" value="1" id="ctEditRemoveDoc"> Remove current document without replacement</label>
+        </div>
+      </div>
+    </div>
+    <div class="wms-dialog-foot">
+      <button type="button" class="btn btn-ghost btn-sm" id="ctEditCancel">Cancel</button>
+      <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
+    </div>
+  <?= form_close() ?>
+</dialog>
+<?php endif; ?>
+
+
 <script>
 (function () {
   var form = document.getElementById('ctFilterForm');
@@ -474,6 +569,102 @@ $valid_pct = ((int)$summary['total'] > 0) ? (int)round((int)$summary['valid'] / 
   form.querySelectorAll('.ct-autosubmit').forEach(function (el) {
     el.addEventListener('change', function () { form.submit(); });
   });
+
+  /* ── Certificate inspector drawer + renew/edit ─────────────────── */
+  var drawer = document.getElementById('ctDrawer');
+  if (drawer) {
+    var overlay = document.getElementById('ctDrawerOverlay');
+    var bodyEl = document.getElementById('ctDrawerBody');
+    var titleEl = document.getElementById('ctDrawerTitle');
+    var workerEl = document.getElementById('ctDrawerWorker');
+    var profileBtn = document.getElementById('ctDrawerProfile');
+    var docBtn = document.getElementById('ctDrawerDoc');
+    var renewBtn = document.getElementById('ctDrawerRenew');
+    var prevBtn = document.getElementById('ctDrawerPrev');
+    var nextBtn = document.getElementById('ctDrawerNext');
+    var cache = {};
+    var currentId = null;
+    var ids = Array.prototype.map.call(document.querySelectorAll('[data-cert-inspect]'), function (b) { return parseInt(b.getAttribute('data-cert-inspect'), 10); });
+
+    function esc(t) { var d = document.createElement('div'); d.textContent = String(t == null ? '' : t); return d.innerHTML; }
+    function daysText(c) {
+      if (c.days_left === null) return 'No expiry date recorded';
+      if (c.days_left < 0) return Math.abs(c.days_left) + ' day(s) overdue';
+      if (c.days_left === 0) return 'Expires today';
+      return 'Expires in ' + c.days_left + ' day(s)';
+    }
+    function openDrawer(id) {
+      currentId = id;
+      drawer.classList.add('is-open'); drawer.setAttribute('aria-hidden', 'false');
+      overlay.hidden = false; overlay.classList.add('is-open');
+      titleEl.textContent = 'Loading…'; bodyEl.innerHTML = '<p style="font-size:12.5px;color:var(--t3);">Loading certificate…</p>';
+      prevBtn.disabled = ids.indexOf(id) <= 0;
+      nextBtn.disabled = ids.indexOf(id) === -1 || ids.indexOf(id) >= ids.length - 1;
+      var url = <?= json_encode(site_url('team/certifications_json/')) ?> + id;
+      var render = function (c) {
+        titleEl.textContent = c.cert_name;
+        workerEl.textContent = c.worker_name + (c.employee_id ? ' · ' + c.employee_id : '');
+        profileBtn.href = c.profile_url;
+        if (c.document_url) { docBtn.href = c.document_url; docBtn.hidden = false; } else { docBtn.hidden = true; }
+        if (renewBtn) { renewBtn.setAttribute('data-cert-edit', String(c.id)); renewBtn.disabled = !c.can_edit; }
+        bodyEl.innerHTML =
+          '<div class="ct-drawer-sec">Status</div>' +
+          '<dl class="ct-kv"><dt>Status</dt><dd>' + esc(c.status) + '</dd><dt>Expiry</dt><dd>' + esc(c.expiry_date || '—') + '</dd><dt>Remaining</dt><dd>' + esc(daysText(c)) + '</dd></dl>' +
+          '<div class="ct-drawer-sec">Certificate</div>' +
+          '<dl class="ct-kv"><dt>Number</dt><dd>' + esc(c.cert_number || '—') + '</dd><dt>Issuing body</dt><dd>' + esc(c.issuing_body || '—') + '</dd><dt>Issued</dt><dd>' + esc(c.issued_date || '—') + '</dd><dt>Document</dt><dd>' + (c.document_url ? '<a href="' + esc(c.document_url) + '" target="_blank" rel="noopener">Open document</a>' : 'No document on file') + '</dd></dl>' +
+          '<div class="ct-drawer-sec">Worker</div>' +
+          '<dl class="ct-kv"><dt>Name</dt><dd>' + esc(c.worker_name) + '</dd><dt>Employee ID</dt><dd>' + esc(c.employee_id || '—') + '</dd><dt>Position</dt><dd>' + esc(c.position || '—') + '</dd></dl>';
+      };
+      if (cache[id]) { render(cache[id]); return; }
+      fetch(url, { headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (c) { if (!c.ok) throw new Error(c.error || 'Not available'); cache[id] = c; if (currentId === id) render(c); })
+        .catch(function (e) { if (currentId === id) bodyEl.innerHTML = '<p style="font-size:12.5px;color:var(--red);">' + esc(e.message) + '</p>'; });
+    }
+    function closeDrawer() {
+      drawer.classList.remove('is-open'); drawer.setAttribute('aria-hidden', 'true');
+      overlay.classList.remove('is-open'); overlay.hidden = true; currentId = null;
+    }
+    document.querySelectorAll('[data-cert-inspect]').forEach(function (b) {
+      b.addEventListener('click', function () { openDrawer(parseInt(b.getAttribute('data-cert-inspect'), 10)); });
+    });
+    document.getElementById('ctDrawerClose').addEventListener('click', closeDrawer);
+    overlay.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && currentId !== null) closeDrawer(); });
+    prevBtn.addEventListener('click', function () { var i = ids.indexOf(currentId); if (i > 0) openDrawer(ids[i - 1]); });
+    nextBtn.addEventListener('click', function () { var i = ids.indexOf(currentId); if (i >= 0 && i < ids.length - 1) openDrawer(ids[i + 1]); });
+
+    /* Renew / Edit dialog */
+    var editDialog = document.getElementById('ctEditDialog');
+    if (editDialog) {
+      var editForm = document.getElementById('ctEditForm');
+      var fill = function (c) {
+        editForm.action = <?= json_encode(site_url('team/edit_certification/')) ?> + c.id;
+        document.getElementById('ctEditWorker').textContent = c.worker_name + (c.employee_id ? ' · ' + c.employee_id : '');
+        document.getElementById('ctEditName').value = c.cert_name || '';
+        document.getElementById('ctEditNumber').value = c.cert_number || '';
+        document.getElementById('ctEditBody').value = c.issuing_body || '';
+        document.getElementById('ctEditIssued').value = c.issued_raw || '';
+        document.getElementById('ctEditExpiry').value = c.expiry_raw || '';
+        document.getElementById('ctEditDoc').value = '';
+        document.getElementById('ctEditRemoveDoc').checked = false;
+        document.getElementById('ctEditCurrentDoc').textContent = c.document_name ? ('Current document: ' + c.document_name + ' — uploading a replacement removes the old file after saving.') : 'No document currently on file.';
+        if (typeof editDialog.showModal === 'function') editDialog.showModal();
+      };
+      var openEdit = function (id) {
+        if (cache[id]) { fill(cache[id]); return; }
+        fetch(<?= json_encode(site_url('team/certifications_json/')) ?> + id, { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (c) { if (c.ok) { cache[id] = c; fill(c); } });
+      };
+      document.querySelectorAll('[data-cert-edit]').forEach(function (b) {
+        b.addEventListener('click', function () { openEdit(parseInt(b.getAttribute('data-cert-edit'), 10)); });
+      });
+      if (renewBtn) renewBtn.addEventListener('click', function () { if (currentId !== null) { closeDrawer(); openEdit(currentId); } });
+      document.getElementById('ctEditClose').addEventListener('click', function () { editDialog.close(); });
+      document.getElementById('ctEditCancel').addEventListener('click', function () { editDialog.close(); });
+    }
+  }
   var search = document.getElementById('ctSearch');
   if (search) {
     var timer = null;

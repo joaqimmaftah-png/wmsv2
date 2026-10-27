@@ -90,8 +90,8 @@ What was already correct and is preserved: status refresh from dates, expired in
 | CT-02 | **Critical** | Compliance unprovable (only failures listed; none-recorded invisible) → **Fixed**: All/Valid/No-Expiry tabs + None Recorded worker segment + KPI denominator |
 | CT-03 | **High** | Worker cards info-free → **Fixed**: replaced by certificate record table/cards with per-worker identity cells and counts in tabs/KPIs |
 | CT-04 | **High** | No search/filter/sort/pagination/export → **Fixed**: full toolbar, whitelisted sorts, pagination, filtered CSV, print |
-| CT-05 | **High** | No remediation path from a row → **Fixed (partial)**: visible Profile action (where Add/Delete live). In-tracker Renew awaits the Renew-endpoint decision (VIEW-02) — *requires confirmation* |
-| CT-06 | **Medium** | Single-window urgency only → **Addressed in display**: Expired / Expiring Soon (≤ window) / Valid tabs + bell's 31–90-day tier (PR #62). In-table 31–90 tab not added (would duplicate bell tier) — *available on request* |
+| CT-05 | **High** | No remediation path from a row → **Fixed**: visible Profile action plus in-tracker Renew/Edit (supervisor) via `Team::edit_certification` — see §12 addendum |
+| CT-06 | **Medium** | Single-window urgency only → **Fixed**: tabs now partition Expired / Expiring Soon (≤ window) / early-warning band (window+1…90d, labelled from the configured window) / Valid (>90d); KPI “Valid” still counts everything beyond the alert window — see §12 addendum |
 | CT-07 | **Medium** | Two unstated populations on one page → **Fixed**: one role-scoped population; subtitle states scope and worker count |
 | CT-08 | **Medium** | Silent empty states → **Fixed**: three explicit states with next actions |
 | CT-09 | **Medium** | Unescaped worker name (stored XSS) → **Fixed** + regression assertion |
@@ -165,9 +165,28 @@ Files: `application/models/Team_model.php` (+1 method), `application/controllers
 | `node tests/lubricant_masters_ux.js` | ❌ Pre-existing failure ("catalog needs empty state" in lubricants files untouched by this change — fails identically without it; disclosed, not fixed here) |
 | Live MySQL/browser E2E | ⏳ Runs in CI on the PR (no DB/browser in this sandbox) — **not verified locally** |
 
+## 12b. Addendum — Implemented 2026-10-27 (follow-up “implement” instruction)
+
+Built on top of the tracker, without schema changes or invented business rules:
+
+- **Edit / Renew certification (CT-05 / VIEW-02).** `Team_model::update_certification()` + `Team::edit_certification($id)` (POST-only, supervisor-only server-side, expiry-before-issue rejected without writes). Renew updates the same record — the profile keeps one row per certificate instead of delete-and-retype. Document replace/removal supported (PDF/JPG/PNG ≤8 MB via the existing `_save_cert_document`); the superseded file is deleted only after the update succeeds. Exposed as **Renew** on tracker rows, **Renew / Edit** in the inspector drawer, and **Renew / Edit** on the worker profile certificate table (both post to the same endpoint; the tracker returns to the filtered list via a validated query string). Renewal *history* was **not** added — that would require a schema change (an audit/history table), which remains a decision for the user.
+- **Certificate inspector ( §4.5).** Slide-over drawer on the tracker (Inspect button per row/card, Prev/Next across the page, Esc/overlay close) fed by `Team::certifications_json($id)`, role-scoped exactly like the tracker (Supervisors/Managers any record; other roles only their own). Shows status/days remaining, certificate number, issuing body, dates, document link, and worker identity; supervisors can jump straight to Renew from it.
+- **Early-warning tab (CT-06).** When `cert_alert_days` < 90 a band tab (e.g., “Expiring in 31–90d”) partitions the register from Valid (>90d); the KPI “Valid” figure deliberately keeps the broader meaning (everything beyond the alert window), documented in the metric definition.
+
+| Check | Result |
+|---|---|
+| PHP-WASM `TOKEN_PARSE` lint (controller, model, both views) | ✅ OK ×4 |
+| Dataset harness (real PHP) | ✅ 17/17 incl. upcoming-band partition + KPI valid semantics |
+| Render harness | ✅ 16/16, zero PHP warnings |
+| Endpoint harness (real PHP): in-place update, status recompute, tracker/profile redirects, invalid-date rejection, holder blocked, document removal | ✅ 12/12 |
+| `node tests/certifications_table_ux.js` (extended) | ✅ Pass |
+| Existing suites (`page_titles`, `table_ux`, `global_find_attention`, `reorder_ux`, `reports_hub`, `service_kits_ux`) | ✅ Pass |
+| `node tests/lubricant_masters_ux.js` | ❌ Pre-existing failure, unchanged (unrelated files) |
+| Live MySQL/browser E2E | ⏳ Runs in CI — **not verified locally** |
+
 ## 13. Outstanding Risks, Unresolved Decisions & Acceptance Checklist
 
-**Decisions still required (not built):** Renew/Edit endpoint + renewal history (VIEW-02); in-tracker Renew action (CT-05 destination); required-certificates-per-role matrix (CERT-12) — until then "None Recorded" means *no record*, not *non-compliant for role*; 31–90-day in-table tab (CT-06); slide-over inspector ( §4.5).
+**Decisions still required (not built):** required-certificates-per-role matrix (CERT-12) — needs the organisation's role → required-certificate policy; until then "None Recorded" means *no record*, not *non-compliant for role*. Renewal *history*/audit trail (VIEW-02 extension) — needs a schema decision (history table), not yet authorised.
 
 **Acceptance checklist:** ☑ correct records/values (harness) · ☑ hierarchy supports triage · ☑ search/filters/sort/pagination compose (one builder, tested) · ☑ counts match defined rules · ☑ actions functional & authorised (existing endpoints; role-tested UI) · ☑ details open correct record (profile links by `user_id`) · ☑ destructive op confirms + consequence stated · ☑ responsive preserves essential columns/actions · ☑ empty states (loading/error are full-page server renders — no async states apply) · ☑ keyboard/focus/labels (`/`, tabs, aria-sort, descriptive links) · ☑ house conventions · ☑ tests pass with failures disclosed · ☑ no functionality removed (expiring table + worker navigation both survive in stronger form) · ☐ CI DB/E2E on PR (pending, outside sandbox).
 

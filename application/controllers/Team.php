@@ -1171,7 +1171,7 @@ class Team extends MY_Controller {
         $doc_filter   = in_array($doc_in, array('with', 'without'), TRUE) ? $doc_in : '';
 
         $tab_in     = strtolower(trim((string)$this->input->get('tab', TRUE)));
-        $valid_tabs = array('all', 'expired', 'expiring', 'valid', 'no_expiry', 'none');
+        $valid_tabs = array('all', 'expired', 'expiring', 'upcoming', 'valid', 'no_expiry', 'none');
         $active_tab = in_array($tab_in, $valid_tabs, TRUE) ? $tab_in : 'all';
 
         $sort_in    = strtolower(trim((string)$this->input->get('sort', TRUE)));
@@ -1233,12 +1233,18 @@ class Team extends MY_Controller {
                 ? (int)floor((strtotime($r->expiry_date) - $today) / 86400) : NULL;
         };
 
-        $tab_counts = array('all' => count($scoped), 'expired' => 0, 'expiring' => 0, 'valid' => 0, 'no_expiry' => 0, 'none' => 0);
+        // Tab counts partition the dated register: expired / within the
+        // alert window / early-warning band (window+1 .. 90 days, only when
+        // the window is below 90) / valid beyond it. The KPI 'valid' figure
+        // keeps the broader meaning (everything beyond the alert window,
+        // early-warning band included) -- see 'summary' below.
+        $tab_counts = array('all' => count($scoped), 'expired' => 0, 'expiring' => 0, 'upcoming' => 0, 'valid' => 0, 'no_expiry' => 0, 'none' => 0);
         foreach ($scoped as $r) {
             $d = $days_left($r);
             if ($d === NULL) $tab_counts['no_expiry']++;
             elseif ($d < 0) $tab_counts['expired']++;
             elseif ($d <= $alert_days) $tab_counts['expiring']++;
+            elseif ($alert_days < 90 && $d <= 90) $tab_counts['upcoming']++;
             else $tab_counts['valid']++;
         }
 
@@ -1267,7 +1273,8 @@ class Team extends MY_Controller {
             $d = $days_left($r);
             if ($active_tab === 'expired'   && !($d !== NULL && $d < 0)) continue;
             if ($active_tab === 'expiring'  && !($d !== NULL && $d >= 0 && $d <= $alert_days)) continue;
-            if ($active_tab === 'valid'     && !($d !== NULL && $d > $alert_days)) continue;
+            if ($active_tab === 'upcoming'  && !($d !== NULL && $d > $alert_days && $d <= 90)) continue;
+            if ($active_tab === 'valid'     && !($d !== NULL && $d > ($alert_days < 90 ? 90 : $alert_days))) continue;
             if ($active_tab === 'no_expiry' && $d !== NULL) continue;
             if ($active_tab === 'none') continue;
             $rows[] = $r;
@@ -1275,9 +1282,10 @@ class Team extends MY_Controller {
 
         $status_rank = function ($r) use ($days_left, $alert_days) {
             $d = $days_left($r);
-            if ($d === NULL) return 3;
+            if ($d === NULL) return 4;
             if ($d < 0) return 0;
-            return ($d <= $alert_days) ? 1 : 2;
+            if ($d <= $alert_days) return 1;
+            return ($alert_days < 90 && $d <= 90) ? 2 : 3;
         };
         $mul = ($sort_dir === 'desc') ? -1 : 1;
         usort($rows, function ($a, $b) use ($sort_by, $mul, $status_rank) {
@@ -1319,7 +1327,7 @@ class Team extends MY_Controller {
             'tab_counts'     => $tab_counts,
             'summary'        => array(
                 'total'    => $tab_counts['all'],
-                'valid'    => $tab_counts['valid'],
+                'valid'    => $tab_counts['valid'] + $tab_counts['upcoming'],
                 'expiring' => $tab_counts['expiring'],
                 'expired'  => $tab_counts['expired'],
                 'no_expiry'=> $tab_counts['no_expiry'],
@@ -1329,6 +1337,152 @@ class Team extends MY_Controller {
             'rows'           => $rows,
             'worker_rows'    => $worker_rows,
         );
+    }
+
+    /**
+     * JSON detail for the Certifications Tracker inspector drawer.
+     * Role scoping mirrors the tracker: Supervisors/Managers may inspect any
+     * record; other roles only their own certificates.
+     */
+    public function certifications_json($id = NULL) {
+        $send_json = function ($status_code, array $payload) {
+            if (ob_get_level()) @ob_end_clean();
+            http_response_code($status_code);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: private, no-store, max-age=0');
+            echo json_encode($payload);
+            exit;
+        };
+
+        $cert = $id ? $this->Team_model->get_certification((int)$id) : NULL;
+        if (!$cert) {
+            $send_json(404, array('ok' => FALSE, 'error' => 'Certification not found.'));
+        }
+        if (!$this->is_supervisor() && !$this->is_manager() && (int)$cert->user_id !== (int)$this->user_id) {
+            $send_json(403, array('ok' => FALSE, 'error' => 'You can only inspect your own certificates.'));
+        }
+
+        $this->Team_model->refresh_cert_status((int)$cert->user_id);
+        $cert  = $this->Team_model->get_certification((int)$id);
+        $worker = $this->Team_model->get_by_id((int)$cert->user_id);
+
+        $days = !empty($cert->expiry_date)
+            ? (int)floor((strtotime($cert->expiry_date) - strtotime(date('Y-m-d'))) / 86400) : NULL;
+        $alert_days = $this->_cert_alert_days();
+        if ($days === NULL) $display_status = 'No expiry date';
+        elseif ($days < 0) $display_status = 'Expired';
+        elseif ($days <= $alert_days) $display_status = 'Expiring Soon';
+        else $display_status = 'Valid';
+
+        $send_json(200, array(
+            'ok'             => TRUE,
+            'id'             => (int)$cert->id,
+            'user_id'        => (int)$cert->user_id,
+            'worker_name'    => $worker ? trim($worker->first_name . ' ' . $worker->last_name) : '',
+            'employee_id'    => $worker ? (string)$worker->employee_id : '',
+            'position'       => $worker && isset($worker->position) ? (string)$worker->position : '',
+            'cert_name'      => (string)$cert->cert_name,
+            'cert_number'    => isset($cert->cert_number) && $cert->cert_number !== NULL ? (string)$cert->cert_number : '',
+            'issuing_body'   => isset($cert->issuing_body) && $cert->issuing_body !== NULL ? (string)$cert->issuing_body : '',
+            'issued_date'    => !empty($cert->issued_date) ? date('d M Y', strtotime($cert->issued_date)) : '',
+            'issued_raw'     => !empty($cert->issued_date) ? (string)$cert->issued_date : '',
+            'expiry_date'    => !empty($cert->expiry_date) ? date('d M Y', strtotime($cert->expiry_date)) : '',
+            'expiry_raw'     => !empty($cert->expiry_date) ? (string)$cert->expiry_date : '',
+            'days_left'      => $days,
+            'status'         => $display_status,
+            'document_url'   => !empty($cert->document) ? base_url($cert->document) : '',
+            'document_name'  => !empty($cert->document) ? basename((string)$cert->document) : '',
+            'can_edit'       => $this->is_supervisor(),
+            'profile_url'    => base_url('team/view/' . (int)$cert->user_id),
+        ));
+    }
+
+    /**
+     * Edit / renew an existing certification in place (supervisor only).
+     * Renewal updates dates (and optionally replaces the document) on the
+     * same record instead of the old delete-and-retype flow; the record id
+     * and its history on the worker profile are preserved. Replacing or
+     * removing the document deletes the superseded file after the update
+     * succeeds, mirroring delete_certification's ordering.
+     */
+    public function edit_certification($id = NULL) {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) {
+            $this->session->set_flashdata('error', 'Access denied.');
+            redirect('team/certifications');
+        }
+
+        $cert = $id ? $this->Team_model->get_certification((int)$id) : NULL;
+        if (!$cert) {
+            $this->session->set_flashdata('error', 'Certification not found.');
+            redirect('team/certifications');
+        }
+
+        $from_tracker = ((string)$this->input->post('return_to', TRUE) === 'tracker');
+        $back = $from_tracker ? 'team/certifications' : ('team/view/' . (int)$cert->user_id);
+        if ($from_tracker) {
+            $qs = trim((string)$this->input->post('tracker_qs', TRUE));
+            if ($qs !== '' && preg_match('/^[A-Za-z0-9_\-\.%=&\+]*$/D', $qs)) {
+                $back .= '?' . $qs;
+            }
+        }
+
+        $name = trim((string)$this->input->post('cert_name', TRUE));
+        if ($name === '') {
+            $this->session->set_flashdata('error', 'A certificate name is required.');
+            redirect($back);
+        }
+
+        $issued = $this->_valid_date($this->input->post('issued_date', TRUE));
+        $expiry = $this->_valid_date($this->input->post('expiry_date', TRUE));
+        if ($issued && $expiry && strtotime($expiry) < strtotime($issued)) {
+            $this->session->set_flashdata('error', 'The expiry date cannot be before the issue date.');
+            redirect($back);
+        }
+
+        $update = array(
+            'cert_name'    => $name,
+            'cert_number'  => $this->input->post('cert_number', TRUE) ?: NULL,
+            'issued_date'  => $issued,
+            'expiry_date'  => $expiry,
+            'issuing_body' => $this->input->post('issuing_body', TRUE) ?: NULL,
+        );
+
+        $old_document = !empty($cert->document) ? (string)$cert->document : NULL;
+        $remove_document = ((string)$this->input->post('remove_document', TRUE) === '1');
+        if (!empty($_FILES['document']['name'])) {
+            $new_document = $this->_save_cert_document((int)$cert->user_id);
+            if (!$new_document) {
+                // _save_cert_document flashed its own error; make it accurate
+                // for an edit (nothing was changed) and stop here.
+                $this->session->set_flashdata('error',
+                    'The document could not be uploaded, so the certification was not changed. Check the file (PDF / JPG / PNG, max 8 MB) and try again.');
+                redirect($back);
+            }
+            $update['document'] = $new_document;
+            $remove_document = TRUE; // superseded file is removed below
+        } elseif ($remove_document) {
+            $update['document'] = NULL;
+        }
+
+        if (!$this->Team_model->update_certification((int)$id, $update)) {
+            if (!empty($update['document'])) {
+                $path = FCPATH . ltrim((string)$update['document'], '/');
+                if (is_file($path)) @unlink($path);
+            }
+            $this->session->set_flashdata('error',
+                'The certification could not be saved. Nothing was written — check the values and try again.');
+            redirect($back);
+        }
+        $this->Team_model->refresh_cert_status((int)$cert->user_id);
+
+        if ($remove_document && $old_document) {
+            $path = FCPATH . ltrim($old_document, '/');
+            if (is_file($path)) @unlink($path);
+        }
+
+        $this->session->set_flashdata('success', 'Certification updated.');
+        redirect($back);
     }
 
     /** Remove a certification record (supervisor only). */

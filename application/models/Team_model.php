@@ -470,6 +470,11 @@ class Team_model extends CI_Model {
         return $this->db->where('id', (int)$id)->get('certifications')->row();
     }
 
+    /** Update an existing certification in place (renewal / correction). */
+    public function update_certification($id, $data) {
+        return (bool)$this->db->where('id', (int)$id)->update('certifications', $data);
+    }
+
     public function delete_certification($id) {
         $this->db->where('id', (int)$id)->delete('certifications');
         return $this->db->affected_rows() > 0;
