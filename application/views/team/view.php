@@ -216,8 +216,17 @@ foreach ($attendance as $a) {
                   <span style="color:#94a3b8;">—</span>
                 <?php endif; ?>
               </td>
-              <td style="text-align:right;">
+              <td style="text-align:right;white-space:nowrap;">
                 <?php if (!empty($is_supervisor)): ?>
+                <button type="button" class="btn btn-sm btn-outline-primary" style="font-size:10.5px;padding:2px 8px;"
+                        data-cert-edit-btn
+                        data-cert-id="<?= (int)$c->id ?>"
+                        data-cert-name="<?= htmlspecialchars((string)$c->cert_name, ENT_QUOTES, 'UTF-8') ?>"
+                        data-cert-number="<?= htmlspecialchars((string)(isset($c->cert_number) ? $c->cert_number : ''), ENT_QUOTES, 'UTF-8') ?>"
+                        data-issuing-body="<?= htmlspecialchars((string)(isset($c->issuing_body) ? $c->issuing_body : ''), ENT_QUOTES, 'UTF-8') ?>"
+                        data-issued="<?= htmlspecialchars((string)(isset($c->issued_date) ? $c->issued_date : ''), ENT_QUOTES, 'UTF-8') ?>"
+                        data-expiry="<?= htmlspecialchars((string)(isset($c->expiry_date) ? $c->expiry_date : ''), ENT_QUOTES, 'UTF-8') ?>"
+                        data-document="<?= htmlspecialchars((string)(isset($c->document) ? basename((string)$c->document) : ''), ENT_QUOTES, 'UTF-8') ?>">Renew / Edit</button>
                 <?= form_open('team/delete_certification/'.$c->id, array('style' => 'display:inline;')) ?>
                   <button type="submit" class="btn btn-sm btn-outline-danger" style="font-size:10.5px;padding:2px 8px;"
                           onclick="return confirm('Delete this certification? The attached document is removed too.');">Delete</button>
@@ -298,6 +307,65 @@ foreach ($attendance as $a) {
       </div>
       <?= form_close() ?>
 </dialog>
+
+
+<!-- Renew / Edit Certification dialog (supervisor only; posts to
+     Team::edit_certification, shared with the Certifications Tracker). -->
+<?php if (!empty($is_supervisor)): ?>
+<dialog id="editCertDialog" class="wms-dialog">
+      <div class="wms-dialog-head">
+        <span class="wms-dialog-title">Renew / Edit Certification</span>
+        <button type="button" class="wms-dialog-x" aria-label="Close"
+                onclick="document.getElementById('editCertDialog').close()">×</button>
+      </div>
+      <?= form_open_multipart('', array('id' => 'editCertForm')) ?>
+      <input type="hidden" name="return_to" value="profile">
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-12"><label class="form-label" for="editCertName">Certificate Name *</label><input type="text" id="editCertName" name="cert_name" class="form-control" required></div>
+          <div class="col-6"><label class="form-label" for="editCertNumber">Certificate Number</label><input type="text" id="editCertNumber" name="cert_number" class="form-control"></div>
+          <div class="col-6"><label class="form-label" for="editCertBody">Issuing Body</label><input type="text" id="editCertBody" name="issuing_body" class="form-control"></div>
+          <div class="col-6"><label class="form-label" for="editCertIssued">Issued Date</label><input type="date" id="editCertIssued" name="issued_date" class="form-control"></div>
+          <div class="col-6"><label class="form-label" for="editCertExpiry">Expiry Date</label><input type="date" id="editCertExpiry" name="expiry_date" class="form-control"></div>
+          <div class="col-12">
+            <label class="form-label" for="editCertDoc">Replacement Document <span style="font-weight:400;color:#94a3b8;">(PDF / JPG / PNG, max 8 MB — leave empty to keep current)</span></label>
+            <input type="file" id="editCertDoc" name="document" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+            <div style="font-size:11.5px;color:#94a3b8;margin-top:4px;" id="editCertCurrentDoc"></div>
+            <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:6px;"><input type="checkbox" name="remove_document" value="1"> Remove current document without replacement</label>
+          </div>
+        </div>
+      </div>
+      <div class="wms-dialog-foot">
+        <button type="button" class="btn btn-ghost btn-sm"
+                onclick="document.getElementById('editCertDialog').close()">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
+      </div>
+      <?= form_close() ?>
+</dialog>
+<script>
+(function () {
+  var dialog = document.getElementById('editCertDialog');
+  if (!dialog) return;
+  var form = document.getElementById('editCertForm');
+  document.querySelectorAll('[data-cert-edit-btn]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      form.action = <?= json_encode(site_url('team/edit_certification/')) ?> + btn.getAttribute('data-cert-id');
+      document.getElementById('editCertName').value = btn.getAttribute('data-cert-name') || '';
+      document.getElementById('editCertNumber').value = btn.getAttribute('data-cert-number') || '';
+      document.getElementById('editCertBody').value = btn.getAttribute('data-issuing-body') || '';
+      document.getElementById('editCertIssued').value = btn.getAttribute('data-issued') || '';
+      document.getElementById('editCertExpiry').value = btn.getAttribute('data-expiry') || '';
+      document.getElementById('editCertDoc').value = '';
+      var doc = btn.getAttribute('data-document') || '';
+      document.getElementById('editCertCurrentDoc').textContent = doc
+        ? ('Current document: ' + doc + ' — uploading a replacement removes the old file after saving.')
+        : 'No document currently on file.';
+      if (typeof dialog.showModal === 'function') dialog.showModal();
+    });
+  });
+})();
+</script>
+<?php endif; ?>
 
 <style>
 .wms-dialog{border:1px solid var(--sep);border-radius:14px;padding:0;max-width:560px;width:calc(100% - 32px);
