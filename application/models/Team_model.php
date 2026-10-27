@@ -443,6 +443,24 @@ class Team_model extends CI_Model {
         return (int)$this->db->affected_rows();
     }
 
+    /**
+     * Every certification record (all statuses) joined with its worker, for
+     * the Certifications Tracker dataset builder. The tracker needs valid and
+     * no-expiry records as well as expiring ones, which get_expiring_certs()
+     * deliberately does not return. Optionally scoped to a single worker
+     * (self-service roles see only their own certificates).
+     */
+    public function get_certifications_overview($only_user_id = NULL) {
+        $this->db
+            ->select('c.*, CONCAT(u.first_name," ",u.last_name) as worker_name, u.employee_id, u.position, u.status as user_status')
+            ->from('certifications c')
+            ->join('users u', 'u.id = c.user_id', 'inner');
+        if ($only_user_id !== NULL && (int)$only_user_id > 0) {
+            $this->db->where('c.user_id', (int)$only_user_id);
+        }
+        return $this->db->order_by('c.expiry_date', 'ASC')->order_by('c.id', 'ASC')->get()->result();
+    }
+
     public function add_certification($data) {
         $this->db->insert('certifications', $data);
         return (int)$this->db->insert_id();

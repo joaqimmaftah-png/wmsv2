@@ -43,6 +43,7 @@ jobs:
         run: |
           node --check assets/js/global-find.js
           node tests/global_find_attention.js
+          node tests/certifications_table_ux.js
 
   database-and-e2e:
     name: DB Schema, Migrations & HTTP E2E (${{ matrix.db_label }})
