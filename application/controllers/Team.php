@@ -1524,16 +1524,189 @@ class Team extends MY_Controller {
     ───────────────────────────────────────────────────── */
 
     public function shift_roster() {
-        $week = $this->_roster_week($this->input->get('week'));
+        $ctx = $this->_build_shift_roster_dataset();
 
-        $data['workers']     = $this->Team_model->get_all_active();
-        $data['shifts']      = $this->Team_model->get_shifts();
-        $data['assignment_counts'] = $this->Team_model->get_shift_assignment_counts();
-        $data['assignments'] = $this->Team_model->get_shift_assignments($week);
-        $data['week_start']  = $week;
+        $per_page_in = (int)$this->input->get('per_page', TRUE);
+        $per_page = in_array($per_page_in, array(10, 25, 50, 100), TRUE) ? $per_page_in : 25;
+        $total_filtered = count($ctx['rows']);
+        $total_pages = max(1, (int)ceil($total_filtered / $per_page));
+        $page_in = (int)$this->input->get('page', TRUE);
+        $page = max(1, min($total_pages, $page_in > 0 ? $page_in : 1));
+        $offset = ($page - 1) * $per_page;
+
+        $view_in = strtolower(trim((string)$this->input->get('view', TRUE)));
+        $view_mode = ($view_in === 'cards') ? 'cards' : 'table';
+
+        $data = $ctx;
+        $data['workers']     = array_slice($ctx['rows'], $offset, $per_page);
+        $data['total_filtered'] = $total_filtered;
+        $data['per_page']    = $per_page;
+        $data['page']        = $page;
+        $data['total_pages'] = $total_pages;
+        $data['showing_from'] = $total_filtered > 0 ? ($offset + 1) : 0;
+        $data['showing_to']   = min($total_filtered, $offset + count($data['workers']));
+        $data['view_mode']   = $view_mode;
         $data['can_edit']    = $this->is_supervisor();
+        $data['can_export']  = $this->is_supervisor() || $this->is_manager();
         $data['page_title']  = 'Shift Roster';
         $this->render('team/shift_roster', $data);
+    }
+
+    /**
+     * Build the Shift Roster dataset for one week: active workers joined to
+     * their (single, weekly) shift assignment, with search, shift filter,
+     * Assigned/Unassigned tabs, sorting and counts. Tab/KPI counts are
+     * computed after search + shift filter (the house counting rule), before
+     * the active tab narrows the rows.
+     */
+    private function _build_shift_roster_dataset() {
+        $week = $this->_roster_week($this->input->get('week'));
+
+        $workers     = $this->Team_model->get_all_active();
+        $shifts      = $this->Team_model->get_shifts();
+        $assignments = $this->Team_model->get_shift_assignments($week);
+
+        $shift_by_id = array();
+        foreach ($shifts as $sh) { $shift_by_id[(int)$sh->id] = $sh; }
+
+        $search_query = trim((string)$this->input->get('q', TRUE));
+        if (strlen($search_query) > 100) $search_query = substr($search_query, 0, 100);
+
+        $shift_in = trim((string)$this->input->get('shift', TRUE));
+        $shift_filter = '';
+        if ($shift_in === 'none') {
+            $shift_filter = 'none';
+        } elseif (ctype_digit($shift_in) && isset($shift_by_id[(int)$shift_in])) {
+            $shift_filter = (string)(int)$shift_in;
+        }
+
+        $tab_in = strtolower(trim((string)$this->input->get('tab', TRUE)));
+        $active_tab = in_array($tab_in, array('all', 'assigned', 'unassigned'), TRUE) ? $tab_in : 'all';
+
+        // Decorate + search + shift filter.
+        $scoped = array();
+        foreach ($workers as $w) {
+            $sid = isset($assignments[$w->id]) ? (int)$assignments[$w->id] : 0;
+            $w->roster_shift_id = $sid;
+            $w->roster_shift = isset($shift_by_id[$sid]) ? $shift_by_id[$sid] : NULL;
+            $w->full_name_roster = trim($w->first_name . ' ' . $w->last_name);
+
+            if ($search_query !== '') {
+                $hay = strtolower($w->full_name_roster . ' ' .
+                    (isset($w->employee_id) ? (string)$w->employee_id : '') . ' ' .
+                    (isset($w->position) ? (string)$w->position : '') . ' ' .
+                    ($w->roster_shift ? (string)$w->roster_shift->name : ''));
+                if (strpos($hay, strtolower($search_query)) === FALSE) continue;
+            }
+            if ($shift_filter === 'none' && $sid !== 0) continue;
+            if ($shift_filter !== '' && $shift_filter !== 'none' && $sid !== (int)$shift_filter) continue;
+            $scoped[] = $w;
+        }
+
+        $tab_counts = array('all' => count($scoped), 'assigned' => 0, 'unassigned' => 0);
+        $per_shift = array();
+        foreach ($scoped as $w) {
+            if ($w->roster_shift_id > 0) {
+                $tab_counts['assigned']++;
+                $per_shift[$w->roster_shift_id] = isset($per_shift[$w->roster_shift_id]) ? $per_shift[$w->roster_shift_id] + 1 : 1;
+            } else {
+                $tab_counts['unassigned']++;
+            }
+        }
+
+        $rows = array();
+        foreach ($scoped as $w) {
+            if ($active_tab === 'assigned' && $w->roster_shift_id === 0) continue;
+            if ($active_tab === 'unassigned' && $w->roster_shift_id !== 0) continue;
+            $rows[] = $w;
+        }
+
+        $sort_in = strtolower(trim((string)$this->input->get('sort', TRUE)));
+        $sort_by = in_array($sort_in, array('worker', 'position', 'shift'), TRUE) ? $sort_in : 'worker';
+        $dir_in = strtolower(trim((string)$this->input->get('dir', TRUE)));
+        $sort_dir = ($dir_in === 'desc') ? 'desc' : 'asc';
+        $mul = ($sort_dir === 'desc') ? -1 : 1;
+        usort($rows, function ($a, $b) use ($sort_by, $mul) {
+            switch ($sort_by) {
+                case 'position':
+                    $cmp = strcasecmp((string)(isset($a->position) ? $a->position : ''), (string)(isset($b->position) ? $b->position : '')); break;
+                case 'shift':
+                    $cmp = strcasecmp((string)($a->roster_shift ? $a->roster_shift->name : ''), (string)($b->roster_shift ? $b->roster_shift->name : '')); break;
+                default:
+                    $cmp = strcasecmp((string)$a->full_name_roster, (string)$b->full_name_roster);
+            }
+            if ($cmp === 0) $cmp = strcasecmp((string)$a->full_name_roster, (string)$b->full_name_roster);
+            return $cmp * $mul;
+        });
+
+        $total_staff = count($workers);
+        $assigned_total = 0;
+        foreach ($workers as $w) { if (!empty($assignments[$w->id])) $assigned_total++; }
+
+        return array(
+            'rows'          => $rows,
+            'all_workers'   => $workers,
+            'shifts'        => $shifts,
+            'shift_by_id'   => $shift_by_id,
+            'assignments'   => $assignments,
+            'assignment_counts' => $this->Team_model->get_shift_assignment_counts(),
+            'week_start'    => $week,
+            'tab_counts'    => $tab_counts,
+            'per_shift_counts' => $per_shift,
+            'active_tab'    => $active_tab,
+            'search_query'  => $search_query,
+            'shift_filter'  => $shift_filter,
+            'sort_by'       => $sort_by,
+            'sort_dir'      => $sort_dir,
+            'summary'       => array(
+                'total'     => $total_staff,
+                'assigned'  => $assigned_total,
+                'unassigned'=> $total_staff - $assigned_total,
+                'coverage'  => $total_staff > 0 ? (int)round($assigned_total / $total_staff * 100) : NULL,
+                'shift_types' => count($shifts),
+            ),
+        );
+    }
+
+    /** Export the filtered Shift Roster week as CSV (Supervisors & Managers). */
+    public function shift_roster_csv() {
+        if (!$this->is_supervisor() && !$this->is_manager()) {
+            $this->session->set_flashdata('error', 'Access denied.');
+            redirect('team/shift_roster');
+            return;
+        }
+        $ctx = $this->_build_shift_roster_dataset();
+        $week = $ctx['week_start'];
+        $week_end = date('Y-m-d', strtotime($week . ' +6 days'));
+
+        $safe_cell = function ($v) {
+            $s = (string)$v;
+            if ($s !== '' && in_array($s[0], array('=', '+', '-', '@', "\t", "\r"), TRUE)) return "'" . $s;
+            return $s;
+        };
+
+        $filename = 'WMS_Shift_Roster_' . $week . '.csv';
+        if (ob_get_level()) @ob_end_clean();
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: private, max-age=0, must-revalidate');
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, array('Week Start', 'Week End', 'Employee ID', 'Worker', 'Position', 'Shift', 'Shift Start', 'Shift End'), ',', '"', '\\');
+        foreach ($ctx['rows'] as $w) {
+            $sh = $w->roster_shift;
+            fputcsv($out, array(
+                $week, $week_end,
+                $safe_cell(isset($w->employee_id) ? $w->employee_id : ''),
+                $safe_cell($w->full_name_roster),
+                $safe_cell(isset($w->position) ? $w->position : ''),
+                $safe_cell($sh ? $sh->name : 'Unassigned'),
+                $sh ? date('H:i', strtotime($sh->start_time)) : '',
+                $sh ? date('H:i', strtotime($sh->end_time)) : '',
+            ), ',', '"', '\\');
+        }
+        fclose($out);
+        exit;
     }
 
     /** Create or update a shift type. */
