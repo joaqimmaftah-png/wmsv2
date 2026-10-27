@@ -442,14 +442,22 @@ class Attendance_model extends CI_Model {
      *
      * @return array{eligible:bool,on_site:bool,reasons:string[],work_orders:string[],session:object|null}
      */
-    public function eligibility($user_id, $date = NULL) {
+    /**
+     * @param array|null $pre Optional precomputed values for batch callers:
+     *                        'latest_punch' => row|null, 'open_session' => row|null.
+     *                        When a key exists it is used as-is (identical
+     *                        semantics, just fetched in bulk by the caller).
+     */
+    public function eligibility($user_id, $date = NULL, $pre = NULL) {
         $user_id = (int)$user_id;
         $date    = $date ?: date('Y-m-d');
         $reasons = array();
 
         $on_site = $this->is_on_site($user_id, $date);
         if (!$on_site) {
-            $latest = $this->latest_punch($user_id, $date);
+            $latest = (is_array($pre) && array_key_exists('latest_punch', $pre))
+                ? $pre['latest_punch']
+                : $this->latest_punch($user_id, $date);
             $reasons[] = $latest
                 ? 'Checked out at ' . date('H:i', strtotime((string)$latest->punched_at)) . ' — not on site'
                 : 'Not checked in today';
@@ -463,7 +471,9 @@ class Attendance_model extends CI_Model {
                        . (count($wos) > 3 ? ' …' : '');
         }
 
-        $session = $this->open_session($user_id);
+        $session = (is_array($pre) && array_key_exists('open_session', $pre))
+            ? $pre['open_session']
+            : $this->open_session($user_id);
         if ($session) {
             $reasons[] = 'Work session still open'
                        . (!empty($session->wo_number) ? ' on ' . $session->wo_number : '')
@@ -495,9 +505,40 @@ class Attendance_model extends CI_Model {
             ->order_by('u.first_name', 'ASC')->order_by('u.last_name', 'ASC')
             ->get()->result();
 
+        // Batch the two per-worker lookups eligibility() needs, so a large
+        // roster costs 2 queries here instead of ~2 per worker (N+1).
+        // Semantics are unchanged: latest punch = newest by time then id;
+        // open session = newest open session, with its work-order number.
+        $latest_map = array();
+        if ($this->db->table_exists('attendance_punches')) {
+            $punch_rows = $this->db->select('user_id, punched_at')
+                ->where('work_date', $date)
+                ->order_by('user_id', 'ASC')->order_by('punched_at', 'DESC')->order_by('id', 'DESC')
+                ->get('attendance_punches')->result();
+            foreach ($punch_rows as $pr) {
+                if (!isset($latest_map[(int)$pr->user_id])) $latest_map[(int)$pr->user_id] = $pr;
+            }
+        }
+        $session_map = array();
+        if ($this->db->table_exists('wo_sessions')) {
+            $session_rows = $this->db->select('s.technician_id, s.id, s.wo_id, s.start_datetime, w.wo_number')
+                ->from('wo_sessions s')
+                ->join('work_orders w', 'w.id = s.wo_id', 'left')
+                ->where('s.status', 'Open')
+                ->order_by('s.technician_id', 'ASC')->order_by('s.start_datetime', 'DESC')
+                ->get()->result();
+            foreach ($session_rows as $sr) {
+                if (!isset($session_map[(int)$sr->technician_id])) $session_map[(int)$sr->technician_id] = $sr;
+            }
+        }
+
         $out = array();
         foreach ($rows as $r) {
-            $e = $this->eligibility($r->id, $date);
+            $pre = array(
+                'latest_punch' => isset($latest_map[(int)$r->id]) ? $latest_map[(int)$r->id] : NULL,
+                'open_session' => isset($session_map[(int)$r->id]) ? $session_map[(int)$r->id] : NULL,
+            );
+            $e = $this->eligibility($r->id, $date, $pre);
             $r->on_site       = $e['on_site'];
             $r->eligible      = $e['eligible'];
             $r->block_reasons = $e['reasons'];

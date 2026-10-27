@@ -48,4 +48,17 @@ assert.ok(view.includes('No punches match the current filters'), 'filtered-empty
 assert.ok(view.includes('attendance/log_csv'), 'export links to the log CSV endpoint');
 assert.ok(view.includes('$p->radius_m'), 'radius shown is the punch-time snapshot stored on the punch row');
 
+
+// --- Technicians panel scaling (AL-08) ------------------------------------------
+assert.ok(controller.includes('function _build_log_workers_dataset'), 'Attendance::_build_log_workers_dataset missing');
+assert.ok(controller.includes("'wpage'") || controller.includes('"wpage"') || controller.includes('wper_page'),
+  'technicians panel paginates independently (wpage/wper_page)');
+assert.ok(view.includes('id="alWorkerSearch"'), 'technicians search input exists');
+assert.ok(view.includes('alWPerPage'), 'technicians page-size selector exists');
+assert.ok(view.includes('of <?= (int)$workers_total ?> technicians') || view.includes('workers_total'),
+  'technicians showing summary reflects the filtered total');
+const modelSrc = src('application/models/Attendance_model.php');
+assert.ok(modelSrc.includes("'latest_punch' =>") && modelSrc.includes('function eligibility($user_id, $date = NULL, $pre = NULL)'),
+  'eligibility accepts batch-precomputed values (N+1 fix)');
+
 console.log('Attendance Log table UX structural checks passed.');

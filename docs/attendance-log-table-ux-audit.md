@@ -59,6 +59,7 @@ The punch log is the attendance audit view: a per-worker day summary (state + as
 | AL-05 | **Low** | Worker names not linked to profiles → linked in summary + events + cards |
 | AL-06 | **Low** | No print output → print banner + control-hiding CSS |
 | AL-07 | **Info (guarded)** | Radius semantics: punch-time snapshot vs current site radius — pinned by test so a future "cleanup" can't silently change audit meaning |
+| AL-08 | **High** | **Technicians panel did not scale** (raised by the user 2026-10-27): every technician rendered in one table, and `technicians_for_assignment()` called `eligibility()` per worker — `latest_punch` + `open_session` ≈ 2 queries/worker (~2,000 queries at 1,000 technicians) plus a 1,000-row DOM → **Fixed**: model batches the two lookups (2 queries total, identical semantics via `eligibility(..., $pre)`), panel gets search + On Site/Away/Eligible/Blocked tabs + independent pagination (`wpage`/`wper_page`, default 25) — see §12 addendum |
 
 ## 7. Recommended Table Structure & Interaction Specification (as built)
 
@@ -102,6 +103,21 @@ Files: `application/controllers/Attendance.php` (builder + CSV), `application/vi
 | Existing suites: `shift_roster_ux`, `certifications_table_ux`, `page_titles`, `table_ux`, `global_find_attention`, `reorder_ux`, `reports_hub`, `service_kits_ux` | ✅ Pass |
 | `node tests/lubricant_masters_ux.js` | ❌ Pre-existing failure (lubricant views untouched; disclosed, not fixed here) |
 | Live MySQL/browser E2E | ⏳ Runs in CI — **not verified locally** |
+
+## 12b. Addendum — Technicians panel scaling (AL-08, implemented 2026-10-27)
+
+**Problem, in layers.** (1) *Rendering:* the panel printed every active technician (≈1,000 rows at the user's scale) beside the correction form. (2) *Queries:* `Attendance_model::technicians_for_assignment()` looped `eligibility()` per worker; that method re-queried `latest_punch` (when away) and `open_session` per person — the two cached maps (`on_site_map`, `unfinished_assignment_map`) were fine, but the per-worker tail cost ≈2 queries × headcount on every page load. Pagination alone would not have fixed the queries, and query batching alone would not have fixed the DOM — both layers were addressed.
+
+**Fix.** *Model:* `technicians_for_assignment()` now precomputes the latest punch per worker (newest by `punched_at`, then `id` — the exact ordering `latest_punch()` uses) and the newest open session per worker (with `wo_number`, matching `open_session()`), then passes them to `eligibility($user_id, $date, $pre)`. Single-worker callers omit `$pre` and keep the original query path; results are identical. *Controller:* `_build_log_workers_dataset()` adds search (name / employee ID / position / block reasons) and All / On Site / Away / Eligible / Blocked tabs (counts after search), paginated independently of the Punch-events table (`wq`, `wtab`, `wpage`, `wper_page` = 10/25/50/100, default 25) so paging one panel never resets the other; state cross-preserves via URL. *View:* tab strip + debounce search + windowed pager + "Showing a–b of N technicians" inside the existing card; empty states for no technicians / nobody blocked / nobody on site / no matches.
+
+| Check | Result |
+|---|---|
+| PHP-WASM `TOKEN_PARSE` lint (controller, model, view) | ✅ OK ×3 |
+| Worker-panel harness (real PHP): counts 30/12/18/10/20, blocked tab, search by name and by block reason narrows before counts, pagination math, paged render (page-1 links only), pager `wpage` links, empty state | ✅ 11/11, zero PHP warnings |
+| `node tests/attendance_log_ux.js` (extended) | ✅ Pass |
+| Query-count claim | By construction: 2 bulk queries + 2 cached maps replace ≈2/worker; **not** measured against a live 1,000-worker MySQL dataset in this sandbox — flagged honestly below |
+
+**Residual, documented not hidden:** the *correction form's* worker `<select>` also lists every worker (≈1,000 `<option>`s). It stays functional and is only rendered for supervisors, but at that scale a searchable picker would be better; changing it alters the correction UX and is left as a follow-up decision rather than bundled silently into this fix.
 
 ## 13. Outstanding Risks, Unresolved Decisions & Acceptance Checklist
 
