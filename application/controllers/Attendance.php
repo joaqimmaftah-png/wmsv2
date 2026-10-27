@@ -481,7 +481,25 @@ class Attendance extends MY_Controller {
         $all_punches                = $this->Attendance_model->get_punches($date);
         $data['punches']            = $all_punches; // full day: worker summary groups these
         $data['on_site']            = $this->Attendance_model->on_site_map($date);
-        $data['workers']            = $this->Attendance_model->technicians_for_assignment($date);
+        $all_workers                = $this->Attendance_model->technicians_for_assignment($date);
+        $wctx = $this->_build_log_workers_dataset($all_workers);
+        $wper_in = (int)$this->input->get('wper_page', TRUE);
+        $wper_page = in_array($wper_in, array(10, 25, 50, 100), TRUE) ? $wper_in : 25;
+        $wtotal = count($wctx['rows']);
+        $wtotal_pages = max(1, (int)ceil($wtotal / $wper_page));
+        $wpage_in = (int)$this->input->get('wpage', TRUE);
+        $wpage = max(1, min($wtotal_pages, $wpage_in > 0 ? $wpage_in : 1));
+        $woffset = ($wpage - 1) * $wper_page;
+        $data['workers']            = array_slice($wctx['rows'], $woffset, $wper_page);
+        $data['workers_total']      = $wtotal;
+        $data['wtab_counts']        = $wctx['tab_counts'];
+        $data['wactive_tab']        = $wctx['active_tab'];
+        $data['wsearch_query']      = $wctx['search_query'];
+        $data['wper_page']          = $wper_page;
+        $data['wpage']              = $wpage;
+        $data['wtotal_pages']       = $wtotal_pages;
+        $data['wshowing_from']      = $wtotal > 0 ? ($woffset + 1) : 0;
+        $data['wshowing_to']        = min($wtotal, $woffset + count($data['workers']));
         $data['correction_workers'] = $data['ready'] ? $this->Attendance_model->workers_for_correction() : array();
         $data['sites']              = $this->Attendance_model->get_sites();
         $data['is_supervisor']      = $this->is_supervisor();
@@ -516,6 +534,57 @@ class Attendance extends MY_Controller {
         $data['view_mode']      = ($view_in === 'cards') ? 'cards' : 'table';
         $data['can_export']     = TRUE; // page itself is supervisor/manager only
         $this->render('attendance/log', $data);
+    }
+
+    /**
+     * Build the Technicians (worker day-summary) dataset: search and
+     * On Site / Away / Eligible / Blocked tabs over the workers the model
+     * decorated with on_site / eligible / block_reasons. Counts are after
+     * search (house rule). Paginated independently of the Punch-events
+     * table (wpage / wper_page) so either panel can grow without the
+     * other resetting.
+     */
+    private function _build_log_workers_dataset($workers) {
+        $search_query = trim((string)$this->input->get('wq', TRUE));
+        if (strlen($search_query) > 100) $search_query = substr($search_query, 0, 100);
+
+        $tab_in = strtolower(trim((string)$this->input->get('wtab', TRUE)));
+        $active_tab = in_array($tab_in, array('all', 'on_site', 'away', 'eligible', 'blocked'), TRUE) ? $tab_in : 'all';
+
+        $scoped = array();
+        foreach ((array)$workers as $w) {
+            $w->worker_name_log = trim((string)(isset($w->first_name) ? $w->first_name : '') . ' ' . (string)(isset($w->last_name) ? $w->last_name : ''));
+            if ($search_query !== '') {
+                $hay = strtolower($w->worker_name_log . ' ' .
+                    (isset($w->employee_id) ? (string)$w->employee_id : '') . ' ' .
+                    (isset($w->position) ? (string)$w->position : '') . ' ' .
+                    (!empty($w->block_reasons) ? implode(' ', (array)$w->block_reasons) : ''));
+                if (strpos($hay, strtolower($search_query)) === FALSE) continue;
+            }
+            $scoped[] = $w;
+        }
+
+        $tab_counts = array('all' => count($scoped), 'on_site' => 0, 'away' => 0, 'eligible' => 0, 'blocked' => 0);
+        foreach ($scoped as $w) {
+            if (!empty($w->on_site)) $tab_counts['on_site']++; else $tab_counts['away']++;
+            if (!empty($w->eligible)) $tab_counts['eligible']++; else $tab_counts['blocked']++;
+        }
+
+        $rows = array();
+        foreach ($scoped as $w) {
+            if ($active_tab === 'on_site' && empty($w->on_site)) continue;
+            if ($active_tab === 'away' && !empty($w->on_site)) continue;
+            if ($active_tab === 'eligible' && empty($w->eligible)) continue;
+            if ($active_tab === 'blocked' && !empty($w->eligible)) continue;
+            $rows[] = $w;
+        }
+
+        return array(
+            'rows'         => $rows,
+            'tab_counts'   => $tab_counts,
+            'active_tab'   => $active_tab,
+            'search_query' => $search_query,
+        );
     }
 
     /**

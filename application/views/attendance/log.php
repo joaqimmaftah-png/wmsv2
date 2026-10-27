@@ -67,6 +67,32 @@ $tab_defs = array(
     'corrections' => array('label' => 'Corrections', 'count' => (int)$tab_counts['corrections']),
 );
 $has_filters = ($search_query !== '' || $site_filter !== '');
+
+$workers_total  = isset($workers_total) ? (int)$workers_total : count($workers);
+$wtab_counts    = isset($wtab_counts) ? $wtab_counts : array('all' => $workers_total, 'on_site' => 0, 'away' => 0, 'eligible' => 0, 'blocked' => 0);
+$wactive_tab    = isset($wactive_tab) ? $wactive_tab : 'all';
+$wsearch_query  = isset($wsearch_query) ? $wsearch_query : '';
+$wper_page      = isset($wper_page) ? (int)$wper_page : 25;
+$wpage          = isset($wpage) ? (int)$wpage : 1;
+$wtotal_pages   = isset($wtotal_pages) ? (int)$wtotal_pages : 1;
+$wshowing_from  = isset($wshowing_from) ? (int)$wshowing_from : ($workers_total ? 1 : 0);
+$wshowing_to    = isset($wshowing_to) ? (int)$wshowing_to : $workers_total;
+$wtab_defs = array(
+    'all'      => array('label' => 'All',      'count' => (int)$wtab_counts['all']),
+    'on_site'  => array('label' => 'On Site',  'count' => (int)$wtab_counts['on_site']),
+    'away'     => array('label' => 'Away',     'count' => (int)$wtab_counts['away']),
+    'eligible' => array('label' => 'Eligible', 'count' => (int)$wtab_counts['eligible']),
+    'blocked'  => array('label' => 'Blocked',  'count' => (int)$wtab_counts['blocked']),
+);
+$w_base = array_merge($base_params, array_filter(array(
+    'page'     => ($page > 1) ? $page : null,
+    'per_page' => ((int)$per_page !== 25) ? (int)$per_page : null,
+    'wq'       => $wsearch_query,
+    'wtab'     => ($wactive_tab !== 'all') ? $wactive_tab : null,
+)));
+$w_url = function ($overrides = array()) use ($w_base) {
+    return site_url('attendance/log') . '?' . http_build_query(array_merge($w_base, $overrides));
+};
 ?>
 <style>
 .al-kpis{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px;margin-bottom:14px}
@@ -136,13 +162,48 @@ $has_filters = ($search_query !== '' || $site_filter !== '');
   <div class="card">
     <div class="ch" style="padding:14px 18px 8px;">
       <div><div class="ct">Technicians</div><div class="cs">On-site state and assignment eligibility</div></div>
+      <span class="cs"><?= (int)$workers_total ?> shown · search & pages below</span>
+    </div>
+    <div style="padding:0 18px;">
+      <div class="al-tabs" role="tablist" aria-label="Technician state">
+        <?php foreach ($wtab_defs as $key => $def): ?>
+        <a role="tab" aria-selected="<?= $wactive_tab === $key ? 'true' : 'false' ?>" class="al-tab"
+           href="<?= $w_url(array('wtab' => ($key === 'all' ? null : $key), 'wpage' => null)) ?>">
+          <?= $def['label'] ?><span class="cnt"><?= (int)$def['count'] ?></span>
+        </a>
+        <?php endforeach; ?>
+      </div>
+      <form method="get" action="<?= site_url('attendance/log') ?>" class="al-toolbar no-print" role="search" style="padding-bottom:0;">
+        <?php foreach ($w_base as $k => $v): if ($k === 'wq' || $k === 'wtab') continue; ?><input type="hidden" name="<?= $h($k) ?>" value="<?= $h((string)$v) ?>"><?php endforeach; ?>
+        <?php if ($wactive_tab !== 'all'): ?><input type="hidden" name="wtab" value="<?= $wactive_tab ?>"><?php endif; ?>
+        <div style="position:relative;flex:1;min-width:170px;">
+          <label class="sr-only" for="alWorkerSearch">Search technicians</label>
+          <input type="search" id="alWorkerSearch" name="wq" class="form-control" style="width:100%;padding-left:30px;"
+                 placeholder="Search name, ID, position, block reason…" value="<?= $h($wsearch_query) ?>">
+          <span aria-hidden="true" style="position:absolute;left:9px;top:7px;color:var(--t3);">&#128269;</span>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Search</button>
+        <?php if ($wsearch_query !== '' || $wactive_tab !== 'all'): ?>
+        <a href="<?= $w_url(array('wq' => null, 'wtab' => null, 'wpage' => null)) ?>" class="btn btn-ghost btn-sm">Clear</a>
+        <?php endif; ?>
+      </form>
     </div>
     <div style="overflow-x:auto;">
       <table class="tbl" style="margin-top:10px;">
         <thead><tr><th>Worker</th><th>Punches</th><th>State</th><th>Eligible</th></tr></thead>
         <tbody>
         <?php if (empty($workers)): ?>
-          <tr><td colspan="4" style="text-align:center;padding:32px;color:var(--t3);">No active technicians.</td></tr>
+          <tr><td colspan="4" style="text-align:center;padding:32px;color:var(--t3);">
+            <?php if ((int)$wtab_counts['all'] === 0 && $wsearch_query === ''): ?>
+              No active technicians.
+            <?php elseif ($wactive_tab === 'blocked' && $wsearch_query === ''): ?>
+              Nobody is blocked — every technician is eligible.
+            <?php elseif ($wactive_tab === 'on_site' && $wsearch_query === ''): ?>
+              Nobody is on site for this date yet.
+            <?php else: ?>
+              No technicians match the current search or tab. <a href="<?= $w_url(array('wq' => null, 'wtab' => null, 'wpage' => null)) ?>">Clear</a>
+            <?php endif; ?>
+          </td></tr>
         <?php else: foreach ($workers as $w):
           $list = isset($by_user[(int)$w->id]) ? $by_user[(int)$w->id] : array(); ?>
           <tr>
@@ -173,6 +234,31 @@ $has_filters = ($search_query !== '' || $site_filter !== '');
         </tbody>
       </table>
     </div>
+    <?php if ($workers_total > 0): ?>
+    <div style="padding:0 18px 14px;">
+      <div class="al-pager no-print">
+        <form method="get" action="<?= site_url('attendance/log') ?>" class="flex ai-c gap-10" style="font-size:12px;color:var(--t2);">
+          <?php foreach ($w_base as $k => $v): ?><input type="hidden" name="<?= $h($k) ?>" value="<?= $h((string)$v) ?>"><?php endforeach; ?>
+          <label for="alWPerPage">Show</label>
+          <select id="alWPerPage" name="wper_page" class="form-select al-autosubmit" style="width:auto;font-size:12px;">
+            <?php foreach (array(10, 25, 50, 100) as $pp): ?><option value="<?= $pp ?>" <?= (int)$wper_page === $pp ? 'selected' : '' ?>><?= $pp ?></option><?php endforeach; ?>
+          </select>
+          <span>Showing <?= (int)$wshowing_from ?>–<?= (int)$wshowing_to ?> of <?= (int)$workers_total ?> technicians</span>
+        </form>
+        <nav class="al-pg" aria-label="Technician pages">
+          <?php if ($wpage > 1): ?><a href="<?= $w_url(array('wpage' => $wpage - 1, 'wper_page' => (int)$wper_page)) ?>">‹ Prev</a><?php else: ?><span class="dis">‹ Prev</span><?php endif; ?>
+          <?php
+            $wwin = array();
+            for ($i = 1; $i <= (int)$wtotal_pages; $i++) { if ($i === 1 || $i === (int)$wtotal_pages || abs($i - $wpage) <= 1) $wwin[] = $i; }
+            $wwin = array_values(array_unique($wwin)); $wprev = 0;
+            foreach ($wwin as $i): if ($wprev && $i > $wprev + 1): ?><span class="dis">…</span><?php endif; $wprev = $i; ?>
+            <?php if ($i === $wpage): ?><span class="cur" aria-current="page"><?= $i ?></span><?php else: ?><a href="<?= $w_url(array('wpage' => $i, 'wper_page' => (int)$wper_page)) ?>"><?= $i ?></a><?php endif; ?>
+          <?php endforeach; ?>
+          <?php if ($wpage < (int)$wtotal_pages): ?><a href="<?= $w_url(array('wpage' => $wpage + 1, 'wper_page' => (int)$wper_page)) ?>">Next ›</a><?php else: ?><span class="dis">Next ›</span><?php endif; ?>
+        </nav>
+      </div>
+    </div>
+    <?php endif; ?>
   </div>
 
   <!-- ── correction form ────────────────────────────────────────── -->
@@ -426,6 +512,14 @@ $has_filters = ($search_query !== '' || $site_filter !== '');
       e.preventDefault(); search.focus(); search.select();
     }
   });
+  var wsearch = document.getElementById('alWorkerSearch');
+  var wtimer = null;
+  if (wsearch) {
+    wsearch.addEventListener('input', function () {
+      clearTimeout(wtimer);
+      wtimer = setTimeout(function () { wsearch.form.submit(); }, 450);
+    });
+  }
   var timer = null;
   if (search) {
     search.addEventListener('input', function () {
