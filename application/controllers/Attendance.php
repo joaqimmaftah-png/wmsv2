@@ -478,14 +478,183 @@ class Attendance extends MY_Controller {
 
         $data['ready']              = $this->Attendance_model->ready();
         $data['date']               = $date;
-        $data['punches']            = $this->Attendance_model->get_punches($date);
+        $all_punches                = $this->Attendance_model->get_punches($date);
+        $data['punches']            = $all_punches; // full day: worker summary groups these
         $data['on_site']            = $this->Attendance_model->on_site_map($date);
         $data['workers']            = $this->Attendance_model->technicians_for_assignment($date);
         $data['correction_workers'] = $data['ready'] ? $this->Attendance_model->workers_for_correction() : array();
         $data['sites']              = $this->Attendance_model->get_sites();
         $data['is_supervisor']      = $this->is_supervisor();
         $data['page_title']         = 'Attendance log';
+
+        // Punch-events table: tabs/search/sort/pagination over the same day.
+        $ctx = $this->_build_log_dataset($all_punches);
+        $per_page_in = (int)$this->input->get('per_page', TRUE);
+        $per_page = in_array($per_page_in, array(10, 25, 50, 100), TRUE) ? $per_page_in : 25;
+        $total_filtered = count($ctx['rows']);
+        $total_pages = max(1, (int)ceil($total_filtered / $per_page));
+        $page_in = (int)$this->input->get('page', TRUE);
+        $page = max(1, min($total_pages, $page_in > 0 ? $page_in : 1));
+        $offset = ($page - 1) * $per_page;
+        $view_in = strtolower(trim((string)$this->input->get('view', TRUE)));
+
+        $data['events']         = array_slice($ctx['rows'], $offset, $per_page);
+        $data['events_total']   = $total_filtered;
+        $data['tab_counts']     = $ctx['tab_counts'];
+        $data['log_summary']    = $ctx['summary'];
+        $data['log_sites']      = $ctx['sites'];
+        $data['active_tab']     = $ctx['active_tab'];
+        $data['search_query']   = $ctx['search_query'];
+        $data['site_filter']    = $ctx['site_filter'];
+        $data['sort_by']        = $ctx['sort_by'];
+        $data['sort_dir']       = $ctx['sort_dir'];
+        $data['per_page']       = $per_page;
+        $data['page']           = $page;
+        $data['total_pages']    = $total_pages;
+        $data['showing_from']   = $total_filtered > 0 ? ($offset + 1) : 0;
+        $data['showing_to']     = min($total_filtered, $offset + count($data['events']));
+        $data['view_mode']      = ($view_in === 'cards') ? 'cards' : 'table';
+        $data['can_export']     = TRUE; // page itself is supervisor/manager only
         $this->render('attendance/log', $data);
+    }
+
+    /**
+     * Build the Punch-events dataset for one day: search (worker, employee
+     * ID, site, reason, author), site filter, and tabs. Counts are computed
+     * after search + site filter (house rule). Note the Corrections tab is a
+     * subset view (origin = supervisor) that overlaps Check-in/Check-out —
+     * the type counts always sum to the All count.
+     */
+    private function _build_log_dataset($punches) {
+        $search_query = trim((string)$this->input->get('q', TRUE));
+        if (strlen($search_query) > 100) $search_query = substr($search_query, 0, 100);
+
+        $site_names = array();
+        foreach ((array)$punches as $p) {
+            if (!empty($p->site_name)) $site_names[(string)$p->site_name] = TRUE;
+        }
+        $site_names = array_keys($site_names);
+        sort($site_names, SORT_NATURAL | SORT_FLAG_CASE);
+
+        $site_filter = trim((string)$this->input->get('site', TRUE));
+        if ($site_filter !== '' && !in_array($site_filter, $site_names, TRUE)) $site_filter = '';
+
+        $tab_in = strtolower(trim((string)$this->input->get('tab', TRUE)));
+        $active_tab = in_array($tab_in, array('all', 'check_in', 'check_out', 'corrections'), TRUE) ? $tab_in : 'all';
+
+        $scoped = array();
+        foreach ((array)$punches as $p) {
+            $p->worker_name_log = trim((string)(isset($p->first_name) ? $p->first_name : '') . ' ' . (string)(isset($p->last_name) ? $p->last_name : ''));
+            if ($search_query !== '') {
+                $hay = strtolower($p->worker_name_log . ' ' .
+                    (isset($p->employee_id) ? (string)$p->employee_id : '') . ' ' .
+                    (isset($p->site_name) ? (string)$p->site_name : '') . ' ' .
+                    (isset($p->reason) ? (string)$p->reason : '') . ' ' .
+                    trim((string)(isset($p->by_first_name) ? $p->by_first_name : '') . ' ' . (string)(isset($p->by_last_name) ? $p->by_last_name : '')));
+                if (strpos($hay, strtolower($search_query)) === FALSE) continue;
+            }
+            if ($site_filter !== '' && (string)(isset($p->site_name) ? $p->site_name : '') !== $site_filter) continue;
+            $scoped[] = $p;
+        }
+
+        $tab_counts = array('all' => count($scoped), 'check_in' => 0, 'check_out' => 0, 'corrections' => 0);
+        $workers_seen = array();
+        foreach ($scoped as $p) {
+            if ($p->punch_type === 'check_in') $tab_counts['check_in']++;
+            elseif ($p->punch_type === 'check_out') $tab_counts['check_out']++;
+            if ((string)(isset($p->origin) ? $p->origin : '') === 'supervisor') $tab_counts['corrections']++;
+            $workers_seen[(int)$p->user_id] = TRUE;
+        }
+
+        $rows = array();
+        foreach ($scoped as $p) {
+            if ($active_tab === 'check_in' && $p->punch_type !== 'check_in') continue;
+            if ($active_tab === 'check_out' && $p->punch_type !== 'check_out') continue;
+            if ($active_tab === 'corrections' && (string)(isset($p->origin) ? $p->origin : '') !== 'supervisor') continue;
+            $rows[] = $p;
+        }
+
+        $sort_in = strtolower(trim((string)$this->input->get('sort', TRUE)));
+        $sort_by = in_array($sort_in, array('time', 'worker', 'type'), TRUE) ? $sort_in : 'time';
+        $dir_in = strtolower(trim((string)$this->input->get('dir', TRUE)));
+        $sort_dir = ($dir_in === 'desc') ? 'desc' : 'asc';
+        $mul = ($sort_dir === 'desc') ? -1 : 1;
+        usort($rows, function ($a, $b) use ($sort_by, $mul) {
+            switch ($sort_by) {
+                case 'worker': $cmp = strcasecmp((string)$a->worker_name_log, (string)$b->worker_name_log); break;
+                case 'type':   $cmp = strcasecmp((string)$a->punch_type, (string)$b->punch_type); break;
+                default:       $cmp = strcmp((string)$a->punched_at, (string)$b->punched_at);
+            }
+            if ($cmp === 0) $cmp = strcmp((string)$a->punched_at, (string)$b->punched_at);
+            return $cmp * $mul;
+        });
+
+        return array(
+            'rows'         => $rows,
+            'sites'        => $site_names,
+            'tab_counts'   => $tab_counts,
+            'active_tab'   => $active_tab,
+            'search_query' => $search_query,
+            'site_filter'  => $site_filter,
+            'sort_by'      => $sort_by,
+            'sort_dir'     => $sort_dir,
+            'summary'      => array(
+                'punches'    => $tab_counts['all'],
+                'check_in'   => $tab_counts['check_in'],
+                'check_out'  => $tab_counts['check_out'],
+                'corrections'=> $tab_counts['corrections'],
+                'workers'    => count($workers_seen),
+            ),
+        );
+    }
+
+    /** Export the filtered Punch-events day as CSV (same roles as the log page). */
+    public function log_csv() {
+        if (!$this->is_supervisor() && !$this->is_manager()) {
+            $this->session->set_flashdata('error', 'Access denied.');
+            redirect('attendance');
+            return;
+        }
+        $date = (string)$this->input->get('date', TRUE);
+        if (!preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/D', $date)
+            || !checkdate((int)substr($date, 5, 2), (int)substr($date, 8, 2), (int)substr($date, 0, 4))) {
+            $date = date('Y-m-d');
+        }
+        $ctx = $this->_build_log_dataset($this->Attendance_model->get_punches($date));
+
+        $safe_cell = function ($v) {
+            $s = (string)$v;
+            if ($s !== '' && in_array($s[0], array('=', '+', '-', '@', "\t", "\r"), TRUE)) return "'" . $s;
+            return $s;
+        };
+
+        $filename = 'WMS_Attendance_Log_' . $date . '.csv';
+        if (ob_get_level()) @ob_end_clean();
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: private, max-age=0, must-revalidate');
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, array('Date', 'Time', 'Worker', 'Employee ID', 'Punch', 'Site', 'Distance (m)', 'Site Radius (m)', 'Accuracy (m)', 'Origin', 'Recorded By', 'Reason', 'IP Address'), ',', '"', '\\');
+        foreach ($ctx['rows'] as $p) {
+            fputcsv($out, array(
+                $date,
+                date('H:i:s', strtotime((string)$p->punched_at)),
+                $safe_cell($p->worker_name_log),
+                $safe_cell(isset($p->employee_id) ? $p->employee_id : ''),
+                $p->punch_type === 'check_in' ? 'Check-in' : 'Check-out',
+                $safe_cell(isset($p->site_name) ? $p->site_name : ''),
+                isset($p->distance_m) && $p->distance_m !== NULL ? (int)round((float)$p->distance_m) : '',
+                isset($p->radius_m) && $p->radius_m !== NULL ? (int)$p->radius_m : '',
+                isset($p->accuracy_m) && $p->accuracy_m !== NULL ? (int)round((float)$p->accuracy_m) : '',
+                (string)(isset($p->origin) ? $p->origin : '') === 'supervisor' ? 'Correction' : 'Phone',
+                $safe_cell(trim((string)(isset($p->by_first_name) ? $p->by_first_name : '') . ' ' . (string)(isset($p->by_last_name) ? $p->by_last_name : ''))),
+                $safe_cell(isset($p->reason) ? $p->reason : ''),
+                $safe_cell(isset($p->ip_address) ? $p->ip_address : ''),
+            ), ',', '"', '\\');
+        }
+        fclose($out);
+        exit;
     }
 
     /**
