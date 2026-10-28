@@ -79,7 +79,13 @@ class W36_excel {
 
         $this->spec = array(
             'sheet'      => 'W36',
-            'freeze'     => 'I50',
+            // Frozen below the header block (rows 1-4) and right of the
+            // identity columns (A-H). This used to be 'I50' from the sample:
+            // freezing 49 rows fills any window shorter than the first page
+            // with frozen rows Excel cannot scroll past — the sheet looks
+            // like it ends after the second group even though every machine
+            // row is in the file.
+            'freeze'     => 'I5',
             'first_row'  => 1,
             'last_header_row' => 4,
 
