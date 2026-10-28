@@ -48,6 +48,7 @@ jobs:
           node tests/attendance_log_ux.js
           node tests/team_profile_ux.js
           node tests/workshop_daily_ux.js
+          node tests/weekly_w36_export_ux.js
 
   database-and-e2e:
     name: DB Schema, Migrations & HTTP E2E (${{ matrix.db_label }})
