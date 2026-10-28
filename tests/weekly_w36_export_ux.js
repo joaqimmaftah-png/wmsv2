@@ -45,4 +45,10 @@ assert.ok(w36.includes('$reg_shift') && w36.includes('($last_plan_row + 3)'),
 assert.ok(helper.includes('function _validMerges'),
   'writer must drop overlapping/single-cell merges instead of emitting them');
 
+// Freeze panes: 'I50' froze the first 49 rows, which fill a normal Excel
+// window entirely — scrolling then moves an off-screen pane and the sheet
+// looks like it ends after the second group, with every row present.
+assert.ok(/'freeze'\s*=>\s*'I5'/.test(w36), 'grid must freeze at I5 (header rows + identity columns)');
+assert.ok(!/'freeze'\s*=>\s*'I50'/.test(w36), 'the 49-row freeze (I50) must not come back');
+
 console.log('Weekly W36 export guard checks passed.');
