@@ -474,8 +474,99 @@ class Team extends MY_Controller {
         $this->Team_model->refresh_cert_status($id);
 
         $data['attendance']   = $this->Team_model->get_attendance_history($id, 30);
-        $data['certifications'] = $this->Team_model->get_certifications($id);
-        $data['leave_history']= $this->Team_model->get_leave_history($id);
+
+        // Certifications: display status computed from dates (NULL expiry is
+        // "No expiry date", never silently Valid), ordered by urgency, tabbed
+        // and paged so a long record stays usable. Independent params
+        // (ctab/cpage) so this card never resets the Leave History card.
+        $alert_days = $this->_cert_alert_days();
+        $all_certs = $this->Team_model->get_certifications($id);
+        $days_left_of = function ($c) {
+            return !empty($c->expiry_date)
+                ? (int)floor((strtotime($c->expiry_date) - strtotime(date('Y-m-d'))) / 86400) : NULL;
+        };
+        $cert_counts = array('all' => count($all_certs), 'expired' => 0, 'expiring' => 0, 'valid' => 0, 'no_expiry' => 0);
+        foreach ($all_certs as $c) {
+            $c->days_left_profile = $days_left_of($c);
+            $d = $c->days_left_profile;
+            if ($d === NULL) $cert_counts['no_expiry']++;
+            elseif ($d < 0) $cert_counts['expired']++;
+            elseif ($d <= $alert_days) $cert_counts['expiring']++;
+            else $cert_counts['valid']++;
+            $c->display_status = $d === NULL ? 'No expiry date'
+                : ($d < 0 ? 'Expired' : ($d <= $alert_days ? 'Expiring Soon' : 'Valid'));
+        }
+        $ctab_in = strtolower(trim((string)$this->input->get('ctab', TRUE)));
+        $ctab = in_array($ctab_in, array('all', 'expired', 'expiring', 'valid', 'no_expiry'), TRUE) ? $ctab_in : 'all';
+        $cert_rows = array();
+        foreach ($all_certs as $c) {
+            $d = $c->days_left_profile;
+            if ($ctab === 'expired' && !($d !== NULL && $d < 0)) continue;
+            if ($ctab === 'expiring' && !($d !== NULL && $d >= 0 && $d <= $alert_days)) continue;
+            if ($ctab === 'valid' && !($d !== NULL && $d > $alert_days)) continue;
+            if ($ctab === 'no_expiry' && $d !== NULL) continue;
+            $cert_rows[] = $c;
+        }
+        usort($cert_rows, function ($a, $b) use ($alert_days) {
+            $rank = function ($c) use ($alert_days) {
+                $d = $c->days_left_profile;
+                if ($d === NULL) return 3;
+                if ($d < 0) return 0;
+                return $d <= $alert_days ? 1 : 2;
+            };
+            $cmp = ($rank($a) <=> $rank($b));
+            if ($cmp === 0) {
+                $cmp = strcmp((string)($a->expiry_date ?: '9999-12-31'), (string)($b->expiry_date ?: '9999-12-31'));
+            }
+            return $cmp;
+        });
+        $cper_in = (int)$this->input->get('cper_page', TRUE);
+        $cper_page = in_array($cper_in, array(5, 10, 25, 50), TRUE) ? $cper_in : 10;
+        $ctotal = count($cert_rows);
+        $ctotal_pages = max(1, (int)ceil($ctotal / $cper_page));
+        $cpage_in = (int)$this->input->get('cpage', TRUE);
+        $cpage = max(1, min($ctotal_pages, $cpage_in > 0 ? $cpage_in : 1));
+        $coffset = ($cpage - 1) * $cper_page;
+        $data['certifications'] = array_slice($cert_rows, $coffset, $cper_page);
+        $data['cert_counts']    = $cert_counts;
+        $data['cert_tab']       = $ctab;
+        $data['cert_total']     = $ctotal;
+        $data['cper_page']      = $cper_page;
+        $data['cpage']          = $cpage;
+        $data['ctotal_pages']   = $ctotal_pages;
+        $data['cshowing_from']  = $ctotal > 0 ? ($coffset + 1) : 0;
+        $data['cshowing_to']    = min($ctotal, $coffset + count($data['certifications']));
+
+        // Leave History: status tabs + pagination (grows every year).
+        $all_leave = $this->Team_model->get_leave_history($id);
+        $ltab_in = strtolower(trim((string)$this->input->get('ltab', TRUE)));
+        $ltab = in_array($ltab_in, array('all', 'approved', 'pending', 'rejected'), TRUE) ? $ltab_in : 'all';
+        $leave_counts = array('all' => count($all_leave), 'approved' => 0, 'pending' => 0, 'rejected' => 0);
+        foreach ($all_leave as $lr) {
+            $k = strtolower((string)$lr->status);
+            if (isset($leave_counts[$k])) $leave_counts[$k]++;
+        }
+        $leave_rows = array();
+        foreach ($all_leave as $lr) {
+            if ($ltab !== 'all' && strtolower((string)$lr->status) !== $ltab) continue;
+            $leave_rows[] = $lr;
+        }
+        $lper_in = (int)$this->input->get('lper_page', TRUE);
+        $lper_page = in_array($lper_in, array(5, 10, 25), TRUE) ? $lper_in : 5;
+        $ltotal = count($leave_rows);
+        $ltotal_pages = max(1, (int)ceil($ltotal / $lper_page));
+        $lpage_in = (int)$this->input->get('lpage', TRUE);
+        $lpage = max(1, min($ltotal_pages, $lpage_in > 0 ? $lpage_in : 1));
+        $loffset = ($lpage - 1) * $lper_page;
+        $data['leave_history']  = array_slice($leave_rows, $loffset, $lper_page);
+        $data['leave_counts']   = $leave_counts;
+        $data['leave_tab']      = $ltab;
+        $data['leave_total']    = $ltotal;
+        $data['lper_page']      = $lper_page;
+        $data['lpage']          = $lpage;
+        $data['ltotal_pages']   = $ltotal_pages;
+        $data['lshowing_from']  = $ltotal > 0 ? ($loffset + 1) : 0;
+        $data['lshowing_to']    = min($ltotal, $loffset + count($data['leave_history']));
         $data['leave_balance']= $this->Team_model->get_leave_balance($id);
         $data['leave_year']   = (int)date('Y');
         $data['cert_alert_days'] = $this->_cert_alert_days();

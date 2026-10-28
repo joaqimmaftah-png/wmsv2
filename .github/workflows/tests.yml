@@ -46,6 +46,7 @@ jobs:
           node tests/certifications_table_ux.js
           node tests/shift_roster_ux.js
           node tests/attendance_log_ux.js
+          node tests/team_profile_ux.js
 
   database-and-e2e:
     name: DB Schema, Migrations & HTTP E2E (${{ matrix.db_label }})

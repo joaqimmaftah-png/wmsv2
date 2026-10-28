@@ -1,6 +1,37 @@
 <?php
 $skill_colors = ['Junior'=>'secondary','Senior'=>'primary','Expert'=>'success','Specialist'=>'warning'];
 $status_colors = ['Active'=>'success','Inactive'=>'danger','On Leave'=>'warning'];
+$vp_id = (int)$worker->id;
+$cert_counts  = isset($cert_counts) ? $cert_counts : array('all' => count($certifications), 'expired' => 0, 'expiring' => 0, 'valid' => 0, 'no_expiry' => 0);
+$cert_tab     = isset($cert_tab) ? $cert_tab : 'all';
+$cert_total   = isset($cert_total) ? (int)$cert_total : count($certifications);
+$cper_page    = isset($cper_page) ? (int)$cper_page : 10;
+$cpage        = isset($cpage) ? (int)$cpage : 1;
+$ctotal_pages = isset($ctotal_pages) ? (int)$ctotal_pages : 1;
+$cshowing_from = isset($cshowing_from) ? (int)$cshowing_from : ($cert_total ? 1 : 0);
+$cshowing_to   = isset($cshowing_to) ? (int)$cshowing_to : $cert_total;
+$leave_counts  = isset($leave_counts) ? $leave_counts : array('all' => count($leave_history), 'approved' => 0, 'pending' => 0, 'rejected' => 0);
+$leave_tab     = isset($leave_tab) ? $leave_tab : 'all';
+$leave_total   = isset($leave_total) ? (int)$leave_total : count($leave_history);
+$lper_page     = isset($lper_page) ? (int)$lper_page : 5;
+$lpage         = isset($lpage) ? (int)$lpage : 1;
+$ltotal_pages  = isset($ltotal_pages) ? (int)$ltotal_pages : 1;
+$lshowing_from = isset($lshowing_from) ? (int)$lshowing_from : ($leave_total ? 1 : 0);
+$lshowing_to   = isset($lshowing_to) ? (int)$lshowing_to : $leave_total;
+$vp_cert_url = function ($o = array()) use ($vp_id, $cert_tab, $leave_tab, $lpage) {
+    return site_url('team/view/' . $vp_id) . '?' . http_build_query(array_merge(array_filter(array(
+        'ctab' => ($cert_tab !== 'all') ? $cert_tab : null,
+        'ltab' => ($leave_tab !== 'all') ? $leave_tab : null,
+        'lpage' => ($lpage > 1) ? $lpage : null,
+    )), $o));
+};
+$vp_leave_url = function ($o = array()) use ($vp_id, $cert_tab, $leave_tab, $cpage) {
+    return site_url('team/view/' . $vp_id) . '?' . http_build_query(array_merge(array_filter(array(
+        'ctab' => ($cert_tab !== 'all') ? $cert_tab : null,
+        'cpage' => ($cpage > 1) ? $cpage : null,
+        'ltab' => ($leave_tab !== 'all') ? $leave_tab : null,
+    )), $o));
+};
 $present_count = 0; $absent_count = 0; $leave_count = 0;
 foreach ($attendance as $a) {
     if ($a->status == 'Present') $present_count++;
@@ -52,13 +83,13 @@ foreach ($attendance as $a) {
         <form method="get" action="<?= base_url('team/timesheet/' . (int)$worker->id) ?>" class="d-flex flex-column gap-2">
           <div class="row g-2">
             <div class="col-6">
-              <label class="form-label mb-1" style="font-size:11px;">Month</label>
-              <input type="month" name="month" class="form-control form-control-sm" value="<?= date('Y-m') ?>">
+              <label class="form-label mb-1" style="font-size:11px;" for="vpTsMonth">Month</label>
+              <input type="month" id="vpTsMonth" name="month" class="form-control form-control-sm" value="<?= date('Y-m') ?>">
             </div>
             <div class="col-6">
-              <label class="form-label mb-1" style="font-size:11px;">Period</label>
+              <label class="form-label mb-1" style="font-size:11px;" for="vpTsPeriod">Period</label>
               <?php $def_half = ((int)date('j') <= 15) ? 'h1' : 'h2'; ?>
-              <select name="period" class="form-select form-select-sm">
+              <select id="vpTsPeriod" name="period" class="form-select form-select-sm">
                 <option value="h1" <?= $def_half === 'h1' ? 'selected' : '' ?>>1st Half (01–15)</option>
                 <option value="h2" <?= $def_half === 'h2' ? 'selected' : '' ?>>2nd Half (16–End)</option>
                 <option value="full">Full Month (2 Sheets)</option>
@@ -121,7 +152,7 @@ foreach ($attendance as $a) {
       </div>
       <div class="card-body p-0">
         <table class="table wms-table mb-0" style="font-size:12px;">
-          <thead><tr><th>Type</th><th style="text-align:right;">Entitled</th><th style="text-align:right;">Approved</th><th style="text-align:right;">Pending</th><th style="text-align:right;">Remaining</th></tr></thead>
+          <thead><tr><th scope="col">Type</th><th scope="col" style="text-align:right;">Entitled</th><th scope="col" style="text-align:right;">Approved</th><th scope="col" style="text-align:right;">Pending</th><th scope="col" style="text-align:right;">Remaining</th></tr></thead>
           <tbody>
             <?php foreach ($leave_balance as $lb): ?>
             <?php if ($lb['entitled'] === null && $lb['approved'] <= 0 && $lb['pending'] <= 0) continue; ?>
@@ -150,15 +181,28 @@ foreach ($attendance as $a) {
         <i class="bi bi-calendar-x text-primary me-1"></i>Leave History
         <a href="<?= base_url('team/leave_request') ?>" class="btn btn-sm btn-outline-primary ms-auto" style="font-size:11px;">Request Leave</a>
       </div>
+      <div style="padding:0 14px;">
+        <div class="vp-tabs" role="tablist" aria-label="Leave status">
+          <?php foreach (array('all' => 'All', 'approved' => 'Approved', 'pending' => 'Pending', 'rejected' => 'Rejected') as $k => $l): ?>
+          <a role="tab" aria-selected="<?= $leave_tab === $k ? 'true' : 'false' ?>" class="vp-tab"
+             href="<?= $vp_leave_url(array('ltab' => ($k === 'all' ? null : $k), 'lpage' => null)) ?>"><?= $l ?><span class="cnt"><?= (int)$leave_counts[$k] ?></span></a>
+          <?php endforeach; ?>
+        </div>
+      </div>
       <div class="card-body p-0">
         <?php if (empty($leave_history)): ?>
-          <div class="text-center py-3 text-muted" style="font-size:13px;">No leave records</div>
+          <div class="text-center py-3 text-muted" style="font-size:13px;">
+            <?php if ((int)$leave_counts['all'] === 0): ?>No leave records
+            <?php elseif ($leave_tab === 'pending'): ?>No pending leave requests.
+            <?php elseif ($leave_tab === 'rejected'): ?>No rejected leave requests.
+            <?php else: ?>No leave records in this status.<?php endif; ?>
+          </div>
         <?php else: ?>
           <?php foreach ($leave_history as $lr): ?>
           <div class="px-3 py-2 border-bottom">
             <div class="d-flex justify-content-between">
-              <span class="badge bg-primary bg-opacity-15 text-primary"><?= htmlspecialchars((string)$lr->leave_type, ENT_QUOTES, 'UTF-8') ?></span>
-              <span class="badge <?= $lr->status=='Approved'?'bg-success':($lr->status=='Rejected'?'bg-danger':'bg-warning text-dark') ?>"><?= htmlspecialchars((string)$lr->status, ENT_QUOTES, 'UTF-8') ?></span>
+              <span class="badge b-primary"><?= htmlspecialchars((string)$lr->leave_type, ENT_QUOTES, 'UTF-8') ?></span>
+              <span class="badge <?= $lr->status=='Approved'?'b-available':($lr->status=='Rejected'?'b-danger':'b-warning') ?>"><?= htmlspecialchars((string)$lr->status, ENT_QUOTES, 'UTF-8') ?></span>
             </div>
             <div style="font-size:12px;color:#64748b;margin-top:3px;">
               <?= date('d M Y', strtotime($lr->start_date)) ?> — <?= date('d M Y', strtotime($lr->end_date)) ?>
@@ -166,6 +210,15 @@ foreach ($attendance as $a) {
             </div>
           </div>
           <?php endforeach; ?>
+        <?php endif; ?>
+        <?php if ($leave_total > 0): ?>
+        <div class="vp-pager">
+          <span>Showing <?= (int)$lshowing_from ?>–<?= (int)$lshowing_to ?> of <?= (int)$leave_total ?></span>
+          <nav class="vp-pg" aria-label="Leave history pages">
+            <?php if ($lpage > 1): ?><a href="<?= $vp_leave_url(array('lpage' => $lpage - 1, 'lper_page' => (int)$lper_page)) ?>">‹ Prev</a><?php else: ?><span class="dis">‹ Prev</span><?php endif; ?>
+            <?php if ($lpage < $ltotal_pages): ?><a href="<?= $vp_leave_url(array('lpage' => $lpage + 1, 'lper_page' => (int)$lper_page)) ?>">Next ›</a><?php else: ?><span class="dis">Next ›</span><?php endif; ?>
+          </nav>
+        </div>
         <?php endif; ?>
       </div>
     </div>
@@ -176,6 +229,7 @@ foreach ($attendance as $a) {
     <div class="wms-card mb-3">
       <div class="card-head">
         <i class="bi bi-patch-check text-primary me-1"></i>Certifications
+        <span style="font-weight:400;color:var(--t3);font-size:12px;"><?= (int)$cert_counts['all'] ?> recorded<?php if ((int)$cert_counts['expired'] > 0): ?> · <span style="color:var(--red);font-weight:600;"><?= (int)$cert_counts['expired'] ?> expired</span><?php endif; ?><?php if ((int)$cert_counts['expiring'] > 0): ?> · <span style="color:var(--amber);font-weight:600;"><?= (int)$cert_counts['expiring'] ?> expiring soon</span><?php endif; ?></span>
         <?php if (!empty($is_supervisor)): ?>
         <button type="button" class="btn btn-sm btn-primary ms-auto"
                 onclick="document.getElementById('addCertDialog').showModal()">
@@ -184,16 +238,32 @@ foreach ($attendance as $a) {
         <?php endif; ?>
       </div>
       <div class="card-body p-0">
+        <div style="padding:0 14px;">
+          <div class="vp-tabs" role="tablist" aria-label="Certification status">
+            <?php foreach (array('all' => 'All', 'expired' => 'Expired', 'expiring' => 'Expiring Soon', 'valid' => 'Valid', 'no_expiry' => 'No Expiry Date') as $k => $l): ?>
+            <a role="tab" aria-selected="<?= $cert_tab === $k ? 'true' : 'false' ?>" class="vp-tab"
+               href="<?= $vp_cert_url(array('ctab' => ($k === 'all' ? null : $k), 'cpage' => null)) ?>"><?= $l ?><span class="cnt"><?= (int)$cert_counts[$k] ?></span></a>
+            <?php endforeach; ?>
+          </div>
+        </div>
         <?php if (empty($certifications)): ?>
-          <div class="text-center py-3 text-muted" style="font-size:13px;">No certifications recorded</div>
+          <div class="text-center py-3 text-muted" style="font-size:13px;">
+            <?php if ((int)$cert_counts['all'] === 0): ?>No certifications recorded
+            <?php elseif ($cert_tab === 'expired'): ?>No expired certifications — good.
+            <?php elseif ($cert_tab === 'no_expiry'): ?>Every certificate has an expiry date.
+            <?php else: ?>No certifications in this status.<?php endif; ?>
+          </div>
         <?php else: ?>
         <table class="table wms-table mb-0">
-          <thead><tr><th>Certificate</th><th>Number</th><th>Issued By</th><th>Expiry</th><th>Status</th><th>Document</th><th></th></tr></thead>
+          <thead><tr><th scope="col">Certificate</th><th scope="col">Number</th><th scope="col">Issued By</th><th scope="col">Expiry</th><th scope="col">Status</th><th scope="col">Document</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
             <?php foreach ($certifications as $c): ?>
             <?php
-            $days_left = $c->expiry_date ? (int)floor((strtotime($c->expiry_date) - strtotime(date('Y-m-d'))) / 86400) : null;
-            $cert_status_badge = $c->status == 'Valid' ? 'bg-success' : ($c->status == 'Expiring Soon' ? 'bg-warning text-dark' : 'bg-danger');
+            $days_left = isset($c->days_left_profile) ? $c->days_left_profile
+                : ($c->expiry_date ? (int)floor((strtotime($c->expiry_date) - strtotime(date('Y-m-d'))) / 86400) : null);
+            $display_status = isset($c->display_status) ? $c->display_status
+                : ($days_left === null ? 'No expiry date' : ($days_left < 0 ? 'Expired' : ($days_left <= (isset($cert_alert_days) ? (int)$cert_alert_days : 30) ? 'Expiring Soon' : 'Valid')));
+            $cert_status_badge = $display_status === 'Valid' ? 'b-available' : ($display_status === 'Expiring Soon' ? 'b-warning' : ($display_status === 'Expired' ? 'b-danger' : 'b-secondary'));
             $alert_days = isset($cert_alert_days) ? (int)$cert_alert_days : 30;
             ?>
             <tr>
@@ -203,17 +273,17 @@ foreach ($attendance as $a) {
               <td style="font-size:12px;">
                 <?= $c->expiry_date ? date('d M Y', strtotime($c->expiry_date)) : '—' ?>
                 <?php if ($days_left !== null && $days_left >= 0 && $days_left <= $alert_days): ?>
-                  <div style="font-size:10px;color:#f59e0b;"><?= $days_left ?> days left</div>
+                  <div style="font-size:10px;color:var(--amber);"><?= $days_left ?> days left</div>
                 <?php elseif ($days_left !== null && $days_left < 0): ?>
-                  <div style="font-size:10px;color:#dc2626;"><?= abs($days_left) ?> days expired</div>
+                  <div style="font-size:10px;color:var(--red);"><?= abs($days_left) ?> days expired</div>
                 <?php endif; ?>
               </td>
-              <td><span class="badge <?= $cert_status_badge ?>"><?= htmlspecialchars((string)$c->status) ?></span></td>
+              <td><span class="badge <?= $cert_status_badge ?>"><?= htmlspecialchars($display_status, ENT_QUOTES, 'UTF-8') ?></span></td>
               <td style="font-size:11.5px;">
                 <?php if (!empty($c->document)): ?>
-                  <a href="<?= base_url(htmlspecialchars((string)($c->document), ENT_QUOTES, 'UTF-8')) ?>" target="_blank" rel="noopener">Open</a>
+                  <a href="<?= base_url(htmlspecialchars((string)($c->document), ENT_QUOTES, 'UTF-8')) ?>" target="_blank" rel="noopener" aria-label="Open document for <?= htmlspecialchars((string)$c->cert_name, ENT_QUOTES, 'UTF-8') ?>">Open document</a>
                 <?php else: ?>
-                  <span style="color:#94a3b8;">—</span>
+                  <span style="color:var(--t3);">No document</span>
                 <?php endif; ?>
               </td>
               <td style="text-align:right;white-space:nowrap;">
@@ -238,6 +308,15 @@ foreach ($attendance as $a) {
           </tbody>
         </table>
         <?php endif; ?>
+        <?php if ($cert_total > 0): ?>
+        <div class="vp-pager">
+          <span>Showing <?= (int)$cshowing_from ?>–<?= (int)$cshowing_to ?> of <?= (int)$cert_total ?> in this tab · ordered by urgency</span>
+          <nav class="vp-pg" aria-label="Certification pages">
+            <?php if ($cpage > 1): ?><a href="<?= $vp_cert_url(array('cpage' => $cpage - 1, 'cper_page' => (int)$cper_page)) ?>">‹ Prev</a><?php else: ?><span class="dis">‹ Prev</span><?php endif; ?>
+            <?php if ($cpage < $ctotal_pages): ?><a href="<?= $vp_cert_url(array('cpage' => $cpage + 1, 'cper_page' => (int)$cper_page)) ?>">Next ›</a><?php else: ?><span class="dis">Next ›</span><?php endif; ?>
+          </nav>
+        </div>
+        <?php endif; ?>
       </div>
     </div>
 
@@ -260,10 +339,21 @@ foreach ($attendance as $a) {
             elseif ($status == 'Rest') { $color = '#64748b'; $title = $date . ': Rest Day'; }
             elseif ($status == 'Holiday') { $color = '#0c7b7b'; $title = $date . ': Public Holiday'; }
           ?>
-          <div title="<?= $title ?>" style="width:20px;height:20px;border-radius:4px;background:<?= $color ?>;cursor:default;"></div>
+          <span role="img" aria-label="<?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?>" title="<?= $title ?>" style="display:inline-block;width:20px;height:20px;border-radius:4px;background:<?= $color ?>;"></span>
           <?php endfor; ?>
         </div>
-        <div class="d-flex gap-3 mt-2" style="font-size:11px;color:#64748b;">
+        <?php
+          $att_summary = array('Present' => 0, 'Absent' => 0, 'Leave' => 0, 'Rest' => 0, 'Holiday' => 0, 'Not recorded' => 0);
+          for ($i = 29; $i >= 0; $i--) {
+              $d2 = date('Y-m-d', strtotime("-{$i} days"));
+              $k2 = isset($att_by_date[$d2]) ? $att_by_date[$d2] : 'Not recorded';
+              if (isset($att_summary[$k2])) $att_summary[$k2]++; else $att_summary['Not recorded']++;
+          }
+        ?>
+        <div style="font-size:11.5px;color:var(--t2);margin-top:8px;">
+          Last 30 days: <?php $first = true; foreach ($att_summary as $k2 => $v2): if ($v2 === 0) continue; ?><?= $first ? '' : ' · ' ?><strong><?= (int)$v2 ?></strong> <?= htmlspecialchars($k2, ENT_QUOTES, 'UTF-8') ?><?php $first = false; endforeach; ?>
+        </div>
+        <div class="d-flex gap-3 mt-2" style="font-size:11px;color:var(--t3);">
           <span><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#16a34a;margin-right:4px;"></span>Present</span>
           <span><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#dc2626;margin-right:4px;"></span>Absent</span>
           <span><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#f59e0b;margin-right:4px;"></span>Leave</span>
@@ -289,14 +379,14 @@ foreach ($attendance as $a) {
       <?= form_open_multipart('team/certifications/' . $worker->id) ?>
       <div class="modal-body">
         <div class="row g-2">
-          <div class="col-12"><label class="form-label">Certificate Name *</label><input type="text" name="cert_name" class="form-control" required placeholder="e.g. Forklift Operator License"></div>
-          <div class="col-6"><label class="form-label">Certificate Number</label><input type="text" name="cert_number" class="form-control"></div>
-          <div class="col-6"><label class="form-label">Issuing Body</label><input type="text" name="issuing_body" class="form-control"></div>
-          <div class="col-6"><label class="form-label">Issued Date</label><input type="date" name="issued_date" class="form-control"></div>
-          <div class="col-6"><label class="form-label">Expiry Date</label><input type="date" name="expiry_date" class="form-control"></div>
+          <div class="col-12"><label class="form-label" for="addCert_cert_name">Certificate Name *</label><input type="text" id="addCert_cert_name" name="cert_name" class="form-control" required placeholder="e.g. Forklift Operator License"></div>
+          <div class="col-6"><label class="form-label" for="addCert_cert_number">Certificate Number</label><input type="text" id="addCert_cert_number" name="cert_number" class="form-control"></div>
+          <div class="col-6"><label class="form-label" for="addCert_issuing_body">Issuing Body</label><input type="text" id="addCert_issuing_body" name="issuing_body" class="form-control"></div>
+          <div class="col-6"><label class="form-label" for="addCert_issued_date">Issued Date</label><input type="date" id="addCert_issued_date" name="issued_date" class="form-control"></div>
+          <div class="col-6"><label class="form-label" for="addCert_expiry_date">Expiry Date</label><input type="date" id="addCert_expiry_date" name="expiry_date" class="form-control"></div>
           <div class="col-12">
-            <label class="form-label">Document <span style="font-weight:400;color:#94a3b8;">(PDF / JPG / PNG, max 8 MB)</span></label>
-            <input type="file" name="document" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+            <label class="form-label" for="addCert_document">Document <span style="font-weight:400;color:var(--t3);">(PDF / JPG / PNG, max 8 MB)</span></label>
+            <input type="file" id="addCert_document" name="document" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
           </div>
         </div>
       </div>
@@ -378,4 +468,13 @@ foreach ($attendance as $a) {
 .wms-dialog-x:hover{color:var(--t1);}
 .wms-dialog form .modal-body{padding:18px 20px;}
 .wms-dialog-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--sep);}
+.vp-tabs{display:flex;gap:2px;flex-wrap:wrap;border-bottom:1px solid var(--sep)}
+.vp-tab{padding:7px 10px;font-size:12px;font-weight:500;color:var(--t2);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px}
+.vp-tab:hover{color:var(--t1)}
+.vp-tab[aria-selected="true"]{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+.vp-tab .cnt{font-size:10.5px;background:var(--gray-fill);border-radius:999px;padding:0 5px;margin-left:3px}
+.vp-pager{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding:10px 14px;font-size:11.5px;color:var(--t3);border-top:1px solid var(--sep)}
+.vp-pg{display:inline-flex;gap:4px;align-items:center}
+.vp-pg a{font-size:11.5px;padding:3px 8px;border:1px solid var(--sep);border-radius:6px;color:var(--t2);text-decoration:none}
+.vp-pg span.dis{font-size:11.5px;padding:3px 8px;color:var(--t4)}
 </style>
