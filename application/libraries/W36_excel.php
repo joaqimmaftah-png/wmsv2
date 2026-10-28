@@ -50,6 +50,9 @@ class W36_excel {
     const LOGO_ANCHOR = 'D1';
     const LOGO_XOFF   = 48766;
 
+    /** The hidden sheet the LOCATION dropdown reads its vocabulary from. */
+    const SITES_SHEET = 'Sites';
+
     /** The workbook parts the sheet contract fixes. */
     private $spec;
 
@@ -465,6 +468,19 @@ class W36_excel {
         // sheet 2 — `W36 Synthese` (Phase B, W5.4): in the same workbook, after it
         $this->paint_synthese($xlsx, $this->build_synthese($report));
 
+        // sheet 3 (hidden) — the approved site vocabulary. Excel caps a list
+        // validation written as a literal string at 255 characters and
+        // rejects the whole workbook above it; the 36 approved sites make a
+        // 342-character literal, so the dropdown on sheet `W36` points at
+        // this range instead (no length limit, and no 30-site truncation).
+        $sites = isset($report['sites']) ? array_values((array)$report['sites']) : array();
+        if (!empty($sites)) {
+            $xlsx->addSheet($this->sites_sheet_name($report));
+            $xlsx->hideSheet();
+            $xlsx->setColWidth(1, 30);
+            foreach ($sites as $label) $xlsx->writeRow(array($label));
+        }
+
         return $xlsx->save($path);
     }
 
@@ -584,6 +600,12 @@ class W36_excel {
         return $name === '' ? 'Weekly Report' : $name;
     }
 
+    /** The lookup sheet's name — never colliding with the report's own sheet. */
+    public function sites_sheet_name(array $report) {
+        return strcasecmp($this->report_name($report), self::SITES_SHEET) === 0
+            ? self::SITES_SHEET . ' List' : self::SITES_SHEET;
+    }
+
     /** The download name follows the report name and selected ISO week. */
     public function filename(array $report) {
         $week = isset($report['week']) ? $report['week'] : array();
@@ -622,11 +644,18 @@ class W36_excel {
         }
 
         // the site dropdown on every machine row — the sample applied it
-        // to 30 rows out of 104; every machine row gets it here
+        // to 30 rows out of 104; every machine row gets it here. The list is
+        // a range on the hidden vocabulary sheet (see save()): written as a
+        // literal string it would run to 342 characters, over Excel's
+        // 255-character limit for list validations, and Excel would refuse
+        // the workbook ("We found a problem with some content").
         if (!empty($sheet['validation']['list'])) {
+            $sites = array_values($sheet['validation']['list']);
+            $sheet_name = strcasecmp($sheet['sheet'], self::SITES_SHEET) === 0
+                ? self::SITES_SHEET . ' List' : self::SITES_SHEET;
             $xlsx->addDataValidation($sheet['validation']['sqref'], array(
                 'type' => 'list',
-                'formula1' => '"' . implode(',', array_slice(array_values($sheet['validation']['list']), 0, 30)) . '"',
+                'formula1' => "'" . $sheet_name . "'!" . '$A$1:$A$' . count($sites),
                 'allowBlank' => true,
                 'showDropDown' => false,
                 'promptTitle' => 'LOCATION',
