@@ -79,6 +79,7 @@ class XlsxWriter {
     private $currentSheet = null;
     private $sharedStrings = [];
     private $stringIndex = [];
+    private $sharedStringRefs = 0;
     private $styles = [];
     private $styleIndex = [];
     private $builtinFormats = [
@@ -89,10 +90,17 @@ class XlsxWriter {
     public function addSheet($name) {
         $name = $this->_sheetName($name);
         $this->sheets[] = ['name'=>$name,'rows'=>[],'merges'=>[],'colWidths'=>[],'rowHeights'=>[],
+                           'state'=>null,
                            'freeze'=>null,'autoFilter'=>null,'validations'=>[],
                            'images'=>[],'pageSetup'=>null,'pageMargins'=>null,'printArea'=>null,
                            'tables'=>[]];
         $this->currentSheet = &$this->sheets[count($this->sheets)-1];
+        return $this;
+    }
+
+    /** Hide the current sheet (a lookup sheet for validations, say). */
+    public function hideSheet() {
+        if ($this->currentSheet !== null) $this->currentSheet['state'] = 'hidden';
         return $this;
     }
 
@@ -466,6 +474,7 @@ class XlsxWriter {
 
     private function _str($s) {
         $s = $this->_utf8($s);
+        $this->sharedStringRefs++;
         if (!isset($this->stringIndex[$s])) {
             $this->stringIndex[$s] = count($this->sharedStrings);
             $this->sharedStrings[] = $s;
@@ -685,7 +694,8 @@ class XlsxWriter {
     private function _workbook() {
         $sheets = '';
         foreach ($this->sheets as $i=>$s) {
-            $sheets .= '<sheet name="'.htmlspecialchars((string)($s['name'])).'" sheetId="'.($i+1).'" r:id="rId'.($i+2).'"/>';
+            $state = !empty($s['state']) ? ' state="'.htmlspecialchars((string)($s['state'])).'"' : '';
+            $sheets .= '<sheet name="'.htmlspecialchars((string)($s['name'])).'" sheetId="'.($i+1).'"'.$state.' r:id="rId'.($i+2).'"/>';
         }
         // the print area lives in the workbook, as a defined name (W4.1)
         $names = '';
@@ -831,13 +841,18 @@ class XlsxWriter {
     }
 
     private function _sharedStrings() {
-        $count = count($this->sharedStrings);
+        // `count` is every string cell in the workbook (a string used by 300
+        // cells counts 300 times); `uniqueCount` is the distinct strings.
+        // Writing the unique count for both made strict readers (Excel)
+        // reject the part, so keep the two apart.
+        $count = $this->sharedStringRefs;
+        $unique = count($this->sharedStrings);
         $items = '';
         foreach ($this->sharedStrings as $s) {
             $items .= '<si><t xml:space="preserve">'.htmlspecialchars((string)($s), ENT_XML1).'</t></si>';
         }
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="'.$count.'" uniqueCount="'.$count.'">'.$items.'</sst>';
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="'.$count.'" uniqueCount="'.$unique.'">'.$items.'</sst>';
     }
 
     private function _sheet($sheet, $plan = array()) {

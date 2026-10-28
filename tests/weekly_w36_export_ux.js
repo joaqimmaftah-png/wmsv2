@@ -23,4 +23,17 @@ assert.ok(block.includes('catch (Throwable'), 'writer failures must be caught, n
 assert.ok(block.includes("log_message('error'"), 'writer failures must be written to the application log');
 assert.ok(block.includes('_send_file($tmp, $filename)'), 'successful path still streams the file');
 
+// Excel content validity: a list validation written as a literal string is
+// capped at 255 characters; the 36 approved sites make 342, which made Excel
+// answer a successful download with "We found a problem with some content".
+const w36 = src('application/libraries/W36_excel.php');
+assert.ok(!w36.includes("implode(',', array_slice(array_values($sheet['validation']['list'])"),
+  'LOCATION dropdown must not be a literal site list (Excel 255-char limit)');
+assert.ok(w36.includes("'$A$1:$A$'"), 'LOCATION dropdown must reference the vocabulary range');
+assert.ok(w36.includes('hideSheet()'), 'vocabulary sheet must be hidden');
+assert.ok(helper.includes('public function hideSheet'), 'writer supports hidden sheets');
+assert.ok(helper.includes('state="'), 'workbook must write the sheet state attribute');
+assert.ok(helper.includes('sharedStringRefs'), 'sst count must count string references, not uniques');
+assert.ok(helper.includes('uniqueCount'), 'sst uniqueCount stays the distinct-string count');
+
 console.log('Weekly W36 export guard checks passed.');
