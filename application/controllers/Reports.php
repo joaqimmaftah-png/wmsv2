@@ -3147,15 +3147,11 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         // file and the screen can never disagree (D-W1).
         $report = $this->W36_report_model->report_for_week($week_start);
 
-        // The workbook writer builds a real .xlsx (a zip) in uploads/tmp/.
-        // Both failure modes used to surface as a blank page (an uncaught
-        // Error/RuntimeException with display_errors off), so name them:
-        // a missing PHP zip extension, or a temp dir PHP cannot write to.
-        if (!class_exists('ZipArchive')) {
-            show_error('Excel download is unavailable on this server: the PHP "zip" extension is not installed (ZipArchive class missing). Ask the server admin to install/enable php-zip, then restart PHP.', 500);
-            return;
-        }
-
+        // The workbook writer builds a real .xlsx in uploads/tmp/. It uses
+        // the PHP zip extension when present and a pure-PHP stored-zip
+        // fallback otherwise (XlsxStoredZip), so a server without php-zip
+        // can still download. The remaining hard failure — a temp dir PHP
+        // cannot write to — used to surface as a blank page, so name it.
         $this->load->library('w36_excel');
         $filename = $this->w36_excel->filename($report);
         $tmp      = $this->_tmp_path($filename);

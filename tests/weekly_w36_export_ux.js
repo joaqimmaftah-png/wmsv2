@@ -12,10 +12,12 @@ const start = controller.indexOf('function export_weekly_w36_xlsx');
 assert.ok(start > -1, 'Reports::export_weekly_w36_xlsx missing');
 const block = controller.slice(start, start + 3200);
 
-assert.ok(block.includes("class_exists('ZipArchive')"),
-  'export must check for the PHP zip extension before writing (missing zip = blank page)');
-assert.ok(block.includes('php-zip') || block.includes('PHP "zip" extension'),
-  'zip-missing error must tell the admin what to install');
+assert.ok(!block.includes("class_exists('ZipArchive')"),
+  'export must not hard-block on the zip extension (stored-zip fallback covers it)');
+const helper = src('application/helpers/xlsx_helper.php');
+assert.ok(helper.includes('class XlsxStoredZip'), 'pure-PHP stored-zip fallback writer exists');
+assert.ok(helper.includes('XlsxStoredZip') && helper.includes("!class_exists('ZipArchive')"),
+  'writer falls back to stored-zip when ZipArchive is unavailable');
 assert.ok(block.includes('is_writable'), 'export must verify uploads/tmp is writable up front');
 assert.ok(block.includes('catch (Throwable'), 'writer failures must be caught, not an uncaught blank page');
 assert.ok(block.includes("log_message('error'"), 'writer failures must be written to the application log');
