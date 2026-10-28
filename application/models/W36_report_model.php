@@ -1644,13 +1644,14 @@ class W36_report_model extends CI_Model {
                 return $report;
             }
 
-            // the week IS published, but this call asked for a live reading: the
-            // screen still needs to know, so it can offer the way back
-            $row = $this->snapshot_row($start);
-            if ($row !== null) {
-                $payload = isset($row->payload) ? (string)$row->payload : '';
-                $report_published = $this->snapshot_meta($row, $payload, $start);
-            }
+        }
+
+        // A live reading must still disclose an existing freeze. Also surface
+        // metadata for a stored snapshot that could not be loaded normally.
+        $row = $this->snapshot_row($start);
+        if ($row !== null) {
+            $payload = isset($row->payload) ? (string)$row->payload : '';
+            $report_published = $this->snapshot_meta($row, $payload, $start);
         }
 
         $build_opts = array();
