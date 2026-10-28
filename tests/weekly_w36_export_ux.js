@@ -36,4 +36,13 @@ assert.ok(helper.includes('state="'), 'workbook must write the sheet state attri
 assert.ok(helper.includes('sharedStringRefs'), 'sst count must count string references, not uniques');
 assert.ok(helper.includes('uniqueCount'), 'sst uniqueCount stays the distinct-string count');
 
+// Merge validity: the Synthese action plan carries every machine from row
+// 72 while the registers sit at the sample's fixed row 179 — a fleet larger
+// than the sample's made the plan's group merges overlap the register title
+// merges, and Excel answered "Removed Records: Merge cells from sheet2.xml".
+assert.ok(w36.includes('$reg_shift') && w36.includes('($last_plan_row + 3)'),
+  'register block must shift down when the action plan reaches row 179');
+assert.ok(helper.includes('function _validMerges'),
+  'writer must drop overlapping/single-cell merges instead of emitting them');
+
 console.log('Weekly W36 export guard checks passed.');
