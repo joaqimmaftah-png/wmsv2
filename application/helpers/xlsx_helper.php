@@ -648,6 +648,37 @@ class XlsxWriter {
         return isset($this->sheets[$i]['rows']) ? $this->sheets[$i]['rows'] : array();
     }
 
+    /**
+     * The merges a sheet may actually carry. Excel removes the whole
+     * mergeCells record — and offers to "repair" the workbook — when two
+     * merges share a cell or a merge spans a single cell, so drop those
+     * here (first merge wins) whatever a caller built.
+     */
+    private function _validMerges(array $merges) {
+        $kept = array(); $used = array();
+        foreach ($merges as $m) {
+            $parts = explode(':', (string)$m);
+            if (count($parts) !== 2) continue;
+            $a = $this->_splitRef($parts[0]);
+            $b = $this->_splitRef($parts[1]);
+            $c1 = min($a[0], $b[0]); $c2 = max($a[0], $b[0]);
+            $r1 = min($a[1], $b[1]); $r2 = max($a[1], $b[1]);
+            if ($c1 === $c2 && $r1 === $r2) continue;   // a single cell cannot merge
+            $clash = false;
+            for ($r = $r1; $r <= $r2 && !$clash; $r++) {
+                for ($c = $c1; $c <= $c2; $c++) {
+                    if (isset($used[$c . ':' . $r])) { $clash = true; break; }
+                }
+            }
+            if ($clash) continue;
+            for ($r = $r1; $r <= $r2; $r++) {
+                for ($c = $c1; $c <= $c2; $c++) $used[$c . ':' . $r] = true;
+            }
+            $kept[] = $m;
+        }
+        return $kept;
+    }
+
     /** 'BQ3' → array(column number, row number). */
     private function _splitRef($ref) {
         if (preg_match('/^([A-Za-z]{1,3})(\d+)$/', trim((string)($ref)), $m)) {
@@ -898,9 +929,10 @@ class XlsxWriter {
         }
 
         $mergesXml = '';
-        if (!empty($sheet['merges'])) {
-            $mergesXml = '<mergeCells count="'.count($sheet['merges']).'">';
-            foreach ($sheet['merges'] as $m) $mergesXml .= '<mergeCell ref="'.$m.'"/>';
+        $merges = $this->_validMerges(isset($sheet['merges']) ? $sheet['merges'] : array());
+        if (!empty($merges)) {
+            $mergesXml = '<mergeCells count="'.count($merges).'">';
+            foreach ($merges as $m) $mergesXml .= '<mergeCell ref="'.$m.'"/>';
             $mergesXml .= '</mergeCells>';
         }
 

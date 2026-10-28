@@ -430,7 +430,7 @@ class W36_excel {
             'cells'      => $cells,
             'merges'     => $merges,
             'widths'     => $spec['widths'],
-            'row_heights'=> $spec['row_heights'],
+            'row_heights'=> $row_heights,
             'data_row_height' => $spec['data_row_height'],
             'validation' => array(
                 'sqref' => 'H5:H' . max(5, $last_grid_row),
@@ -1043,23 +1043,38 @@ class W36_excel {
         $last_plan_row  = $row - 1;
         $last_plan_row  = max($last_plan_row, $spec['header_row']);   // an empty plan still prints its header
 
+        // The registers sit at the sample's own rows (title 179) only while
+        // the action plan leaves them room. The plan carries every machine,
+        // so a fleet larger than the sample's runs into row 179: the plan's
+        // group merges overlap the register title merges (Excel then
+        // removes every merge on the sheet: "Removed Records: Merge
+        // cells"), and the register overwrites plan rows. When the plan
+        // reaches the registers, the whole register block — titles,
+        // headers, rows, the `M`/`N` counters — moves down by the overrun,
+        // keeping the sample's two-blank-row gap below the plan.
+        $reg_shift      = max(0, ($last_plan_row + 3) - $spec['reg_title_row']);
+        $reg_title_row  = $spec['reg_title_row'] + $reg_shift;
+        $reg_header_row = $spec['reg_header_row'] + $reg_shift;
+        $reg_first_row  = $spec['reg_first_row'] + $reg_shift;
+        $kpi_total_row  = $spec['kpi_total_row'] + $reg_shift;
+
         /* ── the two registers, one row per machine (BR-26) ────────────── */
 
-        $put($spec['reg_title_inspection']['col'], $spec['reg_title_row'],
+        $put($spec['reg_title_inspection']['col'], $reg_title_row,
              $spec['reg_title_inspection']['label'], 'syn_title');
-        $merges[] = $spec['reg_title_inspection']['span'][0] . $spec['reg_title_row'] . ':'
-                  . $spec['reg_title_inspection']['span'][1] . $spec['reg_title_row'];
-        $put($spec['reg_title_pm']['col'], $spec['reg_title_row'], $spec['reg_title_pm']['label'], 'syn_title');
-        $merges[] = $spec['reg_title_pm']['span'][0] . $spec['reg_title_row'] . ':'
-                  . $spec['reg_title_pm']['span'][1] . $spec['reg_title_row'];
+        $merges[] = $spec['reg_title_inspection']['span'][0] . $reg_title_row . ':'
+                  . $spec['reg_title_inspection']['span'][1] . $reg_title_row;
+        $put($spec['reg_title_pm']['col'], $reg_title_row, $spec['reg_title_pm']['label'], 'syn_title');
+        $merges[] = $spec['reg_title_pm']['span'][0] . $reg_title_row . ':'
+                  . $spec['reg_title_pm']['span'][1] . $reg_title_row;
 
         foreach ($spec['reg_headers'] as $col => $label) {
-            $put($col, $spec['reg_header_row'], $label, $col === 'M' ? 'syn_kpi_label' : 'syn_head');
+            $put($col, $reg_header_row, $label, $col === 'M' ? 'syn_kpi_label' : 'syn_head');
         }
-        $merges[] = $spec['comment_span'][0] . $spec['reg_header_row'] . ':'
-                  . $spec['comment_span'][1] . $spec['reg_header_row'];
+        $merges[] = $spec['comment_span'][0] . $reg_header_row . ':'
+                  . $spec['comment_span'][1] . $reg_header_row;
 
-        $row           = $spec['reg_first_row'];
+        $row           = $reg_first_row;
         $reg_rows      = array();
         $group         = null;
         $group_row     = null;
@@ -1111,7 +1126,7 @@ class W36_excel {
             $row++;
         }
         $close_reg_group($row - 1);
-        $last_reg_row = max($row - 1, $spec['reg_header_row']);
+        $last_reg_row = max($row - 1, $reg_header_row);
 
         /* ── the `M`/`N` counters (BR-27) ──────────────────────────────── */
 
@@ -1126,43 +1141,54 @@ class W36_excel {
             185 => isset($pm['ratio_undone']) ? $pm['ratio_undone'] : null,
         );
         foreach ($spec['kpi_pm'] as $r => $label) {
-            $put($spec['kpi_col_label'], $r, $label, 'syn_kpi_label');
-            $put($spec['kpi_col_value'], $r, $pm_values[$r],
+            $put($spec['kpi_col_label'], $r + $reg_shift, $label, 'syn_kpi_label');
+            $put($spec['kpi_col_value'], $r + $reg_shift, $pm_values[$r],
                  ($r >= 184) ? 'syn_kpi_ratio' : 'syn_kpi_count');
         }
 
-        foreach ($spec['kpi_pm_sub'] as $r => $label) $put($spec['kpi_col_value'], $r, $label, 'syn_kpi_sub');
+        foreach ($spec['kpi_pm_sub'] as $r => $label) $put($spec['kpi_col_value'], $r + $reg_shift, $label, 'syn_kpi_sub');
 
-        $put($spec['kpi_col_value'], $spec['kpi_insp_total_row'],
+        $put($spec['kpi_col_value'], $spec['kpi_insp_total_row'] + $reg_shift,
             isset($ins['machines']) ? (int)$ins['machines'] : 0, 'syn_kpi_count');
 
         $ins_values = array(192 => 'done', 193 => 'undone', 194 => 'breakdown',
                             195 => 'ratio_done', 196 => 'ratio_undone', 197 => 'ratio_breakdown');
         foreach ($spec['kpi_insp'] as $r => $label) {
-            $put($spec['kpi_col_label'], $r, $label, 'syn_kpi_label');
+            $put($spec['kpi_col_label'], $r + $reg_shift, $label, 'syn_kpi_label');
             $key = $ins_values[$r];
-            $put($spec['kpi_col_value'], $r, isset($ins[$key]) ? $ins[$key] : null,
+            $put($spec['kpi_col_value'], $r + $reg_shift, isset($ins[$key]) ? $ins[$key] : null,
                  ($r >= 195) ? 'syn_kpi_ratio' : 'syn_kpi_count');
         }
 
         // the sample's total row swaps the columns: label in `M`, figure in `N`
-        $put($spec['kpi_col_value'], $spec['kpi_total_row'], $spec['kpi_total_label'], 'syn_kpi_total');
-        $put($spec['kpi_col_label'], $spec['kpi_total_row'],
+        $put($spec['kpi_col_value'], $kpi_total_row, $spec['kpi_total_label'], 'syn_kpi_total');
+        $put($spec['kpi_col_label'], $kpi_total_row,
             isset($kpi['total_planned']) ? (int)$kpi['total_planned'] : 0, 'syn_kpi_total_v');
 
         /* ── everything that has to follow the data ────────────────────── */
+
+        // the register rows keep their sample heights, at their shifted rows
+        $row_heights = $spec['row_heights'];
+        if ($reg_shift > 0) {
+            foreach (array($spec['reg_title_row'], $spec['reg_header_row']) as $hr) {
+                if (isset($row_heights[$hr])) {
+                    $row_heights[$hr + $reg_shift] = $row_heights[$hr];
+                    unset($row_heights[$hr]);
+                }
+            }
+        }
 
         return array(
             'sheet'      => $report_name . ' Synthese',
             'cells'      => $cells,
             'merges'     => $merges,
             'widths'     => $spec['widths'],
-            'row_heights'=> $spec['row_heights'],
+            'row_heights'=> $row_heights,
             'data_row_height' => $spec['data_row_height'],
-            'last_row'   => max($last_reg_row, $spec['kpi_total_row']),
+            'last_row'   => max($last_reg_row, $kpi_total_row),
             'last_plan_row' => $last_plan_row,
             'first_data_row'=> $spec['first_data_row'],
-            'reg_first_row' => $spec['reg_first_row'],
+            'reg_first_row' => $reg_first_row,
             'last_reg_row'  => $last_reg_row,
             'plan_rows'  => $plan_rows,
             'filter'     => 'J' . $spec['header_row'] . ':O' . $last_plan_row,
@@ -1183,9 +1209,9 @@ class W36_excel {
                                       'list'  => array_values(array_keys($legend)), 'title' => 'STATUS'),
                 'status'     => array('sqref' => 'G' . $spec['first_data_row'] . ':G' . $last_plan_row,
                                       'list'  => $spec['status_vocabulary'], 'title' => 'EQUIPMENT STATUS'),
-                'inspection' => array('sqref' => 'I' . $spec['reg_first_row'] . ':I' . $last_reg_row,
+                'inspection' => array('sqref' => 'I' . $reg_first_row . ':I' . $last_reg_row,
                                       'list'  => $spec['inspection_vocabulary'], 'title' => 'INSPECTION STATUS'),
-                'pm'         => array('sqref' => 'K' . $spec['reg_first_row'] . ':K' . $last_reg_row,
+                'pm'         => array('sqref' => 'K' . $reg_first_row . ':K' . $last_reg_row,
                                       'list'  => $spec['pm_vocabulary'], 'title' => 'PM STATUS'),
             ),
         );
