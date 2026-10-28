@@ -13,8 +13,66 @@
  */
 defined('BASEPATH') OR exit('No direct script access allowed');
 
+/**
+ * Pure-PHP ZIP writer (STORE method, no compression) used only when the
+ * PHP zip extension (ZipArchive) is not installed. An .xlsx is a zip of
+ * XML parts; storing them uncompressed is valid OOXML that Excel, LibreOffice
+ * and Google Sheets all open — the file is simply larger. Uses only core
+ * functions (crc32, pack), so a server without php-zip can still download
+ * workbooks instead of showing an error.
+ */
+if (!class_exists('XlsxStoredZip')) {
+class XlsxStoredZip {
+    private $entries = array(); // list of array(name, data)
+
+    public function addFromString($name, $data) {
+        $this->entries[] = array((string)$name, (string)$data);
+        return true;
+    }
+
+    public function addFile($filepath, $localname) {
+        $data = @file_get_contents($filepath);
+        if ($data === false) {
+            throw new RuntimeException('Unable to read file for XLSX package: ' . $filepath);
+        }
+        return $this->addFromString($localname, $data);
+    }
+
+    /** Write the archive; throws RuntimeException on failure (ZipArchive parity). */
+    public function writeTo($filepath) {
+        // Fixed DOS date/time (1980-01-01 00:00) keeps output deterministic.
+        $dosTime = 0; $dosDate = (1 << 5) | 1; // 1980-01-01
+        $out = '';
+        $central = '';
+        foreach ($this->entries as $e) {
+            list($name, $data) = $e;
+            $crc  = crc32($data);
+            $size = strlen($data);
+            $offset = strlen($out);
+            $nameLen = strlen($name);
+            // Local file header (STORE, UTF-8 filename flag)
+            $out .= pack('VvvvvvVVVvv', 0x04034b50, 20, 0x0800, 0, $dosTime, $dosDate, $crc, $size, $size, $nameLen, 0)
+                  . $name . $data;
+            // Central directory record
+            $central .= pack('VvvvvvvVVVvvvvvVV', 0x02014b50, 20, 20, 0x0800, 0, $dosTime, $dosDate, $crc, $size, $size, $nameLen, 0, 0, 0, 0, 0, $offset)
+                      . $name;
+        }
+        $cdOffset = strlen($out);
+        $out .= $central;
+        $count = count($this->entries);
+        $out .= pack('VvvvvVVv', 0x06054b50, 0, 0, $count, $count, strlen($central), $cdOffset, 0);
+
+        if (@file_put_contents($filepath, $out) === false) {
+            throw new RuntimeException('Unable to create XLSX file at ' . $filepath);
+        }
+        return $filepath;
+    }
+}
+}
+
 if (!class_exists('XlsxWriter')) {
 #[AllowDynamicProperties]
+
 class XlsxWriter {
 
     private $sheets = [];
@@ -276,10 +334,17 @@ class XlsxWriter {
         $styles        = $this->_styles();
         $sharedStrings = $this->_sharedStrings();
 
-        $zip = new ZipArchive();
-        $opened = $zip->open($filepath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
-        if ($opened !== true) {
-            throw new RuntimeException('Unable to create XLSX file at '.$filepath);
+        // Prefer the zip extension; fall back to the pure-PHP stored-zip
+        // writer so downloads work on servers without php-zip installed.
+        $use_stored_zip = !class_exists('ZipArchive');
+        if ($use_stored_zip) {
+            $zip = new XlsxStoredZip();
+        } else {
+            $zip = new ZipArchive();
+            $opened = $zip->open($filepath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+            if ($opened !== true) {
+                throw new RuntimeException('Unable to create XLSX file at '.$filepath);
+            }
         }
         $zip->addFromString('[Content_Types].xml',       $contentTypes);
         $zip->addFromString('_rels/.rels',               $rels);
@@ -354,7 +419,11 @@ class XlsxWriter {
                 . $rels . '</Relationships>');
         }
 
-        $zip->close();
+        if ($use_stored_zip) {
+            $zip->writeTo($filepath);
+        } else {
+            $zip->close();
+        }
         return $filepath;
     }
 
