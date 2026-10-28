@@ -1757,10 +1757,123 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
 
     public function workshop_daily() {
         $date = $this->_resolve_report_date($this->input->get('date', TRUE));
+        $report = $this->_build_workshop_daily($date);
+
+        $ctx = $this->_build_workshop_daily_dataset($report);
+        $per_page_in = (int)$this->input->get('per_page', TRUE);
+        $per_page = in_array($per_page_in, array(10, 25, 50, 100), TRUE) ? $per_page_in : 25;
+        $total_filtered = count($ctx['rows']);
+        $total_pages = max(1, (int)ceil($total_filtered / $per_page));
+        $page_in = (int)$this->input->get('page', TRUE);
+        $page = max(1, min($total_pages, $page_in > 0 ? $page_in : 1));
+        $offset = ($page - 1) * $per_page;
+        $view_in = strtolower(trim((string)$this->input->get('view', TRUE)));
+
         $data['date']       = $date;
-        $data['report']     = $this->_build_workshop_daily($date);
+        $data['report']     = $report; // grouped: KPI strip, fleet summary, charts, exports
+        $data['machines']   = array_slice($ctx['rows'], $offset, $per_page);
+        $data['total_filtered'] = $total_filtered;
+        $data['tab_counts'] = $ctx['tab_counts'];
+        $data['type_counts'] = $ctx['type_counts'];
+        $data['active_tab'] = $ctx['active_tab'];
+        $data['search_query'] = $ctx['search_query'];
+        $data['type_filter'] = $ctx['type_filter'];
+        $data['sort_by']    = $ctx['sort_by'];
+        $data['sort_dir']   = $ctx['sort_dir'];
+        $data['per_page']   = $per_page;
+        $data['page']       = $page;
+        $data['total_pages'] = $total_pages;
+        $data['showing_from'] = $total_filtered > 0 ? ($offset + 1) : 0;
+        $data['showing_to']   = min($total_filtered, $offset + count($data['machines']));
+        $data['view_mode']  = ($view_in === 'cards') ? 'cards' : 'table';
         $data['page_title'] = 'Workshop Daily Report — '.date('d M Y', strtotime($date));
         $this->render('reports/workshop_daily', $data);
+    }
+
+    /**
+     * Flatten the grouped Workshop Daily report into machine rows for the
+     * detail table: status tabs (All / Down / Available), equipment-type
+     * filter, search, sorting and counts. Tab/type counts are computed
+     * after search + type filter (house rule), before the status tab.
+     * The grouped report (KPIs, fleet summary, charts, XLSX/PDF exports)
+     * is untouched and always covers the whole fleet for the day.
+     */
+    private function _build_workshop_daily_dataset($report) {
+        $flat = array();
+        foreach ((array)$report as $type => $g) {
+            foreach ((array)$g['machines'] as $m) {
+                $m['type'] = (string)$g['type'];
+                $flat[] = $m;
+            }
+        }
+
+        $type_names = array();
+        foreach ($flat as $m) { $type_names[$m['type']] = TRUE; }
+        $type_names = array_keys($type_names);
+        sort($type_names, SORT_NATURAL | SORT_FLAG_CASE);
+
+        $search_query = trim((string)$this->input->get('q', TRUE));
+        if (strlen($search_query) > 100) $search_query = substr($search_query, 0, 100);
+        $type_filter = trim((string)$this->input->get('type', TRUE));
+        if ($type_filter !== '' && !in_array($type_filter, $type_names, TRUE)) $type_filter = '';
+
+        $tab_in = strtolower(trim((string)$this->input->get('tab', TRUE)));
+        $active_tab = in_array($tab_in, array('all', 'down', 'available'), TRUE) ? $tab_in : 'all';
+
+        $scoped = array();
+        foreach ($flat as $m) {
+            if ($search_query !== '') {
+                $hay = strtolower((string)$m['machine_id'] . ' ' . (string)$m['model'] . ' ' .
+                    (string)$m['location'] . ' ' . (string)$m['observation'] . ' ' . (string)$m['action_taken']);
+                if (strpos($hay, strtolower($search_query)) === FALSE) continue;
+            }
+            if ($type_filter !== '' && $m['type'] !== $type_filter) continue;
+            $scoped[] = $m;
+        }
+
+        $tab_counts = array('all' => count($scoped), 'down' => 0, 'available' => 0);
+        $type_counts = array();
+        foreach ($scoped as $m) {
+            if ($m['status'] === 'Down') $tab_counts['down']++; else $tab_counts['available']++;
+            $type_counts[$m['type']] = isset($type_counts[$m['type']]) ? $type_counts[$m['type']] + 1 : 1;
+        }
+
+        $rows = array();
+        foreach ($scoped as $m) {
+            if ($active_tab === 'down' && $m['status'] !== 'Down') continue;
+            if ($active_tab === 'available' && $m['status'] === 'Down') continue;
+            $rows[] = $m;
+        }
+
+        $sort_in = strtolower(trim((string)$this->input->get('sort', TRUE)));
+        $sort_by = in_array($sort_in, array('machine', 'type', 'availability', 'days_down', 'total_dt', 'status'), TRUE) ? $sort_in : 'machine';
+        $dir_in = strtolower(trim((string)$this->input->get('dir', TRUE)));
+        $sort_dir = ($dir_in === 'desc') ? 'desc' : 'asc';
+        $mul = ($sort_dir === 'desc') ? -1 : 1;
+        usort($rows, function ($a, $b) use ($sort_by, $mul) {
+            switch ($sort_by) {
+                case 'type':         $cmp = strcasecmp((string)$a['type'], (string)$b['type']); break;
+                case 'status':       $cmp = strcasecmp((string)$a['status'], (string)$b['status']); break;
+                case 'availability': $cmp = ((float)$a['availability'] <=> (float)$b['availability']); break;
+                case 'days_down':    $cmp = ((int)$a['days_down'] <=> (int)$b['days_down']); break;
+                case 'total_dt':     $cmp = ((float)$a['total_dt'] <=> (float)$b['total_dt']); break;
+                default:             $cmp = strcasecmp((string)$a['machine_id'], (string)$b['machine_id']);
+            }
+            if ($cmp === 0) $cmp = strcasecmp((string)$a['machine_id'], (string)$b['machine_id']);
+            return $cmp * $mul;
+        });
+
+        return array(
+            'rows'         => $rows,
+            'tab_counts'   => $tab_counts,
+            'type_counts'  => $type_counts,
+            'type_names'   => $type_names,
+            'active_tab'   => $active_tab,
+            'search_query' => $search_query,
+            'type_filter'  => $type_filter,
+            'sort_by'      => $sort_by,
+            'sort_dir'     => $sort_dir,
+        );
     }
 
     public function export_workshop_daily_xlsx() {
