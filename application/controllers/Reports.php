@@ -3147,10 +3147,32 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         // file and the screen can never disagree (D-W1).
         $report = $this->W36_report_model->report_for_week($week_start);
 
+        // The workbook writer builds a real .xlsx (a zip) in uploads/tmp/.
+        // Both failure modes used to surface as a blank page (an uncaught
+        // Error/RuntimeException with display_errors off), so name them:
+        // a missing PHP zip extension, or a temp dir PHP cannot write to.
+        if (!class_exists('ZipArchive')) {
+            show_error('Excel download is unavailable on this server: the PHP "zip" extension is not installed (ZipArchive class missing). Ask the server admin to install/enable php-zip, then restart PHP.', 500);
+            return;
+        }
+
         $this->load->library('w36_excel');
         $filename = $this->w36_excel->filename($report);
         $tmp      = $this->_tmp_path($filename);
-        $this->w36_excel->save($report, $tmp);
+        if (!is_dir(dirname($tmp)) || !is_writable(dirname($tmp))) {
+            show_error('Excel download is unavailable: the web server cannot write to ' . dirname($tmp) . '. Check that uploads/tmp/ exists and is writable by the web-server user.', 500);
+            return;
+        }
+
+        try {
+            $this->w36_excel->save($report, $tmp);
+        } catch (Throwable $e) {
+            if (function_exists('log_message')) {
+                log_message('error', 'Weekly W36 Excel export failed: ' . $e->getMessage());
+            }
+            show_error('Could not generate the Excel file: ' . $e->getMessage(), 500);
+            return;
+        }
         $this->_send_file($tmp, $filename);
     }
 
