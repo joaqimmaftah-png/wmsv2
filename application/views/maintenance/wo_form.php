@@ -211,10 +211,11 @@ function _v($is_edit, $wo, $field, $default = '') {
         <label class="form-label">Status</label>
         <select name="status" class="form-select">
           <?php $curStatus = $is_edit ? $wo->status : 'Open';
-          foreach (array('Open','In Progress','Waiting Parts','Waiting Tools','Completed','Closed') as $s): ?>
+          foreach (array('Open','In Progress','Waiting Parts','Waiting Tools','Completed') as $s): ?>
           <option value="<?= $s; ?>" <?= ($curStatus===$s)?'selected':''; ?>><?= $s; ?></option>
           <?php endforeach; ?>
         </select>
+        <div class="cs">A supervisor verifies a completed work order from its detail page.</div>
       </div>
       <div>
         <label class="form-label">Hold Code <span style="font-weight:400;color:var(--t4);">(why work waits)</span></label>

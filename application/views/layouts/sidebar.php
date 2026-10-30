@@ -653,8 +653,15 @@ $security_alert_label = $security_alert_count . ' security event' . ($security_a
   var sb=document.getElementById('sidebar');
   var cv=document.getElementById('canvas');
   if(!sb||!cv) return;
-  sb.addEventListener('mouseenter',function(){ sb.classList.add('expanded'); cv.style.marginLeft='224px'; });
-  sb.addEventListener('mouseleave',function(){ sb.classList.remove('expanded'); cv.style.marginLeft='72px'; });
+  function collapseSidebar(){ sb.classList.remove('expanded'); cv.style.marginLeft=''; }
+  sb.addEventListener('mouseenter',function(){
+    // At narrow widths expanding the navigation squeezed the page down to a
+    // few pixels (including when zoomed). Keep the icon rail usable instead.
+    if(window.matchMedia('(max-width: 760px)').matches) return;
+    sb.classList.add('expanded'); cv.style.marginLeft='224px';
+  });
+  sb.addEventListener('mouseleave',collapseSidebar);
+  window.addEventListener('resize',function(){ if(window.matchMedia('(max-width: 760px)').matches) collapseSidebar(); });
 })();
 (function(){
   var cv=document.getElementById('canvas');

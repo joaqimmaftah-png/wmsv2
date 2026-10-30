@@ -3,12 +3,12 @@
 -- Compatible with MySQL 8.0+ and MariaDB 10.4+ (XAMPP / cPanel / Linux VPS)
 -- Ordered cleanly:
 --   1. Session settings & transaction start
---   2. All 62 CREATE TABLE definitions
+--   2. All application and migration-ledger CREATE TABLE definitions
 --   3. All PRIMARY KEY, UNIQUE KEY & secondary indexes
 --   4. All AUTO_INCREMENT definitions (active BEFORE any INSERT runs!)
 --   5. All FOREIGN KEY constraints
 --   6. Master reference data, 29 system settings & 14 EN/FR checklists (630 items)
---   7. Baseline schema_migrations ledger (0001..0010 SHA-256 checksums)
+--   7. Baseline schema_migrations ledger (SHA-256 checksums)
 -- =============================================================================
 
 
@@ -116,8 +116,30 @@ CREATE TABLE `backlogs` (
   `verified_at` datetime DEFAULT NULL,
   `verification_notes` varchar(300) DEFAULT NULL,
   `closed_by` int(11) DEFAULT NULL COMMENT 'users.id that closed the item (NULL on migrated history)',
-  `inspection_item_id` int(11) DEFAULT NULL COMMENT 'inspection_items.id this defect came from — lets a later pass close it',
-  `recurrence_of` int(11) DEFAULT NULL COMMENT 'backlogs.id of the earlier (closed) defect this one repeats'
+  `inspection_item_id` int(11) DEFAULT NULL COMMENT 'inspection_items.id this defect came from — links later inspection evidence',
+  `recurrence_of` int(11) DEFAULT NULL COMMENT 'backlogs.id of the earlier (closed) defect this one repeats',
+  `requested_date` date DEFAULT NULL COMMENT 'Proposed date, not a committed plan',
+  `requested_duration` int(11) DEFAULT NULL COMMENT 'Proposed minutes, not a committed plan',
+  `schedule_state` varchar(32) DEFAULT NULL,
+  `schedule_message` varchar(700) DEFAULT NULL,
+  `closure_kind` varchar(24) DEFAULT NULL COMMENT 'verified, historical or historical_verified; NULL is legacy',
+  `completion_source` varchar(500) DEFAULT NULL,
+  `reviewed_by` int(11) DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `cancellation_reason` varchar(500) DEFAULT NULL,
+  `submit_token` char(32) DEFAULT NULL COMMENT 'Idempotency token for manual defect creation'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Append-only defect activity. No imported historical record is rewritten.
+CREATE TABLE IF NOT EXISTS `backlog_events` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `backlog_id` int(11) NOT NULL,
+  `actor_id` int(11) DEFAULT NULL,
+  `event_type` varchar(40) NOT NULL,
+  `details` text DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_backlog_events_item` (`backlog_id`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `certifications` (
@@ -244,6 +266,14 @@ CREATE TABLE `excel_migration_log` (
   `notes` text DEFAULT NULL,
   `run_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- A single transactional mutex for all forecast publication and plan writes.
+CREATE TABLE `forecast_write_lock` (
+  `lock_id` tinyint(3) unsigned NOT NULL,
+  PRIMARY KEY (`lock_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `forecast_write_lock` (`lock_id`) VALUES (1);
 
 CREATE TABLE `forecast_snapshots` (
   `id` int(11) NOT NULL,
@@ -961,6 +991,7 @@ ALTER TABLE `attendance_punches`
 ALTER TABLE `backlogs`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uq_backlog_source_ref` (`source_ref`),
+  ADD UNIQUE KEY `uq_backlog_submit_token` (`submit_token`),
   ADD KEY `idx_backlog_equipment` (`equipment_id`),
   ADD KEY `idx_backlog_status` (`status`),
   ADD KEY `idx_backlog_start` (`start_date`),
@@ -17856,7 +17887,9 @@ INSERT INTO `schema_migrations` (`version`, `filename`, `checksum`, `applied_at`
   ('0011', '0011_restore_verbatim_asset_machine_ids.sql', '69721ba7a7f9e2a5fc2f3dc10a9bab111ad69bebeabe0e80bbe07bd4675ac953', NOW()),
   ('0012', '0012_sync_equipment_with_asset_register.sql', 'bcf5cb6f2c5a96ce63c9782aafe53df524d89c7ef07316cca78c536e0d25c668', NOW()),
   ('0013', '0013_reconcile_stale_equipment_duplicates.sql', '2f18908982a107d08a5e16ffb307fa3da4d963dc9a4121c9d2a863ab430471ce', NOW()),
-  ('0014', '0014_worker_site_and_timesheet_settings.sql', 'cd8b51e3741f792ed864d5b911fa89b0af2f57b0c513e0520a439e9833dffe28', NOW())
+  ('0014', '0014_worker_site_and_timesheet_settings.sql', 'cd8b51e3741f792ed864d5b911fa89b0af2f57b0c513e0520a439e9833dffe28', NOW()),
+  ('0015', '0015_backlog_workflow_safety.sql', '44d53529a058ba2f8797cff130d2e257ec0a7dbbb152b7f6876f9418ff15ca17', NOW()),
+  ('0016', '0016_forecast_write_lock.sql', '8c83c1e80c7751a560e868ba8a2fc03dee668284adcbaa6dcdcbeccf9bbf13c4', NOW())
 ON DUPLICATE KEY UPDATE `filename` = VALUES(`filename`), `checksum` = VALUES(`checksum`);
 
 COMMIT;

@@ -423,6 +423,11 @@ class Workorders extends MY_Controller {
     ───────────────────────────────────────────────────── */
     public function create() {
         if ($this->input->post()) {
+            // Reject before generating a number or writing an uploaded signature.
+            if ($this->input->post('status', TRUE) === 'Closed') {
+                $this->session->set_flashdata('error', 'Create the work order as Completed, then ask a supervisor to verify and close it.');
+                redirect('workorders/create'); return;
+            }
             $wo_number = $this->_generate_wo_number();
             $sys_csv   = $this->_get_systems_csv();
             $techs_csv = $this->input->post('assigned_to', TRUE) ?: NULL;
@@ -558,6 +563,8 @@ class Workorders extends MY_Controller {
             $data['breakdown_event'] = $this->Workorder_model->get_breakdown_event_group($id);
             $data['breakdown_candidates'] = $this->Workorder_model->get_breakdown_event_candidates($wo->equipment_id, $id);
         }
+        $this->load->model('Backlog_model');
+        $data['linked_backlogs'] = $this->Backlog_model->open_for_work_order($id);
         $data['history']     = $this->Workorder_model->get_status_history($id);
         $data['technicians'] = !empty($wo->assigned_to) ? $this->Team_model->get_technicians() : $this->_assignment_picker($wo);
         $data['attendance_gate'] = $this->_attendance_gate();
@@ -581,8 +588,16 @@ class Workorders extends MY_Controller {
     public function edit($id) {
         $wo = $this->Workorder_model->get_by_id($id);
         if (!$wo) show_404();
+        if ($wo->status === 'Closed') {
+            $this->session->set_flashdata('error', 'Closed work orders are locked to preserve verification evidence. Record follow-up work separately.');
+            redirect("workorders/view/{$id}"); return;
+        }
 
         if ($this->input->post()) {
+            if ($this->input->post('status', TRUE) === 'Closed') {
+                $this->session->set_flashdata('error', 'Use Verify & Close on the work-order page to review linked defects and record your checks.');
+                redirect("workorders/view/{$id}"); return;
+            }
             $sys_csv   = $this->_get_systems_csv();
             $techs_csv = $this->input->post('assigned_to', TRUE) ?: NULL;
 
@@ -594,8 +609,6 @@ class Workorders extends MY_Controller {
                 redirect("workorders/edit/{$id}");
                 return;
             }
-
-            $op_sig = $this->_save_operator_signature();
 
             $update = array(
                 'type'               => $this->input->post('type',           TRUE),
@@ -620,27 +633,6 @@ class Workorders extends MY_Controller {
                 'planner'            => $this->input->post('planner',        TRUE) ?: NULL,
                 'equipment_systems'  => $sys_csv,
             );
-            if ($op_sig) $update['operator_signature'] = $op_sig;
-
-            /*
-             * Closing is a supervisor's verification, whichever screen is used
-             * (SYSTEM.md §7.1 / §17). The quick status form already enforced
-             * this; the edit form could silently set "Closed" without a
-             * verifier, so the same rule is applied here.
-             */
-            if ($update['status'] === 'Closed' && $wo->status !== 'Closed' && !$this->is_supervisor()) {
-                $this->session->set_flashdata('error',
-                    'A work order is closed by a supervisor after checking the repair. '
-                    .'Set it to Completed — the supervisor then verifies and closes it.');
-                redirect("workorders/view/{$id}");
-                return;
-            }
-            if ($update['status'] === 'Closed' && $wo->status !== 'Closed') {
-                $update['verified_by']        = $this->user_id;
-                $update['verified_at']        = date('Y-m-d H:i:s');
-                $update['verification_notes'] = $this->input->post('verification_notes', TRUE) ?: NULL;
-            }
-
             /*
              * Same gap as create(): the edit form posted straight into the
              * UPDATE. A blank title, or an enum value the column does not
@@ -686,7 +678,24 @@ class Workorders extends MY_Controller {
                 $update['downtime_hours'] = round(($end_ts - $start_ts) / 3600, 2);
             }
 
+            // Serialize edits with supervisor verification. A form posted just
+            // before closure must not overwrite the newly verified order or its
+            // child rows after the verification transaction commits.
+            if (!$this->db->trans_begin()) {
+                $this->session->set_flashdata('error', 'The work order edit could not be started. Nothing was saved.');
+                redirect("workorders/edit/{$id}"); return;
+            }
+            $lockedQuery = $this->db->query('SELECT status FROM '.$this->db->dbprefix('work_orders').' WHERE id = ? FOR UPDATE', array((int)$id));
+            $locked = $lockedQuery ? $lockedQuery->row() : NULL;
+            if (!$locked || $locked->status === 'Closed' || (string)$locked->status !== (string)$wo->status) {
+                $this->db->trans_rollback();
+                $this->session->set_flashdata('error', 'The work order status changed while you were editing. Refresh and review it before making changes.');
+                redirect("workorders/view/{$id}"); return;
+            }
+            $op_sig = $this->_save_operator_signature();
+            if ($op_sig) $update['operator_signature'] = $op_sig;
             if ($this->Workorder_model->update($id, $update) === FALSE) {
+                $this->db->trans_rollback();
                 $this->session->set_flashdata('error',
                     'The work order could not be saved. Nothing was written — check the values and try again.');
                 redirect("workorders/edit/{$id}");
@@ -712,6 +721,11 @@ class Workorders extends MY_Controller {
             // status (this path used to change the WO only).
             $this->_sync_equipment_status($wo->equipment_id, $update['type'], $update['status'], $id);
 
+            if ($this->db->trans_status() === FALSE || !$this->db->trans_commit()) {
+                $this->db->trans_rollback();
+                $this->session->set_flashdata('error', 'The work order edit could not be confirmed. Review it before retrying.');
+                redirect("workorders/view/{$id}"); return;
+            }
             $this->session->set_flashdata('success', 'Work Order updated.' . $this->_lube_sync_note($lube));
             redirect("workorders/view/{$id}");
         }
@@ -782,13 +796,27 @@ class Workorders extends MY_Controller {
          * only by a supervisor (role 1 — the Manager is read-only by the access
          * matrix, so the verification authority is the supervisor).
          */
+        if (!in_array($status, array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools', 'Completed', 'Closed'), TRUE)
+            || $wo->status === 'Closed') {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('error', 'The status change is not valid for this work order.');
+            redirect("workorders/view/{$id}"); return;
+        }
         if ($status === 'Closed' && !$this->is_supervisor()) {
             $this->db->trans_rollback();
-            $this->session->set_flashdata('error',
-                'A work order is closed by a supervisor after checking the repair. '
-                .'Set it to Completed with your findings — the supervisor then verifies and closes it.');
-            redirect("workorders/view/{$id}");
-            return;
+            $this->session->set_flashdata('error', 'A work order is closed by a supervisor after checking the repair.');
+            redirect("workorders/view/{$id}"); return;
+        }
+        if ($status === 'Closed' && $wo->status !== 'Completed') {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('error', 'Mark the work order Completed before supervisor verification.');
+            redirect("workorders/view/{$id}"); return;
+        }
+        $verificationNotes = trim((string)$this->input->post('verification_notes', TRUE));
+        if ($status === 'Closed' && $verificationNotes === '') {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('error', 'Describe what you checked before closing the work order.');
+            redirect("workorders/view/{$id}"); return;
         }
 
         if ($status === 'In Progress' && !$wo->start_datetime) {
@@ -801,13 +829,9 @@ class Workorders extends MY_Controller {
             } else {
                 $update['verified_by']          = $this->user_id;
                 $update['verified_at']          = date('Y-m-d H:i:s');
-                $update['verification_notes']   = $this->input->post('verification_notes', TRUE) ?: $notes;
-                if (!$wo->end_datetime) {
-                    $update['end_datetime'] = date('Y-m-d H:i:s');
-                }
-                if (!$wo->completed_by) {
-                    $update['completed_by'] = $this->user_id;
-                }
+                $update['verification_notes']   = mb_substr($verificationNotes, 0, 300);
+                // Verification is now, but a missing historical completion
+                // date/person is unknown; do not invent either one.
             }
             $posted_rc = $this->input->post('root_cause', TRUE);
             $posted_at = $this->input->post('action_taken', TRUE);
@@ -834,9 +858,6 @@ class Workorders extends MY_Controller {
             if ($wo->start_datetime && $effective_end && ($status === 'Completed' || $wo->downtime_hours === null)) {
                 $update['downtime_hours'] = max(0, round((strtotime($effective_end) - strtotime($wo->start_datetime)) / 3600, 2));
             }
-            // -> Available (the helper also refuses to revive a Retired machine)
-            $this->_sync_equipment_status($wo->equipment_id, $wo->type, $status, $id);
-
             // Pending Spare Parts Tracking: anything still reserved for this WO
             // is treated as consumed — book the ISSUE movements automatically.
             $issued_count = $this->Spareparts_model->auto_issue_for_wo($id, $this->user_id);
@@ -846,35 +867,35 @@ class Workorders extends MY_Controller {
             }
         }
 
-        $this->Workorder_model->update($id, $update);
+        if (!$this->Workorder_model->update($id, $update)) {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('error', 'The status change could not be saved.');
+            redirect("workorders/view/{$id}"); return;
+        }
         $this->Workorder_model->add_status_history($id, $wo->status, $status, $this->user_id, $notes);
 
-        /*
-         * One closure path for a defect (F-08). When a backlog item points at
-         * this work order, verifying the repair here closes the defect too —
-         * with the verifier recorded — instead of leaving the work order closed
-         * and the defect open (or the reverse, which is what two independent
-         * closure buttons produced).
-         */
+        // A work order can cover several defects. Only those explicitly
+        // selected by the supervisor are verified; the rest stay open.
+        $resolvedCount = 0;
         if ($status === 'Closed' && $this->db->table_exists('backlogs')) {
-            $update_cols = array(
-                'status'          => 'Closed',
-                'end_date'        => date('Y-m-d'),
-                'closing_remarks' => 'Closed with work order '.$wo->wo_number." (verified by supervisor) — see the work order for what was done.",
-                'closed_by'       => $this->user_id,
-            );
-            if ($this->db->field_exists('verified_by', 'backlogs')) {
-                $update_cols['verified_by']         = $this->user_id;
-                $update_cols['verified_at']         = date('Y-m-d H:i:s');
-                $update_cols['verification_notes']  = 'Verified with work order '.$wo->wo_number.'.';
+            $this->load->model('Backlog_model');
+            $selected = $this->input->post('resolved_defect_ids', TRUE);
+            $selected = is_array($selected) ? $selected : array();
+            if (isset($update['action_taken'])) $wo->action_taken = $update['action_taken'];
+            $outcome = $this->Backlog_model->close_selected_for_work_order($wo, $selected, $this->user_id, $verificationNotes);
+            if (!empty($outcome['error'])) {
+                $this->db->trans_rollback();
+                $this->session->set_flashdata('error', $outcome['error']);
+                redirect("workorders/view/{$id}"); return;
             }
-            $this->db->where('work_order_id', (int)$id)
-                ->where_in('status', array('Open', 'In Progress'))
-                ->update('backlogs', $update_cols);
+            $resolvedCount = isset($outcome['closed']) ? (int)$outcome['closed'] : 0;
+        }
 
-            if ($this->db->affected_rows() > 0) {
-                $notes = trim((string)$notes.' [defect(s) on this work order closed]');
-            }
+        if (in_array($status, array('Completed', 'Closed'), TRUE)) {
+            // Check open defect claims after selected defects are closed, so the
+            // last resolved breakdown can release the machine while any other
+            // open breakdown still prevents release. Retired machines stay put.
+            $this->_sync_equipment_status($wo->equipment_id, $wo->type, $status, $id);
         }
 
         if ($this->db->trans_status() === FALSE) {
@@ -889,7 +910,9 @@ class Workorders extends MY_Controller {
             redirect("workorders/view/{$id}");
             return;
         }
-        $this->session->set_flashdata('success', 'Status updated.');
+        $this->session->set_flashdata('success', $status === 'Closed'
+            ? 'Work order verified. '.$resolvedCount.' selected defect(s) closed; unselected defects remain open.'
+            : 'Status updated.');
         redirect("workorders/view/{$id}");
     }
 
@@ -1064,6 +1087,12 @@ class Workorders extends MY_Controller {
             return;
         }
 
+        if (in_array($wo->status, array('Completed', 'Closed'), TRUE)) {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('error', 'Work sessions cannot start on a completed or closed work order. Review the status first.');
+            redirect('workorders/view/'.$id); return;
+        }
+
         $requested_tech = $this->input->post('technician_id', TRUE);
         $technician_id = is_scalar($requested_tech) && $requested_tech !== ''
             ? (int)$requested_tech : (int)$this->user_id;
@@ -1171,7 +1200,7 @@ class Workorders extends MY_Controller {
         }
 
         $locked_wo = $this->db->query(
-            'SELECT id FROM '.$this->db->dbprefix('work_orders').' WHERE id = ? FOR UPDATE',
+            'SELECT id, status FROM '.$this->db->dbprefix('work_orders').' WHERE id = ? FOR UPDATE',
             array((int)$wo_id)
         );
         $locked_session = $this->db->query(
@@ -1179,10 +1208,16 @@ class Workorders extends MY_Controller {
             array((int)$session_id, (int)$wo_id)
         );
         $session = $locked_session ? $locked_session->row() : null;
-        if (!$locked_wo || !$locked_wo->row() || !$session) {
+        $wo = $locked_wo ? $locked_wo->row() : NULL;
+        if (!$wo || !$session) {
             $this->db->trans_rollback();
             show_404();
             return;
+        }
+        if ($wo->status === 'Closed') {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('error', 'Sessions on a closed work order are locked; ask a supervisor to review the historical record.');
+            redirect('workorders/view/'.$wo_id); return;
         }
         if ($session->status !== 'Open') {
             $this->db->trans_rollback();
@@ -1331,8 +1366,26 @@ class Workorders extends MY_Controller {
     public function delete_attachment($attachment_id, $wo_id = null) {
         if (!$this->require_post()) return;
         if ($wo_id === null) show_404();
-        if (!$this->Workorder_model->get_by_id($wo_id)) show_404();
-        if (!$this->Workorder_model->delete_attachment($attachment_id, $wo_id)) show_404();
+        if (!$this->db->trans_begin()) {
+            $this->session->set_flashdata('error', 'The evidence change could not be started.');
+            redirect('workorders/view/'.$wo_id); return;
+        }
+        $query = $this->db->query('SELECT status FROM '.$this->db->dbprefix('work_orders').' WHERE id = ? FOR UPDATE', array((int)$wo_id));
+        $wo = $query ? $query->row() : NULL;
+        if (!$wo) { $this->db->trans_rollback(); show_404(); return; }
+        if ($wo->status === 'Closed') {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('error', 'Evidence on a closed work order cannot be deleted.');
+            redirect('workorders/view/'.$wo_id); return;
+        }
+        if (!$this->Workorder_model->delete_attachment($attachment_id, $wo_id)) {
+            $this->db->trans_rollback(); show_404(); return;
+        }
+        if ($this->db->trans_status() === FALSE || !$this->db->trans_commit()) {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('error', 'The evidence change could not be confirmed.');
+            redirect('workorders/view/'.$wo_id); return;
+        }
         $this->session->set_flashdata('success', 'Attachment removed.');
         redirect('workorders/view/'.$wo_id);
     }
@@ -1597,6 +1650,12 @@ class Workorders extends MY_Controller {
         }
 
         if ($target === NULL) return;
+        if ($target === 'Available' && $this->db->table_exists('backlogs')) {
+            $openDefect = $this->db->where('equipment_id', $equipment_id)
+                ->where('machine_status', 'BREAKDOWN')
+                ->where_in('status', array('Open', 'In Progress'))->limit(1)->get('backlogs')->row();
+            if ($openDefect) $target = 'Breakdown';
+        }
 
         /*
          * One machine, several work orders: finishing this job does not make

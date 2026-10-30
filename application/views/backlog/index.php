@@ -577,7 +577,7 @@ if ($q !== '') {
   <div class="bl-header">
     <div>
       <h1 class="bl-title">Backlog &amp; Defect Register</h1>
-      <div class="bl-sub">Defects raised by pre-shift inspections, daily checklists, and job cards — tracked to verified closure.</div>
+      <div class="bl-sub">Defects raised by inspections, checklists and job cards — with closure evidence where recorded.</div>
     </div>
 
     <div class="bl-head-actions">
@@ -607,7 +607,7 @@ if ($q !== '') {
       <a class="bl-kpi <?= (int)$kpi['p1'] > 0 ? 'is-crit' : '' ?>" href="<?= $h($buildUrl(array('tab' => 'p1', 'page' => 1))) ?>">
         <span class="bl-kpi-lbl">P1 Critical Open</span>
         <span class="bl-kpi-val"><?= (int)$kpi['p1'] ?></span>
-        <span class="bl-kpi-meta"><?= (int)$kpi['breakdown'] ?> machine(s) in BREAKDOWN</span>
+        <span class="bl-kpi-meta"><?= (int)$kpi['breakdown'] ?> open BREAKDOWN defects</span>
       </a>
 
       <a class="bl-kpi <?= (int)$kpi['overdue'] > 0 ? 'is-warn' : '' ?>" href="<?= $h($buildUrl(array('tab' => 'overdue', 'page' => 1))) ?>">
@@ -618,14 +618,14 @@ if ($q !== '') {
 
       <a class="bl-kpi" href="<?= $h($buildUrl(array('tab' => 'active', 'sort' => 'days_down', 'dir' => 'desc', 'page' => 1))) ?>">
         <span class="bl-kpi-lbl">Avg. Age Open</span>
-        <span class="bl-kpi-val"><?= $h($kpi['avg_days']) ?>d</span>
-        <span class="bl-kpi-meta">Oldest active defect: <?= (int)$kpi['oldest'] ?>d</span>
+        <span class="bl-kpi-val"><?= $kpi['avg_days'] === NULL ? '—' : $h($kpi['avg_days']).'d' ?></span>
+        <span class="bl-kpi-meta">Oldest active defect: <?= $kpi['oldest'] === NULL ? 'unknown' : (int)$kpi['oldest'].'d' ?></span>
       </a>
 
       <a class="bl-kpi is-ok" href="<?= $h($buildUrl(array('tab' => 'closed', 'page' => 1))) ?>">
-        <span class="bl-kpi-lbl">Verified &amp; Closed</span>
+        <span class="bl-kpi-lbl">Closed defects</span>
         <span class="bl-kpi-val"><?= (int)$kpi['closed'] ?></span>
-        <span class="bl-kpi-meta">Supervisor-verified closures</span>
+        <span class="bl-kpi-meta">Verification varies; see each record</span>
       </a>
     </div>
 
@@ -848,17 +848,18 @@ if ($q !== '') {
                 </td>
                 <td class="num">
                   <div class="bl-cell-main" style="<?= ($isOpen && (int)$b->days_down > 30) ? 'color:var(--bl-crit-fg);' : '' ?>">
-                    <?= (int)$b->days_down ?>d
+                    <?= $b->days_down === NULL ? '—' : (int)$b->days_down.'d' ?>
                   </div>
                   <div class="bl-cell-sub" style="<?= $overdue ? 'color:var(--bl-crit-fg);font-weight:600;' : '' ?>">
-                    <?= !empty($b->deadline) ? ('Due ' . $h($b->deadline)) : (!empty($b->planned_date) ? ('Plan ' . $h($b->planned_date)) : 'No deadline') ?>
+                    <?= !empty($b->deadline) ? ('Due ' . $h($b->deadline)) : 'No deadline' ?>
                   </div>
+                  <div class="bl-cell-sub"><?= $h(isset($b->schedule_label) ? $b->schedule_label : 'Not planned') ?><?= !empty($b->plan_date_display) ? ' · '.$h($b->plan_date_display) : '' ?></div>
                 </td>
                 <td>
                   <div class="bl-cell-main"><?= $h($owner) ?></div>
                   <div class="bl-cell-sub">
-                    <?php if (!empty($b->verifier_name) && !$isOpen): ?>
-                      <span style="color:var(--bl-ok-fg);font-weight:600;">✓ <?= $h($b->verifier_name) ?></span>
+                    <?php if (!$isOpen && !empty($b->verification_label)): ?>
+                      <span><?= $h($b->verification_label) ?></span>
                     <?php else: ?>
                       <?= $h($b->reported_by ? ('By ' . $b->reported_by) : '—') ?>
                     <?php endif; ?>
@@ -870,7 +871,7 @@ if ($q !== '') {
                 <td>
                   <div class="bl-row-actions">
                     <button type="button" class="bl-btn bl-btn-sm" data-bl-open="<?= $bid ?>">Inspect</button>
-                    <?php if ($can_write): ?>
+                    <?php if ($can_write && ($isOpen || $is_supervisor)): ?>
                       <a class="bl-btn bl-btn-sm" href="<?= $h(base_url('backlog/edit/' . $bid)) ?>">Edit</a>
                       <?php if ($isOpen && $is_supervisor): ?>
                         <button type="button" class="bl-btn bl-btn-sm"
@@ -911,16 +912,18 @@ if ($q !== '') {
                   <button type="button" class="bl-primary-btn" data-bl-open="<?= $bid ?>">
                     BL-<?= str_pad((string)$bid, 4, '0', STR_PAD_LEFT) ?> · <?= $h($mDisp) ?>
                   </button>
-                  <div class="bl-cell-sub"><?= $h($b->start_date ?: '—') ?> · <?= (int)$b->days_down ?>d open</div>
+                  <div class="bl-cell-sub"><?= $h($b->start_date ?: '—') ?> · <?= $b->days_down === NULL ? 'age unknown' : (int)$b->days_down.'d' ?></div>
                 </div>
                 <span class="bl-badge <?= $pCls ?>"><?= $h($b->priority ?: $b->status) ?></span>
               </div>
 
               <div style="font-size:12.5px;color:var(--bl-text);line-height:1.4;"><?= $h($b->description) ?></div>
+              <div class="bl-cell-sub"><?= $h(isset($b->schedule_label) ? $b->schedule_label : 'Not planned') ?><?= !empty($b->plan_date_display) ? ' · '.$h($b->plan_date_display) : '' ?></div>
+              <?php if (!empty($b->verification_label)): ?><div class="bl-cell-sub"><?= $h($b->verification_label) ?></div><?php endif; ?>
 
               <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:8px;border-top:1px solid var(--bl-border);">
                 <button type="button" class="bl-btn bl-btn-sm" data-bl-open="<?= $bid ?>">Inspect</button>
-                <?php if ($can_write): ?>
+                <?php if ($can_write && ($isOpen || $is_supervisor)): ?>
                   <a class="bl-btn bl-btn-sm" href="<?= $h(base_url('backlog/edit/' . $bid)) ?>">Edit</a>
                   <?php if ($isOpen && $is_supervisor): ?>
                     <button type="button" class="bl-btn bl-btn-sm"
@@ -1013,22 +1016,26 @@ if ($q !== '') {
       <?= function_exists('csrf_field') ? csrf_field() : '' ?>
       <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:12px;">
         <div>
-          <label style="display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;">Completion Date</label>
-          <input type="date" name="end_date" class="bl-input" style="width:100%;" value="<?= $h(date('Y-m-d')) ?>">
+          <label for="blCloseDate" style="display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;">Completion Date</label>
+          <input type="date" id="blCloseDate" required name="end_date" class="bl-input" style="width:100%;" value="<?= $h(date('Y-m-d')) ?>">
         </div>
         <div>
-          <label style="display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;">End Odometer / Hours</label>
-          <input type="text" name="end_odometer" class="bl-input" style="width:100%;" placeholder="e.g. 1425.0 Hr">
+          <label for="blCloseOdometer" style="display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;">End Odometer / Hours</label>
+          <input type="text" id="blCloseOdometer" name="end_odometer" class="bl-input" style="width:100%;" placeholder="e.g. 1425.0 Hr">
         </div>
       </div>
       <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;">Mechanic who performed repair</label>
+        <label for="blCloseMechanic" style="display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;">Mechanic who performed repair</label>
         <input type="text" name="mechanic" id="blCloseMechanic" class="bl-input" style="width:100%;">
       </div>
       <div style="margin-bottom:14px;">
-        <label style="display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;">What was done / Verification remarks</label>
-        <textarea name="closing_remarks" rows="3" style="width:100%;padding:8px 10px;border:1px solid var(--bl-border);border-radius:8px;font-size:12.5px;"
+        <label for="blCloseRepair" style="display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;">What was done</label>
+        <textarea name="closing_remarks" id="blCloseRepair" required rows="3" style="width:100%;padding:8px 10px;border:1px solid var(--bl-border);border-radius:8px;font-size:12.5px;"
                   placeholder="Describe repair completed and on-site verification…"></textarea>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label for="blCloseVerification" style="display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;">What you personally checked</label>
+        <textarea name="verification_notes" id="blCloseVerification" required maxlength="300" rows="2" style="width:100%;padding:8px 10px;border:1px solid var(--bl-border);border-radius:8px;font-size:12.5px;"></textarea>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;">
         <button type="button" class="bl-btn" data-bl-modal-close>Cancel</button>
@@ -1171,7 +1178,7 @@ if ($q !== '') {
         html += '<div class="bl-kv-grid">'
           + '<div><div class="bl-kv-lbl">Machine / Asset</div><div class="bl-kv-val">' + machHtml + '</div></div>'
           + '<div><div class="bl-kv-lbl">Priority &amp; Status</div><div class="bl-kv-val">' + esc(it.priority) + ' · ' + esc(it.status) + '</div></div>'
-          + '<div><div class="bl-kv-lbl">Raised Date &amp; Age</div><div class="bl-kv-val">' + esc(it.start_date) + ' (' + esc(it.days_down) + 'd)</div></div>'
+          + '<div><div class="bl-kv-lbl">Raised Date &amp; Age</div><div class="bl-kv-val">' + esc(it.start_date) + ' (' + (it.days_down === null ? 'unknown' : esc(it.days_down) + 'd') + ')</div></div>'
           + '<div><div class="bl-kv-lbl">Deadline</div><div class="bl-kv-val">' + esc(it.deadline) + '</div></div>'
           + '<div><div class="bl-kv-lbl">Machine Condition</div><div class="bl-kv-val">' + esc(it.machine_status) + '</div></div>'
           + '<div><div class="bl-kv-lbl">Source</div><div class="bl-kv-val">' + esc(it.source) + '</div></div>'
@@ -1196,19 +1203,45 @@ if ($q !== '') {
           + '<div><div class="bl-kv-lbl">Originating Inspection</div><div class="bl-kv-val">'
           + (it.inspection_record_id ? '<a class="bl-equip-link" href="' + esc(inspBase + it.inspection_record_id) + '">INSP-' + esc(it.inspection_record_id) + '</a>' : '—')
           + '</div></div>'
-          + '<div><div class="bl-kv-lbl">Planned Date</div><div class="bl-kv-val">' + esc(it.planned_date) + '</div></div>'
+          + '<div><div class="bl-kv-lbl">Planning outcome</div><div class="bl-kv-val">' + esc(it.schedule_label) + '</div></div>'
+          + '<div><div class="bl-kv-lbl">Plan date</div><div class="bl-kv-val">' + esc(it.planned_date) + '</div></div>'
+          + '<div><div class="bl-kv-lbl">Proposed date</div><div class="bl-kv-val">' + esc(it.requested_date) + '</div></div>'
+          + '<div><div class="bl-kv-lbl">Proposed duration</div><div class="bl-kv-val">' + esc(it.requested_duration) + '</div></div>'
           + '<div><div class="bl-kv-lbl">Est. Duration</div><div class="bl-kv-val">' + esc(it.estimated_duration) + '</div></div>'
           + '</div>';
+        if (it.schedule_detail) html += '<p style="color:#7c4700;">' + esc(it.schedule_detail) + '</p>';
 
-        if (!it.is_open || it.closing_remarks) {
+        if (it.status === 'Cancelled') {
+          html += '<div style="font-size:11.5px;font-weight:700;text-transform:uppercase;color:#64748B;margin:12px 0 6px;">Cancellation</div>'
+            + '<div style="padding:10px 12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:9px;white-space:pre-line;">'
+            + esc(it.cancellation_reason || 'Reason not recorded') + '</div>'
+            + '<div style="margin-top:8px;font-size:12px;">Reviewed by ' + esc(it.reviewer_name) + ' · ' + esc(it.reviewed_at) + '</div>';
+        } else if (!it.is_open || it.closing_remarks) {
           html += '<div style="font-size:11.5px;font-weight:700;text-transform:uppercase;color:#64748B;margin:12px 0 6px;">Closure &amp; Verification Evidence</div>'
             + '<div class="bl-kv-grid">'
-            + '<div><div class="bl-kv-lbl">Closed Date</div><div class="bl-kv-val">' + esc(it.end_date) + '</div></div>'
+            + '<div><div class="bl-kv-lbl">Completion date</div><div class="bl-kv-val">' + esc(it.end_date) + '</div></div>'
+            + '<div><div class="bl-kv-lbl">Verification status</div><div class="bl-kv-val">' + esc(it.verification_label || 'Not verified') + '</div></div>'
             + '<div><div class="bl-kv-lbl">Verified By</div><div class="bl-kv-val">' + esc(it.verifier_name) + '</div></div>'
+            + '<div><div class="bl-kv-lbl">Completion source</div><div class="bl-kv-val">' + esc(it.completion_source || '—') + '</div></div>'
+            + '<div><div class="bl-kv-lbl">Reviewed By</div><div class="bl-kv-val">' + esc(it.reviewer_name) + '</div></div>'
+            + '<div><div class="bl-kv-lbl">Reviewed At</div><div class="bl-kv-val">' + esc(it.reviewed_at) + '</div></div>'
             + '</div>'
             + (it.closing_remarks ? '<div style="padding:10px 12px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:9px;color:#065F46;">' + esc(it.closing_remarks) + '</div>' : '');
+          if (it.verification_notes) html += '<div style="margin-top:8px;font-size:12px;"><strong>Verified at ' + esc(it.verified_at) + ':</strong> ' + esc(it.verification_notes) + '</div>';
+          if (it.legacy_verification_notes) html += '<div style="margin-top:8px;font-size:12px;"><strong>Legacy note (verification not confirmed):</strong> ' + esc(it.legacy_verification_notes) + '</div>';
         }
 
+        if (it.events && it.events.length) {
+          html += '<details style="margin:14px 0;"><summary>Activity and evidence</summary>';
+          it.events.forEach(function (event) {
+            var details = event.details || '';
+            try { details = JSON.stringify(JSON.parse(details), null, 2); } catch (_) {}
+            html += '<div style="padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:12px;">'
+              + '<strong>' + esc(event.event_type) + '</strong> · ' + esc(event.created_at) + ' · user ' + esc(event.actor_id || 'unknown')
+              + '<pre style="white-space:pre-wrap;overflow-wrap:anywhere;">' + esc(details) + '</pre></div>';
+          });
+          html += '</details>';
+        }
         drawerBody.innerHTML = html;
 
         var foot = '<div style="display:flex;gap:8px;flex-wrap:wrap;">'

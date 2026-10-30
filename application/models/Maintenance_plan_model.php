@@ -23,7 +23,8 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *     that category on that day — the planner's explicit job is more specific
  *     than a generator's allowance;
  *   • a week that is published is frozen (D33): no job touching it can be
- *     added, changed or removed — raise a revision instead.
+ *     added, changed or removed. A revision preserves the original baseline;
+ *     it does not unlock the published job.
  *
  * Availability is still computed only by `Forecast_model` → `kpi_availability()`
  * (D29).  Nothing here does availability arithmetic.
@@ -74,6 +75,11 @@ class Maintenance_plan_model extends CI_Model {
 
     public function tables_ready() {
         return $this->db && $this->db->table_exists(self::TABLE);
+    }
+
+    /** Start before any plan read; the lock lives through the caller's entire change. */
+    public function plan_transaction(callable $operation) {
+        return $this->fc()->plan_transaction($operation);
     }
 
     /* ─────────────────────────────────────────────────────────────────
@@ -211,12 +217,38 @@ class Maintenance_plan_model extends CI_Model {
     }
 
     /**
+     * An active linked job must point to an open defect on the same machine.
+     * All plan writers hold the global guard first; lock the defect next so a
+     * concurrent defect machine/status change cannot race this check. Use
+     * current reads because the plan transaction may already have a snapshot.
+     */
+    private function _lock_linked_defect_for_active_job($backlog_id, $equipment_id, $job_id = 0) {
+        $q = $this->db->query('SELECT id, equipment_id, status FROM '.$this->db->dbprefix('backlogs')
+            .' WHERE id = ? FOR UPDATE', array((int)$backlog_id));
+        if (!$q) return 'The linked defect could not be checked.';
+        $defect = $q->row();
+        if (!$defect || empty($defect->equipment_id) || (int)$defect->equipment_id !== (int)$equipment_id) {
+            return 'A linked defect job must use the defect’s registered machine. Review the defect before planning.';
+        }
+        if (!in_array($defect->status, array('Open', 'In Progress'), TRUE)) {
+            return 'A closed or cancelled defect cannot receive an active plan job. Reopen or review the defect first.';
+        }
+        $other = $this->db->query('SELECT id FROM '.$this->db->dbprefix(self::TABLE)
+            ." WHERE backlog_id = ? AND status IN ('Planned','Issued') AND id <> ? LIMIT 1 FOR UPDATE",
+            array((int)$backlog_id, (int)$job_id));
+        if (!$other) return 'Existing linked plan jobs could not be checked.';
+        if ($other->row()) return 'This defect already has another active plan job. Review it before scheduling another.';
+        return NULL;
+    }
+
+    /**
      * Create ($id null) or update a job, then re-sync every week it touches
      * (before and after an edit, so a moved job leaves nothing behind).
      *
      * @return array{id?:int,errors?:string[],synced?:array}
      */
     public function save_job(array $in, $user_id = null, $id = null) {
+        if (!$this->fc()->plan_write_active()) return array('errors' => array('A locked plan transaction is required.'));
         if (!$this->tables_ready()) return array('errors' => array('The maintenance-plan tables are not set up on this database yet.'));
 
         list($row, $errors) = $this->validate($in);
@@ -228,55 +260,81 @@ class Maintenance_plan_model extends CI_Model {
             if (!$old) return array('errors' => array('That job no longer exists.'));
         }
 
+        // A forecast edit preserves a job's originating link. Do not silently
+        // reassign a linked job to another defect (including detaching it).
+        if ($old) {
+            if (!isset($in['source']) && isset($old->source)) $row['source'] = $old->source;
+            if (!isset($in['backlog_id']) && isset($old->backlog_id)) $row['backlog_id'] = $old->backlog_id;
+            if (!isset($in['pm_schedule_id']) && isset($old->pm_schedule_id)) $row['pm_schedule_id'] = $old->pm_schedule_id;
+            if (!empty($old->backlog_id) && (int)$row['backlog_id'] !== (int)$old->backlog_id) {
+                return array('errors' => array('A linked job cannot be reassigned to another defect. Review or remove it first.'));
+            }
+        }
+
         // D33 — neither the old nor the new range may touch a published week
         $frozen = $this->frozen_weeks($row['start_date'], $row['end_date']);
         if ($old) $frozen = array_values(array_unique(array_merge(
             $frozen, $this->frozen_weeks($old->start_date, $old->end_date))));
         if ($frozen) {
             return array('errors' => array(implode(', ', $frozen) . (count($frozen) === 1 ? ' is' : ' are')
-                . ' published and frozen — raise a revision instead of changing its jobs.'));
+                . ' published and frozen — choose another week or ask the supervisor to review the plan.'));
+        }
+
+        if (!empty($row['backlog_id']) && in_array($row['status'], array('Planned', 'Issued'), TRUE)) {
+            $linkError = $this->_lock_linked_defect_for_active_job($row['backlog_id'], $row['equipment_id'], $id ?: 0);
+            if ($linkError) return array('errors' => array($linkError));
         }
 
         if ($old) {
             $row['updated_by'] = $user_id;
             $row['updated_at'] = date('Y-m-d H:i:s');
-            // source, backlog_id, pm_schedule_id shouldn't be overwritten blindly if we aren't providing them
-            if (!isset($in['source']) && isset($old->source)) $row['source'] = $old->source;
-            if (!isset($in['backlog_id']) && isset($old->backlog_id)) $row['backlog_id'] = $old->backlog_id;
-            if (!isset($in['pm_schedule_id']) && isset($old->pm_schedule_id)) $row['pm_schedule_id'] = $old->pm_schedule_id;
-            
-            $this->db->where('id', (int)$id)->update(self::TABLE, $row);
+            if (!$this->db->where('id', (int)$id)->update(self::TABLE, $row)) {
+                return array('errors' => array('The maintenance-plan job could not be updated.'));
+            }
             $jid = (int)$id;
         } else {
             if (!isset($row['source'])) $row['source'] = 'Manual';
             $row['created_by'] = $user_id;
-            $this->db->insert(self::TABLE, $row);
+            if (!$this->db->insert(self::TABLE, $row)) {
+                return array('errors' => array('The maintenance-plan job could not be created.'));
+            }
             $jid = (int)$this->db->insert_id();
+            if ($jid <= 0) return array('errors' => array('The maintenance-plan job could not be created.'));
         }
 
         $weeks = $this->weeks_touched($row['start_date'], $row['end_date']);
         if ($old) $weeks = array_values(array_unique(array_merge(
             $weeks, $this->weeks_touched($old->start_date, $old->end_date))));
+        sort($weeks, SORT_STRING);
         $synced = array();
-        foreach ($weeks as $w) $synced[$w] = $this->sync_week($w, $user_id);
+        foreach ($weeks as $w) {
+            $synced[$w] = $this->sync_week($w, $user_id);
+            if (!empty($synced[$w]['errors'])) return array('errors' => $synced[$w]['errors']);
+            if (!empty($synced[$w]['frozen'])) return array('errors' => array('The week was published while saving; review the frozen baseline.'));
+        }
 
         return array('id' => $jid, 'synced' => $synced);
     }
 
     /** Remove a job and take its hours out of the ledger. */
     public function delete_job($id, $user_id = null) {
+        if (!$this->fc()->plan_write_active()) return array('errors' => array('A locked plan transaction is required.'));
         if (!$this->tables_ready()) return array('errors' => array('The maintenance-plan tables are not set up on this database yet.'));
         $old = $this->get($id);
         if (!$old) return array('errors' => array('That job no longer exists.'));
         $frozen = $this->frozen_weeks($old->start_date, $old->end_date);
         if ($frozen) {
             return array('errors' => array(implode(', ', $frozen) . (count($frozen) === 1 ? ' is' : ' are')
-                . ' published and frozen — raise a revision instead of removing its jobs.'));
+                . ' published and frozen — ask the supervisor to review the plan without changing the baseline.'));
         }
-        $this->db->where('id', (int)$id)->delete(self::TABLE);
+        if (!$this->db->where('id', (int)$id)->delete(self::TABLE)) {
+            return array('errors' => array('The maintenance-plan job could not be removed.'));
+        }
         $synced = array();
         foreach ($this->weeks_touched($old->start_date, $old->end_date) as $w) {
             $synced[$w] = $this->sync_week($w, $user_id);
+            if (!empty($synced[$w]['errors'])) return array('errors' => $synced[$w]['errors']);
+            if (!empty($synced[$w]['frozen'])) return array('errors' => array('The week was published while removing the job; review the frozen baseline.'));
         }
         return array('deleted' => (int)$id, 'synced' => $synced);
     }
@@ -299,7 +357,14 @@ class Maintenance_plan_model extends CI_Model {
         $ws  = $fc->week_start($week_start);
         $out = array('written' => 0, 'removed' => 0, 'manual_kept' => 0,
                      'manual_cells' => array(), 'overbooked' => array());
-        if (!$this->tables_ready() || !$fc->tables_ready()) return $out;
+        if (!$fc->plan_write_active() || !$ws) {
+            $out['errors'] = array('A locked transaction and valid week are required to sync the plan.');
+            return $out;
+        }
+        if (!$this->tables_ready() || !$fc->tables_ready()) {
+            $out['errors'] = array('Maintenance-plan or forecast ledger tables are not available.');
+            return $out;
+        }
         if ($fc->baseline_snapshot($ws)) { $out['frozen'] = true; return $out; }
 
         $we   = $fc->week_end($ws);
@@ -351,14 +416,20 @@ class Maintenance_plan_model extends CI_Model {
             }
             $note = 'jobs: ' . implode(' + ', $s['titles']);
             if (strlen((string)($note)) > 255) $note = substr($note, 0, 252) . '...';
-            $fc->set_planned((int)$eid, $d, $cat, $s['hours'], Forecast_model::SRC_FROM_PLAN, $note, $user_id);
+            if (!$fc->set_planned((int)$eid, $d, $cat, $s['hours'], Forecast_model::SRC_FROM_PLAN, $note, $user_id)) {
+                $out['errors'] = array('The forecast ledger could not be updated.');
+                return $out;
+            }
             $out['written']++;
         }
 
         // FromPlan rows whose jobs are gone
         foreach ($existing as $k => $row) {
             if ($row->source !== Forecast_model::SRC_FROM_PLAN || isset($sum[$k])) continue;
-            $this->db->where('id', $row->id)->delete(Forecast_model::TABLE);
+            if (!$this->db->where('id', $row->id)->delete(Forecast_model::TABLE)) {
+                $out['errors'] = array('The obsolete forecast entry could not be removed.');
+                return $out;
+            }
             $out['removed']++;
         }
 
@@ -482,6 +553,10 @@ class Maintenance_plan_model extends CI_Model {
         $we  = $fc->week_end($ws);
         $out = array('placed' => 0, 'already' => 0, 'standby' => array(), 'out_week' => array(),
                      'out_days' => array(), 'orphans' => array(), 'frozen' => false);
+        if (!$fc->plan_write_active() || !$ws) {
+            $out['error'] = 'A locked transaction and valid week are required to generate inspections.';
+            return $out;
+        }
         if (!$this->rounds_ready() || !$fc->tables_ready()) {
             $out['error'] = 'The maintenance-plan tables are not set up on this database yet.';
             return $out;
@@ -498,7 +573,14 @@ class Maintenance_plan_model extends CI_Model {
 
         // jobs already placed for this week, keyed round|date
         $placed = array();
-        foreach ($this->db->where('source', self::SOURCE_INSPECTION)->get(self::TABLE)->result() as $j) {
+        $inspectionJobs = $this->db->where('source', self::SOURCE_INSPECTION)->get(self::TABLE)->result();
+        // A work order may lock several defects in ascending order. Use the
+        // same order if legacy inspection jobs happen to link to defects.
+        usort($inspectionJobs, function ($a, $b) {
+            $byDefect = (int)$a->backlog_id <=> (int)$b->backlog_id;
+            return $byDefect ?: ((int)$a->id <=> (int)$b->id);
+        });
+        foreach ($inspectionJobs as $j) {
             if ((string)$j->start_date < $ws || (string)$j->start_date > $we) continue;
             $placed[(int)$j->pm_schedule_id . '|' . (string)$j->start_date] = true;
         }
@@ -524,7 +606,7 @@ class Maintenance_plan_model extends CI_Model {
                      ? (float)$planned[$eid][$date][Forecast_model::CAT_OUT]['hours'] : 0.0;
             if ($out_day >= $daily_open * 0.999) { $out['out_days'][] = array('registration_no' => $reg, 'date' => $date); continue; }
 
-            $this->db->insert(self::TABLE, array(
+            if (!$this->db->insert(self::TABLE, array(
                 'equipment_id'  => $eid,
                 'start_date'    => $date,
                 'end_date'      => $date,
@@ -540,12 +622,20 @@ class Maintenance_plan_model extends CI_Model {
                 'status'        => 'Planned',
                 'source'        => self::SOURCE_INSPECTION,
                 'created_by'    => $user_id,
-            ));
+            ))) {
+                $out['error'] = 'An inspection job could not be created.';
+                return $out;
+            }
             $out['placed']++;
         }
 
-        $out['sync']   = $this->sync_week($ws, $user_id);
+        $out['sync'] = $this->sync_week($ws, $user_id);
+        if (!empty($out['sync']['errors']) || !empty($out['sync']['frozen'])) {
+            $out['error'] = !empty($out['sync']['errors']) ? implode(' ', $out['sync']['errors']) : 'The week is published and frozen.';
+            return $out;
+        }
         $out['status'] = $this->sync_inspection_status($ws);
+        if (!empty($out['status']['error'])) $out['error'] = $out['status']['error'];
         return $out;
     }
 
@@ -560,6 +650,8 @@ class Maintenance_plan_model extends CI_Model {
         $ws  = $fc->week_start($week_start);
         $we  = $fc->week_end($ws);
         $out = array('done' => 0, 'reopened' => 0);
+        if (!$fc->plan_write_active() || !$ws) return array('error' => 'A locked transaction and valid week are required to update inspection jobs.');
+        if ($fc->baseline_snapshot($ws)) return array('error' => 'The week is published and frozen.');
         if (!$this->tables_ready()) return $out;
 
         $last = array();
@@ -577,19 +669,29 @@ class Maintenance_plan_model extends CI_Model {
             if (in_array($j->status, array('Cancelled', 'Missed'), true)) continue;
             $eid  = (int)$j->equipment_id;
             $done = isset($last[$eid]);
-
+            $change = ($done && $j->status !== 'Done') || (!$done && $j->status === 'Done');
+            // An older inspection job may span several weeks, even though new
+            // generated rounds are single-day jobs. Do not change ANY part of a
+            // job that touches a published week.
+            if ($change && $this->frozen_weeks($j->start_date, $j->end_date)) {
+                return array('error' => 'An inspection job touches a published and frozen week.');
+            }
+            if (!$done && $j->status === 'Done' && !empty($j->backlog_id)) {
+                $linkError = $this->_lock_linked_defect_for_active_job($j->backlog_id, $j->equipment_id, $j->id);
+                if ($linkError) return array('error' => $linkError);
+            }
             if ($done && $j->status !== 'Done') {
-                $this->db->where('id', (int)$j->id)->update(self::TABLE, array('status' => 'Done'));
+                if (!$this->db->where('id', (int)$j->id)->update(self::TABLE, array('status' => 'Done'))) return array('error' => 'The inspection job could not be updated.');
                 $out['done']++;
             } elseif (!$done && $j->status === 'Done') {
-                $this->db->where('id', (int)$j->id)->update(self::TABLE, array('status' => 'Planned'));
+                if (!$this->db->where('id', (int)$j->id)->update(self::TABLE, array('status' => 'Planned'))) return array('error' => 'The inspection job could not be updated.');
                 $out['reopened']++;
             }
 
             if ($done && (int)$j->pm_schedule_id > 0 && $this->db->table_exists('pm_schedules')) {
                 $ps = $this->db->where('id', (int)$j->pm_schedule_id)->get('pm_schedules')->row();
                 if ($ps && ($ps->last_done_date === null || (string)$ps->last_done_date < $last[$eid])) {
-                    $this->db->where('id', (int)$ps->id)->update('pm_schedules', array('last_done_date' => $last[$eid]));
+                    if (!$this->db->where('id', (int)$ps->id)->update('pm_schedules', array('last_done_date' => $last[$eid]))) return array('error' => 'The inspection schedule could not be updated.');
                 }
             }
         }

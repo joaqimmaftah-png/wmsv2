@@ -932,7 +932,7 @@ class Inspections extends MY_Controller {
                 $this->Equipment_model->record_meter_reading($record['equipment_id'], $record['inspection_date'], $record['smr'], 'Manual', null, $this->user_id);
             }
             // Trigger backlog parsing
-            $findings = $this->Inspection_model->process_backlog_findings($record_id);
+            $findings = $this->Inspection_model->process_backlog_findings($record_id, $this->user_id);
 
             $this->session->set_flashdata('success', ($record['language'] === 'fr'
                 ? 'Inspection mise à jour avec succès.'
@@ -953,7 +953,7 @@ class Inspections extends MY_Controller {
             $this->Equipment_model->record_meter_reading($record['equipment_id'], $record['inspection_date'], $record['smr'], 'Manual', null, $this->user_id);
         }
         // Trigger backlog parsing
-        $findings = $this->Inspection_model->process_backlog_findings($new_id);
+        $findings = $this->Inspection_model->process_backlog_findings($new_id, $this->user_id);
 
         $this->session->set_flashdata('success', ($record['language'] === 'fr'
             ? 'Inspection enregistrée avec succès.'
@@ -1218,7 +1218,7 @@ class Inspections extends MY_Controller {
         $parts = array();
         if (!empty($findings['created']))   $parts[] = $findings['created'].' defect(s) raised';
         if (!empty($findings['annotated'])) $parts[] = $findings['annotated'].' repeat sighting(s) added to open defects';
-        if (!empty($findings['closed']))    $parts[] = $findings['closed'].' defect(s) closed by this inspection';
+        if (!empty($findings['review']))    $parts[] = $findings['review'].' positive result(s) sent for supervisor review; defects remain open';
         return empty($parts) ? '' : ' Defect list: '.implode(', ', $parts).'.';
     }
 }

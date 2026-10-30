@@ -29,7 +29,9 @@ jobs:
         run: find application system tests scripts index.php -name '*.php' -print0 | xargs -0 -n1 -P4 php -l >/dev/null
 
       - name: Run unit & regression test suite
-        run: php tests/run.php
+        run: |
+          php tests/backlog_workflow.php
+          php tests/run.php
 
       - name: Run shared-layout & page-title regression checks
         run: node tests/page_titles.js
@@ -125,6 +127,16 @@ jobs:
           php scripts/migrate.php --force --verify
           php scripts/migrate.php --force --verify
           php scripts/migrate.php --status
+
+      - name: Test concurrent forecast publication and plan changes
+        env:
+          WMS_DB_HOST: 127.0.0.1
+          WMS_DB_PORT: 3306
+          WMS_DB_USER: root
+          WMS_DB_PASS: ${{ matrix.root_pass }}
+          WMS_DB_NAME: wms_fresh
+          WMS_TEST_DESTRUCTIVE: '1'
+        run: python3 tests/forecast_lock_integration.py
 
       - name: Seed test accounts & run live authenticated HTTP + XLSX smoke test
         env:

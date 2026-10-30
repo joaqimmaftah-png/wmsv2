@@ -538,77 +538,62 @@ class Inspection_model extends CI_Model {
     }
 
     /**
-     * Turn a submitted inspection into defects — and, just as important, close
-     * the ones the inspection has just cleared (Wave 3, Q2).
+     * Raise or annotate defects for failed checks. A positive inspection is
+     * evidence for a supervisor; it never closes a defect by itself. Blank,
+     * N/A and malformed results are not positive evidence.
      *
-     * Until now this method only ever created rows: a repeat failure added a
-     * second row beside the first, a later pass closed nothing, and every
-     * defect arrived as P3 regardless of what the checklist said. The rules
-     * now:
-     *
-     *   • severity is the item's explicit priority (No-Go → P1, Go & Fix →
-     *     P2, Defect → P3), set in the template editor; a row saved before
-     *     that setting existed still derives it from its category wording.
-     *     A No-Go item stops the machine, so it can never sit at the bottom
-     *     of the list behind a routine P3.
-     *   • an item that now conforms closes the defect it opened — the closure
-     *     records the inspection that cleared it (verified_by / verified_at),
-     *     so "who said this is fixed, and on what evidence" has an answer.
-     *   • a repeat failure does NOT add a row beside an open one: the existing
-     *     defect is annotated with the new sighting and escalated if the new
-     *     verdict is more severe. When the earlier defect was already closed,
-     *     the new row records `recurrence_of` — a repeat is visible as a
-     *     repeat, not as a brand-new problem.
-     *
-     * @return array ['created'=>int,'annotated'=>int,'closed'=>int]
+     * @return array ['created'=>int,'annotated'=>int,'closed'=>0,'review'=>int]
      */
-    public function process_backlog_findings($record_id) {
-        $stats = array('created' => 0, 'annotated' => 0, 'closed' => 0);
+    public function process_backlog_findings($record_id, $actor_id = NULL) {
+        $stats = array('created' => 0, 'annotated' => 0, 'closed' => 0, 'review' => 0);
         if (!$this->db->table_exists('backlogs')) return $stats;
 
         $record = $this->get_record($record_id);
         if (!$record) return $stats;
-
-        // The closure-evidence/link columns are probed with field_exists(); on
-        // a database without them the method still works, it just cannot link
-        // or verify.
         $has_item_link  = $this->db->field_exists('inspection_item_id', 'backlogs');
         $has_recurrence = $this->db->field_exists('recurrence_of', 'backlogs');
-        $has_verified   = $this->db->field_exists('verified_by', 'backlogs');
-
         $items = $this->get_record_items($record_id);
-        $who   = (int)$record->created_by;   // the person who signed the inspection
 
         foreach ($items as $item) {
             if (isset($item->row_type) && $item->row_type === 'section') continue;
-
             $verdict = $this->_inspection_item_verdict($item);
             $source_ref = 'insp_'.$record_id.'_item_'.$item->item_id;
 
-            // ── the item conforms now: close the defect it opened ─────────
             if (!$verdict['failed']) {
-                if ($has_item_link && $record->equipment_id) {
-                    $this->db->where('equipment_id', (int)$record->equipment_id)
+                // Matrix columns represent different equipment types. A positive
+                // selection is a prompt to review, not proof that the selected
+                // column applied to this machine or that the repair is verified.
+                $values = !empty($item->value_json) ? json_decode($item->value_json, TRUE) : NULL;
+                $positive = is_array($values) && (
+                    (isset($values['result']) && $values['result'] === 'Yes')
+                    || in_array('ok', $values, TRUE)
+                );
+                if ($positive && $has_item_link && !empty($record->equipment_id)) {
+                    $open = $this->db->where('equipment_id', (int)$record->equipment_id)
                         ->where('inspection_item_id', (int)$item->item_id)
-                        ->where_in('status', array('Open', 'In Progress'));
-                    $open = $this->db->get('backlogs')->result();
-
+                        ->where_in('status', array('Open', 'In Progress'))
+                        ->get('backlogs')->result();
                     foreach ($open as $row) {
-                        $close = array(
-                            'status'          => 'Closed',
-                            'end_date'        => $record->inspection_date ?: date('Y-m-d'),
-                            'closing_remarks' => 'Closed by inspection '.($record->inspection_date ?: date('Y-m-d'))
-                                .' (record #'.$record_id.'): the item conforms. '
-                                .'Previously: '.mb_substr((string)$row->description, 0, 120),
-                        );
-                        if ($has_verified) {
-                            $close['verified_by']         = $who ?: null;
-                            $close['verified_at']         = date('Y-m-d H:i:s');
-                            $close['verification_notes'] = 'Cleared on inspection record #'.$record_id
-                                .' ('.($item->item_no !== null ? 'item '.$item->item_no : 'checklist item').').';
+                        if (!empty($row->start_date) && !empty($record->inspection_date)
+                            && $record->inspection_date < $row->start_date) continue;
+                        $marker = '[Inspection #'.(int)$record_id.' item #'.(int)$item->item_id.' positive]';
+                        $observation = trim((string)(isset($row->observation) ? $row->observation : ''));
+                        if (strpos($observation, $marker) !== FALSE) continue;
+                        $note = $marker.' Positive selection recorded; supervisor must review the current inspection and applicability before closing.';
+                        $ok = $this->db->where('id', (int)$row->id)
+                            ->where_in('status', array('Open', 'In Progress'))
+                            ->update('backlogs', array('observation' => $observation === '' ? $note : $observation."\n".$note,
+                                                       'updated_at' => date('Y-m-d H:i:s')));
+                        if ($ok && $this->db->affected_rows() === 1) {
+                            if ($this->db->table_exists('backlog_events')) {
+                                $this->db->insert('backlog_events', array(
+                                    'backlog_id' => (int)$row->id, 'actor_id' => $actor_id ? (int)$actor_id : NULL,
+                                    'event_type' => 'inspection_evidence', 'details' => $note,
+                                    'created_at' => date('Y-m-d H:i:s'),
+                                ));
+                            }
+                            $stats['review']++;
                         }
-                        $this->db->where('id', (int)$row->id)->update('backlogs', $close);
-                        $stats['closed']++;
                     }
                 }
                 continue;
@@ -639,15 +624,22 @@ class Inspection_model extends CI_Model {
 
             if ($open_same) {
                 $observation = trim((string)$open_same->observation);
-                $note = 'Re-seen on inspection '.($record->inspection_date ?: date('Y-m-d'))
-                    .' (record #'.$record_id.'): '.$verdict['label'].'.';
+                $marker = '[Inspection #'.(int)$record_id.' item #'.(int)$item->item_id.' failure]';
+                if (strpos($observation, $marker) !== FALSE || strpos($observation, '(record #'.(int)$record_id.'):') !== FALSE) continue;
+                $note = $marker.' Re-seen on inspection '.($record->inspection_date ?: date('Y-m-d'))
+                    .': '.$verdict['label'].'.';
                 $update = array(
                     'observation' => $observation === '' ? $note : $observation."\n".$note,
                     'updated_at'  => date('Y-m-d H:i:s'),
                 );
                 if ($has_item_link) $update['priority'] = $this->_escalate($open_same->priority, $priority);
-                $this->db->where('id', (int)$open_same->id)->update('backlogs', $update);
-                $stats['annotated']++;
+                $ok = $this->db->where('id', (int)$open_same->id)->where_in('status', array('Open', 'In Progress'))->update('backlogs', $update);
+                if ($ok && $this->db->affected_rows() === 1) {
+                    if ($this->db->table_exists('backlog_events')) $this->db->insert('backlog_events', array(
+                        'backlog_id' => (int)$open_same->id, 'actor_id' => $actor_id ? (int)$actor_id : NULL,
+                        'event_type' => 'inspection_repeat', 'details' => $note, 'created_at' => date('Y-m-d H:i:s')));
+                    $stats['annotated']++;
+                }
                 continue;
             }
 
@@ -678,14 +670,14 @@ class Inspection_model extends CI_Model {
                 'created_at'     => date('Y-m-d H:i:s'),
             );
             if ($has_item_link)  $backlog_data['inspection_item_id'] = (int)$item->item_id;
+            if ($actor_id && $this->db->field_exists('created_by', 'backlogs')) $backlog_data['created_by'] = (int)$actor_id;
             if ($has_recurrence && $previous) {
                 $backlog_data['recurrence_of'] = (int)$previous->id;
                 $backlog_data['observation'] = 'Recurrence of backlog #'.$previous->id
                     .' (first reported '.($previous->start_date ?: 'unknown').', closed '.($previous->end_date ?: 'unknown').').';
             }
 
-            $this->db->insert('backlogs', $backlog_data);
-            $stats['created']++;
+            if ($this->db->insert('backlogs', $backlog_data)) $stats['created']++;
         }
 
         return $stats;

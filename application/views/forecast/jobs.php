@@ -147,7 +147,7 @@ $machine_day_caption = $machine
 
 <?php if ($frozen): ?>
 <div class="card mb-4" style="padding:12px 18px;border-left:3px solid var(--green);font-size:12px;">
-  <?=$h($iso_label)?> is published and frozen — its jobs cannot be changed. Raise a revision on the planned screen.
+  <?=$h($iso_label)?> is published and frozen — its jobs cannot be changed. A new revision preserves the baseline; it does not unlock these jobs.
 </div>
 <?php elseif (!$editable): ?>
 <div class="card mb-4" role="status" style="padding:12px 18px;font-size:12px;">

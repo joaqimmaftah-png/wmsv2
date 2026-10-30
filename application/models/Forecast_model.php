@@ -81,6 +81,10 @@ class Forecast_model extends CI_Model {
     const SNAPS   = 'forecast_snapshots';
     const PARTS   = 'pm_part_requirements';
     const JOBS    = 'maintenance_plan_jobs';
+    const WRITE_LOCK = 'forecast_write_lock';
+
+    /** True only inside the transaction that acquired the plan mutex. */
+    private $plan_write_active = false;
 
     /**
      * Collaborators, injectable so this model can be exercised without booting
@@ -116,6 +120,93 @@ class Forecast_model extends CI_Model {
      */
     public function jobs_ready() {
         return $this->db && $this->db->table_exists(self::JOBS);
+    }
+
+    /**
+     * Run a complete plan change (or publication) in one transaction.
+     *
+     * The singleton InnoDB row is intentionally global, not per week: it also
+     * covers jobs moved across weeks, and gives every writer the same ordering.
+     * Acquire it BEFORE any consistent data read. Refusing an already-active
+     * transaction prevents a REPEATABLE READ snapshot taken earlier from
+     * hiding a just-published baseline. All nested write helpers require this
+     * context and must return errors to their caller rather than committing.
+     *
+     * The row lock is released by the database on commit, rollback or loss of
+     * the connection. Missing/malformed schema and lock timeouts fail closed.
+     */
+    public function plan_transaction(callable $operation) {
+        if (!$this->db || $this->plan_write_active || $this->db->trans_active()) {
+            return array('error' => 'The plan change must start in a new transaction.');
+        }
+        $old_debug = $this->db->db_debug;
+        $this->db->db_debug = false;
+        $started = false;
+        try {
+            if (!$this->db->trans_begin()) {
+                return array('error' => 'The plan change could not be started.');
+            }
+            $started = true;
+            $table = $this->db->dbprefix(self::WRITE_LOCK);
+            $quoted = '`' . str_replace('`', '``', $table) . '`';
+            $lock = $this->db->query('SELECT lock_id FROM ' . $quoted . ' WHERE lock_id = 1 FOR UPDATE');
+            if (!$lock || !$lock->row()) {
+                return array('error' => 'The plan is busy or its lock is unavailable. Check migration 0016 and retry.');
+            }
+
+            // A pre-existing malformed table must not silently act as a mutex.
+            // Inspect metadata after taking the row lock, before reading plan data.
+            $meta = $this->db->query(
+                "SELECT t.ENGINE AS engine_name, COUNT(s.COLUMN_NAME) AS key_columns, "
+                . "SUM(CASE WHEN s.COLUMN_NAME = 'lock_id' AND s.SEQ_IN_INDEX = 1 "
+                . "AND s.SUB_PART IS NULL THEN 1 ELSE 0 END) AS valid_columns "
+                . "FROM information_schema.TABLES t LEFT JOIN information_schema.STATISTICS s "
+                . "ON s.TABLE_SCHEMA = t.TABLE_SCHEMA AND s.TABLE_NAME = t.TABLE_NAME AND s.INDEX_NAME = 'PRIMARY' "
+                . "WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = ? GROUP BY t.ENGINE",
+                array($table)
+            );
+            $m = $meta ? $meta->row() : null;
+            if (!$m || strcasecmp((string)$m->engine_name, 'InnoDB') !== 0
+                || (int)$m->key_columns !== 1 || (int)$m->valid_columns !== 1) {
+                return array('error' => 'The forecast lock is not ready. Check migration 0016 before changing the plan.');
+            }
+            // A lock alone cannot roll back nontransactional plan/defect tables.
+            // All tables mutated by any protected operation must be InnoDB.
+            $required = array(self::SNAPS, self::JOBS, self::TABLE, 'pm_schedules', 'backlogs', 'backlog_events');
+            $names = array_map(function ($name) { return $this->db->dbprefix($name); }, $required);
+            $marks = implode(',', array_fill(0, count($names), '?'));
+            $engines = $this->db->query('SELECT TABLE_NAME AS table_name, ENGINE AS engine_name FROM information_schema.TABLES '
+                . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (' . $marks . ')', $names);
+            $found = array();
+            if ($engines) foreach ($engines->result() as $engine) $found[$engine->table_name] = $engine->engine_name;
+            foreach ($names as $name) {
+                if (!isset($found[$name]) || strcasecmp((string)$found[$name], 'InnoDB') !== 0) {
+                    return array('error' => 'The plan, snapshot or defect tables are not transaction-ready. Check migrations and InnoDB before changing the plan.');
+                }
+            }
+
+            $this->plan_write_active = true;
+            $result = call_user_func($operation);
+            if (!is_array($result)) $result = array('error' => 'The plan change returned an invalid result.');
+            if (!empty($result['error']) || !empty($result['errors']) || !empty($result['frozen'])) return $result;
+            if ($this->db->trans_status() === false || !$this->db->trans_commit()) {
+                return array('error' => 'The plan change could not be confirmed. Refresh and review it before retrying.');
+            }
+            $started = false;
+            return $result;
+        } catch (Throwable $e) {
+            log_message('error', 'Forecast plan transaction failed: ' . $e->getMessage());
+            return array('error' => 'The plan change could not be confirmed. Refresh and review it before retrying.');
+        } finally {
+            $this->plan_write_active = false;
+            if ($started && $this->db->trans_active()) $this->db->trans_rollback();
+            $this->db->db_debug = $old_debug;
+        }
+    }
+
+    /** Internal write methods are safe only while the above transaction owns the lock. */
+    public function plan_write_active() {
+        return $this->plan_write_active && $this->db && $this->db->trans_active();
     }
 
     /** Whether the `Corrective` category may be written (see CAT_CORRECTIVE). */
@@ -312,6 +403,13 @@ class Forecast_model extends CI_Model {
      * (equipment_id, plan_date, category) makes this safe to re-run.
      */
     public function set_planned($equipment_id, $plan_date, $category, $hours, $source = self::SRC_MANUAL, $note = null, $user_id = null) {
+        $ws = $this->week_start($plan_date);
+        if (!$ws || $this->plan_week_error($ws)) return false;
+        return $this->_set_planned($equipment_id, $plan_date, $category, $hours, $source, $note, $user_id);
+    }
+
+    /** Called only after the encompassing week has been locked and checked. */
+    private function _set_planned($equipment_id, $plan_date, $category, $hours, $source, $note, $user_id) {
         if (!$this->tables_ready()) return false;
 
         $hours = round(max(0.0, min(24.0, (float)$hours)), 2);
@@ -332,12 +430,20 @@ class Forecast_model extends CI_Model {
 
         if ($existing) {
             $data['updated_at'] = date('Y-m-d H:i:s');
-            $this->db->where('id', $existing->id)->update(self::TABLE, $data);
+            if (!$this->db->where('id', $existing->id)->update(self::TABLE, $data)) return false;
             return (int)$existing->id;
         }
         $data['created_by'] = $user_id;
-        $this->db->insert(self::TABLE, $data);
+        if (!$this->db->insert(self::TABLE, $data)) return false;
         return (int)$this->db->insert_id();
+    }
+
+    /** Guard every public plan mutator, including callers outside controllers. */
+    private function plan_week_error($week_start) {
+        if (!$this->plan_write_active()) return 'A locked plan transaction is required.';
+        if (!$week_start || $this->week_start($week_start) !== $week_start) return 'Choose a valid plan week.';
+        if ($this->baseline_snapshot($week_start)) return $this->iso_label($week_start) . ' is published and frozen.';
+        return null;
     }
 
     /* ─────────────────────────────────────────────────────────────────
@@ -364,6 +470,7 @@ class Forecast_model extends CI_Model {
      * @return array{placed:int,skipped:int,missing_hours:int,not_placed:array,estimated:array}
      */
     public function generate_from_pm($week_start, $user_id = null, $overwrite = false) {
+        if ($error = $this->plan_week_error($week_start)) return array('error' => $error);
         $placed = $skipped = 0;
 
         if (!$this->tables_ready()) {
@@ -383,8 +490,10 @@ class Forecast_model extends CI_Model {
                     $skipped++; continue;
                 }
             }
-            $this->set_planned($c['equipment_id'], $c['date'], self::CAT_PM, $c['hours'],
-                               self::SRC_FROM_PM, $c['note'], $user_id);
+            if (!$this->_set_planned($c['equipment_id'], $c['date'], self::CAT_PM, $c['hours'],
+                                     self::SRC_FROM_PM, $c['note'], $user_id)) {
+                return array('error' => 'The PM forecast entry could not be saved.');
+            }
             $placed++;
         }
 
@@ -1293,6 +1402,8 @@ class Forecast_model extends CI_Model {
      * @return array|false  the stored row, or false with 'error'
      */
     public function publish($week_start, $user_id = null, $note = null) {
+        if (!$this->plan_write_active()) return array('error' => 'A locked plan transaction is required.');
+        if (!$week_start || $this->week_start($week_start) !== $week_start) return array('error' => 'Choose a valid plan week.');
         if (!$this->snapshots_ready()) return array('error' => 'the forecast tables are not set up on this database');
 
         $plan     = $this->planned_availability($week_start);
@@ -1317,6 +1428,7 @@ class Forecast_model extends CI_Model {
         }
 
         $payload  = json_encode($plan);
+        if ($payload === false) return array('error' => 'The forecast snapshot could not be encoded.');
         $checksum = hash('sha256', $payload);
 
         $row = array(
@@ -1344,8 +1456,9 @@ class Forecast_model extends CI_Model {
             'published_at'       => date('Y-m-d H:i:s'),
         );
 
-        $this->db->insert(self::SNAPS, $row);
+        if (!$this->db->insert(self::SNAPS, $row)) return array('error' => 'The forecast snapshot could not be saved.');
         $row['id'] = (int)$this->db->insert_id();
+        if ($row['id'] <= 0) return array('error' => 'The forecast snapshot could not be confirmed.');
         return $row;
     }
 
@@ -1794,6 +1907,7 @@ class Forecast_model extends CI_Model {
      * @return array{placed:int,left_alone:int}
      */
     public function generate_unplanned_allowance($week_start, $user_id = null) {
+        if ($error = $this->plan_week_error($week_start)) return array('error' => $error);
         $days     = $this->week_dates($week_start);
         $allows   = $this->derived_unplanned_allowances($week_start);
         $mode     = $this->_setting('unplanned_allowance_mode', 'flat');
@@ -1813,7 +1927,9 @@ class Forecast_model extends CI_Model {
                     continue;
                 }
 
-                $this->set_planned($eid, $d, self::CAT_UNPLANNED, $a['hours'], $source, $a['note'], $user_id);
+                if (!$this->_set_planned($eid, $d, self::CAT_UNPLANNED, $a['hours'], $source, $a['note'], $user_id)) {
+                    return array('error' => 'The unplanned allowance could not be saved.');
+                }
                 $placed++;
             }
         }
@@ -1827,6 +1943,7 @@ class Forecast_model extends CI_Model {
      * @return array{placed:int,left_alone:int}
      */
     public function generate_standing_allowance($week_start, $user_id = null) {
+        if ($error = $this->plan_week_error($week_start)) return array('error' => $error);
         $days   = $this->week_dates($week_start);
         $held   = $this->held_days($week_start);
         $placed = $left = $skipped_held = $removed = $standby = 0;
@@ -1861,8 +1978,10 @@ class Forecast_model extends CI_Model {
                     continue;
                 }
 
-                $this->set_planned($eid, $d, self::CAT_STANDING, $hours, self::SRC_DEFAULT,
-                                   'standing allowance for ' . $m->equip_type, $user_id);
+                if (!$this->_set_planned($eid, $d, self::CAT_STANDING, $hours, self::SRC_DEFAULT,
+                                         'standing allowance for ' . $m->equip_type, $user_id)) {
+                    return array('error' => 'The standing allowance could not be saved.');
+                }
                 $placed++;
             }
         }

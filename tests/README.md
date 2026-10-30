@@ -8,6 +8,49 @@ No Composer, PHPUnit, database or web server: a plain PHP 8+ process runs a
 small assertion harness and exits non-zero when something fails. CI runs the
 same command (`.github/workflows/tests.yml`).
 
+## Defect workflow regression checks
+
+```bash
+php tests/backlog_workflow.php
+```
+
+This runs the real backlog/inspection/work-order policy code against in-memory
+fakes: technician proposal/closure/cancellation boundaries, scheduling success
+and failure rollback, idempotent retries, historical evidence, selected linked
+defects, inspection evidence, missing schema/index, stale defect forms, closed
+WO guards, locked plan rechecks and mismatched-machine protection. `tests/live_e2e.py` also contains
+authenticated database cases for invalid and frozen planning, a committed
+job/ledger row, stale edits, work-order verification, idempotent retries and
+historical evidence. CI is configured to run these and `tests/ui_e2e.js` against
+the real create and work-order verification forms.
+These are not a substitute for a staging pass on **MySQL/MariaDB**: exercise
+migrations 0015–0016 twice, different roles, concurrent submissions and stale
+edits, frozen weeks, manual overrides, ledger failures, old multiline defects,
+exports, actual browser zoom and assistive technology before deployment.
+
+## Forecast publication and planning concurrency
+
+On a **disposable** database imported from `database/schema.sql` with all
+migrations applied, run:
+
+```bash
+WMS_DB_HOST=127.0.0.1 WMS_DB_PORT=3306 WMS_DB_USER=... WMS_DB_PASS=... \
+WMS_DB_NAME=... WMS_TEST_DESTRUCTIVE=1 python3 tests/forecast_lock_integration.py
+```
+
+The runner starts independent PHP processes using the real CodeIgniter database
+driver and models. It creates temporary dated jobs, ledger entries, snapshots and
+a defect; it also temporarily changes the engine of two test tables and restores
+it. **Never run it on a production database.** It refuses a date range with
+existing rows and cleans its own range afterwards, but a killed test process may
+require manual cleanup. `WMS_TEST_PHP` can override the `php` executable.
+The suite checks publication in both orders, cross-week changes, competing
+publishers, generation, manual cells, backlog planning and stale proposals,
+linked-job activation versus defect machine changes in both orders, duplicate
+and closed-defect guards, rollback, disconnect, timeouts, missing/malformed
+locks, non-InnoDB tables and frozen inspection-job status. CI is configured for MySQL 8 and MariaDB 10.4;
+run it on the actual target version and do a separate staging walkthrough.
+
 ## What is covered
 
 The cases concentrate on the pure logic that has broken silently in the past:
@@ -23,11 +66,11 @@ the system temp directory, so they exercise the deployed code (including
 `wms_base_url_from_host()`) and a developer's own `config.local.php` cannot
 change the result.
 
-## What is not covered
+## What the dependency-free unit runner does not cover
 
-- Anything needing MySQL (models, migrations, report SQL). Those still need the
-  manual walkthrough described in `README.md` → *Testing*.
-- Anything needing a browser (layout, JavaScript, uploads).
+- Database behavior, migrations and report SQL; use the separate real-database
+  tests above and the staging walkthrough in `README.md` → *Testing*.
+- Browser layout, JavaScript and uploads; use `tests/ui_e2e.js` and manual testing.
 
 ## Conventions
 
