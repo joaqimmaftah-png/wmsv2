@@ -217,7 +217,7 @@ Per-action restrictions inside controllers (on top of the matrix):
 | `pm/create`, `pm/edit` | Supervisor only (`pm/complete`: roles 1–2 via matrix) |
 | `workorders/update_status` → `Closed` | Supervisor only (verification step); all status changes POST-only, row-locked transaction |
 | `materials/create/edit/receive/issue/import_excel` | `can_write()` (1/2/3); `materials/delete` Supervisor + POST |
-| `backlog/create/edit` | `can_write()`; `backlog/close` Supervisor + POST; `backlog/delete` Supervisor + POST |
+| `backlog/create/edit` | `can_write()`; `backlog/close` Supervisor + POST; `backlog/delete` POST rejects deletion; Supervisor cancels with a reason |
 | `spareparts/allocate/release/issue` | `can_write()` + POST; `mark_read/mark_all_read` POST |
 | `lubricants/record` | Roles 1 and 3 only; `lubricants/types` POST Supervisor only; `specifications`/`budget` POST: any matrix role that can reach them (1/2/3) |
 | `team/create`, `team/edit`, `team/approve_leave` | Supervisor only (approve also POST); `team/leave_request` always creates for the caller |
@@ -595,7 +595,7 @@ assets representable), `model`, `serial_no`, `start_odometer`,
 hours/day when pushed to the plan), `source_ref UQ` (idempotency key, e.g.
 `insp_<record>_item_<item>`), `created_by`, timestamps, `verified_by`,
 `verified_at`, `verification_notes`, `closed_by`, `inspection_item_id`,
-`recurrence_of` (→ earlier closed defect).
+`recurrence_of` (→ earlier closed defect), planning proposal/outcome, closure kind and source, reviewer, cancellation reason and submission token. `backlog_events` records activity and evidence.
 
 **`maintenance_plan_jobs`** — planner jobs (several per machine-day allowed).
 `id AI`, `equipment_id NN →equipment (CASCADE)`, `start_date NN`,
@@ -622,6 +622,17 @@ machine · day · category. `id AI`, `equipment_id NN →equipment (CASCADE)`,
 `payload_checksum CHAR(64) NN` (SHA-256), `fleet_total`,
 `fleet_out_of_service`, `fleet_available`, `fleet_availability`,
 `revision_note`, `published_by`, `published_at`; UQ (`week_start`, `revision`).
+
+**`forecast_write_lock`** — migration 0016's InnoDB singleton `lock_id = 1`.
+`Forecast_model::plan_transaction()` starts a fresh transaction, locks the row
+before any consistent plan read, verifies the lock and all participating tables
+are InnoDB, and commits or rolls back the entire operation. A nested transaction,
+missing/malformed lock, lock timeout or nontransactional participating table
+fails closed. The deliberately global mutex serializes *all* weeks, avoiding
+multi-week lock ordering and stale baseline snapshots at the cost of contention.
+Every application job/ledger mutation, generation and publication must use it;
+older application instances and direct SQL do not participate. The database
+releases the row on commit, rollback or disconnect. Never delete the singleton.
 
 #### Weekly report (W36)
 
@@ -864,24 +875,21 @@ A machine whose meter basis for judging PM currency is stale is reported as
   edits; lines removed from the form are deleted (their reservations become
   inert). Oil lines are delete-and-reinsert.
 - Status lifecycle: `Open → In Progress → (Waiting Parts | Waiting Tools) →
-  Completed → Closed`. Transitions are **not** whitelisted in code — any
-  posted status is accepted by `update_status` — except:
-  - `In Progress` stamps `start_datetime` if empty;
-  - `Completed` (the workshop says "done") stamps `end_datetime` +
-    `completed_by`, closes any open labour session, sets `actual_hours` =
-    Σ session hours (manual value only when no sessions), recomputes
-    `downtime_hours` = now − start, returns the equipment to `Available`, and
-    **auto-issues** all still-reserved spare allocations (books ISSUE
-    movements);
-  - `Closed` (verification) is **Supervisor-only**, stamps
-    `verified_by/verified_at/verification_notes`, and closes any Open/
-    In-Progress backlog defects pointing at this WO (recording the verifier).
-  The edit form can also set `Completed/Closed`; it stamps `completed_by`
-  once and auto-issues allocations on the transition, but it does **not**
-  apply the supervisor-verification rule, verification stamps, backlog
-  closing, or equipment-status sync — those live only in `update_status`.
-- `update_status` and session start/close run in transactions with
-  `SELECT … FOR UPDATE` on the WO (and on the technician for session start).
+  Completed → Closed`. Completion records the workshop's work and can
+  auto-issue reserved parts. Supervisor-only closure requires personal
+  verification notes and is available from the work-order detail page after
+  completion. Create/edit cannot directly set Closed; core edits, status and
+  session changes and attachment deletion are blocked after closure. Separate
+  incident reviews, additional uploads and breakdown grouping have their own
+  actions. Only defects explicitly selected
+  by the supervisor are verified in the same transaction; unselected defects
+  remain open. An open registered `BREAKDOWN` defect prevents the WO status
+  sync from automatically setting the machine Available, but this is not an
+  equipment-isolation control and site safety procedures still apply.
+- Work-order edit, `update_status`, session start/close and attachment removal
+  use a transaction and `SELECT … FOR UPDATE` on the WO. Selected defects are
+  locked and rechecked before verification. Starting a session on Completed or
+  Closed is rejected (the technician is also locked for session start).
 - Labour sessions: starting a session for a technician closes their open
   session on any other WO (marked `switched_to_wo_id`); a WO may have one
   open session; first session on a WO moves it to `In Progress` + stamps
@@ -977,28 +985,46 @@ For each item, per machine (`equipment_id` + `inspection_item_id`):
 failed + already-open defect → append a "re-seen" note to `observation` and
 escalate priority (never down); failed + previously closed → new defect with
 `recurrence_of`; failed + none → new Open defect (source `Inspection`,
-description = item text in the record language + comment); **passing now →
-closes** the open defect(s) for that item, verified by the inspector. Items
-without a linked machine (`equipment_id` empty) still create defects but
-cannot match/annotate/close existing ones.
+description = item text in the record language + comment). A positive result
+is evidence for supervisor review only; it does **not** close a defect. Blank
+or N/A is not positive. A matrix positive is a review prompt, not proof that a
+column applies to the machine. Items without a linked machine still create
+defects but cannot match/annotate an existing one.
 
 Inspection PDF (`inspections/pdf/<id>`): generated in pure PHP
 (`Inspection_pdf` + `Pdf_writer`, PDF 1.4, WinAnsi text, optional GD signature
 images, optional zlib) and streamed inline; failures render an explanatory
 HTML error instead of a 500.
 
-**Backlog**: required fields asset, start date, description; end ≥ start;
-status `Closed` without end date uses today; free-text asset labels are
-resolved to a machine when they match a registration number. `days_down`
-(shown/exported) is computed in the model from start date (and end date when
-closed). Closure policy mirrors work orders (§7.1): Supervisor-only; a defect
-with an unfinished WO cannot be closed from the backlog (close the WO
-instead — which closes the defect with verifier stamps). Planning fields:
-when `planned_date` + `estimated_duration` (minutes) are set on a
-machine-linked defect, a `maintenance_plan_jobs` job (`Repair`/`Corrective`,
-source `FromBacklog`, hours/day = minutes ÷ 60, single day) is created or
-updated; clearing them deletes the job. Excel export reproduces the two
-legacy sheets ("Backlog on going" / "Backlog done").
+**Backlog**: one new record per independently actionable defect, with an asset,
+starting date and description required. A selected machine and typed reference
+must agree; ambiguous free-text matches are not automatically linked. New
+planning dates/durations are proposals until a supervisor commits a real
+`maintenance_plan_jobs` job. Job and ledger writes run separately from the
+defect save, with frozen-week checks, retries, failure warnings and preservation
+of an existing job. The register counts actual active jobs, not date fields;
+manual forecast overrides still win. Migration 0015 provides proposal, evidence,
+activity and idempotency fields. Migration 0016 coordinates planning with
+publication. Before scheduling, the locked defect and proposal are rechecked so
+a newer request is not overwritten. Active linked jobs must match an open
+defect's machine and cannot duplicate another active job. Plan writers lock the
+defect after the global guard; defect machine changes and closures recheck active
+jobs using a current read after locking the defect. Existing mismatches are
+flagged for review, not rewritten. Terminal job updates remain available for
+resolving legacy cases when the affected weeks are not frozen. Historical
+imports are not rewritten.
+
+Closing or cancelling requires a supervisor. Cancellation requires a reason;
+corrections to closed/cancelled records require an audited reason. The edit UI
+carries a version hash and rejects a stale form after locking the current row;
+older API clients that omit it have only the transaction-time conflict check.
+A supervisor may enter an already-completed historical defect with a traceable source and
+work done, leaving unknown completion dates and verification unrecorded. Current
+reviewer/time is distinct from historical completion and personal verification.
+An unfinished linked work order blocks closure, and work-order closure affects
+only explicitly selected defects. Inspection passes prompt review rather than
+closing. Hard deletion is disabled; use audited cancellation. CSV and workbook
+exports distinguish historical/legacy evidence from confirmed verification.
 
 ### 7.5 Inventory (store) — `Materials_model`
 
@@ -1280,7 +1306,9 @@ the variance by category.
   generation touching that week are refused. `plan_vs_actual` compares the
   **baseline** plan against actuals from `W36_report_model::report_for_week()`
   (group + fleet roll-ups); when the weekly report can't be built the screen
-  says so instead of showing zeros.
+  says so instead of showing zeros. Publication, manual cells, generation, job
+  edits and backlog-driven planning all use the shared transaction lock (§5.3).
+  Inspection status sync also checks every week touched by a legacy multi-week job.
 - Rolling plan: the same computation for weeks +0/+1/+2 in one grid.
 - PM spares forecast (`forecast/spares?weeks=1..13`, default 4): from
   `pm_part_requirements` of schedules due in the horizon vs current stock
@@ -1294,24 +1322,17 @@ the variance by category.
 
 ## 8. End-to-end workflows
 
-**W1 — Breakdown repair.** Operator/supervisor creates a Corrective WO
-(equipment → `Breakdown`; `is_breakdown` derived) → technician starts a labour
-session (WO → In Progress) → parts requested on the WO appear on the pending
-spares board → store allocates/issues (§7.6) → session closed (hours booked)
-→ status `Completed` (equipment → Available, reserved stock auto-issued,
-downtime computed) → supervisor verifies → `Closed` (linked defects close
-with verifier) → the downtime interval now feeds dashboard KPIs and the W36
-week containing it.
+**W1 — Breakdown repair.** Create a Corrective WO → technician completes the
+work → supervisor verifies and closes the WO, explicitly selecting any resolved
+linked defects. An unselected open BREAKDOWN defect remains open and prevents
+automatic equipment release. The record is not a safety interlock.
 
-**W2 — Inspection → defect → repair.** Inspector fills a checklist (EN/FR) →
-failed No-Go item raises a P1 backlog defect (machine BREAKDOWN) → planner
-sets planned date + duration → a Corrective job appears in the maintenance
-plan/forecast → work is done (raise/link a WO that references the defect via
-`backlogs.work_order_id` — set in the data, there is no dedicated "create WO
-from backlog" button; the linkage is by editing records) → WO Closed by
-supervisor closes the defect; alternatively a later inspection passing the
-same item closes it, or the supervisor closes it directly once its WO is
-finished.
+**W2 — Inspection → defect → repair.** A failed checklist item creates or
+annotates a defect. A technician may suggest planning dates and duration; a
+supervisor commits a plan in an unfrozen week. Link an optional WO for the same
+machine. Supervisor verification closes only selected defects; alternatively
+close a defect directly after a linked WO is completed. An inspection pass is
+only evidence for review and never closes it automatically.
 
 **W3 — PM cycle.** Schedule created (interval + standard hours + part
 requirements) → dashboard/PM planner show due/overdue (next 14 days on the

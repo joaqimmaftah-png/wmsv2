@@ -346,6 +346,217 @@ try:
         bl_reject_html = bl_resp.read().decode('utf-8', 'replace')
     assert 'Closing a defect requires supervisor verification.' in bl_reject_html, 'Technician was allowed to self-close defect!'
 
+    # Exercise the real database + authenticated defect paths, not just fakes.
+    # Each new form has a server-generated idempotency token; refresh only the
+    # CSRF value when replaying that same submission.
+    def bl_sql(sql):
+        return subprocess.check_output([
+            'mysql', '-h', '127.0.0.1', '-uroot', f'-p{os.environ["WMS_DB_PASS"]}',
+            '--batch', '--skip-column-names', os.environ.get('WMS_DB_NAME', 'wms_fresh'),
+        ], input=sql.encode('utf-8')).decode('utf-8').strip()
+
+    def bl_form(op):
+        html = get('/backlog/create', op)
+        token_match = re.search(r'name=["\x27]submit_token["\x27]\s+value=["\x27]([a-f0-9]{32})', html)
+        assert token_match, 'Missing defect idempotency token'
+        return csrf_from(html), token_match.group(1)
+
+    def bl_submit(op, fields):
+        req = urllib.request.Request(BASE + '/backlog/create',
+            data=urllib.parse.urlencode(fields).encode('utf-8'),
+            headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        with op.open(req) as response:
+            return response.read().decode('utf-8', 'replace')
+
+    base_defect = {'asset_label':'EX 006', 'start_date':'2020-01-01',
+                   'source':'Other', 'priority':'P2', 'status':'Open'}
+    csrf, token = bl_form(tech_op)
+    tech_defect = dict(base_defect, csrf_token_wms=csrf, submit_token=token,
+        description='CI invalid plan still saves defect', requested_date='2041-06-06',
+        requested_duration='0', plan_action='schedule')
+    tech_result = bl_submit(tech_op, tech_defect)
+    assert 'saved' in tech_result.lower(), 'Invalid planning input blocked the defect'
+    row = bl_sql("SELECT CONCAT(COUNT(*), ':', COALESCE(MAX(schedule_state),''), ':', "
+        "COALESCE(MAX(requested_duration),-1)) FROM backlogs WHERE submit_token='" + token + "'")
+    assert row == '1:needs_info:-1', f'Invalid plan was treated as scheduled: {row}'
+    assert bl_sql("SELECT COUNT(*) FROM maintenance_plan_jobs j JOIN backlogs b ON b.id=j.backlog_id WHERE b.submit_token='" + token + "'") == '0'
+    tech_defect['csrf_token_wms'], _ = bl_form(tech_op)
+    bl_submit(tech_op, tech_defect)
+    assert bl_sql("SELECT COUNT(*) FROM backlogs WHERE submit_token='" + token + "'") == '1', 'Retry duplicated a defect'
+    defect_id = bl_sql("SELECT id FROM backlogs WHERE submit_token='" + token + "'")
+    exact_register = get('/backlog?q=BL-' + defect_id, tech_op)
+    assert ('data-bl-open="' + defect_id + '"') in exact_register, 'Similar-defect link did not locate the existing record'
+
+    csrf, token = bl_form(opener)
+    hist_result = bl_submit(opener, dict(base_defect, csrf_token_wms=csrf, submit_token=token,
+        description='CI historical defect evidence', status='Closed', historical='1',
+        completion_source='CI job card', closing_remarks='Hose replaced'))
+    assert 'saved' in hist_result.lower(), 'Historical defect was not saved'
+    historical = bl_sql("SELECT CONCAT(id, ':', closure_kind, ':', end_date IS NULL, ':', "
+        "verified_by IS NULL, ':', reviewed_by IS NOT NULL) FROM backlogs WHERE submit_token='" + token + "'")
+    parts = historical.split(':')
+    assert len(parts) == 5 and parts[1:] == ['historical','1','1','1'], f'Invented historical evidence: {historical}'
+    detail = json.loads(get('/backlog/summary_json/' + parts[0], opener))['item']
+    assert detail['verification_label'] == 'Historical completion; verification not recorded' and detail['days_down'] is None
+
+    # Edits from this form carry a version. A concurrent change after the
+    # form was opened must be surfaced instead of overwritten.
+    csrf, token = bl_form(opener)
+    bl_submit(opener, dict(base_defect, csrf_token_wms=csrf, submit_token=token,
+        description='CI stale edit fixture'))
+    stale_id = bl_sql("SELECT id FROM backlogs WHERE submit_token='" + token + "'")
+    edit_html = get('/backlog/edit/' + stale_id, opener)
+    version_match = re.search(r'name=["\x27]record_version["\x27]\s+value=["\x27]([a-f0-9]{64})', edit_html)
+    assert version_match, 'Missing edit conflict token'
+    bl_sql("UPDATE backlogs SET observation='Concurrent inspection note' WHERE id=" + stale_id)
+    stale_fields = dict(base_defect, csrf_token_wms=csrf_from(edit_html), record_version=version_match.group(1),
+        description='Stale browser edit')
+    stale_req = urllib.request.Request(BASE + '/backlog/edit/' + stale_id,
+        data=urllib.parse.urlencode(stale_fields).encode('utf-8'), headers={'Content-Type':'application/x-www-form-urlencoded'})
+    with opener.open(stale_req) as response:
+        stale_html = response.read().decode('utf-8', 'replace')
+    assert 'changed while you were editing' in stale_html
+    assert bl_sql('SELECT observation FROM backlogs WHERE id=' + stale_id) == 'Concurrent inspection note'
+    assert bl_sql('SELECT description FROM backlogs WHERE id=' + stale_id) == 'CI stale edit fixture'
+
+    # Cancellation remains a distinct reasoned outcome in the detail API and
+    # both exports; it must not be presented as a verified completion.
+    csrf, token = bl_form(opener)
+    cancelled_result = bl_submit(opener, dict(base_defect, csrf_token_wms=csrf, submit_token=token,
+        description='CI cancelled duplicate', status='Cancelled', cancellation_reason='CI duplicate report'))
+    assert 'saved' in cancelled_result.lower(), 'Reasoned cancellation was not saved'
+    cancelled_id = bl_sql("SELECT id FROM backlogs WHERE submit_token='" + token + "'")
+    cancelled = json.loads(get('/backlog/summary_json/' + cancelled_id, opener))['item']
+    assert cancelled['status'] == 'Cancelled' and cancelled['cancellation_reason'] == 'CI duplicate report' and not cancelled['verification_label']
+    assert cancelled['reviewer_name'] != '—' and cancelled['reviewed_at'] != '—'
+    csv = get('/backlog/export_csv', opener)
+    assert 'CI duplicate report' in csv and 'Reviewed By' in csv
+    _, _, cancelled_xlsx = get_bytes('/backlog/export_xlsx', opener)
+    with zipfile.ZipFile(io.BytesIO(cancelled_xlsx)) as book:
+        xml = ''.join(book.read(name).decode('utf-8') for name in book.namelist() if name.endswith('.xml'))
+    assert 'CANCELLATION REASON' in xml and 'CI duplicate report' in xml
+
+    # Freeze an isolated future week. The defect must commit while its failed
+    # plan remains absent and is labelled failed, not silently accepted.
+    bl_sql("INSERT INTO forecast_snapshots (week_start,week_end,iso_label,revision,is_baseline,status,payload,payload_checksum) "
+        "VALUES ('2040-06-04','2040-06-10','2040-W23',1,1,'Published','{}',SHA2('{}',256))")
+    csrf, token = bl_form(opener)
+    frozen_result = bl_submit(opener, dict(base_defect, csrf_token_wms=csrf, submit_token=token,
+        description='CI frozen plan saves defect', requested_date='2040-06-06', requested_duration='60', plan_action='schedule'))
+    assert 'plan was not changed' in frozen_result.lower(), 'Frozen-plan failure was not explained'
+    assert bl_sql("SELECT schedule_state FROM backlogs WHERE submit_token='" + token + "'") == 'failed'
+    assert bl_sql("SELECT COUNT(*) FROM maintenance_plan_jobs j JOIN backlogs b ON b.id=j.backlog_id WHERE b.submit_token='" + token + "'") == '0'
+
+    # A different draft week can commit a real job and forecast ledger row.
+    csrf, token = bl_form(opener)
+    plan_result = bl_submit(opener, dict(base_defect, csrf_token_wms=csrf, submit_token=token,
+        description='CI committed plan job', requested_date='2041-06-06', requested_duration='60', plan_action='schedule'))
+    assert 'job saved' in plan_result.lower(), 'Valid supervisor plan was not committed'
+    assert bl_sql("SELECT COUNT(*) FROM maintenance_plan_jobs j JOIN backlogs b ON b.id=j.backlog_id "
+        "WHERE b.submit_token='" + token + "' AND j.status='Planned' AND j.source='FromBacklog'") == '1'
+    assert bl_sql("SELECT COUNT(*) FROM equipment_planned_downtime d JOIN backlogs b ON b.equipment_id=d.equipment_id "
+        "WHERE b.submit_token='" + token + "' AND d.plan_date='2041-06-06' AND d.category='Corrective' AND d.source='FromPlan'") == '1'
+
+    # Editing a linked job through Forecast cannot silently move it to another
+    # machine, even though that editor may change an ordinary unlinked job.
+    linked_job = bl_sql("SELECT j.id FROM maintenance_plan_jobs j JOIN backlogs b ON b.id=j.backlog_id WHERE b.submit_token='" + token + "'")
+    original_machine = bl_sql("SELECT equipment_id FROM maintenance_plan_jobs WHERE id=" + linked_job)
+    other_machine = bl_sql("SELECT id FROM equipment WHERE id<>" + original_machine + " ORDER BY id LIMIT 1")
+    job_page = get('/forecast/jobs?week=2041-W23&equipment_id=' + original_machine + '&date=2041-06-06&edit=' + linked_job, opener)
+    _, wrong_machine = post('/forecast/save_job?week=2041-W23', {
+        'csrf_token_wms': csrf_from(job_page), 'id': linked_job, 'equipment_id': other_machine,
+        'start_date': '2041-06-06', 'end_date': '2041-06-06', 'hours_per_day': '1',
+        'job_type': 'Repair', 'category': 'Corrective', 'title': 'CI linked job edit', 'status': 'Planned'})
+    assert 'linked defect job must use' in wrong_machine.lower()
+    assert bl_sql("SELECT equipment_id FROM maintenance_plan_jobs WHERE id=" + linked_job) == original_machine
+
+    # The HTTP forecast routes use the same locked transaction as backlog
+    # planning: a published manual cell stays frozen against later edits,
+    # generation and job creation.
+    fc_week, fc_date = '2081-W20', '2081-05-12'
+    fc_id = bl_sql("SELECT id FROM equipment WHERE registration_no='EX 006' LIMIT 1")
+    fc_page = get('/forecast?week=' + fc_week, opener)
+    _, cell_saved = post('/forecast/save_cell?week=' + fc_week, {
+        'csrf_token_wms': csrf_from(fc_page), 'equipment_id': fc_id,
+        'plan_date': fc_date, 'category': 'Corrective', 'hours': '3'})
+    assert 'Planned Corrective hours updated' in cell_saved
+    assert bl_sql("SELECT CONCAT(hours,':',source) FROM equipment_planned_downtime WHERE equipment_id="
+        + fc_id + " AND plan_date='" + fc_date + "' AND category='Corrective'") == '3.00:Manual'
+    fc_page = get('/forecast?week=' + fc_week, opener)
+    _, published = post('/forecast/publish?week=' + fc_week, {
+        'csrf_token_wms': csrf_from(fc_page), 'revision_note': 'CI acknowledgement'})
+    assert 'published' in published.lower()
+    assert bl_sql("SELECT COUNT(*) FROM forecast_snapshots WHERE week_start='" + fc_date + "' AND is_baseline=1") == '1'
+    fc_page = get('/forecast?week=' + fc_week, opener)
+    _, frozen_cell = post('/forecast/save_cell?week=' + fc_week, {
+        'csrf_token_wms': csrf_from(fc_page), 'equipment_id': fc_id,
+        'plan_date': fc_date, 'category': 'Corrective', 'hours': '9'})
+    assert 'published and frozen' in frozen_cell.lower()
+    assert bl_sql("SELECT hours FROM equipment_planned_downtime WHERE equipment_id="
+        + fc_id + " AND plan_date='" + fc_date + "' AND category='Corrective'") == '3.00'
+    fc_page = get('/forecast?week=' + fc_week, opener)
+    _, frozen_generation = post('/forecast/generate?week=' + fc_week, {
+        'csrf_token_wms': csrf_from(fc_page), 'what': 'standing'})
+    assert 'published and frozen' in frozen_generation.lower()
+    fc_page = get('/forecast/jobs?week=' + fc_week + '&equipment_id=' + fc_id + '&date=' + fc_date, opener)
+    _, frozen_job = post('/forecast/save_job?week=' + fc_week, {
+        'csrf_token_wms': csrf_from(fc_page), 'equipment_id': fc_id,
+        'start_date': fc_date, 'end_date': fc_date, 'hours_per_day': '1',
+        'job_type': 'Repair', 'category': 'Corrective', 'title': 'CI HTTP frozen job', 'status': 'Planned'})
+    assert 'published and frozen' in frozen_job.lower()
+    assert bl_sql("SELECT COUNT(*) FROM maintenance_plan_jobs WHERE title='CI HTTP frozen job'") == '0'
+
+    # Work-order verification is a separate supervisor action. Selecting one
+    # linked defect must not silently close the other; a later session start
+    # must not reopen a closed WO, even if its start time was never recorded.
+    bl_sql(f"""
+        SET @eq = (SELECT id FROM equipment WHERE registration_no='EX 006' LIMIT 1);
+        INSERT INTO work_orders (wo_number,equipment_id,title,type,priority,status,action_taken,end_datetime,created_by,completed_by)
+        VALUES ('WO-CI-VERIFY-03',@eq,'Verify linked defects','Corrective Maintenance','Medium','Completed','Hose replaced','2020-02-01 09:00:00',{int(sup_id)},{int(sup_id)});
+        SET @wo = LAST_INSERT_ID();
+        INSERT INTO backlogs (equipment_id,asset_label,start_date,description,source,status,work_order_id)
+        VALUES (@eq,'EX 006','2020-01-01','CI resolved defect','Other','Open',@wo),
+               (@eq,'EX 006','2020-01-01','CI unresolved defect','Other','Open',@wo);
+    """)
+    verify_wo = bl_sql("SELECT id FROM work_orders WHERE wo_number='WO-CI-VERIFY-03'")
+    resolved = bl_sql("SELECT id FROM backlogs WHERE description='CI resolved defect'")
+    unresolved = bl_sql("SELECT id FROM backlogs WHERE description='CI unresolved defect'")
+
+    def wo_post(op, path, fields):
+        req = urllib.request.Request(BASE + path, data=urllib.parse.urlencode(fields, doseq=True).encode('utf-8'),
+            headers={'Content-Type':'application/x-www-form-urlencoded'})
+        with op.open(req) as response:
+            return response.read().decode('utf-8', 'replace')
+
+    tech_csrf = csrf_from(get('/backlog/create', tech_op))
+    denied = wo_post(tech_op, '/workorders/update_status/' + verify_wo,
+        {'csrf_token_wms':tech_csrf, 'status':'Closed', 'verification_notes':'Checked'})
+    assert 'supervisor' in denied.lower() and bl_sql('SELECT status FROM work_orders WHERE id=' + verify_wo) == 'Completed'
+    supervisor_form = get('/workorders/view/' + verify_wo, opener)
+    assert 'resolved_defect_ids[]' in supervisor_form and 'wo-verification-notes' in supervisor_form
+    verified = wo_post(opener, '/workorders/update_status/' + verify_wo,
+        {'csrf_token_wms':csrf_from(supervisor_form), 'status':'Closed',
+         'verification_notes':'Pressure tested', 'resolved_defect_ids[]':[resolved]})
+    assert 'work order verified' in verified.lower()
+    assert bl_sql('SELECT status FROM backlogs WHERE id=' + resolved) == 'Closed'
+    assert bl_sql('SELECT status FROM backlogs WHERE id=' + unresolved) == 'Open'
+    tech_csrf = csrf_from(get('/backlog/create', tech_op))
+    denied_session = wo_post(tech_op, '/workorders/start_session/' + verify_wo,
+        {'csrf_token_wms':tech_csrf})
+    assert 'cannot start' in denied_session.lower()
+    assert bl_sql('SELECT status FROM work_orders WHERE id=' + verify_wo) == 'Closed'
+    # A separate completed fixture lets the browser suite exercise the real
+    # verification form without submitting or changing the first scenario.
+    bl_sql(f"""
+        SET @eq = (SELECT id FROM equipment WHERE registration_no='EX 006' LIMIT 1);
+        INSERT INTO work_orders (wo_number,equipment_id,title,type,priority,status,action_taken,end_datetime,created_by,completed_by)
+        VALUES ('WO-CI-Z-UI-04',@eq,'UI verification fixture','Corrective Maintenance','Medium','Completed','Pump repaired','2020-02-01 09:00:00',{int(sup_id)},{int(sup_id)});
+        SET @wo = LAST_INSERT_ID();
+        INSERT INTO backlogs (equipment_id,asset_label,start_date,description,source,status,work_order_id)
+        VALUES (@eq,'EX 006','2020-01-01','CI UI defect one','Other','Open',@wo),
+               (@eq,'EX 006','2020-01-01','CI UI defect two','Other','Open',@wo);
+    """)
+
     # Manager (role_id = 4) read-only access succeeds on /backlog, /backlog/export_csv (UTF-8 BOM), AND /backlog/export_xlsx (ZIP PK\x03\x04)
     st_m_bl, _, m_bl_b = get_bytes('/backlog', mgr_op)
     m_bl_html = m_bl_b.decode('utf-8', 'replace')
@@ -933,7 +1144,10 @@ try:
         'recommended_qty': '-10',
         'service_interval_hours': '250',
     })
-    assert st_sp_bad == 200 and 'Specification not saved' in sp_bad_html and '28.00 L' in sp_bad_html
+    # Quantity and unit are separate spans; compare rendered text rather than
+    # requiring an impossible contiguous substring in the raw HTML.
+    sp_bad_text = ' '.join(re.sub(r'<[^>]+>', ' ', sp_bad_html).split())
+    assert st_sp_bad == 200 and 'Specification not saved' in sp_bad_text and '28.00 L' in sp_bad_text
 
     _, _, st_bgt_b = get_bytes(f'/lubricants/budget?year={cur_yr}&month={cur_mo}', store_op)
     st_bgt_save, _, st_bgt_after = post_op(store_op, '/lubricants/budget', {

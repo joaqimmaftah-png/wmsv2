@@ -55,8 +55,8 @@ passwords. See [`SYSTEM.md` §18](SYSTEM.md) for the full register.
 | Work Orders | Corrective / Preventive / Incident work orders with printable job cards, multi-technician labour sessions, spare-part and oil lines, incident (HSE) details with photo/PDF evidence, drawn operator signature, two-stage close (Completed → supervisor-verified Closed) |
 | Equipment | Asset register with types, meter readings (hours/km) with validation and history, report grouping/site classification, manufacturer spec sheets, per-machine KPIs |
 | PM Planner | Preventive-maintenance schedules (Hours/Km/Days/Months intervals), completion recording linked to the work order that did the service, 12-month calendar forecast, per-service spare-part requirements |
-| Inspections | 14 seeded bilingual (EN/FR) checklist templates plus a supervisor template editor (create/edit/delete, usage-guarded); signed inspection records; failed items automatically raise/annotate/close backlog defects; real PDF output |
-| Backlog | Defect register (P1–P3) with Excel export mirroring the legacy "Backlog on going / done" sheets; planning a defect pushes a job into the maintenance plan |
+| Inspections | 14 seeded bilingual (EN/FR) checklist templates plus a supervisor template editor (create/edit/delete, usage-guarded); signed inspection records; failed items raise or annotate defects; positive results prompt review, not automatic closure; real PDF output |
+| Backlog | Defect register (P1–P3) with Excel export mirroring the legacy "Backlog on going / done" sheets; supervisors can commit a proposed repair to the maintenance plan |
 | Inventory (Materials) | Stock items with a movement ledger (receive/issue), reorder data, Excel export/template/**import with dry-run validation and per-row error report** |
 | Pending Spare Parts | Matches parts requested on open work orders against stock; Allocate → Issue reservations; in-app availability alerts when stock arrives |
 | Suppliers & Orders | Supplier master with contacts and part catalogue; purchase-order pipeline with measured lead-time estimates; partial deliveries, GRN (goods receipt note) per delivery, order documents |
@@ -330,9 +330,22 @@ WMS_DB_HOST=localhost WMS_DB_USER=… WMS_DB_PASS=… WMS_DB_NAME=… \
     scripts/migrate.sh              # apply
 ```
 
-Each file is idempotent and recorded in `schema_migrations`, so re-running is
-safe. The two current files (K-16 severity column, K-20 duplicate index) are
-optional at runtime; see `database/migrations/README.md`.
+Each migration is recorded in `schema_migrations`; see
+`database/migrations/README.md` for the full version list and rollout guidance.
+For the defect workflow, **0015 is required for auditable closure, cancellation,
+idempotent submissions and scheduling proposals**. Before deploying this code,
+back up the database, pause writes, apply pending migrations, deploy the code,
+and verify supervisor/technician flows before resuming writes. Older application
+versions can auto-close defects from inspections and must not remain active
+alongside the new workflow. If 0015 is missing, open defect reporting remains
+available but closure, cancellation and committed planning fail safely.
+Migration **0016** adds the transactional forecast lock: publication and all
+application plan/ledger changes serialize, including cross-week jobs. Planning
+fails closed if the lock or required InnoDB tables are missing. The lock is global,
+so even changes in different weeks wait for one another. Deploy all instances
+together; older code or direct SQL that bypasses the lock is unsafe. Validate
+migrations, concurrent operations and role workflows on the actual production
+database version in staging before resuming writes.
 
 ## Deployment (cPanel production checklist)
 

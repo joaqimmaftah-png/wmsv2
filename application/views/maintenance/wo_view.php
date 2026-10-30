@@ -12,15 +12,27 @@ $tc = (wo_is_breakdown($wo) ? 'b-danger' : (isset($type_colors[$wo->type]) ? $ty
 // was missing here, so a work order parked on it rendered no transition
 // options and could only be moved through the edit form.
 $status_next = [
-  'Open'          => ['In Progress','Waiting Parts','Waiting Tools','Closed'],
-  'In Progress'   => ['Waiting Parts','Waiting Tools','Completed','Closed'],
-  'Waiting Parts' => ['In Progress','Waiting Tools','Completed','Closed'],
-  'Waiting Tools' => ['In Progress','Waiting Parts','Completed','Closed'],
+  'Open'          => ['In Progress','Waiting Parts','Waiting Tools'],
+  'In Progress'   => ['Waiting Parts','Waiting Tools','Completed'],
+  'Waiting Parts' => ['In Progress','Waiting Tools','Completed'],
+  'Waiting Tools' => ['In Progress','Waiting Parts','Completed'],
   'Completed'     => ['Closed'],
   'Closed'        => [],
 ];
 $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] : []);
+$viewerIsSupervisor = isset($role_id) && (int)$role_id === 1;
+if (!$viewerIsSupervisor) $next_statuses = array_values(array_filter($next_statuses, function ($s) { return $s !== 'Closed'; }));
+$mayUpdateStatus = isset($role_id) && in_array((int)$role_id, array(1, 2), TRUE);
 ?>
+<style>
+.wo-detail-grid > * { min-width: 0; }
+.wo-kpi-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+@media (max-width: 900px) {
+  .wo-detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .wo-detail-grid > .col-2 { grid-column: auto; }
+  .wo-kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+</style>
 
 <!-- WO Header -->
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:12px;">
@@ -44,7 +56,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
       <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
       Print Job Card
     </a>
-    <?php if (empty($is_manager) && (!isset($role_id) || (int)$role_id !== 4)): ?>
+    <?php if ($wo->status !== 'Closed' && empty($is_manager) && (!isset($role_id) || (int)$role_id !== 4)): ?>
     <a href="<?= base_url('workorders/edit/'.$wo->id) ?>" class="btn btn-ghost btn-icon">
       <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
       Edit
@@ -55,13 +67,13 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
 </div>
 
 <!-- Details Grid -->
-<div class="grid g-2-1 mb-3">
+<div class="grid g-2-1 mb-3 wo-detail-grid">
 
   <!-- Left: WO Details + Description -->
   <div class="col-2">
 
     <!-- Info Cards Strip -->
-    <div class="grid" style="grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;">
+    <div class="grid wo-kpi-strip">
       <div class="kpi" style="animation-delay:.05s;">
         <div class="kpi-glow" style="background:var(--blue);"></div>
         <span class="kpi-tag">Equipment</span>
@@ -96,7 +108,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
     <div class="card mb-3" style="animation-delay:.18s;">
       <div class="ch">
         <div><div class="ct">Work Sessions</div><div class="cs"><?= count($sessions) ?> session(s) &middot; <?= number_format((float)($session_hours),2) ?> hrs logged</div></div>
-        <?php if (!$open_session): ?>
+        <?php if (!$open_session && $mayUpdateStatus && !in_array($wo->status, array('Completed','Closed'), TRUE)): ?>
         <span class="ca" onclick="document.getElementById('start-session-form').style.display='block';this.style.display='none';">+ Start Session</span>
         <?php endif; ?>
       </div>
@@ -110,6 +122,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
             <div style="font-size:10.5px;color:var(--t3);margin-top:2px;"><?= htmlspecialchars((string)($open_session->technician_name ?: 'Unassigned')) ?> &middot; started <?= date('d M, H:i', strtotime($open_session->start_datetime)) ?></div>
           </div>
         </div>
+        <?php if ($mayUpdateStatus && $wo->status !== 'Closed'): ?>
         <?= form_open('workorders/close_session/'.$open_session->id.'/'.$wo->id) ?>
         <div style="margin-bottom:10px;">
           <label class="form-label">What was done in this session?</label>
@@ -117,8 +130,9 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
         </div>
         <button type="submit" class="btn btn-primary btn-sm w-full">Stop &amp; Log Hours</button>
         <?= form_close() ?>
+        <?php endif; ?>
 
-        <?php else: ?>
+        <?php elseif ($mayUpdateStatus && !in_array($wo->status, array('Completed','Closed'), TRUE)): ?>
         <!-- Start new session form (hidden until "+ Start Session" clicked, or shown if no sessions yet) -->
         <div id="start-session-form" style="<?= count($sessions) > 0 ? 'display:none;' : '' ?>">
           <?php
@@ -213,6 +227,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
         <?php else: ?>
         <div style="color:var(--t3);font-size:13px;">Not yet recorded.</div>
         <?php endif; ?>
+        <?php if (!empty($wo->action_taken)): ?><div style="font-size:13px;color:var(--t2);line-height:1.6;margin-top:8px;"><strong>Work done:</strong> <?= nl2br(htmlspecialchars((string)$wo->action_taken, ENT_QUOTES, 'UTF-8')) ?></div><?php endif; ?>
       </div>
     </div>
 
@@ -446,7 +461,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
         <?php if ($can_link): ?>
         <?= form_open('workorders/link_breakdown_event/'.$wo->id, array('class' => 'flex ai-c gap-10', 'style' => 'flex-wrap:wrap;')) ?>
           <label style="font-size:11.5px;color:var(--t3);">Group this work order with:</label>
-          <select name="breakdown_event_id" class="form-select" style="width:auto;min-width:280px;font-size:12px;padding:5px 8px;">
+          <select name="breakdown_event_id" class="form-select" style="width:280px;max-width:100%;min-width:0;font-size:12px;padding:5px 8px;">
             <option value="0">— no other work order (stand alone) —</option>
             <?php foreach ($be_candidates as $cand): ?>
             <option value="<?= (int)$cand->id ?>" <?= ($be_root !== null && (int)$cand->id === $be_root && count($be_group) > 1) ? 'selected' : '' ?>>
@@ -610,7 +625,7 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
     </div>
 
     <!-- Update Status -->
-    <?php if (count($next_statuses) > 0): ?>
+    <?php if ($mayUpdateStatus && count($next_statuses) > 0): ?>
     <div class="card mb-3" style="animation-delay:.40s;">
       <div class="ch"><div><div class="ct">Update Status</div><div class="cs">Advance work order</div></div></div>
       <div style="padding:16px 22px;">
@@ -627,8 +642,8 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
         }));
         ?>
         <div style="margin-bottom:12px;">
-          <label class="form-label">New Status</label>
-          <select name="status" class="form-select">
+          <label class="form-label" for="wo-next-status">New Status</label>
+          <select id="wo-next-status" name="status" class="form-select">
             <?php foreach ($offered as $ns): ?>
             <option value="<?= $ns ?>"><?= $ns ?></option>
             <?php endforeach; ?>
@@ -640,8 +655,8 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
           <?php endif; ?>
         </div>
         <div style="margin-bottom:12px;">
-          <label class="form-label">Hold Code <span style="font-weight:400;color:var(--t3);">(why the work waits — cleared when finished)</span></label>
-          <select name="hold_code" class="form-select">
+          <label class="form-label" for="wo-hold-code">Hold Code <span style="font-weight:400;color:var(--t2);">(why the work waits — cleared when finished)</span></label>
+          <select id="wo-hold-code" name="hold_code" class="form-select">
             <option value="">— none —</option>
             <?php foreach (wo_hold_codes() as $code => $label): ?>
             <option value="<?= $code ?>" <?= (isset($wo->hold_code) && (string)$wo->hold_code === $code) ? 'selected' : '' ?>>
@@ -650,23 +665,35 @@ $next_statuses = (isset($status_next[$wo->status]) ? $status_next[$wo->status] :
             <?php endforeach; ?>
           </select>
         </div>
-        <?php if ($is_supervisor): ?>
+        <?php if ($is_supervisor && $wo->status === 'Completed' && !empty($linked_backlogs)): ?>
         <div style="margin-bottom:12px;">
-          <label class="form-label">Verification Notes <span style="font-weight:400;color:var(--t3);">(recorded when you close the work order)</span></label>
-          <input type="text" name="verification_notes" class="form-control" placeholder="What you checked on the machine">
+          <label class="form-label" for="wo-work-done">Work completed</label>
+          <textarea id="wo-work-done" name="action_taken" class="form-control" rows="2" aria-describedby="wo-work-done-hint"><?= htmlspecialchars((string)(isset($wo->action_taken) ? $wo->action_taken : ''), ENT_QUOTES, 'UTF-8') ?></textarea>
+          <div id="wo-work-done-hint" class="cs" style="color:#475569;">Required if you select defects to verify.</div>
+        </div>
+        <fieldset style="border:1px solid var(--sep);border-radius:8px;padding:12px;margin:0 0 12px;">
+          <legend style="font-size:12px;font-weight:700;">Defects resolved by this work</legend>
+          <p class="cs" style="color:#475569;">Select only defects you have checked. Unselected defects remain open.</p>
+          <?php foreach ($linked_backlogs as $linked): ?>
+          <label style="display:flex;gap:8px;align-items:flex-start;margin:8px 0;font-size:12px;">
+            <input type="checkbox" name="resolved_defect_ids[]" value="<?= (int)$linked->id ?>">
+            <span>BL-<?= (int)$linked->id ?> · <?= htmlspecialchars((string)$linked->description, ENT_QUOTES, 'UTF-8') ?></span>
+          </label>
+          <?php endforeach; ?>
+        </fieldset>
+        <?php endif; ?>
+        <?php if ($is_supervisor && $wo->status === 'Completed'): ?>
+        <div style="margin-bottom:12px;">
+          <label class="form-label" for="wo-verification-notes">Verification Notes <span style="font-weight:400;color:var(--t2);">(recorded when you close the work order)</span></label>
+          <input type="text" id="wo-verification-notes" name="verification_notes" class="form-control" maxlength="300" required aria-describedby="wo-verification-hint" placeholder="What you personally checked on the machine">
+          <div id="wo-verification-hint" class="cs" style="color:#475569;">Required when closing; this is recorded as your verification evidence.</div>
         </div>
         <?php endif; ?>
         <div style="margin-bottom:12px;">
-          <label class="form-label">Work Completed Notes</label>
-          <textarea name="notes" class="form-control" rows="2" placeholder="Describe what was done..."></textarea>
+          <label class="form-label" for="wo-status-notes">Status history note (optional)</label>
+          <textarea id="wo-status-notes" name="notes" class="form-control" rows="2" placeholder="Optional note about the status change"></textarea>
         </div>
-        <?php if (wo_is_breakdown($wo)): ?>
-        <div style="margin-bottom:12px;">
-          <label class="form-label">End Date/Time</label>
-          <input type="datetime-local" name="end_datetime" class="form-control" value="<?= date('Y-m-d\TH:i') ?>">
-        </div>
-        <?php endif; ?>
-        <button type="submit" class="btn btn-primary w-full">Update Status</button>
+        <button type="submit" class="btn btn-primary w-full"><?= $wo->status === 'Completed' && $is_supervisor ? 'Verify &amp; close' : 'Update status' ?></button>
         <?= form_close() ?>
       </div>
     </div>

@@ -346,6 +346,32 @@ if ($opts['verify']) {
         $errors[] = "Expected single-column PRIMARY KEY (`id`) on `ci_sessions`, found {$pkCols} PK column(s).";
     }
 
+    // A malformed or missing mutex must never silently permit plan writes.
+    $res = $mysqli->query("SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'forecast_write_lock'");
+    $lockEngine = $res ? $res->fetch_assoc() : null;
+    if (!$lockEngine || strcasecmp((string)$lockEngine['ENGINE'], 'InnoDB') !== 0) {
+        $errors[] = "Expected an InnoDB `forecast_write_lock` table from migration 0016.";
+    } else {
+        $res = $mysqli->query("SELECT COUNT(*) AS c, SUM(CASE WHEN COLUMN_NAME = 'lock_id' AND SEQ_IN_INDEX = 1 AND SUB_PART IS NULL THEN 1 ELSE 0 END) AS valid_col FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'forecast_write_lock' AND INDEX_NAME = 'PRIMARY'");
+        $lockPk = $res ? $res->fetch_assoc() : null;
+        $res = $mysqli->query("SELECT COUNT(*) AS c FROM `forecast_write_lock` WHERE `lock_id` = 1");
+        $lockRow = $res ? $res->fetch_assoc() : null;
+        if (!$lockPk || (int)$lockPk['c'] !== 1 || (int)$lockPk['valid_col'] !== 1 || !$lockRow || (int)$lockRow['c'] !== 1) {
+            $errors[] = "Expected the `forecast_write_lock` single-column primary key and lock_id 1.";
+        }
+    }
+
+    $planTables = array('forecast_snapshots', 'maintenance_plan_jobs', 'equipment_planned_downtime',
+        'pm_schedules', 'backlogs', 'backlog_events');
+    $res = $mysqli->query("SELECT TABLE_NAME, ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()");
+    $planEngines = array();
+    if ($res) while ($row = $res->fetch_assoc()) $planEngines[$row['TABLE_NAME']] = $row['ENGINE'];
+    foreach ($planTables as $table) {
+        if (!isset($planEngines[$table]) || strcasecmp((string)$planEngines[$table], 'InnoDB') !== 0) {
+            $errors[] = "Expected InnoDB transaction support on `{$table}` for forecast/defect changes.";
+        }
+    }
+
     $res = $mysqli->query("SELECT COUNT(*) AS c FROM `settings`");
     $settingsCount = $res ? (int)$res->fetch_assoc()['c'] : 0;
     if ($settingsCount < 25) {

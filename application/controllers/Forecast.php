@@ -104,38 +104,48 @@ class Forecast extends MY_Controller {
             redirect('forecast?week=' . $label);
         }
 
-        if ($this->Forecast_model->baseline_snapshot($week_start)) {
-            $this->session->set_flashdata('error',
-                $label . ' is published and frozen. Raise a revision instead of regenerating it.');
-            redirect('forecast?week=' . $label);
-        }
-
         $what = (string)$this->input->post('what');
-        $pm   = array('placed' => 0, 'skipped' => 0, 'missing_hours' => 0, 'not_placed' => array(), 'estimated' => array());
-        $st   = $un = array('placed' => 0, 'left_alone' => 0, 'skipped_held' => 0, 'removed' => 0);
-        $sync = null;
+        $result = $this->Forecast_model->plan_transaction(function () use ($week_start, $label, $what) {
+            if ($this->Forecast_model->baseline_snapshot($week_start)) {
+                return array('error' => $label . ' is published and frozen; review the published baseline before making a new plan.');
+            }
+            $pm = array('placed' => 0, 'skipped' => 0, 'missing_hours' => 0, 'not_placed' => array(), 'estimated' => array());
+            $st = $un = array('placed' => 0, 'left_alone' => 0, 'skipped_held' => 0, 'removed' => 0);
+            $insp = $sync = null;
 
-        // MP-3 — the weekly inspections are placed by weekday before the sync,
-        // so their hours reach the ledger with the rest of the jobs
-        $insp = null;
-        if (($what === '' || $what === 'all' || $what === 'inspections') && $this->Maintenance_plan_model->tables_ready()) {
-            $insp = $this->Maintenance_plan_model->generate_inspections($week_start, $this->user_id);
+            // Generate and sync as ONE unit, so publication sees all or none.
+            if (($what === '' || $what === 'all' || $what === 'inspections') && $this->Maintenance_plan_model->tables_ready()) {
+                $insp = $this->Maintenance_plan_model->generate_inspections($week_start, $this->user_id);
+                if (!empty($insp['error']) || !empty($insp['frozen'])) {
+                    return array('error' => !empty($insp['error']) ? $insp['error'] : $label . ' is published and frozen.');
+                }
+            }
+            if ($this->Maintenance_plan_model->tables_ready()) {
+                $sync = $this->Maintenance_plan_model->sync_week($week_start, $this->user_id);
+                if (!empty($sync['errors']) || !empty($sync['frozen'])) {
+                    return array('error' => !empty($sync['errors']) ? implode(' ', $sync['errors']) : $label . ' is published and frozen.');
+                }
+            }
+            if ($what === '' || $what === 'all' || $what === 'pm') {
+                $pm = $this->Forecast_model->generate_from_pm($week_start, $this->user_id);
+                if (!empty($pm['error'])) return array('error' => $pm['error']);
+            }
+            if ($what === '' || $what === 'all' || $what === 'standing') {
+                $st = $this->Forecast_model->generate_standing_allowance($week_start, $this->user_id);
+                if (!empty($st['error'])) return array('error' => $st['error']);
+            }
+            if ($what === '' || $what === 'all' || $what === 'unplanned') {
+                $un = $this->Forecast_model->generate_unplanned_allowance($week_start, $this->user_id);
+                if (!empty($un['error'])) return array('error' => $un['error']);
+            }
+            return compact('pm', 'st', 'un', 'insp', 'sync');
+        });
+        if (!empty($result['error'])) {
+            $this->session->set_flashdata('error', $result['error']);
+            redirect('forecast?week=' . $label); return;
         }
-
-        // MP-2 — the planner's jobs reach the ledger first, so the generators
-        // see them (and leave their FromPlan rows alone)
-        if ($this->Maintenance_plan_model->tables_ready()) {
-            $sync = $this->Maintenance_plan_model->sync_week($week_start, $this->user_id);
-        }
-        if ($what === '' || $what === 'all' || $what === 'pm') {
-            $pm = $this->Forecast_model->generate_from_pm($week_start, $this->user_id);
-        }
-        if ($what === '' || $what === 'all' || $what === 'standing') {
-            $st = $this->Forecast_model->generate_standing_allowance($week_start, $this->user_id);
-        }
-        if ($what === '' || $what === 'all' || $what === 'unplanned') {
-            $un = $this->Forecast_model->generate_unplanned_allowance($week_start, $this->user_id);
-        }
+        $pm = $result['pm']; $st = $result['st']; $un = $result['un'];
+        $insp = $result['insp']; $sync = $result['sync'];
 
         $placed = (int)$pm['placed'] + (int)$st['placed'] + (int)$un['placed'] + ($insp ? (int)$insp['placed'] : 0);
         $kept   = (int)$pm['skipped'] + (int)$st['left_alone'] + (int)$un['left_alone'];
@@ -217,11 +227,6 @@ class Forecast extends MY_Controller {
         $week_start = $this->_resolve_week();
         $label      = $this->Forecast_model->iso_label($week_start);
 
-        if ($this->Forecast_model->baseline_snapshot($week_start)) {
-            $this->session->set_flashdata('error', $label . ' is published and frozen.');
-            redirect('forecast?week=' . $label);
-        }
-
         $equipment_id = (int)$this->input->post('equipment_id');
         $plan_date    = trim((string)$this->input->post('plan_date'));
         $category     = (string)$this->input->post('category');
@@ -240,9 +245,14 @@ class Forecast extends MY_Controller {
             redirect('forecast?week=' . $label);
         }
 
-        $this->Forecast_model->set_planned($equipment_id, $plan_date, $category, $hours,
-                                           Forecast_model::SRC_MANUAL, 'planner override', $this->user_id);
-        $this->session->set_flashdata('success', 'Planned ' . $category . ' hours updated.');
+        $result = $this->Forecast_model->plan_transaction(function () use ($week_start, $label, $equipment_id, $plan_date, $category, $hours) {
+            if ($this->Forecast_model->baseline_snapshot($week_start)) return array('error' => $label . ' is published and frozen.');
+            $saved = $this->Forecast_model->set_planned($equipment_id, $plan_date, $category, $hours,
+                Forecast_model::SRC_MANUAL, 'planner override', $this->user_id);
+            return $saved ? array('id' => $saved) : array('error' => 'The planned hours could not be saved.');
+        });
+        $this->session->set_flashdata(!empty($result['error']) ? 'error' : 'success', !empty($result['error'])
+            ? $result['error'] : 'Planned ' . $category . ' hours updated.');
         redirect('forecast?week=' . $label);
     }
 
@@ -256,7 +266,9 @@ class Forecast extends MY_Controller {
         $label      = $this->Forecast_model->iso_label($week_start);
         $note       = trim((string)$this->input->post('revision_note'));
 
-        $result = $this->Forecast_model->publish($week_start, $this->user_id, $note);
+        $result = $this->Forecast_model->plan_transaction(function () use ($week_start, $note) {
+            return $this->Forecast_model->publish($week_start, $this->user_id, $note);
+        });
 
         if (isset($result['error'])) {
             $this->session->set_flashdata('error', $result['error']);
@@ -337,9 +349,11 @@ class Forecast extends MY_Controller {
         foreach ($fields as $f) $in[$f] = $this->input->post($f);
         $id = (int)$this->input->post('id');
 
-        $res = $this->Maintenance_plan_model->save_job($in, $this->user_id, $id ?: null);
-        if (!empty($res['errors'])) {
-            $this->session->set_flashdata('error', implode(' ', $res['errors']));
+        $res = $this->Maintenance_plan_model->plan_transaction(function () use ($in, $id) {
+            return $this->Maintenance_plan_model->save_job($in, $this->user_id, $id ?: null);
+        });
+        if (!empty($res['error']) || !empty($res['errors'])) {
+            $this->session->set_flashdata('error', !empty($res['error']) ? $res['error'] : implode(' ', $res['errors']));
         } else {
             $msg = $id ? 'Job updated.' : 'Job added.';
             $kept = 0;
@@ -361,9 +375,13 @@ class Forecast extends MY_Controller {
             $this->session->set_flashdata('error', 'You do not have permission to change the plan.');
             redirect($back);
         }
-        $res = $this->Maintenance_plan_model->delete_job((int)$this->input->post('id'), $this->user_id);
-        $this->session->set_flashdata(!empty($res['errors']) ? 'error' : 'success',
-            !empty($res['errors']) ? implode(' ', $res['errors']) : 'Job removed.');
+        $id = (int)$this->input->post('id');
+        $res = $this->Maintenance_plan_model->plan_transaction(function () use ($id) {
+            return $this->Maintenance_plan_model->delete_job($id, $this->user_id);
+        });
+        if (!empty($res['error']) || !empty($res['errors'])) {
+            $this->session->set_flashdata('error', !empty($res['error']) ? $res['error'] : implode(' ', $res['errors']));
+        } else $this->session->set_flashdata('success', 'Job removed.');
         redirect($back);
     }
 

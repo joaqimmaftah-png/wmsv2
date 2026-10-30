@@ -374,7 +374,7 @@ check('Schema: seeds all 630 inspection_items', strpos($schemaSql, 'INSERT IGNOR
 
 $migFiles = glob(__DIR__ . '/../database/migrations/[0-9][0-9][0-9][0-9]_*.sql');
 sort($migFiles, SORT_STRING);
-is_same('Migrations: all 14 ordered SQL migrations present (0001..0014)', 14, count($migFiles));
+is_same('Migrations: all 16 ordered SQL migrations present (0001..0016)', 16, count($migFiles));
 foreach ($migFiles as $mf) {
     $bn  = basename($mf);
     $sum = hash_file('sha256', $mf);

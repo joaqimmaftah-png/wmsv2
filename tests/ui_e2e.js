@@ -333,6 +333,35 @@ for (const rawLine of cookieLines) {
     assert(woMobile.docOverflow <= 0, '/workorders Mobile 390px overflowed: ' + woMobile.docOverflow);
     assert(woMobile.tableDisplay === 'none' && woMobile.cardsDisplay === 'block', '/workorders Mobile Card View failed: ' + JSON.stringify(woMobile));
 
+    // Real supervisor work-order verification form at a narrow CSS width.
+    // The fixture was created by live_e2e.py; do not actually submit it here.
+    const verifyWoId = await evalJs(`(async () => {
+      const html = await (await fetch('/workorders?q=WO-CI-Z-UI-04', {credentials:'same-origin'})).text();
+      const row = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-wo-num="WO-CI-Z-UI-04"]');
+      return row ? row.getAttribute('data-wo-row') : '';
+    })()`);
+    assert(verifyWoId, 'Missing work-order verification UI fixture');
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 320, height: 900, deviceScaleFactor: 1, mobile: false });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/workorders/view/' + verifyWoId });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("wo-verification-notes"))')) break;
+      await sleep(200);
+    }
+    await sleep(1000); // let the existing card entrance animation finish
+    const woVerify = await evalJs(`(() => {
+      const field = document.getElementById('wo-verification-notes');
+      const form = field && field.form;
+      if (!form) return {error:'verification form missing'};
+      const boxes = Array.from(form.querySelectorAll('input[name="resolved_defect_ids[]"]'));
+      const controls = Array.from(form.querySelectorAll('input:not([type=hidden]),select,textarea,button'));
+      const clipped = controls.filter(el => { const r=el.getBoundingClientRect(); return r.left < -1 || r.right > innerWidth+1; }).map(el => el.name || el.textContent.trim());
+      if (boxes[0]) boxes[0].click();
+      return {boxes:boxes.length, firstSelected:!!boxes[0]?.checked, secondSelected:!!boxes[1]?.checked,
+        required:field.required, labeled:!!field.labels?.length, clipped};
+    })()`);
+    assert(woVerify.boxes === 2 && woVerify.firstSelected && !woVerify.secondSelected && woVerify.required && woVerify.labeled && woVerify.clipped.length === 0,
+      '/workorders verification form failed: ' + JSON.stringify(woVerify));
+
     // ---------------------------------------------------------------
     // /equipment Enterprise Fleet DataTable Desktop (1440x900) & Mobile (390x844) E2E
     // ---------------------------------------------------------------
@@ -744,6 +773,66 @@ for (const rawLine of cookieLines) {
     }))()`);
     assert(blMobile.docOverflow <= 0, '/backlog Mobile 390px overflowed: ' + blMobile.docOverflow);
     assert(blMobile.tableDisplay === 'none' && blMobile.cardsDisplay === 'block', '/backlog Mobile Card View failed: ' + JSON.stringify(blMobile));
+
+    // Actual authenticated create form: progressive status, duplicate lookup,
+    // labeled controls and a planning error that must not block a defect.
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/backlog/create' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("defect-form"))')) break;
+      await sleep(200);
+    }
+    const blForm = await evalJs(`(async () => {
+      const form = document.getElementById('defect-form');
+      const machine = document.getElementById('field-equipment_id');
+      const option = Array.from(machine.options).find(o => o.textContent.trim() === 'EX 006');
+      if (!option) return {error:'EX 006 missing'};
+      machine.value = option.value;
+      machine.dispatchEvent(new Event('change', {bubbles:true}));
+      const description = document.getElementById('field-description');
+      description.value = 'CI invalid plan still saves defect';
+      description.dispatchEvent(new Event('input', {bubbles:true}));
+      for (let i=0; i<30 && !document.querySelector('#defect-similar a'); i++) {
+        await new Promise(resolve => setTimeout(resolve,100));
+      }
+      const similar = document.querySelector('#defect-similar a');
+      const status = document.getElementById('field-status');
+      status.value = 'Closed'; status.dispatchEvent(new Event('change', {bubbles:true}));
+      const closeVisible = !document.getElementById('closure-fields').hidden;
+      status.value = 'Open'; status.dispatchEvent(new Event('change', {bubbles:true}));
+      const controls = Array.from(form.querySelectorAll('input:not([type=hidden]),select,textarea'));
+      const unlabeled = controls.filter(el => !el.labels || !el.labels.length).map(el => el.name);
+      const duration = document.getElementById('field-requested_duration'); duration.value = '0';
+      let submitted = false;
+      form.addEventListener('submit', e => { submitted = true; e.preventDefault(); }, {once:true});
+      form.requestSubmit();
+      return { autoReference: document.getElementById('field-asset_label').value,
+        similarHref: similar ? similar.getAttribute('href') : '', closeVisible, unlabeled,
+        invalidDuration: duration.validity.rangeUnderflow, noValidate: form.noValidate, submitted };
+    })()`);
+    assert(blForm.autoReference === 'EX 006' && blForm.similarHref.includes('backlog?q=BL-'), '/backlog/create duplicate lookup failed: ' + JSON.stringify(blForm));
+    assert(blForm.closeVisible && blForm.unlabeled.length === 0, '/backlog/create status or labels failed: ' + JSON.stringify(blForm));
+    assert(blForm.invalidDuration && blForm.noValidate && blForm.submitted, '/backlog/create invalid plan blocked submission: ' + JSON.stringify(blForm));
+
+    // Equivalent narrow CSS viewport for reflow; real browser zoom is a
+    // separate manual/assistive-technology check.
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 320, height: 900, deviceScaleFactor: 1, mobile: false });
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:8000/backlog/create' });
+    for (let i = 0; i < 40; i++) {
+      if (await evalJs('document.readyState === "complete" && Boolean(document.getElementById("defect-form"))')) break;
+      await sleep(200);
+    }
+    await evalJs(`(() => { document.querySelectorAll('.defect-form details').forEach(d => d.open = true);
+      document.getElementById('closure-fields').hidden = false; })()`);
+    await sleep(700); // allow the existing card entrance animation to finish
+    const blFormMobile = await evalJs(`(() => ({
+      docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      clipped: Array.from(document.querySelectorAll('.defect-form input:not([type=hidden]), .defect-form select, .defect-form textarea, .defect-form button'))
+        .filter(el => el.getClientRects().length && !el.closest('[hidden]'))
+        .filter(el => { const r = el.getBoundingClientRect(); return r.left < -1 || r.right > innerWidth + 1; })
+        .map(el => el.name || el.textContent.trim())
+    }))()`);
+    assert(blFormMobile.docOverflow <= 0 && !blFormMobile.clipped.length, '/backlog/create 320px overflow: ' + JSON.stringify(blFormMobile));
 
     // =========================================================================
     // 10. INVENTORY CATALOGUE REGISTER (/materials/inventory) — 1440x900 & 390x844
