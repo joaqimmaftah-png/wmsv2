@@ -49,9 +49,9 @@ class Dashboard_model extends CI_Model {
     public function get_availability_pct() {
         $data = $this->_fleet_window();
         $pct  = $data['fleet']['availability_pct'];
-        // null means the window had no required time at all (no machines, or
-        // every hour accounted for by planned work) — the card shows 100.
-        return $pct === null ? 100.0 : $pct;
+        // null means the window had no positive required-time denominator; keep
+        // it null so every consumer can display an explicit unknown state.
+        return $pct;
     }
 
     /**
@@ -65,7 +65,7 @@ class Dashboard_model extends CI_Model {
         $data = $this->_fleet_window();
         $pct  = $data['fleet']['availability_pct'];
         return [
-            'pct'            => $pct === null ? 100.0 : $pct,
+            'pct'            => $pct,
             'machines_with'  => isset($data['fleet']['machines_with_data']) ? (int)$data['fleet']['machines_with_data'] : 0,
             'from'           => isset($data['period']['from']) ? $data['period']['from'] : null,
             'to'             => isset($data['period']['to']) ? $data['period']['to'] : null,
@@ -160,7 +160,7 @@ class Dashboard_model extends CI_Model {
         $series = $this->_engine()->daily_fleet($days);
         $result = [];
         foreach ($series as $point) {
-            $result[] = ['date' => $point['date'], 'pct' => $point['pct'] === null ? 100 : $point['pct']];
+            $result[] = ['date' => $point['date'], 'pct' => $point['pct']];
         }
         return $result;
     }
@@ -267,7 +267,7 @@ class Dashboard_model extends CI_Model {
         $data  = $this->_engine()->fleet($from, $to);
         $fleet = $data['fleet'];
         return [
-            'availability'    => $fleet['availability_pct'] === null ? 100 : $fleet['availability_pct'],
+            'availability'    => $fleet['availability_pct'],
             'mttr'            => $fleet['mttr_hours'] === null ? 0 : round($fleet['mttr_hours'], 2),
             'mtbf'            => $fleet['mtbf_hours'] === null ? 0 : round($fleet['mtbf_hours'], 1),
             'breakdowns'      => (int)$fleet['breakdowns'],
@@ -324,7 +324,7 @@ class Dashboard_model extends CI_Model {
                 'month'        => $m['month'],
                 'mttr'         => $m['mttr'] === null ? 0 : $m['mttr'],
                 'mtbf'         => $m['mtbf'] === null ? 0 : $m['mtbf'],
-                'availability' => $m['availability'] === null ? 100.0 : $m['availability'],
+                'availability' => $m['availability'],
                 'breakdowns'   => $m['breakdowns'],
             ];
         }
@@ -376,7 +376,7 @@ class Dashboard_model extends CI_Model {
                 'total_down'  => round((float)$k['downtime_hours'], 1),
                 'mttr'        => $k['mttr_hours'] === null ? 0 : round($k['mttr_hours'], 1),
                 'mtbf'        => $k['mtbf_hours'] === null ? 0 : round($k['mtbf_hours'], 1),
-                'availability'=> $k['availability_pct'] === null ? 100.0 : $k['availability_pct'],
+                'availability'=> $k['availability_pct'],
                 'max_down'    => round($max_down, 1),
                 'target'      => round($engine->target_for($eq->id, $to_date) * 100, 1),
                 'variance'    => $engine->variance_pp($k['availability'], $engine->target_for($eq->id, $to_date)),
@@ -399,7 +399,7 @@ class Dashboard_model extends CI_Model {
                 'total_down'  => round($all_down, 1),
                 'avg_mttr'    => $fleet['mttr_hours'] === null ? 0 : round($fleet['mttr_hours'], 1),
                 'avg_mtbf'    => $fleet['mtbf_hours'] === null ? 0 : round($fleet['mtbf_hours'], 1),
-                'avg_avail'   => $fleet['availability_pct'] === null ? 100.0 : $fleet['availability_pct'],
+                'avg_avail'   => $fleet['availability_pct'],
             ],
             'months'     => $months,
             'window'     => ['from' => $from_date, 'to' => $to_date,
@@ -635,7 +635,7 @@ class Dashboard_model extends CI_Model {
                 'breakdowns' => (int)$kpi['fleet']['breakdowns'],
                 'completed'  => (int)($wo->done ?? 0),
                 'downtime'   => round((float)$kpi['fleet']['downtime_hours'], 1),
-                'availability'=> $kpi['fleet']['availability_pct'] === null ? 100.0 : $kpi['fleet']['availability_pct'],
+                'availability'=> $kpi['fleet']['availability_pct'],
                 'mttr'       => $kpi['fleet']['mttr_hours'] === null ? 0 : round($kpi['fleet']['mttr_hours'], 1),
                 'mtbf'       => $kpi['fleet']['mtbf_hours'] === null ? 0 : round($kpi['fleet']['mtbf_hours'], 1),
                 'lube_used'  => round((float)($lube->total ?? 0), 1),
@@ -677,7 +677,7 @@ class Dashboard_model extends CI_Model {
                 'downtime'    => round((float)$k['downtime_hours'], 1),
                 'mttr'        => $k['mttr_hours'] === null ? 0 : round($k['mttr_hours'], 1),
                 'mtbf'        => $k['mtbf_hours'] === null ? 0 : round($k['mtbf_hours'], 1),
-                'availability'=> $k['availability_pct'] === null ? 100.0 : $k['availability_pct'],
+                'availability'=> $k['availability_pct'],
             ];
         }
         usort($eq_reliability, fn($a,$b) => $a['availability'] <=> $b['availability']);
@@ -722,8 +722,9 @@ class Dashboard_model extends CI_Model {
             ->get()->row();
 
         $eq_cnt = $this->db->where('status !=','Retired')->count_all_results('equipment');
-        $avg_avail = count($monthly) > 0
-            ? round(array_sum(array_column($monthly,'availability'))/count($monthly),1) : 0;
+        $defined_availability = array_values(array_filter(array_column($monthly, 'availability'), function ($v) { return $v !== null; }));
+        $avg_avail = count($defined_availability) > 0
+            ? round(array_sum($defined_availability) / count($defined_availability), 1) : null;
         $total_dt = (float)($totals_wo->total_dt ?? 0);
         $total_bd = (int)($totals_wo->bd ?? 0);
 

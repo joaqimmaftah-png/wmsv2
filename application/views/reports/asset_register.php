@@ -16,9 +16,12 @@ $type_summary = array();
 foreach ($assets as $asset) {
     if (isset($status_counts[$asset['status']])) $status_counts[$asset['status']]++;
     $type_name = trim((string)(isset($asset['type_name']) ? $asset['type_name'] : '')) ?: 'Other';
-    if (!isset($type_summary[$type_name])) $type_summary[$type_name] = array('count' => 0, 'availability' => 0.0);
+    if (!isset($type_summary[$type_name])) $type_summary[$type_name] = array('count' => 0, 'availability' => 0.0, 'defined' => 0);
     $type_summary[$type_name]['count']++;
-    $type_summary[$type_name]['availability'] += (float)$asset['availability'];
+    if ($asset['availability'] !== null) {
+        $type_summary[$type_name]['availability'] += (float)$asset['availability'];
+        $type_summary[$type_name]['defined']++;
+    }
 }
 ?>
 
@@ -283,13 +286,13 @@ document.addEventListener('DOMContentLoaded', function(){
   <?php if (!empty($type_summary)): ?>
   <div class="asset-type-summary" aria-label="Average availability by equipment type">
     <?php foreach ($type_summary as $type_name => $summary):
-        $type_avg = round($summary['availability'] / max(1, $summary['count']), 1);
-        $type_color = $type_avg >= 90 ? 'var(--green)' : ($type_avg >= 70 ? 'var(--amber)' : 'var(--red)');
+        $type_avg = $summary['defined'] > 0 ? round($summary['availability'] / $summary['defined'], 1) : null;
+        $type_color = $type_avg === null ? 'var(--t3)' : ($type_avg >= 90 ? 'var(--green)' : ($type_avg >= 70 ? 'var(--amber)' : 'var(--red)'));
     ?>
     <div class="asset-type-summary-item">
       <span class="asset-type-summary-label"><?= $asset_h($type_name) ?></span>
       <strong><?= number_format($summary['count']) ?> <small>assets</small></strong>
-      <span>Avg availability <b style="color:<?= $type_color ?>;"><?= number_format($type_avg, 1) ?>%</b></span>
+      <span>Avg availability <b style="color:<?= $type_color ?>;"><?= $type_avg === null ? '—' : number_format($type_avg, 1) . '%' ?></b></span>
     </div>
     <?php endforeach; ?>
   </div>
@@ -368,7 +371,7 @@ document.addEventListener('DOMContentLoaded', function(){
           <td data-sort-value="<?= (int)$a['total_wo'] ?>" data-card-label="Work orders" class="asset-numeric"><?= number_format((int)$a['total_wo']) ?></td>
           <td data-sort-value="<?= (int)$a['breakdowns'] ?>" data-card-label="Breakdowns" class="asset-numeric"><?= number_format((int)$a['breakdowns']) ?></td>
           <td data-sort-value="<?= (float)$a['total_down'] ?>" data-card-label="Downtime hours" class="asset-numeric"><?= number_format((float)$a['total_down'], 1) ?></td>
-          <td data-sort-value="<?= (float)$a['availability'] ?>" data-card-label="Availability" class="asset-numeric"><strong><?= number_format((float)$a['availability'], 1) ?>%</strong></td>
+          <td data-sort-value="<?= $a['availability'] === null ? '' : (float)$a['availability'] ?>" data-card-label="Availability" class="asset-numeric"><strong><?= $a['availability'] === null ? '—' : number_format((float)$a['availability'], 1) . '%' ?></strong></td>
           <td data-sort-value="<?= $asset_h($a['warranty_expiry']) ?>" data-card-label="Warranty"><?= $asset_h($warranty_label) ?></td>
           <td data-sort-value="<?= $asset_h($a['next_pm_date']) ?>" data-card-label="Next PM"><?= $asset_h($pm_label ?: '—') ?></td>
           <td data-sort-value="<?= $asset_h($a['notes']) ?>" data-card-label="Notes" class="asset-notes-cell"><?= $asset_h($a['notes'] ?: '—') ?></td>

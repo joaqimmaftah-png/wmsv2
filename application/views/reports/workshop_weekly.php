@@ -26,11 +26,11 @@ foreach ($report as $type => $g) {
     $labels = []; $values = [];
     foreach ($g['machines'] as $m) {
         $labels[] = $m['machine_id'];
-        $values[] = round($m['availability'] * 100);
+        $values[] = $m['availability'] === null ? null : round($m['availability'] * 100);
     }
     $chartData[] = [
         'type'      => $g['type'],
-        'kpi'       => round($g['weekly_kpi'] * 100),
+        'kpi'       => $g['weekly_kpi'] === null ? null : round($g['weekly_kpi'] * 100),
         'available' => $g['available'],
         'down'      => $g['down'],
         'total'     => $g['total'],
@@ -138,22 +138,22 @@ foreach ($report as $type => $g) {
       <?php foreach ($chartData as $i => $ct):
         $kpi   = $ct['kpi'];
         $tgt   = $ct['target'];
-        $color = $kpi >= $tgt ? 'var(--green)' : ($kpi >= $tgt - 10 ? 'var(--amber)' : 'var(--red)');
-        $diff  = $kpi - $tgt;
+        $color = $kpi === null ? 'var(--t3)' : ($kpi >= $tgt ? 'var(--green)' : ($kpi >= $tgt - 10 ? 'var(--amber)' : 'var(--red)'));
+        $diff  = $kpi === null ? null : $kpi - $tgt;
       ?>
       <div style="flex:1;min-width:110px;padding:12px 14px;border-right:1px solid var(--g2);<?= $i===count($chartData)-1?'border-right:none':'' ?>">
         <div style="font-size:11px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--t3);margin-bottom:4px;"><?= htmlspecialchars((string)($ct['type'])) ?>s</div>
-        <div style="font-size:22px;font-weight:800;color:<?= $color ?>;line-height:1;margin-bottom:4px;"><?= $kpi ?>%</div>
+        <div style="font-size:22px;font-weight:800;color:<?= $color ?>;line-height:1;margin-bottom:4px;"><?= $kpi === null ? '—' : $kpi.'%' ?></div>
         <div style="height:4px;background:var(--g2);border-radius:3px;overflow:hidden;margin-bottom:5px;">
-          <div style="height:100%;width:<?= $kpi ?>%;background:<?= $color ?>;border-radius:3px;"></div>
+          <div style="height:100%;width:<?= $kpi === null ? 0 : max(0,min(100,$kpi)) ?>%;background:<?= $color ?>;border-radius:3px;"></div>
         </div>
         <div style="font-size:10px;color:var(--t3);">
           <span style="color:var(--green);font-weight:600;"><?= $ct['available'] ?> op</span>
           <?php if ($ct['down']>0): ?>· <span style="color:var(--red);font-weight:600;"><?= $ct['down'] ?> dn</span><?php endif; ?>
           / <?= $ct['total'] ?>
         </div>
-        <div style="font-size:9.5px;margin-top:2px;color:<?= $diff>=0?'var(--green)':'var(--red)' ?>;font-weight:600;">
-          <?= $diff>=0?'↑ +':'↓ ' ?><?= abs($diff) ?>% vs <?= $tgt ?>% target
+        <div style="font-size:9.5px;margin-top:2px;color:<?= $diff === null ? 'var(--t3)' : ($diff>=0?'var(--green)':'var(--red)') ?>;font-weight:600;">
+          <?= $diff === null ? 'Availability not defined for this period' : (($diff>=0?'↑ +':'↓ ') . abs($diff) . '% vs ' . $tgt . '% target') ?>
         </div>
       </div>
       <?php endforeach; ?>
@@ -196,10 +196,10 @@ foreach ($report as $type => $g) {
       <?php foreach ($report as $type => $g): ?>
       <?php $first = true; ?>
       <?php foreach ($g['machines'] as $m):
-        $avail    = round($m['availability'] * 100);
-        $tgt      = round($m['target'] * 100);
-        $diff     = $avail - $tgt;
-        $avColor  = $avail >= $tgt ? 'var(--green)' : ($avail >= $tgt - 10 ? 'var(--amber)' : 'var(--red)');
+        $avail    = $m['availability'] === null ? null : round($m['availability'] * 100);
+        $tgt      = $m['target'] === null ? null : round($m['target'] * 100);
+        $diff     = ($avail === null || $tgt === null) ? null : $avail - $tgt;
+        $avColor  = $avail === null ? 'var(--t3)' : ($tgt !== null && $avail >= $tgt ? 'var(--green)' : ($tgt !== null && $avail >= $tgt - 10 ? 'var(--amber)' : 'var(--red)'));
         $anaColor = $diff >= 0 ? 'var(--green)' : 'var(--red)';
         $stCode   = $m['status_code'];
         $stColor  = $stCode==='O' ? 'var(--green)' : ($stCode==='WSP' ? 'var(--amber)' : 'var(--red)');
@@ -219,13 +219,13 @@ foreach ($report as $type => $g) {
         <td style="text-align:center;font-weight:600;vertical-align:middle;<?= $m['days_down']>14?'color:var(--red)':($m['days_down']>7?'color:var(--amber)':'') ?>">
           <?= $m['days_down']>0 ? $m['days_down'] : '' ?>
         </td>
-        <td style="text-align:center;font-weight:700;color:<?= $avColor ?>;vertical-align:middle;"><?= $avail ?>%</td>
+        <td style="text-align:center;font-weight:700;color:<?= $avColor ?>;vertical-align:middle;"><?= $avail === null ? '—' : $avail.'%' ?></td>
         <td style="text-align:center;font-weight:700;color:var(--blue);background:var(--blue-d);vertical-align:middle;">
-          <?= $first ? round($g['weekly_kpi']*100).'%' : '' ?>
+          <?= $first ? ($g['weekly_kpi'] === null ? '—' : round($g['weekly_kpi']*100).'%') : '' ?>
         </td>
-        <td style="text-align:center;font-weight:600;color:var(--t3);vertical-align:middle;"><?= $tgt ?>%</td>
-        <td style="text-align:center;font-weight:700;color:<?= $anaColor ?>;vertical-align:middle;">
-          <?= ($diff>=0?'↑ +':'↓ ').abs($diff).'%' ?>
+        <td style="text-align:center;font-weight:600;color:var(--t3);vertical-align:middle;"><?= $tgt === null ? '—' : $tgt.'%' ?></td>
+        <td style="text-align:center;font-weight:700;color:<?= $diff === null ? 'var(--t3)' : $anaColor ?>;vertical-align:middle;">
+          <?= $diff === null ? '—' : (($diff>=0?'↑ +':'↓ ').abs($diff).' pp') ?>
         </td>
         <!-- Observations — numbered list -->
         <td style="padding:6px 8px;font-size:10.5px;line-height:1.5;">

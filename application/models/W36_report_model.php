@@ -174,9 +174,18 @@ class W36_report_model extends CI_Model {
                     'start'      => date('Y-m-d H:i', $e['start']),
                     'end'        => $e['open'] ? null : date('Y-m-d H:i', $e['end']),
                     'open'       => $e['open'],
+                    // The event list and the KPI use the same clipped interval union;
+                    // this is event downtime inside the selected period, not elapsed
+                    // wall time from earliest ticket to latest ticket.
+                    'hours_in_period' => round(kpi_union_hours(
+                        $e['intervals'],
+                        kpi_ts($bounds['start'] . ' 00:00:00'),
+                        kpi_ts(date('Y-m-d', strtotime($bounds['end'] . ' +1 day')) . ' 00:00:00')
+                    ), 4),
                     'carried_in' => $e['start'] < kpi_ts($bounds['start'] . ' 00:00:00'),
                     'work_orders'=> $e['work_orders'],
-                    'counts_as_breakdown' => ($e['start'] >= kpi_ts($bounds['start'] . ' 00:00:00') && $e['start'] < kpi_ts($bounds['end'] . ' 23:59:59')),
+                    'counts_as_breakdown' => ($e['start'] >= kpi_ts($bounds['start'] . ' 00:00:00')
+                        && $e['start'] < kpi_ts(date('Y-m-d', strtotime($bounds['end'] . ' +1 day')) . ' 00:00:00')),
                 );
             }
 

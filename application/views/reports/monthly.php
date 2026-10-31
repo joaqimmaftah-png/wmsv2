@@ -1,6 +1,6 @@
 <?php
 $month_name = date('F Y', strtotime($date_from));
-$kpi_avail  = isset($kpi['availability']) ? $kpi['availability'] : 0;
+$kpi_avail  = array_key_exists('availability', $kpi) && $kpi['availability'] !== null ? $kpi['availability'] : null;
 $kpi_mttr   = isset($kpi['mttr'])         ? $kpi['mttr']         : 0;
 $kpi_mtbf   = isset($kpi['mtbf'])         ? $kpi['mtbf']         : 0;
 $kpi_bkd    = isset($kpi['breakdowns'])   ? $kpi['breakdowns']   : 0;
@@ -42,12 +42,12 @@ foreach ($work_orders as $wo_item) {
   <?php
   // Q1: the target is the engine's, passed in with the KPI figures
   $avail_target = isset($kpi['target']) ? (float)$kpi['target'] : 88.0;
-  $avail_color = ($kpi_avail >= $avail_target) ? 'var(--green)' : (($kpi_avail >= $avail_target - 10) ? 'var(--amber)' : 'var(--red)');
+  $avail_color = $kpi_avail === null ? 'var(--t3)' : (($kpi_avail >= $avail_target) ? 'var(--green)' : (($kpi_avail >= $avail_target - 10) ? 'var(--amber)' : 'var(--red)'));
   ?>
   <div class="kpi" style="animation-delay:.04s;">
     <div class="kpi-glow" style="background:<?= $avail_color; ?>;"></div>
     <span class="kpi-tag">Availability</span>
-    <div class="kpi-num" style="color:<?= $avail_color; ?>;font-size:28px;"><?= $kpi_avail; ?><sup>%</sup></div>
+    <div class="kpi-num" style="color:<?= $avail_color; ?>;font-size:28px;"><?= $kpi_avail === null ? '—' : $kpi_avail; ?><?php if ($kpi_avail !== null): ?><sup>%</sup><?php endif; ?></div>
     <div style="font-size:10px;color:var(--t4);margin-top:6px;">Target ≥ <?= $avail_target ?>% · <?= (int)$kpi['open_hours'] ?> h open</div>
   </div>
   <div class="kpi" style="animation-delay:.08s;">

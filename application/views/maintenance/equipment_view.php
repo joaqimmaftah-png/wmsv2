@@ -23,8 +23,8 @@
 <!-- KPI Row -->
 <div class="row g-3 mb-3">
   <div class="col-6 col-md-3">
-    <div class="kpi-card <?= $kpi['availability'] >= 90 ? 'green' : ($kpi['availability'] >= 75 ? 'amber' : 'red') ?>">
-      <div class="kpi-value"><?= $kpi['availability'] ?>%</div>
+    <div class="kpi-card <?= $kpi['availability'] === null ? '' : ($kpi['availability'] >= 90 ? 'green' : ($kpi['availability'] >= 75 ? 'amber' : 'red')) ?>">
+      <div class="kpi-value"><?= $kpi['availability'] === null ? '—' : number_format((float)$kpi['availability'], 1) . '%' ?></div>
       <div class="kpi-label">Availability</div>
     </div>
   </div>

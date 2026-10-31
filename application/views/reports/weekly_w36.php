@@ -37,6 +37,7 @@ $snapshot = isset($snapshot) && is_array($snapshot) ? $snapshot : null;
 // week (they differ on the live reading of a published week)
 $published = isset($published) && is_array($published) ? $published : $snapshot;
 $is_live  = !empty($is_live);
+$live_query = $is_live && $published !== null ? '&live=1' : '';
 $may_publish = isset($role_id) && in_array((int)$role_id, array(1, 4), true);   // supervisor / manager
 // every POST form must carry the CSRF token (`config.php`: csrf_protection = TRUE).
 // The controller passes it in — and `csrf_field()` (application/helpers) falls
@@ -77,6 +78,13 @@ $misses = function ($value, $target) {
 };
 
 $day_name = function ($d) { return date('D d/m', strtotime($d)); };
+// Current W36 payloads key daily values by ISO date. Accept numeric keys as a
+// compatibility fallback for any older published payload already stored.
+$day_row = function ($daily, $day, $index) {
+    if (!is_array($daily)) return null;
+    if (isset($daily[$day]) && is_array($daily[$day])) return $daily[$day];
+    return isset($daily[$index]) && is_array($daily[$index]) ? $daily[$index] : null;
+};
 
 // the data-readiness panel buckets the model's notes
 $by_level = array('error' => array(), 'warn' => array(), 'info' => array());
@@ -274,6 +282,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   <?php endif; ?>
 
   <?php if (!$print_mode): ?>
+  <?php $this->load->view('reports/_fleet_nav', array('fleet_nav_active' => 'weekly', 'week_start' => $week['start'])); ?>
   <div class="w36-head">
     <div>
       <h1 class="w36-title">Weekly Report <?= $esc($report_name) ?> — preview</h1>
@@ -287,7 +296,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
     </div>
     <div>
       <a class="w36-btn w36-btn-primary"
-         href="<?= $esc(base_url('reports/export_weekly_w36_xlsx?week=' . $week_label)) ?>">Download Excel</a>
+         href="<?= $esc(base_url('reports/export_weekly_w36_xlsx?week=' . $week_label . ($snapshot === null && $published !== null ? '&live=1' : ''))) ?>">Download Excel</a>
       <a class="w36-btn" target="_blank" rel="noopener"
          href="<?= $esc(base_url('reports/export_weekly_w36_pdf?week=' . $week_label . ($snapshot === null && $published !== null ? '&live=1' : ''))) ?>">Print / PDF</a>
       <?php if ($may_publish && $published === null): ?>
@@ -356,18 +365,20 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
 
   <?php if (!$print_mode): /* the picker is screen chrome — paper has no links */ ?>
   <form class="w36-picker" method="get" action="<?= $esc(base_url('reports/weekly_w36')) ?>">
-    <a class="w36-btn" href="<?= $esc(base_url('reports/weekly_w36?week=' . $prev_week)) ?>" title="previous week">◀ <?= $esc($prev_week) ?></a>
+    <?php if ($live_query !== ''): ?><input type="hidden" name="live" value="1"><?php endif; ?>
+    <a class="w36-btn" href="<?= $esc(base_url('reports/weekly_w36?week=' . $prev_week . $live_query)) ?>" title="previous week">◀ <?= $esc($prev_week) ?></a>
     <label>ISO week
       <input type="week" name="week" value="<?= $esc($week_label) ?>">
     </label>
     <button type="submit" class="w36-btn w36-btn-primary">Show week</button>
-    <a class="w36-btn" href="<?= $esc(base_url('reports/weekly_w36?week=' . $next_week)) ?>" title="next week"><?= $esc($next_week) ?> ▶</a>
+    <a class="w36-btn" href="<?= $esc(base_url('reports/weekly_w36?week=' . $next_week . $live_query)) ?>" title="next week"><?= $esc($next_week) ?> ▶</a>
     <span class="w36-small">
       breakdown count: <?= $esc(isset($modes['breakdown_count_mode']) ? $modes['breakdown_count_mode'] : '—') ?> ·
       zero-failure MTBF: <?= $esc(isset($modes['mtbf_zero_failure_mode']) ? $modes['mtbf_zero_failure_mode'] : '—') ?>
     </span>
   </form>
   <form class="w36-picker" method="get" action="<?= $esc(base_url('reports/weekly_w36')) ?>">
+    <?php if ($live_query !== ''): ?><input type="hidden" name="live" value="1"><?php endif; ?>
     <label>Or select any date in the week <input type="date" name="week_start" value="<?= $esc($week['start']) ?>"></label>
     <button type="submit" class="w36-btn">Show date’s week</button>
   </form>
@@ -468,7 +479,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
             <td colspan="4">FLEET</td>
             <td colspan="3" class="w36-small"><?= (int)$machine_total ?> reportable machines</td>
             <?php foreach ($days as $i => $d): ?>
-              <?php $fd = isset($fleet['daily'][$i]) ? $fleet['daily'][$i] : null; ?>
+              <?php $fd = $day_row(isset($fleet['daily']) ? $fleet['daily'] : array(), $d, $i); ?>
               <td class="num"><?= $esc($pct($fd && isset($fd['availability']) ? $fd['availability'] : null)) ?></td>
             <?php endforeach; ?>
             <?php foreach ($fc as $k => $v): ?>
@@ -491,7 +502,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
             <td colspan="2" class="w36-small"><?= (int)$g['row_count'] ?> machine(s)</td>
             <td class="w36-small">group roll-up</td>
             <?php foreach ($days as $i => $d): ?>
-              <?php $gd = isset($g['daily'][$i]) ? $g['daily'][$i] : null; ?>
+              <?php $gd = $day_row(isset($g['daily']) ? $g['daily'] : array(), $d, $i); ?>
               <td class="num"><?= $esc($pct($gd && isset($gd['availability']) ? $gd['availability'] : null)) ?></td>
             <?php endforeach; ?>
             <?php foreach ($gc as $k => $v): ?>
@@ -511,7 +522,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
                 <?php if (empty($m['site']['approved'])): ?><span class="w36-badge wrn" title="not in the approved site list">unlisted</span><?php endif; ?>
               </td>
               <?php foreach ($days as $i => $d): ?>
-                <?php $dd = isset($m['daily'][$i]) ? $m['daily'][$i] : null;
+                <?php $dd = $day_row(isset($m['daily']) ? $m['daily'] : array(), $d, $i);
                       $av = $dd ? $dd['availability'] : null;
                       $tg = $dd ? $dd['target'] : null; ?>
                 <td class="num <?= $misses($av, $tg) ? 'miss' : '' ?>">
@@ -562,7 +573,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
                       <tr>
                         <th><?= $esc($label) ?></th>
                         <?php foreach ($days as $i => $d): ?>
-                          <?php $dd = isset($m['daily'][$i]) ? $m['daily'][$i] : null;
+                          <?php $dd = $day_row(isset($m['daily']) ? $m['daily'] : array(), $d, $i);
                                 $val = $dd && array_key_exists($key, $dd) ? $dd[$key] : null; ?>
                           <td class="<?= $misses($key === 'availability' ? $val : null, $key === 'availability' && $dd ? $dd['target'] : null) ? 'miss' : '' ?>">
                             <?= $esc($key === 'availability' || $key === 'target' ? $pct($val) : $num($val, 2)) ?>
@@ -605,7 +616,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
             <tr class="machine" data-machine-search="<?= $esc($m['machine_id'] . ' '. $m['model'] . ' '. $m['site']['label']) ?>">
               <td colspan="7"><?= $esc($m['machine_id']) ?> · <?= $esc($m['model']) ?> · <?= $esc($m['site']['label']) ?></td>
               <?php foreach ($days as $i => $d): ?>
-                <?php $dd = isset($m['daily'][$i]) ? $m['daily'][$i] : null; ?>
+                <?php $dd = $day_row(isset($m['daily']) ? $m['daily'] : array(), $d, $i); ?>
                 <td class="num"><?= $esc($pct($dd ? $dd['availability'] : null)) ?></td>
               <?php endforeach; ?>
               <?php foreach ($mc as $k => $v): ?><td class="num wk"><?= $esc($v) ?></td><?php endforeach; ?>

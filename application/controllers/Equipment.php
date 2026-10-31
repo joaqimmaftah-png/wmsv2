@@ -461,7 +461,7 @@ class Equipment extends MY_Controller {
                 'reportable'      => (bool)equip_is_reportable($eq),
                 'purchase_date'   => $eq->purchase_date ? date('d M Y', strtotime($eq->purchase_date)) : '—',
                 'warranty_expiry' => $eq->warranty_expiry ? date('d M Y', strtotime($eq->warranty_expiry)) : '—',
-                'availability'    => number_format((float)$kpi['availability_pct'], 1) . '%',
+                'availability'    => $kpi['availability_pct'] === null ? '—' : number_format((float)$kpi['availability_pct'], 1) . '%',
                 'mtbf'            => number_format((float)$kpi['mtbf'], 1) . ' h',
                 'mttr'            => number_format((float)$kpi['mttr'], 1) . ' h',
                 'open_wo_count'   => $open_wo_cnt,

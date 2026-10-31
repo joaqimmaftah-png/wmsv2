@@ -1,6 +1,13 @@
 <?php
 if (!isset($wo)) $wo = (object)array();
 $is_edit = !empty($wo->id);
+$fleet_availability_mode = !empty($fleet_availability_mode);
+$fleet_availability_kind = isset($fleet_availability_kind) && $fleet_availability_kind === 'planned' ? 'planned' : 'breakdown';
+$fleet_availability_week = isset($fleet_availability_week) ? (string)$fleet_availability_week : '';
+$fleet_prefill = isset($fleet_prefill) && is_array($fleet_prefill) ? $fleet_prefill : array();
+$prefill = function ($key, $default = '') use ($fleet_prefill) {
+    return array_key_exists($key, $fleet_prefill) ? $fleet_prefill[$key] : $default;
+};
 
 $selSys = array();
 if ($is_edit && !empty($wo->equipment_systems)) {
@@ -116,6 +123,15 @@ function _v($is_edit, $wo, $field, $default = '') {
 
   <div style="padding:24px 28px 32px;">
     <?= form_open_multipart($is_edit ? 'workorders/edit/'.$wo->id : 'workorders/create', array('id'=>'wo-form')); ?>
+    <?php if ($fleet_availability_mode): ?>
+      <input type="hidden" name="fleet_availability" value="1">
+      <input type="hidden" name="fleet_kind" value="<?= htmlspecialchars($fleet_availability_kind, ENT_QUOTES, 'UTF-8'); ?>">
+      <input type="hidden" name="fleet_week_start" value="<?= htmlspecialchars($fleet_availability_week, ENT_QUOTES, 'UTF-8'); ?>">
+      <div style="padding:12px 14px;border:1px solid #bfdbfe;border-radius:9px;background:#eff6ff;color:#1e3a8a;margin-bottom:16px;font-size:12px;line-height:1.5;">
+        <strong><?= $fleet_availability_kind === 'breakdown' ? 'Log a breakdown event' : 'Create a preventive maintenance work order'; ?></strong><br>
+        This saves through the existing work-order workflow. Fleet KPIs use actual timestamped Corrective Maintenance intervals; preventive labor and planned outage time remain separate measures.
+      </div>
+    <?php endif; ?>
 
     <!-- ══ SECTION 1 — IDENTIFICATION ══ -->
     <div class="sec-head" style="margin-top:0;"><span>Work Order Identification</span></div>
@@ -125,7 +141,7 @@ function _v($is_edit, $wo, $field, $default = '') {
         <select name="equipment_id" class="form-select" required <?= $is_edit?'disabled':''; ?>>
           <option value="">Select Equipment…</option>
           <?php foreach ($equipment_list as $e): ?>
-          <option value="<?= $e->id; ?>" <?= ($is_edit && $wo->equipment_id==$e->id)?'selected':''; ?>>
+          <option value="<?= $e->id; ?>" <?= (($is_edit && $wo->equipment_id==$e->id) || (!$is_edit && (int)$prefill('equipment_id', 0)==(int)$e->id))?'selected':''; ?>>
             <?= htmlspecialchars((string)($e->registration_no.' — '.$e->brand.' '.$e->model)); ?>
           </option>
           <?php endforeach; ?>
@@ -138,7 +154,7 @@ function _v($is_edit, $wo, $field, $default = '') {
         <label class="form-label">WO Type <span class="req">*</span></label>
         <select name="type" id="wo-type" class="form-select" required>
           <?php foreach (array('Corrective Maintenance','Preventive Maintenance','Incident') as $t): ?>
-          <option value="<?= $t; ?>" <?= ($is_edit && $wo->type===$t)?'selected':''; ?>><?= $t; ?></option>
+          <option value="<?= $t; ?>" <?= (($is_edit && $wo->type===$t) || (!$is_edit && $fleet_availability_mode && $prefill('type')===$t))?'selected':''; ?>><?= $t; ?></option>
           <?php endforeach; ?>
         </select>
       </div>
@@ -203,14 +219,14 @@ function _v($is_edit, $wo, $field, $default = '') {
       <div>
         <label class="form-label">Machine Status</label>
         <select name="machine_status" class="form-select">
-          <option value="Operational" <?= ($is_edit && _v($is_edit,$wo,'machine_status')==='Operational')?'selected':'selected'; ?>>Operational</option>
-          <option value="Breakdown"   <?= ($is_edit && _v($is_edit,$wo,'machine_status')==='Breakdown')?'selected':''; ?>>Breakdown</option>
+          <option value="Operational" <?= (($is_edit && _v($is_edit,$wo,'machine_status')==='Operational') || (!$is_edit && (!$fleet_availability_mode || $prefill('machine_status')==='Operational'))) ? 'selected' : ''; ?>>Operational</option>
+          <option value="Breakdown"   <?= (($is_edit && _v($is_edit,$wo,'machine_status')==='Breakdown') || (!$is_edit && $fleet_availability_mode && $prefill('machine_status')==='Breakdown')) ? 'selected' : ''; ?>>Breakdown</option>
         </select>
       </div>
       <div>
         <label class="form-label">Status</label>
         <select name="status" class="form-select">
-          <?php $curStatus = $is_edit ? $wo->status : 'Open';
+          <?php $curStatus = $is_edit ? $wo->status : ($fleet_availability_mode ? $prefill('status', 'Open') : 'Open');
           foreach (array('Open','In Progress','Waiting Parts','Waiting Tools','Completed') as $s): ?>
           <option value="<?= $s; ?>" <?= ($curStatus===$s)?'selected':''; ?>><?= $s; ?></option>
           <?php endforeach; ?>
@@ -466,13 +482,14 @@ function _v($is_edit, $wo, $field, $default = '') {
     <div class="form-grid cols-3" style="margin-bottom:4px;">
       <div>
         <label class="form-label">Start Date &amp; Time</label>
-        <input type="datetime-local" name="start_datetime" class="form-control"
-          value="<?= ($is_edit && $wo->start_datetime) ? str_replace(' ','T',$wo->start_datetime) : ''; ?>">
+        <input type="datetime-local" name="start_datetime" class="form-control" <?= $fleet_availability_mode && $fleet_availability_kind === 'breakdown' ? 'required' : ''; ?>
+          value="<?= ($is_edit && $wo->start_datetime) ? str_replace(' ','T',$wo->start_datetime) : htmlspecialchars((string)$prefill('start_datetime'), ENT_QUOTES, 'UTF-8'); ?>">
       </div>
       <div>
         <label class="form-label">End Date &amp; Time</label>
         <input type="datetime-local" name="end_datetime" class="form-control"
-          value="<?= ($is_edit && $wo->end_datetime) ? str_replace(' ','T',$wo->end_datetime) : ''; ?>">
+          value="<?= ($is_edit && $wo->end_datetime) ? str_replace(' ','T',$wo->end_datetime) : htmlspecialchars((string)$prefill('end_datetime'), ENT_QUOTES, 'UTF-8'); ?>">
+        <?php if ($fleet_availability_mode): ?><div class="hint">Leave blank while the machine remains down. If already restored, enter the actual restoration time and set status to Completed.</div><?php endif; ?>
       </div>
       <div>
         <label class="form-label">Hour Meter / SMR</label>
@@ -486,13 +503,13 @@ function _v($is_edit, $wo, $field, $default = '') {
     <div style="margin-bottom:12px;">
       <label class="form-label">Title / Short Description <span class="req">*</span></label>
       <input type="text" name="title" class="form-control" required
-        value="<?= htmlspecialchars((string)(_v($is_edit,$wo,'title'))); ?>"
+        value="<?= htmlspecialchars((string)($is_edit ? _v($is_edit,$wo,'title') : $prefill('title')), ENT_QUOTES, 'UTF-8'); ?>"
         placeholder="Brief description of the problem or maintenance task…">
     </div>
     <div style="margin-bottom:4px;">
       <label class="form-label">Symptoms / Problem Detail</label>
       <textarea name="description" class="form-control" rows="4"
-        placeholder="Describe the fault, symptoms, or scope of work in detail…"><?= htmlspecialchars((string)(_v($is_edit,$wo,'description') ?: _v($is_edit,$wo,'symptoms'))); ?></textarea>
+        placeholder="Describe the fault, symptoms, or scope of work in detail…"><?= htmlspecialchars((string)($is_edit ? (_v($is_edit,$wo,'description') ?: _v($is_edit,$wo,'symptoms')) : $prefill('description')), ENT_QUOTES, 'UTF-8'); ?></textarea>
     </div>
 
     <!-- ══ SECTION 4 — EQUIPMENT SYSTEMS ══ -->

@@ -63,7 +63,7 @@ class Asset_model extends CI_Model {
             $totalDown = (float)(isset($s['total_down']) ? $s['total_down'] : 0);
 
             $opHrs = (float)$eq->current_hours;
-            $avail = $opHrs > 0 ? round((($opHrs - $totalDown) / $opHrs) * 100, 1) : 100.0;
+            $avail = $opHrs > 0 ? round((($opHrs - $totalDown) / $opHrs) * 100, 1) : null;
 
             $warrantyStatus = 'N/A';
             $warrantyDays   = null;
