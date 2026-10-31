@@ -346,6 +346,49 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   .w36-no-matches { margin:8px 0; padding:16px; border:1px dashed #d0d8db; color:#586a72; text-align:center; }
   @media(max-width:760px) { .w36-detail-grid { grid-template-columns:1fr; }.w36-table-actions { margin-left:0; }.w36-table-tools #w36-search-count { margin-left:0; } }
   @media print { .w36-table-tools,.w36-scroll-hint,.w36-no-matches { display:none!important; }.w36-main-wrap { overflow:visible; border:0; }.w36-main-wrap table.w36-summary-table { min-width:0; font-size:8px; }.w36-main-wrap table.w36-summary-table th,.w36-main-wrap table.w36-summary-table td { position:static; padding:3px; font-size:8px; }.w36-machine-toggle svg,.w36-group-toggle svg { display:none; }.w36-weekly-detail { grid-template-columns:repeat(2,1fr); } }
+
+  /* sheet `Synthese` action plan — the Workshop Weekly design rules: summary
+     counters, a screen filter bar, collapsible category summary rows whose
+     availability and target stay aligned with the machine columns, text cells
+     that wrap, and cues that never rely on colour alone */
+  .w36-syn-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin:10px 0 4px; }
+  .w36-syn-kpi { min-width:0; padding:11px 14px; background:#f8f9f9; border:1px solid #d0d8db; border-radius:8px; }
+  .w36-syn-kpi .l { display:block; color:#586a72; font-size:10px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; }
+  .w36-syn-kpi .k { display:block; margin-top:2px; color:#14232b; font-size:24px; font-weight:600; line-height:1.12; font-variant-numeric:tabular-nums; }
+  .w36-syn-kpi .k.good { color:#1f8a55; } .w36-syn-kpi .k.warn { color:#c28a12; } .w36-syn-kpi .k.bad { color:#c0392b; }
+  .w36-syn-kpi .s { display:block; margin-top:3px; color:#586a72; font-size:11px; line-height:1.4; }
+  .w36-syn-wrap { overflow:auto; border:1px solid #d0d8db; border-radius:8px; background:#f8f9f9; }
+  .w36-syn-wrap table.w36-syn-table { min-width:1060px; width:100%; border-collapse:collapse; border-spacing:0; white-space:nowrap; font:inherit; font-size:12px; color:#14232b; }
+  .w36-syn-wrap table.w36-syn-table thead th { position:sticky; top:0; z-index:2; padding:9px 10px; border:0; border-bottom:1px solid #d0d8db; background:#f8f9f9; color:#586a72; font:inherit; font-size:10px; font-weight:600; letter-spacing:.065em; text-transform:uppercase; text-align:right; }
+  .w36-syn-wrap table.w36-syn-table th.w36-left, .w36-syn-wrap table.w36-syn-table td.w36-left { text-align:left; }
+  .w36-syn-wrap table.w36-syn-table td { padding:8px 10px; border:0; border-bottom:1px solid #d0d8db; text-align:right; vertical-align:top; }
+  .w36-syn-wrap table.w36-syn-table tbody tr:last-child td { border-bottom:0; }
+  .w36-syn-wrap table.w36-syn-table tbody tr.grp td { background:#e2e8ea; font-weight:600; vertical-align:middle; }
+  .w36-syn-wrap table.w36-syn-table tbody tr.machine td { background:#f8f9f9; }
+  .w36-syn-wrap table.w36-syn-table tbody tr.grp:hover td, .w36-syn-wrap table.w36-syn-table tbody tr.machine:hover td { background:#d5eaee; }
+  .w36-syn-wrap table.w36-syn-table tr.machine td:first-child { padding-left:28px; }
+  .w36-syn-wrap table.w36-syn-table td.w36-wrap { white-space:normal; text-align:left; min-width:200px; max-width:400px; }
+  .w36-syn-table .w36-group-toggle span { font-weight:700; }
+  .w36-syn-table caption { caption-side:top; padding:7px 10px; color:#586a72; text-align:left; }
+  .w36-syn-machine { display:flex; flex-direction:column; align-items:flex-start; gap:1px; max-width:240px; white-space:normal; }
+  .w36-syn-machine b { color:#0b6e7f; font-weight:600; font-variant-numeric:tabular-nums; }
+  .w36-syn-machine small { color:#586a72; font-size:10.5px; font-weight:400; }
+  .w36-syn-machine .w36-status { margin-top:3px; font-style:normal; }
+  .w36-syn-wo { display:block; margin-top:6px; color:#586a72; font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
+  .w36-days { display:inline-block; min-width:32px; padding:2px 7px; border-radius:5px; background:#f5d5d0; color:#c0392b; font-weight:700; font-variant-numeric:tabular-nums; }
+  .w36-syn-foot { display:flex; align-items:flex-start; gap:6px 16px; flex-wrap:wrap; margin-top:10px; color:#586a72; font-size:11px; }
+  .w36-syn-foot > span { max-width:520px; }
+  .w36-syn-wrap [hidden] { display:none!important; }
+  @media(max-width:760px) { .w36-syn-wrap table.w36-syn-table td.w36-wrap { min-width:170px; }.w36-syn-wrap table.w36-syn-table tr.machine td:first-child { padding-left:18px; } }
+  .w36-print .w36-syn-kpis { grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin-bottom:8px; }
+  .w36-print .w36-syn-kpi { padding:6px 8px; }
+  .w36-print .w36-syn-kpi .k { font-size:15px; }
+  .w36-print .w36-syn-kpi .s { font-size:8px; }
+  .w36-print .w36-syn-wrap { overflow:visible; border:0; border-radius:0; background:transparent; }
+  .w36-print .w36-syn-wrap table.w36-syn-table { min-width:0; font-size:8px; }
+  .w36-print .w36-syn-wrap table.w36-syn-table thead th { position:static; font-size:8px; }
+  .w36-print .w36-syn-wrap table.w36-syn-table td { padding:2px 4px; font-size:8px; }
+  .w36-print .w36-syn-wrap table.w36-syn-table tr.machine td:first-child { padding-left:10px; }
 </style>
 
 <div class="w36-wrap<?= $print_mode ? ' w36-print' : '' ?>">
@@ -778,62 +821,142 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
       }
       return $out;
   };
+  // header counters for the action plan: counted from the very rows the screen
+  // prints (the BR-27 habit) — never typed in, and never altered by the screen filters
+  $syn_total = 0; $syn_actions = 0; $syn_hold = 0; $syn_below = 0; $syn_days = 0;
+  foreach ($plan as $syn_row) {
+      if (!is_array($syn_row) || (isset($syn_row['type']) ? $syn_row['type'] : '') !== 'machine') continue;
+      $syn_total++;
+      if (isset($syn_row['action_plan']) && trim((string)$syn_row['action_plan']) !== '') $syn_actions++;
+      if (isset($syn_row['hold_code']) && $syn_row['hold_code'] !== null) $syn_hold++;
+      if ($misses(isset($syn_row['availability']) ? $syn_row['availability'] : null,
+                  isset($syn_row['target']) ? $syn_row['target'] : null)) $syn_below++;
+      $syn_days += isset($syn_row['days_down']) ? (int)$syn_row['days_down'] : 0;
+  }
+  $low = function ($s) { $s = (string)$s; return function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s); };
   ?>
+  <?php /* the action plan panel follows the Workshop Weekly table design: summary
+           counters, a screen-only filter bar, collapsible category summaries whose
+           availability/target stay aligned with the machine columns, wrapping text
+           cells and text-with-colour cues (never colour alone) */ ?>
   <div class="w36-panel">
     <h3>Workshop action plan — sheet <code><?= $esc($report_name . ' Synthese') ?></code></h3>
-    <p class="w36-legend">
-      Every reportable machine, in sheet order. The comment, the action and the status are
-      read from the machine's own work order — nothing is typed into the report.
-      <?php if (!empty($legend)): ?>
-        Legend:
-        <?php $sep = ''; foreach ($legend as $code => $label): ?><?= $sep ?><span class="w36-hold"><?= $esc($code) ?></span> <?= $esc($label) ?><?php $sep = ' · '; endforeach; ?>
-      <?php endif; ?>
+    <p class="w36-legend" style="margin-top:4px">
+      Every reportable machine, in sheet order, under one summary row per category — expand a category for its machines.
+      The comment, the action and the hold status are read from the machine's own work order — nothing is typed into the report.
+      The Excel sheet keeps its own twelve-column layout; this preview groups the same fields the way the availability grid above does.
     </p>
     <?php if (empty($plan)): ?>
       <div class="w36-note">No reportable machine in this week — nothing to plan.</div>
     <?php else: ?>
-      <div class="w36-tblwrap w36-syn">
-        <table class="w36">
+      <div class="w36-syn-kpis" aria-label="Action plan summary for the week">
+        <div class="w36-syn-kpi">
+          <span class="l">Machines on the plan</span>
+          <span class="k"><?= number_format((float)$syn_total, 0, '.', ' ') ?></span>
+          <span class="s"><?= (int)$syn_actions ?> with a work-order action described</span>
+        </div>
+        <div class="w36-syn-kpi">
+          <span class="l">Below daily target</span>
+          <span class="k <?= $syn_below > 0 ? 'bad' : 'good' ?>"><?= (int)$syn_below ?></span>
+          <span class="s">availability under the machine's target KPI</span>
+        </div>
+        <div class="w36-syn-kpi">
+          <span class="l">On hold</span>
+          <span class="k <?= $syn_hold > 0 ? 'warn' : '' ?>"><?= (int)$syn_hold ?></span>
+          <span class="s">codes explained under the table</span>
+        </div>
+        <div class="w36-syn-kpi">
+          <span class="l">Machine days down</span>
+          <span class="k <?= $syn_days > 0 ? 'bad' : 'good' ?>"><?= (int)$syn_days ?></span>
+          <span class="s">summed across the fleet, this week</span>
+        </div>
+      </div>
+
+      <?php if (!$print_mode): ?>
+      <div class="w36-table-tools" id="w36-syn-tools" hidden>
+        <label class="w36-search-label" for="w36-syn-search">Search the plan</label>
+        <input id="w36-syn-search" type="search" placeholder="ID, model, location, comment or action" autocomplete="off">
+        <label class="w36-filter-location"><span class="w36-sr-only">Filter by location</span>
+          <select id="w36-syn-location"><option value="">All locations</option><?php foreach ($locations as $location): ?><option value="<?= $esc($low($location)) ?>"><?= $esc($location) ?></option><?php endforeach; ?></select>
+        </label>
+        <label class="w36-filter-below"><input id="w36-syn-below" type="checkbox"> <span>Below target only</span></label>
+        <label class="w36-filter-below"><input id="w36-syn-hold" type="checkbox"> <span>On hold only</span></label>
+        <span id="w36-syn-count" role="status" aria-live="polite"></span>
+        <span class="w36-table-actions"><button type="button" class="w36-btn" data-w36-action="syn-expand">Expand all</button><button type="button" class="w36-btn" data-w36-action="syn-collapse">Collapse all</button></span>
+      </div>
+      <p class="w36-scroll-hint">Search or narrow the plan, then expand a category for its machines. Screen filters never change the counters above, the printed sheet or the Excel download.</p>
+      <?php endif; ?>
+
+      <div class="w36-tblwrap w36-syn-wrap" tabindex="0" role="region" aria-label="Workshop action plan — scroll horizontally for every column">
+        <table class="w36 w36-syn-table" id="w36-syn-table">
+          <caption class="w36-small">One row per machine: meter reading, availability against the daily target KPI, the failure comment, the planned action, days down and the hold status</caption>
           <thead>
             <tr>
-              <th>CATEGORIE</th><th>MACHINE ID</th><th>MODEL</th><th>LOCATION</th><th>CURRENT HOURS/ KM</th>
-              <th>EQUIPMENT STATUS</th><th>AVAIBILITY OPERATIONAL</th><th>DAILY TARGET KPI</th>
-              <th>COMMENT</th><th>ACTION PLAN</th><th>DAYS DOWN</th><th>STATUS</th>
+              <th class="w36-left">Equipment</th>
+              <th>Meter</th>
+              <th>Availability</th>
+              <th>Target</th>
+              <th class="w36-left">Comment</th>
+              <th class="w36-left">Action plan</th>
+              <th>Days down</th>
+              <th class="w36-left">Hold</th>
             </tr>
           </thead>
           <tbody>
-          <?php foreach ($plan as $r): ?>
+          <?php $syn_gid = 'w36-syn-group-none'; foreach ($plan as $r): ?>
             <?php if ($r['type'] === 'group'): ?>
-              <tr class="grp">
-                <td colspan="12">
-                  <strong><?= $esc($r['label']) ?></strong>
-                  · <?= (int)$r['machines'] ?> machine<?= (int)$r['machines'] === 1 ? '' : 's' ?>
-                  · group availability <strong><?= $pct($r['availability']) ?></strong>
-                  · group target <strong><?= $pct($r['target']) ?></strong>
-                  <?php if ($r['available'] !== null && $r['down'] !== null): ?>
-                    · <?= (int)$r['available'] ?> available / <?= (int)$r['down'] ?> down
-                  <?php endif; ?>
-                </td>
+              <?php $syn_gid = 'w36-syn-group-'.substr(sha1((string)$r['code']), 0, 10); ?>
+              <tr class="grp w36-syn-group" data-group-row="<?= $esc($syn_gid) ?>" data-open="<?= $print_mode ? '1' : '0' ?>">
+                <td class="w36-left"><button type="button" class="w36-group-toggle" data-w36-action="syn-toggle-group" data-group="<?= $esc($syn_gid) ?>" aria-expanded="<?= $print_mode ? 'true' : 'false' ?>">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span><?= $esc($r['label']) ?></span><small><?= (int)$r['machines'] ?> machine<?= (int)$r['machines'] === 1 ? '' : 's' ?><?php if ($r['available'] !== null && $r['down'] !== null): ?> · <?= (int)$r['available'] ?> available · <?= (int)$r['down'] ?> down<?php endif; ?></small>
+                </button></td>
+                <td aria-hidden="true">—</td>
+                <td><?= $availability_bar($r['availability'], $r['target']) ?></td>
+                <td><?= $esc($pct($r['target'])) ?></td>
+                <td class="w36-left w36-wrap" aria-hidden="true">—</td>
+                <td class="w36-left w36-wrap" aria-hidden="true">—</td>
+                <td aria-hidden="true">—</td>
+                <td class="w36-left" aria-hidden="true">—</td>
               </tr>
             <?php else: ?>
-              <tr class="machine" data-machine-search="<?= $esc($m['machine_id'] . ' '. $m['model'] . ' '. $m['site']['label']) ?>">
-                <td><?= $esc($r['group_label'] !== null ? $r['group_label'] : '—') ?></td>
-                <td class="w36-who"><?= $esc($r['machine_id']) ?></td>
-                <td><?= $esc($r['model'] === '' ? '—' : $r['model']) ?></td>
-                <td><?= $esc($r['location'] === '' || $r['location'] === null ? '—' : $r['location']) ?><?php if (!$r['location_approved']): ?> <span class="miss">?</span><?php endif; ?></td>
-                <td class="num"><?= $r['current_hours'] !== null ? $num($r['current_hours'], 1) . ' h' : ($r['current_km'] !== null ? $num($r['current_km'], 1) . ' km' : '—') ?></td>
-                <td><?= $esc($r['status'] === null || $r['status'] === '' ? '—' : $r['status']) ?></td>
-                <td class="num"><?= $pct($r['availability']) ?></td>
-                <td class="num"><?= $pct($r['target']) ?></td>
-                <td class="wrap"><?= $r['comment'] === null ? '—' : nl2br((string)($esc($r['comment']))) ?></td>
-                <td class="wrap"><?= $r['action_plan'] === null ? '—' : nl2br((string)($esc($r['action_plan']))) ?></td>
-                <td class="num<?= (int)$r['days_down'] > 0 ? ' miss' : '' ?>"><?= (int)$r['days_down'] === 0 ? '—' : (int)$r['days_down'] ?></td>
-                <td><?php if ($r['hold_code'] !== null): ?><span class="w36-hold" title="<?= $esc($r['hold_label']) ?>"><?= $esc($r['hold_code']) ?></span><?php else: ?>—<?php endif; ?></td>
+              <?php
+              $r_av   = isset($r['availability']) ? $r['availability'] : null;
+              $r_tg   = isset($r['target']) ? $r['target'] : null;
+              $r_loc  = trim((string)(isset($r['location']) ? $r['location'] : ''));
+              // everything the finder can match, one line, case handled by the script
+              $r_text = trim((string)preg_replace('/\s+/', ' ', implode(' ', array(
+                  (string)$r['machine_id'], (string)$r['model'], $r_loc, (string)$r['group_label'],
+                  (string)$r['status'], (string)$r['hold_code'], (string)$r['work_order'],
+                  (string)$r['comment'], (string)$r['action_plan']
+              ))));
+              $r_meter = $r['current_hours'] !== null ? $num($r['current_hours'], 1).' h' : ($r['current_km'] !== null ? $num($r['current_km'], 1).' km' : '—');
+              $r_days  = isset($r['days_down']) ? (int)$r['days_down'] : 0;
+              ?>
+              <tr class="machine w36-syn-row" data-machine-search="<?= $esc($r_text) ?>" data-location="<?= $esc($low($r_loc)) ?>" data-below="<?= $misses($r_av, $r_tg) ? '1' : '0' ?>" data-hold="<?= $r['hold_code'] !== null ? '1' : '0' ?>" data-parent="<?= $esc($syn_gid) ?>" <?= $print_mode ? '' : 'hidden' ?>>
+                <td class="w36-left"><div class="w36-syn-machine">
+                  <b><?= $esc($r['machine_id']) ?></b>
+                  <small><?= $esc($r['model'] === '' ? 'Model not set' : $r['model']) ?> · <?= $esc($r_loc === '' ? 'Location not set' : $r_loc) ?><?php if (!$r['location_approved']): ?> <span class="miss" title="This site is not approved for the report">?</span><?php endif; ?></small>
+                  <em class="w36-status"><?= $esc($r['status'] === null || $r['status'] === '' ? 'Status unknown' : $r['status']) ?></em>
+                </div></td>
+                <td><?= $esc($r_meter) ?></td>
+                <td><?= $availability_bar($r_av, $r_tg) ?></td>
+                <td><?= $esc($pct($r_tg)) ?></td>
+                <td class="w36-left w36-wrap"><?= $r['comment'] === null ? '—' : nl2br((string)($esc($r['comment']))) ?></td>
+                <td class="w36-left w36-wrap"><?= $r['action_plan'] === null ? '—' : nl2br((string)($esc($r['action_plan']))) ?><?php if ($r['work_order'] !== null): ?><span class="w36-syn-wo">Work order <?= $esc($r['work_order']) ?></span><?php endif; ?></td>
+                <td><?php if ($r_days > 0): ?><span class="w36-days" title="<?= (int)$r_days ?> calendar day(s) with downtime this week"><?= (int)$r_days ?>&nbsp;d</span><?php else: ?>—<?php endif; ?></td>
+                <td class="w36-left"><?php if ($r['hold_code'] !== null): ?><span class="w36-hold" title="<?= $esc($r['hold_label']) ?>"><?= $esc($r['hold_code']) ?></span><?php else: ?>—<?php endif; ?></td>
               </tr>
             <?php endif; ?>
           <?php endforeach; ?>
           </tbody>
         </table>
+      </div>
+      <div id="w36-syn-no-matches" class="w36-no-matches" hidden>No machines match these filters.</div>
+      <div class="w36-syn-foot">
+        <?php if (!empty($legend)): ?>
+          <span>Hold codes: <?php $sep = ''; foreach ($legend as $code => $label): ?><?= $sep ?><span class="w36-hold"><?= $esc($code) ?></span> <?= $esc($label) ?><?php $sep = ' · '; endforeach; ?></span>
+        <?php endif; ?>
+        <span>Availability bars compare each machine with its daily target KPI — red is below it. A red “<span class="w36-days" style="min-width:0;padding:0 4px">n d</span>” badge counts calendar days down; a dash means none.</span>
       </div>
     <?php endif; ?>
   </div>
@@ -1135,6 +1258,86 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   input.addEventListener('input', applyFilters);
   if (location) location.addEventListener('change', applyFilters);
   if (below) below.addEventListener('change', applyFilters);
+  applyFilters();
+}());
+
+/* sheet `Synthese` action plan — its own ids, the same interaction rules as the
+   availability grid: filters only touch screen rows, categories start collapsed,
+   and every machine row keeps its category summary above it. */
+(function () {
+  var tools = document.getElementById('w36-syn-tools');
+  var input = document.getElementById('w36-syn-search');
+  var location = document.getElementById('w36-syn-location');
+  var below = document.getElementById('w36-syn-below');
+  var hold = document.getElementById('w36-syn-hold');
+  var count = document.getElementById('w36-syn-count');
+  var noMatches = document.getElementById('w36-syn-no-matches');
+  var table = document.getElementById('w36-syn-table');
+  if (!input || !table) return;
+
+  var rows = Array.prototype.slice.call(table.querySelectorAll('tr.machine[data-machine-search]'));
+  var groups = Array.prototype.slice.call(table.querySelectorAll('tr.w36-syn-group[data-group-row]'));
+  if (tools) tools.hidden = false;
+
+  function activeFilter() {
+    return !!(input.value.trim() || (location && location.value) || (below && below.checked) || (hold && hold.checked));
+  }
+  function matches(row, term, selectedLocation, onlyBelow, onlyHold) {
+    return (!term || (row.getAttribute('data-machine-search') || '').toLocaleLowerCase().indexOf(term) !== -1) &&
+      (!selectedLocation || row.getAttribute('data-location') === selectedLocation) &&
+      (!onlyBelow || row.getAttribute('data-below') === '1') &&
+      (!onlyHold || row.getAttribute('data-hold') === '1');
+  }
+  function applyFilters() {
+    var term = input.value.trim().toLocaleLowerCase();
+    var selectedLocation = location ? location.value : '';
+    var onlyBelow = below ? below.checked : false;
+    var onlyHold = hold ? hold.checked : false;
+    var filtered = activeFilter();
+    var matching = 0;
+
+    rows.forEach(function (row) {
+      var yes = matches(row, term, selectedLocation, onlyBelow, onlyHold);
+      row.dataset.matches = yes ? '1' : '0';
+      if (yes) matching++;
+    });
+
+    groups.forEach(function (group) {
+      var groupId = group.getAttribute('data-group-row');
+      var children = rows.filter(function (row) { return row.getAttribute('data-parent') === groupId; });
+      var hasMatch = children.some(function (row) { return row.dataset.matches === '1'; });
+      var open = filtered ? hasMatch : group.dataset.open === '1';
+      group.hidden = filtered && !hasMatch;
+      var toggle = group.querySelector('[data-w36-action="syn-toggle-group"]');
+      if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      children.forEach(function (row) { row.hidden = !(open && row.dataset.matches === '1'); });
+    });
+    if (count) count.textContent = matching + ' of ' + rows.length + ' machines shown';
+    if (noMatches) noMatches.hidden = matching !== 0;
+  }
+  function setAll(open) {
+    groups.forEach(function (group) { group.dataset.open = open ? '1' : '0'; });
+    applyFilters();
+  }
+
+  if (tools) tools.addEventListener('click', function (event) {
+    var action = event.target.closest('[data-w36-action]');
+    if (!action) return;
+    if (action.dataset.w36Action === 'syn-expand') setAll(true);
+    else if (action.dataset.w36Action === 'syn-collapse') setAll(false);
+  });
+  table.addEventListener('click', function (event) {
+    var action = event.target.closest('[data-w36-action]');
+    if (!action || action.dataset.w36Action !== 'syn-toggle-group') return;
+    var group = groups.find(function (row) { return row.getAttribute('data-group-row') === action.dataset.group; });
+    if (!group) return;
+    group.dataset.open = group.dataset.open === '1' ? '0' : '1';
+    applyFilters();
+  });
+  input.addEventListener('input', applyFilters);
+  if (location) location.addEventListener('change', applyFilters);
+  if (below) below.addEventListener('change', applyFilters);
+  if (hold) hold.addEventListener('change', applyFilters);
   applyFilters();
 }());
 </script>
