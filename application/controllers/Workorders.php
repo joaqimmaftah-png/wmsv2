@@ -548,7 +548,7 @@ class Workorders extends MY_Controller {
                 redirect("workorders/jobcard/{$wo_id}?autoprint=1");
             }
             if ($fleet_mode) {
-                redirect('reports/downtime_log?week_start=' . rawurlencode($fleet_week));
+                redirect('reports/downtime_log?week_start=' . rawurlencode($fleet_week) . '&live=1');
             }
             redirect('workorders');
         }
