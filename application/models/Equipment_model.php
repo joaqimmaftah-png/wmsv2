@@ -443,7 +443,7 @@ class Equipment_model extends CI_Model {
         $target = $ci->Kpi_engine_model->target_for($equipment_id, $to);
 
         return [
-            'availability'  => $k['availability_pct'] === null ? 100.0 : $k['availability_pct'],
+            'availability'  => $k['availability_pct'],
             'mttr'          => $k['mttr_hours'] === null ? 0 : round($k['mttr_hours'], 2),
             'mtbf'          => $k['mtbf_hours'] === null ? 0 : round($k['mtbf_hours'], 1),
             'total_down'    => round((float)$k['downtime_hours'], 2),

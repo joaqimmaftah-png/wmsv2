@@ -71,7 +71,7 @@ class Reports extends MY_Controller {
         // optional table never prevents the Reports hub from rendering.
         $telemetry = array(
             'available'           => false,
-            'availability_pct'    => 100.0,
+            'availability_pct'    => null,
             'avail_target_pct'    => 88.0,
             'avail_machines_with' => 0,
             'avail_from'          => null,
@@ -118,7 +118,8 @@ class Reports extends MY_Controller {
             $telemetry['avail_target_pct']  = (float)$this->Dashboard_model->availability_target_pct();
 
             $avail_win = $this->Dashboard_model->get_availability_window();
-            $telemetry['availability_pct']    = isset($avail_win['pct']) ? (float)$avail_win['pct'] : 100.0;
+            $telemetry['availability_pct']    = array_key_exists('pct', $avail_win) && $avail_win['pct'] !== null
+                ? (float)$avail_win['pct'] : null;
             $telemetry['avail_machines_with'] = isset($avail_win['machines_with']) ? (int)$avail_win['machines_with'] : 0;
             $telemetry['avail_from']          = isset($avail_win['from']) ? $avail_win['from'] : null;
             $telemetry['avail_to']            = isset($avail_win['to']) ? $avail_win['to'] : null;
@@ -792,8 +793,8 @@ class Reports extends MY_Controller {
         $xlsx->writeRow(['MONTH','WOs','BREAKDOWNS','PM DONE','COMPLETED','DOWNTIME (h)','AVAILABILITY%','MTTR (h)','MTBF (h)'],$sHdr);
 
         foreach ($data['monthly'] as $row) {
-            $av = $row['availability']/100;
-            $sp = $av>=0.9?$sPctG:($av>=0.7?$sPctW:$sPctR);
+            $av = $row['availability'] === null ? null : $row['availability']/100;
+            $sp = $av === null ? $sCell : ($av>=0.9?$sPctG:($av>=0.7?$sPctW:$sPctR));
             $xlsx->setRowHeight(null,22);
             $xlsx->writeRowStyled([
                 ['v'=>date('F Y',strtotime($row['month'].'-01')),'s'=>$sCell],
@@ -818,8 +819,8 @@ class Reports extends MY_Controller {
         $xlsx->setRowHeight(2,32);
         $xlsx->writeRow(['TYPE','MACHINE ID','MODEL','LOCATION','BREAKDOWNS','DOWNTIME (h)','MTTR (h)','MTBF (h)','AVAILABILITY%'],$sHdr);
         foreach ($data['eq_reliability'] as $eq) {
-            $av=$eq['availability']/100;
-            $sp=$av>=0.9?$sPctG:($av>=0.7?$sPctW:$sPctR);
+            $av=$eq['availability'] === null ? null : $eq['availability']/100;
+            $sp=$av === null ? $sCell : ($av>=0.9?$sPctG:($av>=0.7?$sPctW:$sPctR));
             $xlsx->setRowHeight(null,22);
             $xlsx->writeRowStyled([
                 ['v'=>$eq['type'],'s'=>$sCell],['v'=>$eq['machine_id'],'s'=>$sCell],
@@ -1316,7 +1317,7 @@ class Reports extends MY_Controller {
             // UNION of the breakdown intervals (one failure repaired by three work
             // orders counts once) and planned service is excluded from the basis.
             $k = isset($kpi_window['machines'][(int)$eq->id]) ? $kpi_window['machines'][(int)$eq->id] : null;
-            $availability   = ($k !== null && $k['availability'] !== null) ? $k['availability'] : 1.0;
+            $availability   = ($k !== null && array_key_exists('availability', $k)) ? $k['availability'] : null;
             $machine_target = $this->Kpi_engine_model->target_for($eq->id, $week_end);
             $totalDt        = $k === null ? 0.0 : round((float)$k['downtime_hours'], 2);
 
@@ -1356,7 +1357,7 @@ class Reports extends MY_Controller {
             $g['total']     = $total;
             $g['available'] = $total - $down;
             $g['down']      = $down;
-            $g['weekly_kpi']= $rollup['availability'] === null ? 0 : round($rollup['availability'], 2);
+            $g['weekly_kpi']= $rollup['availability'] === null ? null : round($rollup['availability'], 4);
             $g['kpi_rollup']= $rollup;                       // downtime / breakdowns / MTTR / MTBF for the group
             $g['target']    = $rollup['weekly_target'] !== null ? $rollup['weekly_target'] : $default_target;
         }
@@ -1380,7 +1381,7 @@ class Reports extends MY_Controller {
         //   $readiness   — how many machines were up (a count)
         $kpi_fleet   = $this->Kpi_engine_model->fleet($week_start, $week_end);
         $overallKpi  = $kpi_fleet['fleet']['availability_pct'] === null
-            ? 100 : round($kpi_fleet['fleet']['availability_pct']);
+            ? null : round($kpi_fleet['fleet']['availability_pct']);
         $readiness   = $totalEq > 0 ? round($totalAvail / $totalEq * 100) : 0;
         $fleetTarget = round($this->Kpi_engine_model->target_for(null, $week_end) * 100);
 
@@ -1445,7 +1446,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
     <div style="display:flex;gap:10px;align-items:flex-start;">
       <div style="text-align:right;">
         <div style="font-size:7pt;color:#555;">Overall Fleet Availability</div>
-        <div style="font-size:18pt;font-weight:900;color:<?= $overallKpi>=$fleetTarget?'#375623':($overallKpi>=$fleetTarget-10?'#7F6000':'#C00000') ?>;"><?= $overallKpi ?>%</div>
+        <div style="font-size:18pt;font-weight:900;color:<?= $overallKpi === null ? '#64748b' : ($overallKpi>=$fleetTarget?'#375623':($overallKpi>=$fleetTarget-10?'#7F6000':'#C00000')) ?>;"><?= $overallKpi === null ? '—' : $overallKpi.'%' ?></div>
       </div>
       <div class="legend">
         <div class="legend-title">LEGENDS</div>
@@ -1460,14 +1461,14 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
   <!-- Summary by type -->
   <div class="summary">
     <?php foreach ($report as $type => $g):
-      $kpi = round($g['weekly_kpi'] * 100);
+      $kpi = $g['weekly_kpi'] === null ? null : round($g['weekly_kpi'] * 100);
       $tgt = round($g['target'] * 100);
-      $kpiColor = $kpi >= $tgt ? '#375623' : ($kpi >= $tgt - 10 ? '#7F6000' : '#C00000');
+      $kpiColor = $kpi === null ? '#64748b' : ($kpi >= $tgt ? '#375623' : ($kpi >= $tgt - 10 ? '#7F6000' : '#C00000'));
     ?>
     <div class="sum-box">
       <div class="sum-type"><?= htmlspecialchars((string)($g['type'])) ?>s</div>
       <div class="sum-nums"><?= $g['available'] ?> avail / <?= $g['down'] ?> down / <?= $g['total'] ?> total</div>
-      <div class="sum-kpi" style="color:<?= $kpiColor ?>"><?= $kpi ?>%</div>
+      <div class="sum-kpi" style="color:<?= $kpiColor ?>"><?= $kpi === null ? '—' : $kpi.'%' ?></div>
       <div style="font-size:5.5pt;color:#555;">Target: <?= $tgt ?>%</div>
     </div>
     <?php endforeach; ?>
@@ -1506,11 +1507,11 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
       $tgt   = round($g['target'] * 100);
     ?>
     <?php foreach ($g['machines'] as $m):
-      $avail    = round($m['availability'] * 100);
-      $target   = round($m['target'] * 100);
-      $analysis = $avail >= $target ? '+'.($avail-$target).'%' : '-'.($target-$avail).'%';
-      $analysisColor = $avail >= $target ? '#375623' : '#C00000';
-      $avClass  = $avail >= $target ? 'td-good' : ($avail >= $target - 10 ? 'td-warn' : 'td-bad');
+      $avail    = $m['availability'] === null ? null : round($m['availability'] * 100);
+      $target   = $m['target'] === null ? null : round($m['target'] * 100);
+      $analysis = ($avail === null || $target === null) ? null : ($avail >= $target ? '+'.($avail-$target).' pp' : '-'.($target-$avail).' pp');
+      $analysisColor = $analysis === null ? '#64748b' : ($avail >= $target ? '#375623' : '#C00000');
+      $avClass  = $avail === null ? 'td-neutral' : ($avail >= $target ? 'td-good' : ($avail >= $target - 10 ? 'td-warn' : 'td-bad'));
       $stClass  = $m['status_code']==='O' ? 'td-op' : ($m['status_code']==='WSP' ? 'td-wsp' : 'td-bd');
     ?>
     <tr>
@@ -1523,10 +1524,10 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
       <td class="td-c"><?= htmlspecialchars((string)($m['location'])) ?></td>
       <td class="td-c" style="font-size:6pt;"><?= $m['start_date'] ?></td>
       <td class="td-c" style="<?= $m['days_down']>7?'color:#C00000;font-weight:700':'' ?>"><?= $m['days_down']>0 ? $m['days_down'] : '' ?></td>
-      <td class="<?= $avClass ?>"><?= $avail ?>%</td>
-      <td class="td-kpi"><?= $first ? round($g['weekly_kpi']*100).'%' : '' ?></td>
-      <td class="td-c" style="color:#1F4E79;font-weight:700;"><?= $target ?>%</td>
-      <td class="td-c" style="color:<?= $analysisColor ?>;font-weight:700;"><?= $analysis ?></td>
+      <td class="<?= $avClass ?>"><?= $avail === null ? '—' : $avail.'%' ?></td>
+      <td class="td-kpi"><?= $first ? ($g['weekly_kpi'] === null ? '—' : round($g['weekly_kpi']*100).'%') : '' ?></td>
+      <td class="td-c" style="color:#1F4E79;font-weight:700;"><?= $target === null ? '—' : $target.'%' ?></td>
+      <td class="td-c" style="color:<?= $analysisColor ?>;font-weight:700;"><?= $analysis === null ? '—' : $analysis ?></td>
       <td style="font-size:6pt;">
         <?php foreach ($m['observations'] as $oi => $obs): ?>
         <div class="ol-item"><?= htmlspecialchars((string)($obs)) ?></div>
@@ -1552,22 +1553,22 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
   <!-- Per-type charts -->
   <div class="charts-grid">
     <?php foreach ($report as $type => $g):
-      $kpi = round($g['weekly_kpi'] * 100);
+      $kpi = $g['weekly_kpi'] === null ? null : round($g['weekly_kpi'] * 100);
       $ctgt = round($g['target'] * 100);
-      $kpiColor = $kpi >= $ctgt ? '#375623' : ($kpi >= $ctgt - 10 ? '#7F6000' : '#C00000');
+      $kpiColor = $kpi === null ? '#64748b' : ($kpi >= $ctgt ? '#375623' : ($kpi >= $ctgt - 10 ? '#7F6000' : '#C00000'));
     ?>
     <div class="chart-box">
       <div class="chart-title">Weekly <?= htmlspecialchars((string)($g['type'])) ?>s KPI</div>
-      <div class="chart-kpi" style="color:<?= $kpiColor ?>"><?= $kpi ?>%</div>
+      <div class="chart-kpi" style="color:<?= $kpiColor ?>"><?= $kpi === null ? '—' : $kpi.'%' ?></div>
       <div class="bars">
         <?php foreach ($g['machines'] as $m):
-          $avail    = round($m['availability'] * 100);
+          $avail    = $m['availability'] === null ? null : round($m['availability'] * 100);
           $mtgt     = round($m['target'] * 100);
-          $barColor = $avail >= $mtgt ? '#375623' : ($avail >= $mtgt - 10 ? '#FF9F0A' : '#C00000');
-          $barH     = max(2, round($avail * 0.43));
+          $barColor = $avail === null ? '#64748b' : ($avail >= $mtgt ? '#375623' : ($avail >= $mtgt - 10 ? '#FF9F0A' : '#C00000'));
+          $barH     = $avail === null ? 0 : max(2, round($avail * 0.43));
         ?>
         <div class="bar-wrap">
-          <div class="bar-val" style="color:<?= $barColor ?>"><?= $avail ?>%</div>
+          <div class="bar-val" style="color:<?= $barColor ?>"><?= $avail === null ? '—' : $avail.'%' ?></div>
           <div class="bar" style="height:<?= $barH ?>px;background:<?= $barColor ?>;opacity:.85;"></div>
           <div class="bar-lbl"><?= htmlspecialchars((string)($m['machine_id'])) ?></div>
         </div>
@@ -1647,11 +1648,11 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                 $isFirst = ($mi === 0);
                 $avPct   = $m['availability'];
                 $tgtPct  = $m['target'];
-                $sPctStyle = $avPct >= 0.9 ? $sPctG : ($avPct >= 0.7 ? $sPctW : $sPctR);
+                $sPctStyle = $avPct === null ? $sCell : ($avPct >= 0.9 ? $sPctG : ($avPct >= 0.7 ? $sPctW : $sPctR));
                 $sStatus   = $m['status_code']==='O' ? $sOp : ($m['status_code']==='WSP' ? $sWsp : $sBd);
-                $diff      = round(($avPct - $tgtPct) * 100);
-                $sAna      = $diff >= 0 ? $sAnaG : $sAnaR;
-                $anaText   = ($diff >= 0 ? '+' : '').$diff.'%';
+                $diff      = ($avPct === null || $tgtPct === null) ? null : round(($avPct - $tgtPct) * 100);
+                $sAna      = $diff === null ? $sCell : ($diff >= 0 ? $sAnaG : $sAnaR);
+                $anaText   = $diff === null ? '' : (($diff >= 0 ? '+' : '').$diff.' pp');
 
                 $obsText = implode("\n", $m['observations']);
                 $actText = '';
@@ -1675,7 +1676,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                     ['v' => $m['start_date'],          's' => $sCellC],
                     ['v' => $m['days_down']>0 ? (int)$m['days_down'] : '', 's' => $sCellC],
                     ['v' => $avPct,                    's' => $sPctStyle],
-                    ['v' => $isFirst ? (float)$g['weekly_kpi'] : '', 's' => $sPctG],
+                    ['v' => $isFirst && $g['weekly_kpi'] !== null ? (float)$g['weekly_kpi'] : '', 's' => $g['weekly_kpi'] === null ? $sCell : $sPctG],
                     ['v' => $tgtPct,                   's' => $sTgt],
                     ['v' => $anaText,                  's' => $sAna],
                     ['v' => $obsText,                  's' => $sCell],
@@ -1704,11 +1705,10 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
             $totalEq    += $g['total'];
             $totalAvail += $g['available'];
             $totalDown  += $g['down'];
-            $kpiSum     += $g['weekly_kpi'];
-            $kpiCount++;
+            if ($g['weekly_kpi'] !== null) { $kpiSum += $g['weekly_kpi']; $kpiCount++; }
         }
         $overallAvail = $totalEq > 0 ? round($totalAvail/$totalEq, 2) : 0;
-        $overallKpi   = $kpiCount > 0 ? round($kpiSum/$kpiCount, 2)   : 0;
+        $overallKpi   = $kpiCount > 0 ? round($kpiSum/$kpiCount, 2) : null;
 
         $footer = [];
         for ($i = 0; $i < 16; $i++) {
@@ -1970,7 +1970,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
 
             // Availability for the day, from the engine (singleton on this date).
             $k = isset($kpi_day['machines'][(int)$eq->id]) ? $kpi_day['machines'][(int)$eq->id] : null;
-            $availability   = ($k !== null && $k['availability'] !== null) ? round($k['availability'], 2) : 1;
+            $availability   = ($k !== null && $k['availability'] !== null) ? round($k['availability'], 2) : null;
             $machine_target = $this->Kpi_engine_model->target_for($eq->id, $date);
             if ($k !== null) $downtime = round((float)$k['downtime_hours'], 2);   // the union, not the sum
 
@@ -2009,7 +2009,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
             $g['total']      = $total;
             $g['available']  = $total - $down;
             $g['down']       = $down;
-            $g['daily_kpi']  = $rollup['availability'] === null ? 0 : round($rollup['availability'], 2);
+            $g['daily_kpi']  = $rollup['availability'] === null ? null : round($rollup['availability'], 4);
             $g['kpi_rollup'] = $rollup;
             $g['target']     = $rollup['weekly_target'] !== null
                 ? $rollup['weekly_target']
@@ -2039,7 +2039,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         // time-based availability from the engine, the count kept separately (Q1)
         $kpi_fleet   = $this->Kpi_engine_model->fleet($date, $date);
         $overallKpi  = $kpi_fleet['fleet']['availability_pct'] === null
-            ? 100 : round($kpi_fleet['fleet']['availability_pct']);
+            ? null : round($kpi_fleet['fleet']['availability_pct']);
         $readiness   = $totalEq > 0 ? round($totalAvail / $totalEq * 100) : 0;
         $default_target = $this->Kpi_engine_model->target_for(null, $date);
         $fleetTarget = round($default_target * 100);
@@ -2101,21 +2101,21 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
     </div>
     <div style="text-align:right;font-size:8pt;color:#555;">
       Overall Availability<br>
-      <span style="font-size:18pt;font-weight:900;color:<?= $overallKpi>=$fleetTarget?'#375623':($overallKpi>=$fleetTarget-10?'#7F6000':'#C00000') ?>;"><?= $overallKpi ?>%</span>
+      <span style="font-size:18pt;font-weight:900;color:<?= $overallKpi === null ? '#64748b' : ($overallKpi>=$fleetTarget?'#375623':($overallKpi>=$fleetTarget-10?'#7F6000':'#C00000')) ?>;"><?= $overallKpi === null ? '—' : $overallKpi.'%' ?></span>
     </div>
   </div>
 
   <!-- Summary by type -->
   <div class="summary">
     <?php foreach ($report as $type => $g):
-      $kpi = round($g['daily_kpi'] * 100);
+      $kpi = $g['daily_kpi'] === null ? null : round($g['daily_kpi'] * 100);
       $dtgt = round((isset($g['target']) ? $g['target'] : $default_target) * 100);
-      $kpiColor = $kpi >= $dtgt ? '#375623' : ($kpi >= $dtgt - 10 ? '#7F6000' : '#C00000');
+      $kpiColor = $kpi === null ? '#64748b' : ($kpi >= $dtgt ? '#375623' : ($kpi >= $dtgt - 10 ? '#7F6000' : '#C00000'));
     ?>
     <div class="sum-box">
       <div class="sum-type"><?= htmlspecialchars((string)($g['type'])) ?>s</div>
       <div class="sum-nums"><?= $g['available'] ?> avail / <?= $g['down'] ?> down / <?= $g['total'] ?> total</div>
-      <div class="sum-kpi" style="color:<?= $kpiColor ?>"><?= $kpi ?>%</div>
+      <div class="sum-kpi" style="color:<?= $kpiColor ?>"><?= $kpi === null ? '—' : $kpi.'%' ?></div>
     </div>
     <?php endforeach; ?>
   </div>
@@ -2140,9 +2140,9 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
       $count = count($g['machines']);
     ?>
     <?php foreach ($g['machines'] as $m):
-      $avail = round($m['availability'] * 100);
+      $avail = $m['availability'] === null ? null : round($m['availability'] * 100);
       $mtgt  = round((isset($m['target']) ? $m['target'] : $default_target) * 100);
-      $pctClass = $avail >= $mtgt ? 'td-pct-good' : ($avail >= $mtgt - 10 ? 'td-pct-warn' : 'td-pct-bad');
+      $pctClass = $avail === null ? 'td-pct-neutral' : ($avail >= $mtgt ? 'td-pct-good' : ($avail >= $mtgt - 10 ? 'td-pct-warn' : 'td-pct-bad'));
     ?>
     <tr>
       <td class="td-type" rowspan="<?= $first && $count>1 ? '' : '' ?>"><?= $first ? htmlspecialchars((string)($g['type'])) : '' ?></td>
@@ -2165,8 +2165,8 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
       <td class="td-c" style="<?= $m['days_down']>7?'color:#C00000;font-weight:700':($m['days_down']>0?'color:#7F6000;font-weight:700':'') ?>">
         <?= $m['days_down'] > 0 ? $m['days_down'] : '' ?>
       </td>
-      <td class="<?= $pctClass ?>"><?= $avail ?>%</td>
-      <td class="td-kpi"><?= $first ? round($g['daily_kpi']*100).'%' : '' ?></td>
+      <td class="<?= $pctClass ?>"><?= $avail === null ? '—' : $avail.'%' ?></td>
+      <td class="td-kpi"><?= $first ? ($g['daily_kpi'] === null ? '—' : round($g['daily_kpi']*100).'%') : '' ?></td>
     </tr>
     <?php $first = false; endforeach; ?>
     <?php endforeach; ?>
@@ -2176,22 +2176,22 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
   <!-- Per-type bar charts -->
   <div class="charts-grid">
     <?php foreach ($report as $type => $g):
-      $kpi = round($g['daily_kpi'] * 100);
+      $kpi = $g['daily_kpi'] === null ? null : round($g['daily_kpi'] * 100);
       $dtgt = round((isset($g['target']) ? $g['target'] : $default_target) * 100);
-      $kpiColor = $kpi >= $dtgt ? '#375623' : ($kpi >= $dtgt - 10 ? '#7F6000' : '#C00000');
+      $kpiColor = $kpi === null ? '#64748b' : ($kpi >= $dtgt ? '#375623' : ($kpi >= $dtgt - 10 ? '#7F6000' : '#C00000'));
     ?>
     <div class="chart-box">
       <div class="chart-title">Daily <?= htmlspecialchars((string)($g['type'])) ?>s KPI</div>
-      <div class="chart-kpi" style="color:<?= $kpiColor ?>"><?= $kpi ?>%</div>
+      <div class="chart-kpi" style="color:<?= $kpiColor ?>"><?= $kpi === null ? '—' : $kpi.'%' ?></div>
       <div class="bars">
         <?php foreach ($g['machines'] as $m):
-          $avail = round($m['availability'] * 100);
+          $avail = $m['availability'] === null ? null : round($m['availability'] * 100);
           $mtgt  = round((isset($m['target']) ? $m['target'] : $default_target) * 100);
-          $barColor = $avail >= $mtgt ? '#375623' : ($avail >= $mtgt - 10 ? '#FF9F0A' : '#C00000');
-          $barH = max(2, round($avail * 0.45)); // max ~45px
+          $barColor = $avail === null ? '#64748b' : ($avail >= $mtgt ? '#375623' : ($avail >= $mtgt - 10 ? '#FF9F0A' : '#C00000'));
+          $barH = $avail === null ? 0 : max(2, round($avail * 0.45)); // max ~45px
         ?>
         <div class="bar-wrap">
-          <div class="bar-val" style="color:<?= $barColor ?>"><?= $avail ?>%</div>
+          <div class="bar-val" style="color:<?= $barColor ?>"><?= $avail === null ? '—' : $avail.'%' ?></div>
           <div class="bar" style="height:<?= $barH ?>px;background:<?= $barColor ?>;opacity:.85;"></div>
           <div class="bar-lbl"><?= htmlspecialchars((string)($m['machine_id'])) ?></div>
         </div>
@@ -2269,7 +2269,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
 
                 // Pick availability colour style
                 $avPct = $m['availability']; // decimal 0.0–1.0
-                $sPctStyle = $avPct >= 0.9 ? $sPctG : ($avPct >= 0.7 ? $sPctW : $sPctR);
+                $sPctStyle = $avPct === null ? $sCell : ($avPct >= 0.9 ? $sPctG : ($avPct >= 0.7 ? $sPctW : $sPctR));
 
                 // Clean down/up time — strip trailing :00 duplication, blank for available machines
                 $downTimeVal = '';
@@ -2309,7 +2309,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                     ['v' => $startDateVal,                       's' => $sCellC],
                     ['v' => $m['days_down'] > 0 ? (int)$m['days_down'] : '', 's' => $sCellC],
                     ['v' => $avPct,                              's' => $sPctStyle],
-                    ['v' => $isFirst ? (float)$g['daily_kpi'] : '', 's' => $sPctG],
+                    ['v' => $isFirst && $g['daily_kpi'] !== null ? (float)$g['daily_kpi'] : '', 's' => $g['daily_kpi'] === null ? $sCell : $sPctG],
                 ]);
                 $rowNum++;
             }
@@ -2333,11 +2333,10 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
             $totalEq    += $g['total'];
             $totalAvail += $g['available'];
             $totalDown  += $g['down'];
-            $kpiSum     += $g['daily_kpi'];
-            $kpiCount++;
+            if ($g['daily_kpi'] !== null) { $kpiSum += $g['daily_kpi']; $kpiCount++; }
         }
         $overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
-        $overallKpi   = $kpiCount > 0 ? round($kpiSum / $kpiCount, 2)   : 0;
+        $overallKpi   = $kpiCount > 0 ? round($kpiSum / $kpiCount, 2) : null;
 
         $footer = [];
         for ($i = 0; $i < 16; $i++) {
@@ -3038,6 +3037,109 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
      |  the preview can never disagree with the download (decision D-W1).
      * ───────────────────────────────────────────────────────────────── */
 
+    /** Resolve one reporting week for every Fleet Availability screen. */
+    private function _fleet_report_week(&$notice = null) {
+        $requested = trim((string)$this->input->get('week'));
+        $notice = null;
+        $week_start = $this->Settings_model->iso_week_start($requested);
+        if ($week_start === null && $requested !== '') {
+            $notice = '“' . $requested . '” is not a valid ISO week.';
+        }
+        if ($week_start === null) {
+            $date = trim((string)$this->input->get('week_start'));
+            if ($date !== '') {
+                if (preg_match('/^([0-9]{4})-([0-9]{2})-([0-9]{2})$/', $date, $date_parts) && checkdate((int)$date_parts[2], (int)$date_parts[3], (int)$date_parts[1])) {
+                    $week_start = $this->Settings_model->week_start($date);
+                } else {
+                    $notice = '“' . $date . '” is not a valid date (use yyyy-mm-dd).';
+                }
+            }
+        }
+        return $week_start === null ? $this->Settings_model->week_start() : $week_start;
+    }
+
+    /** Fleet overview backed exclusively by the W36 report/KPI payload. */
+    public function fleet_availability() {
+        $notice = null;
+        $week_start = $this->_fleet_report_week($notice);
+        $t0 = microtime(true);
+        $report = $this->W36_report_model->report_for_week($week_start, array(
+            'live' => $this->input->get('live') === '1',
+        ));
+        $data = array(
+            'page_title' => 'Fleet Availability',
+            'report' => $report,
+            'notice' => $notice,
+            'build_ms' => (int)round((microtime(true) - $t0) * 1000),
+            'week_start' => $report['week']['start'],
+            'week_label' => $report['week']['iso_label'],
+            'prev_week' => $this->Settings_model->iso_week_label(date('Y-m-d', strtotime($report['week']['start'] . ' -7 days'))),
+            'next_week' => $this->Settings_model->iso_week_label(date('Y-m-d', strtotime($report['week']['start'] . ' +7 days'))),
+            'snapshot' => isset($report['snapshot']) ? $report['snapshot'] : null,
+            'published' => isset($report['published']) ? $report['published'] : null,
+            'is_live' => empty($report['snapshot']),
+        );
+        $this->render('reports/fleet_availability', $data);
+    }
+
+    /** Breakdown event log for the selected week; events come from W36's merged WO intervals. */
+    public function downtime_log() {
+        $notice = null;
+        $week_start = $this->_fleet_report_week($notice);
+        $report = $this->W36_report_model->report_for_week($week_start, array(
+            'live' => $this->input->get('live') === '1',
+        ));
+        $events = array();
+        foreach ((array)$report['machines'] as $machine) {
+            foreach ((array)$machine['events'] as $event) {
+                $event['equipment_id'] = (int)$machine['equipment_id'];
+                $event['machine_id'] = (string)$machine['machine_id'];
+                $event['model'] = (string)$machine['model'];
+                $event['group_label'] = isset($machine['group_label']) ? (string)$machine['group_label'] : '';
+                $event['location'] = isset($machine['site']['label']) ? (string)$machine['site']['label'] : '';
+                $events[] = $event;
+            }
+        }
+        $work_order_ids = array();
+        foreach ($events as $event) {
+            foreach ((array)(isset($event['work_orders']) ? $event['work_orders'] : array()) as $wo_id) {
+                $wo_id = (int)$wo_id;
+                if ($wo_id > 0) $work_order_ids[$wo_id] = $wo_id;
+            }
+        }
+        $work_order_numbers = array();
+        if ($work_order_ids && $this->db && $this->db->table_exists('work_orders')) {
+            foreach ($this->db->select('id, wo_number')->where_in('id', array_values($work_order_ids))->get('work_orders')->result() as $wo) {
+                $work_order_numbers[(int)$wo->id] = (string)$wo->wo_number;
+            }
+        }
+        foreach ($events as &$event) {
+            $event['work_order_numbers'] = array();
+            foreach ((array)(isset($event['work_orders']) ? $event['work_orders'] : array()) as $wo_id) {
+                $wo_id = (int)$wo_id;
+                $event['work_order_numbers'][] = isset($work_order_numbers[$wo_id]) ? $work_order_numbers[$wo_id] : ('WO #' . $wo_id);
+            }
+        }
+        unset($event);
+        usort($events, function ($a, $b) {
+            return strcmp((string)$b['start'], (string)$a['start']);
+        });
+        $data = array(
+            'page_title' => 'Log Downtime',
+            'report' => $report,
+            'events' => $events,
+            'notice' => $notice,
+            'week_start' => $report['week']['start'],
+            'week_label' => $report['week']['iso_label'],
+            'prev_week' => $this->Settings_model->iso_week_label(date('Y-m-d', strtotime($report['week']['start'] . ' -7 days'))),
+            'next_week' => $this->Settings_model->iso_week_label(date('Y-m-d', strtotime($report['week']['start'] . ' +7 days'))),
+            'snapshot' => isset($report['snapshot']) ? $report['snapshot'] : null,
+            'published' => isset($report['published']) ? $report['published'] : null,
+            'is_live' => empty($report['snapshot']),
+        );
+        $this->render('reports/downtime_log', $data);
+    }
+
     public function weekly_w36() {
         $requested = trim((string)$this->input->get('week'));
         $notice    = null;
@@ -3102,7 +3204,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         $week_start = $this->Settings_model->iso_week_start($requested);
         if ($week_start === null) {
             $date = trim((string)$this->input->post('week_start'));
-            $week_start = ($date !== '' && preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/', $date) && strtotime($date) !== false)
+            $week_start = ($date !== '' && preg_match('/^([0-9]{4})-([0-9]{2})-([0-9]{2})$/', $date, $date_parts) && checkdate((int)$date_parts[2], (int)$date_parts[3], (int)$date_parts[1]))
                 ? $this->Settings_model->week_start($date)
                 : $this->Settings_model->week_start();
         }

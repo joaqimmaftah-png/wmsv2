@@ -63,6 +63,8 @@ $route['forecast/(:any)/(:any)'] = 'forecast/$1/$2';
 
 // Reports
 $route['reports'] = 'reports/index';
+$route['reports/fleet_availability'] = 'reports/fleet_availability';
+$route['reports/downtime_log'] = 'reports/downtime_log';
 $route['reports/(:any)'] = 'reports/$1';
 
 // Settings

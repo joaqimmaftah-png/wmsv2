@@ -1,12 +1,12 @@
 <?php
 $k = $kpi;
-$avail = round($k['availability'], 1);
+$avail = $k['availability'] === null ? null : round($k['availability'], 1);
 // Q1: the target is the engine's (88 % by default), never a number in the view
 $avail_target = isset($k['avail_target']) ? (float)$k['avail_target'] : 88.0;
 $avail_watch  = $avail_target - 10;
-$avail_delta  = round($avail - $avail_target, 1);
-$avail_color = $avail >= $avail_target ? 'var(--green)' : ($avail >= $avail_watch ? 'var(--amber)' : 'var(--red)');
-$avail_chip  = $avail >= $avail_target ? 'chip-up' : ($avail >= $avail_watch ? 'chip-warn' : 'chip-dn');
+$avail_delta  = $avail === null ? null : round($avail - $avail_target, 1);
+$avail_color = $avail === null ? 'var(--t3)' : ($avail >= $avail_target ? 'var(--green)' : ($avail >= $avail_watch ? 'var(--amber)' : 'var(--red)'));
+$avail_chip  = $avail === null ? '' : ($avail >= $avail_target ? 'chip-up' : ($avail >= $avail_watch ? 'chip-warn' : 'chip-dn'));
 
 $manpower_data = is_array($k['manpower']) ? $k['manpower'] : ['present'=>0,'total'=>0];
 $manpower_pct  = $manpower_data['total'] > 0 ? round($manpower_data['present'] / $manpower_data['total'] * 100) : 0;
@@ -31,8 +31,8 @@ $order_kpi = $k['order_kpi'];
   <div class="kpi" style="animation-delay:.04s;">
     <div class="kpi-glow" style="background:<?= $avail_color ?>;"></div>
     <span class="kpi-tag">Fleet Availability</span>
-    <div class="kpi-num"><?= $avail ?><sup>%</sup></div>
-    <div class="kpi-chip <?= $avail_chip ?>">Target ≥ <?= $avail_target ?>% · <?= ($avail_delta >= 0 ? '+' : '') . $avail_delta ?> pp</div>
+    <div class="kpi-num"><?= $avail === null ? '—' : $avail ?><sup><?= $avail === null ? '' : '%' ?></sup></div>
+    <div class="kpi-chip <?= $avail_chip ?>"><?= $avail_delta === null ? 'Not defined for this period' : ('Target ≥ ' . $avail_target . '% · ' . ($avail_delta >= 0 ? '+' : '') . $avail_delta . ' pp') ?></div>
   </div>
 
   <div class="kpi" style="animation-delay:.08s;">

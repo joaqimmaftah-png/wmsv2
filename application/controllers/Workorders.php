@@ -423,10 +423,13 @@ class Workorders extends MY_Controller {
     ───────────────────────────────────────────────────── */
     public function create() {
         if ($this->input->post()) {
+            $fleet_mode = $this->input->post('fleet_availability', TRUE) === '1';
+            $fleet_kind = $this->input->post('fleet_kind', TRUE) === 'planned' ? 'planned' : 'breakdown';
+            $fleet_week = $this->_fleet_return_week($this->input->post('fleet_week_start', TRUE));
             // Reject before generating a number or writing an uploaded signature.
             if ($this->input->post('status', TRUE) === 'Closed') {
                 $this->session->set_flashdata('error', 'Create the work order as Completed, then ask a supervisor to verify and close it.');
-                redirect('workorders/create'); return;
+                redirect($this->_fleet_create_return_url($fleet_mode, $fleet_week, $fleet_kind)); return;
             }
             $wo_number = $this->_generate_wo_number();
             $sys_csv   = $this->_get_systems_csv();
@@ -437,7 +440,17 @@ class Workorders extends MY_Controller {
                 $this->session->set_flashdata('error',
                     'Only technicians who are checked in on site and free of unfinished work orders can be '
                     .'assigned while the attendance gate is on. ' . implode(' ', $problems));
-                redirect('workorders/create');
+                redirect($this->_fleet_create_return_url($fleet_mode, $fleet_week, $fleet_kind));
+                return;
+            }
+
+            $start_raw = $this->input->post('start_datetime', TRUE);
+            $end_raw   = $this->input->post('end_datetime', TRUE);
+            $start_datetime = $this->_normalize_local_datetime($start_raw, $start_valid);
+            $end_datetime   = $this->_normalize_local_datetime($end_raw, $end_valid);
+            if (!$start_valid || !$end_valid || ($start_datetime && $end_datetime && strtotime($end_datetime) < strtotime($start_datetime))) {
+                $this->session->set_flashdata('error', 'Enter valid downtime timestamps; restoration must not be earlier than the start. Nothing was saved.');
+                redirect($this->_fleet_create_return_url($fleet_mode, $fleet_week, $fleet_kind));
                 return;
             }
 
@@ -459,8 +472,8 @@ class Workorders extends MY_Controller {
                 'supervisor_id'       => $this->user_id,
                 'operator_name'       => $this->input->post('operator_name',   TRUE) ?: NULL,
                 'operator_signature'  => $op_sig,
-                'start_datetime'      => $this->input->post('start_datetime',  TRUE) ?: NULL,
-                'end_datetime'        => $this->input->post('end_datetime',    TRUE) ?: NULL,
+                'start_datetime'      => $start_datetime,
+                'end_datetime'        => $end_datetime,
                 'hours_reading'       => $this->input->post('hours_reading',   TRUE) ?: NULL,
                 'workplace'           => $this->input->post('workplace',       TRUE) ?: NULL,
                 'purchase_order'      => $this->input->post('purchase_order',  TRUE) ?: NULL,
@@ -489,10 +502,18 @@ class Workorders extends MY_Controller {
                 && trim((string)$insert['title']) !== ''
                 && in_array($insert['type'], array('Corrective Maintenance', 'Preventive Maintenance', 'Incident'), TRUE)
                 && in_array($insert['status'], array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools', 'Completed', 'Closed'), TRUE);
+            if ($fleet_mode) {
+                $expected_type = $fleet_kind === 'planned' ? 'Preventive Maintenance' : 'Corrective Maintenance';
+                $required_ok = $required_ok && $insert['type'] === $expected_type;
+                if ($fleet_kind === 'breakdown') $required_ok = $required_ok && !empty($insert['start_datetime']);
+                if (!empty($insert['end_datetime']) && $insert['status'] !== 'Completed') $required_ok = FALSE;
+                if ($insert['status'] === 'Completed' && empty($insert['end_datetime'])) $required_ok = FALSE;
+            }
             if (!$required_ok) {
-                $this->session->set_flashdata('error',
-                    'A work order needs a machine, a type, a status and a title. Nothing was saved.');
-                redirect('workorders/create');
+                $this->session->set_flashdata('error', $fleet_mode
+                    ? 'Downtime capture needs the selected work-order type, equipment, title and valid start time. If restoration is entered, set the work order to Completed. Nothing was saved.'
+                    : 'A work order needs a machine, a type, a status and a title. Nothing was saved.');
+                redirect($this->_fleet_create_return_url($fleet_mode, $fleet_week, $fleet_kind));
                 return;
             }
 
@@ -500,7 +521,7 @@ class Workorders extends MY_Controller {
             if (!$wo_id) {
                 $this->session->set_flashdata('error',
                     'The work order could not be saved. Nothing was written — please check the form and try again.');
-                redirect('workorders/create');
+                redirect($this->_fleet_create_return_url($fleet_mode, $fleet_week, $fleet_kind));
                 return;
             }
 
@@ -526,6 +547,9 @@ class Workorders extends MY_Controller {
             if ($this->input->post('save_and_print')) {
                 redirect("workorders/jobcard/{$wo_id}?autoprint=1");
             }
+            if ($fleet_mode) {
+                redirect('reports/downtime_log?week_start=' . rawurlencode($fleet_week));
+            }
             redirect('workorders');
         }
 
@@ -534,7 +558,22 @@ class Workorders extends MY_Controller {
         $data['attendance_gate']= $this->_attendance_gate();
         $data['spare_parts']    = array();
         $data['lubes']          = array();
-        $data['page_title']     = 'Create New Work Order';
+        $data['fleet_availability_mode'] = $this->input->get('fleet_availability', TRUE) === '1';
+        $data['fleet_availability_kind'] = $this->input->get('fleet_kind', TRUE) === 'planned' ? 'planned' : 'breakdown';
+        $data['fleet_availability_week'] = $this->_fleet_return_week($this->input->get('week_start', TRUE));
+        $prefill_equipment = (int)$this->input->get('equipment_id', TRUE);
+        if ($prefill_equipment > 0 && !$this->db->where('id', $prefill_equipment)->where('status !=', 'Retired')->count_all_results('equipment')) {
+            $prefill_equipment = 0;
+        }
+        $data['fleet_prefill'] = array(
+            'equipment_id' => $prefill_equipment,
+            'type' => $data['fleet_availability_kind'] === 'planned' ? 'Preventive Maintenance' : 'Corrective Maintenance',
+            'start_datetime' => '', 'end_datetime' => '',
+            'title' => '', 'description' => '',
+            'machine_status' => $data['fleet_availability_kind'] === 'breakdown' ? 'Breakdown' : 'Operational',
+            'status' => 'Open',
+        );
+        $data['page_title']     = $data['fleet_availability_mode'] ? 'Log Fleet Downtime' : 'Create New Work Order';
         $this->render('maintenance/wo_form', $data);
     }
 
@@ -610,6 +649,10 @@ class Workorders extends MY_Controller {
                 return;
             }
 
+            $start_raw = $this->input->post('start_datetime', TRUE);
+            $end_raw   = $this->input->post('end_datetime', TRUE);
+            $start_datetime = $this->_normalize_local_datetime($start_raw, $start_valid);
+            $end_datetime   = $this->_normalize_local_datetime($end_raw, $end_valid);
             $update = array(
                 'type'               => $this->input->post('type',           TRUE),
                 'priority'           => $this->input->post('priority',       TRUE),
@@ -623,8 +666,8 @@ class Workorders extends MY_Controller {
                 'assigned_to'        => $techs_csv,
                 'supervisor_id'      => $this->user_id,
                 'operator_name'      => $this->input->post('operator_name',  TRUE) ?: NULL,
-                'start_datetime'     => $this->input->post('start_datetime', TRUE) ?: NULL,
-                'end_datetime'       => $this->input->post('end_datetime',   TRUE) ?: NULL,
+                'start_datetime'     => $start_datetime,
+                'end_datetime'       => $end_datetime,
                 'hours_reading'      => $this->input->post('hours_reading',  TRUE) ?: NULL,
                 'workplace'          => $this->input->post('workplace',      TRUE) ?: NULL,
                 'purchase_order'     => $this->input->post('purchase_order', TRUE) ?: NULL,
@@ -652,6 +695,12 @@ class Workorders extends MY_Controller {
                 redirect("workorders/edit/{$id}");
                 return;
             }
+            if (!$start_valid || !$end_valid || ($update['start_datetime'] && $update['end_datetime']
+                && strtotime($update['end_datetime']) < strtotime($update['start_datetime']))) {
+                $this->session->set_flashdata('error', 'Enter valid work-order timestamps; restoration must not be earlier than the start. Nothing was saved.');
+                redirect("workorders/edit/{$id}");
+                return;
+            }
 
             if (in_array($update['status'], array('Completed','Closed'))) {
                 if (!$wo->completed_by) {
@@ -662,6 +711,13 @@ class Workorders extends MY_Controller {
                 if ($update['status'] === 'Completed' && empty($update['end_datetime'])) {
                     $update['end_datetime'] = date('Y-m-d H:i:s');
                 }
+            }
+
+            if ($update['start_datetime'] && $update['end_datetime']
+                && strtotime($update['end_datetime']) < strtotime($update['start_datetime'])) {
+                $this->session->set_flashdata('error', 'The completion time cannot be before the work-order start. Nothing was saved.');
+                redirect("workorders/edit/{$id}");
+                return;
             }
 
             /*
@@ -1613,6 +1669,38 @@ class Workorders extends MY_Controller {
     /* ─────────────────────────────────────────────────────
        STATUS / LEDGER helpers
     ───────────────────────────────────────────────────── */
+
+    /** Normalize a local HTML datetime-local value to SQL DATETIME, rejecting rollover dates. */
+    private function _normalize_local_datetime($value, &$valid) {
+        $value = trim((string)$value);
+        $valid = TRUE;
+        if ($value === '') return NULL;
+        $value = str_replace('T', ' ', $value);
+        if (!preg_match('/^([0-9]{4})-([0-9]{2})-([0-9]{2}) ([0-9]{2}):([0-9]{2})(?::([0-9]{2}))?$/', $value, $m)) {
+            $valid = FALSE; return NULL;
+        }
+        $year = (int)$m[1]; $month = (int)$m[2]; $day = (int)$m[3];
+        $hour = (int)$m[4]; $minute = (int)$m[5]; $second = isset($m[6]) ? (int)$m[6] : 0;
+        if (!checkdate($month, $day, $year) || $hour > 23 || $minute > 59 || $second > 59) {
+            $valid = FALSE; return NULL;
+        }
+        return sprintf('%04d-%02d-%02d %02d:%02d:%02d', $year, $month, $day, $hour, $minute, $second);
+    }
+
+    /** Keep Fleet Availability return links inside the configured report week. */
+    private function _fleet_return_week($value) {
+        $value = trim((string)$value);
+        if ($value !== '' && preg_match('/^([0-9]{4})-([0-9]{2})-([0-9]{2})$/', $value, $date_parts) && checkdate((int)$date_parts[2], (int)$date_parts[3], (int)$date_parts[1])) {
+            return $this->Settings_model->week_start($value);
+        }
+        return $this->Settings_model->week_start();
+    }
+
+    private function _fleet_create_return_url($enabled, $week, $kind) {
+        if (!$enabled) return 'workorders/create';
+        return 'workorders/create?fleet_availability=1&fleet_kind=' . rawurlencode($kind === 'planned' ? 'planned' : 'breakdown')
+             . '&week_start=' . rawurlencode($this->_fleet_return_week($week));
+    }
 
     /** A posted hold code, or NULL. Only the five approved codes are stored. */
     private function _valid_hold_code($value) {

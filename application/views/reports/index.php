@@ -62,7 +62,7 @@ $report_name  = isset($weekly_report_name) && $weekly_report_name !== ''
 
 $t = isset($telemetry) && is_array($telemetry) ? $telemetry : array();
 $defaults = array(
-    'available' => false, 'availability_pct' => 100.0, 'avail_target_pct' => 88.0,
+    'available' => false, 'availability_pct' => null, 'avail_target_pct' => 88.0,
     'avail_machines_with' => 0, 'avail_from' => null, 'avail_to' => null,
     'mttr_30d' => 0.0, 'mtbf_30d' => 0.0, 'breakdowns_30d' => 0, 'downtime_30d' => 0.0,
     'availability_trend' => array(), 'zero_failure_mode' => 'dash',
@@ -88,11 +88,12 @@ $t['w36_pub'] = array_merge(
 $live = !empty($t['available']);
 
 $target       = (float)$t['avail_target_pct'];
-$avail        = (float)$t['availability_pct'];
+$avail_defined = $live && $t['availability_pct'] !== null;
+$avail        = $avail_defined ? (float)$t['availability_pct'] : null;
 $watch_band   = $target - 10;
-$avail_tone   = $avail >= $target ? 'neutral' : ($avail >= $watch_band ? 'warn' : 'crit');
-$avail_delta  = round($avail - $target, 1);
-$avail_delta_txt = ($avail_delta >= 0 ? '+' : '') . number_format($avail_delta, 1) . ' pp';
+$avail_tone   = !$avail_defined ? 'neutral' : ($avail >= $target ? 'neutral' : ($avail >= $watch_band ? 'warn' : 'crit'));
+$avail_delta  = $avail_defined ? round($avail - $target, 1) : null;
+$avail_delta_txt = $avail_delta === null ? 'availability unavailable' : (($avail_delta >= 0 ? '+' : '') . number_format($avail_delta, 1) . ' pp');
 
 $has_failures = (int)$t['breakdowns_30d'] > 0;
 // settings.mtbf_zero_failure_mode = 'uptime' makes MTBF meaningful even with
@@ -210,10 +211,10 @@ if (!empty($t['availability_trend']) && is_array($t['availability_trend'])) {
         $d = isset($p['date']) ? $p['date'] : null;
         if (!$d) continue;
         $trend_labels[] = date('d M', strtotime($d));
-        $trend_vals[]   = isset($p['pct']) ? round((float)$p['pct'], 1) : 100.0;
+        $trend_vals[]   = !array_key_exists('pct', $p) || $p['pct'] === null ? null : round((float)$p['pct'], 1);
     }
 }
-$has_trend = count($trend_vals) >= 2;
+$has_trend = count($trend_vals) >= 2 && !in_array(null, $trend_vals, true);
 
 /* A server-rendered SVG line chart.  It needs no chart library, prints on
    paper, and is never a blank canvas when a CDN is unreachable.  Coordinates
@@ -922,6 +923,12 @@ $sections = array(
     </a>
   </div>
 
+  <nav aria-label="Fleet availability reports" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px;">
+    <a class="rpt-btn" href="<?= $h($bu('reports/fleet_availability?week_start=' . $week_start)) ?>">Fleet availability</a>
+    <a class="rpt-btn" href="<?= $h($bu('reports/weekly_w36?week_start=' . $week_start)) ?>">Weekly W36 report</a>
+    <a class="rpt-btn" href="<?= $h($bu('reports/downtime_log?week_start=' . $week_start)) ?>">Log downtime</a>
+  </nav>
+
   <?php if (!$live): ?>
   <div class="rpt-panel" style="border-color:var(--rpt-warn-bd);background:var(--rpt-warn-bg);margin-bottom:20px;">
     <div class="rpt-panel-body" style="padding:14px 17px;color:var(--rpt-warn-fg);font-size:12.5px;line-height:1.5;">
@@ -935,15 +942,15 @@ $sections = array(
   <section aria-labelledby="rpt-snapshot-h">
     <h2 class="rpt-sr" id="rpt-snapshot-h">Operational snapshot, last 30 days</h2>
     <div class="rpt-kpis">
-      <a class="rpt-kpi" href="<?= $h($bu('reports/mttr_mtbf?months=12')) ?>">
+      <a class="rpt-kpi" href="#rpt-trend-h">
         <span class="rpt-kpi-lbl">Fleet availability · 30 d</span>
         <span class="rpt-kpi-val <?= $live ? ($avail_tone === 'crit' ? 'is-crit' : ($avail_tone === 'warn' ? 'is-warn' : '')) : '' ?>">
-          <?= $live ? $h(number_format($avail, 1)) . '<sup>%</sup>' : '—' ?>
+          <?= $avail_defined ? $h(number_format($avail, 1)) . '<sup>%</sup>' : '—' ?>
         </span>
         <span class="rpt-kpi-meta"><?= $live
             ? $h('Target ≥' . number_format($target, 1) . '% · ' . $avail_delta_txt . ' · ' . $covered . '/' . $total_machines . ' machines')
             : 'Not available' ?></span>
-        <span class="rpt-kpi-action">Reliability report →</span>
+        <span class="rpt-kpi-action">30-day trend ↓</span>
       </a>
       <a class="rpt-kpi" href="<?= $h($bu('reports/workshop_weekly?week_start=' . $week_start)) ?>">
         <span class="rpt-kpi-lbl">Breakdowns · 30 d</span>
@@ -1057,7 +1064,7 @@ $sections = array(
           <thead><tr><th scope="col">Date</th><th scope="col">Availability</th></tr></thead>
           <tbody>
           <?php foreach ($t['availability_trend'] as $p): ?>
-            <tr><td><?= $h(isset($p['date']) ? $p['date'] : '') ?></td><td><?= $h(number_format(isset($p['pct']) ? (float)$p['pct'] : 100, 1)) ?>%</td></tr>
+            <tr><td><?= $h(isset($p['date']) ? $p['date'] : '') ?></td><td><?= !array_key_exists('pct', $p) || $p['pct'] === null ? '—' : $h(number_format((float)$p['pct'], 1) . '%') ?></td></tr>
           <?php endforeach; ?>
           </tbody>
         </table>
@@ -1066,12 +1073,14 @@ $sections = array(
         Dashed line = <?= $h(number_format($target, 1)) ?>% target, on a fixed 0–100% scale. From the KPI engine on the
         configured open hours<?= ($total_machines > 0 && $covered < $total_machines)
             ? ', with data from ' . $h($covered) . ' of ' . $h($total_machines) . ' machines' : '' ?>;
-        days with no scheduled operating time are reported as 100% by that engine.</p>
+        undefined days are never replaced with a percentage.</p>
       <?php else: ?>
       <div class="rpt-empty">
         <strong><?= $live ? 'Not enough data for a trend' : 'Trend unavailable' ?></strong>
         <span><?= $live
-            ? 'Daily availability needs at least two days of engine output. Open the monthly summary for the underlying figures.'
+            ? (count($trend_vals) >= 2
+                ? 'At least one day has no positive required-time denominator, so a continuous trend would be misleading. No percentage was substituted.'
+                : 'Daily availability needs at least two days of engine output. Open the monthly summary for the underlying figures.')
             : 'The reporting database could not be read on this request.' ?></span>
       </div>
       <?php endif; ?>

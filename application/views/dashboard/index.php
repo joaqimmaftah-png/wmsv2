@@ -22,7 +22,7 @@ $dashboard_greeting = $dashboard_hour < 12
     ? 'Good morning' : ($dashboard_hour < 17 ? 'Good afternoon' : 'Good evening');
 
 $open_wo        = isset($kpi['open_wo'])        ? (int)$kpi['open_wo']        : 0;
-$availability   = isset($kpi['availability'])   ? (float)$kpi['availability'] : 0;
+$availability   = array_key_exists('availability', $kpi) && $kpi['availability'] !== null ? (float)$kpi['availability'] : null;
 $manpower_data  = isset($kpi['manpower'])       ? $kpi['manpower']            : array('present' => 0, 'total' => 0, 'pct' => 0);
 $manpower       = is_array($manpower_data) ? (int)$manpower_data['present'] : (int)$manpower_data;
 $total_workers  = is_array($manpower_data) ? (int)$manpower_data['total']   : (isset($kpi['total_workers']) ? (int)$kpi['total_workers'] : 0);
@@ -37,8 +37,8 @@ $avail_target = isset($kpi['avail_target']) && (float)$kpi['avail_target'] > 0
     ? (float)$kpi['avail_target']
     : (isset($avail_target) ? (float)$avail_target : 88.0);
 $avail_watch  = $avail_target - 10;                       // "watch" band, not a second target
-$avail_delta  = round($availability - $avail_target, 1);
-$avail_delta_txt = ($avail_delta >= 0 ? '+' : '') . $avail_delta . ' pp';
+$avail_delta  = $availability === null ? null : round($availability - $avail_target, 1);
+$avail_delta_txt = $avail_delta === null ? 'availability unavailable' : (($avail_delta >= 0 ? '+' : '') . $avail_delta . ' pp');
 
 // Availability provenance: the window it was computed over and how many
 // machines contributed data. A partial dataset is the one thing that can make
@@ -240,17 +240,19 @@ $ico_alert = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke
 // Availability status: on/above target stays neutral — the /materials
 // convention is that problems are coloured and healthy values keep the
 // default text colour. Below the watch band is crit, watch→target is warn.
-$avail_status = $availability >= $avail_target ? '' : ($availability >= $avail_watch ? 'is-warn' : 'is-crit');
-$avail_meta = $fleet_total > 0
-    ? $avail_with . '/' . $fleet_total . ' machines · target ≥' . $avail_target . '% (' . $avail_delta_txt . ')'
-    : 'target ≥' . $avail_target . '% (' . $avail_delta_txt . ')';
+$avail_status = $availability === null ? '' : ($availability >= $avail_target ? '' : ($availability >= $avail_watch ? 'is-warn' : 'is-crit'));
+$avail_meta = $availability === null
+    ? 'Not defined for this period · no positive required-time basis'
+    : ($fleet_total > 0
+        ? $avail_with . '/' . $fleet_total . ' machines · target ≥' . $avail_target . '% (' . $avail_delta_txt . ')'
+        : 'target ≥' . $avail_target . '% (' . $avail_delta_txt . ')');
 ?>
 <!-- ═══ KPI STRIP ═══ -->
 <div class="dsh-kpis">
 
   <a class="dsh-kpi-card" href="<?= $h(base_url('equipment')) ?>">
     <span class="dsh-kpi-lbl">Availability</span>
-    <span class="dsh-kpi-val <?= $avail_status ?>"><span class="cu" data-to="<?= $availability ?>" data-decimals="1"><?= $availability ?></span><sup>%</sup></span>
+    <span class="dsh-kpi-val <?= $avail_status ?>"><?php if ($availability === null): ?>—<?php else: ?><span class="cu" data-to="<?= $availability ?>" data-decimals="1"><?= $availability ?></span><sup>%</sup><?php endif; ?></span>
     <span class="dsh-kpi-meta"><?= $avail_meta ?></span>
   </a>
 
@@ -292,11 +294,11 @@ $avail_meta = $fleet_total > 0
       <a class="ca" href="<?= $h(base_url('reports/availability_forecast')) ?>">Report →</a>
     </div>
     <div class="card-body" style="padding-top:14px;">
-      <?php if (!empty($avail_vals)): ?>
+      <?php if (!empty($avail_vals) && count(array_filter($avail_vals, function ($v) { return $v !== null; })) > 0): ?>
         <div class="chart-container"><canvas id="cAvail" aria-label="Fleet availability trend over the last 30 days, with the availability target line" role="img"></canvas></div>
         <table class="dsh-sr"><caption>Fleet availability per day over the last 30 days</caption><thead><tr><th>Date</th><th>Availability</th></tr></thead><tbody>
         <?php foreach ($availability_trend as $d): ?>
-          <tr><td><?= $h(date('Y-m-d', strtotime($d['date']))) ?></td><td><?= $h(number_format((float)$d['pct'], 1)) ?>%</td></tr>
+          <tr><td><?= $h(date('Y-m-d', strtotime($d['date']))) ?></td><td><?= $d['pct'] === null ? '—' : $h(number_format((float)$d['pct'], 1) . '%') ?></td></tr>
         <?php endforeach; ?>
         </tbody></table>
       <?php else: ?>
