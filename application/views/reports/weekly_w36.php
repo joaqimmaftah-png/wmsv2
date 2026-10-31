@@ -94,6 +94,14 @@ foreach ($quality as $q) {
     $by_level[$lvl][] = $q;
 }
 $issue_count = count($by_level['error']) + count($by_level['warn']);
+$warning_counts = array();
+foreach ($by_level['warn'] as $warning) {
+    $code = isset($warning['code']) ? (string)$warning['code'] : 'other';
+    $warning_counts[$code] = isset($warning_counts[$code]) ? $warning_counts[$code] + 1 : 1;
+}
+$status_without_wo_count = isset($warning_counts['status_without_wo']) ? $warning_counts['status_without_wo'] : 0;
+$can_create_wo = isset($role_id) && in_array((int)$role_id, array(1, 2, 3), true);
+$can_edit_equipment = isset($role_id) && (int)$role_id === 1;
 $with_data   = 0;
 $down_machines = 0;
 foreach ($order as $id) {
@@ -393,7 +401,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   </form>
   <?php endif; ?>
 
-  <?php /* ── data readiness (W2.2): what the week can and cannot say ───── */ ?>
+  <?php /* ── data readiness: concise summary with actionable, collapsed details ─ */ ?>
   <div class="w36-panel">
     <h3>Data readiness</h3>
     <div class="w36-badges">
@@ -411,32 +419,57 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
 
     <?php if ($machine_total > 0 && $with_data === 0): ?>
       <div class="w36-note warn" style="margin-top:10px">
-        No work order touches this week, so every machine reads an empty period.
-        The Excel file would be structurally complete and operationally blank — check the week, or load the missing records first.
+        <strong>No work-order or labour records overlap <?= $esc($week_label) ?>.</strong>
+        The report will not infer uptime from current equipment status. Confirm the selected week, then enter real events with their equipment and timestamps.
+        <?php if ($status_without_wo_count > 0): ?><br><strong><?= (int)$status_without_wo_count ?> machine(s) are currently marked down without a matching open breakdown work order.</strong><?php endif; ?>
+        <span style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <a class="w36-btn" href="<?= $esc(base_url('reports/downtime_log?week=' . rawurlencode($week_label))) ?>">Open downtime log</a>
+          <?php if ($can_create_wo): ?><a class="w36-btn w36-btn-primary" href="<?= $esc(base_url('workorders/create?fleet_availability=1&fleet_kind=breakdown&week_start=' . rawurlencode($week['start']))) ?>">Create a Corrective WO</a><?php endif; ?>
+        </span>
+      </div>
+    <?php elseif ($status_without_wo_count > 0): ?>
+      <div class="w36-note warn" style="margin-top:10px">
+        <strong><?= (int)$status_without_wo_count ?> machine(s) are marked down without a matching open breakdown work order.</strong>
+        For each real failure, log a Corrective WO with the actual start time; if the machine is not down, reconcile its equipment status. Neither action is applied automatically.
       </div>
     <?php endif; ?>
 
     <?php if ($issue_count === 0): ?>
-      <div class="w36-note ok" style="margin-top:10px">The week is complete: every machine has a group, a site and a resolved daily target.</div>
+      <div class="w36-note ok" style="margin-top:10px">No errors or warnings were found. Notes are available below.</div>
     <?php endif; ?>
 
-    <?php if (!empty($by_level['error'])): ?>
-      <ul class="w36-qlist" style="margin-top:10px">
-        <?php foreach ($by_level['error'] as $q): ?>
-          <li><span class="w36-qcode"><?= $esc($q['code']) ?></span> <?= $esc($q['message']) ?></li>
-        <?php endforeach; ?>
-      </ul>
-    <?php endif; ?>
-    <?php if (!empty($by_level['warn'])): ?>
-      <ul class="w36-qlist" style="margin-top:10px">
-        <?php $shown = 0; foreach ($by_level['warn'] as $q): $shown++; if ($shown > 12) break; ?>
-          <li><span class="w36-qcode"><?= $esc($q['code']) ?></span> <?= $esc($q['message']) ?></li>
-        <?php endforeach; ?>
-        <?php if (count($by_level['warn']) > 12): ?>
-          <li>… and <?= count($by_level['warn']) - 12 ?> more</li>
-        <?php endif; ?>
-      </ul>
-    <?php endif; ?>
+    <?php foreach (array('error' => 'Errors', 'warn' => 'Warnings', 'info' => 'Notes') as $level => $label): if (empty($by_level[$level])) continue; ?>
+      <details class="w36-quality-details" <?= $print_mode ? 'open' : '' ?> style="margin-top:10px;border-top:1px solid #e5e7eb;padding-top:8px;">
+        <summary style="cursor:pointer;font-weight:700;font-size:12px;">
+          <?= (int)count($by_level[$level]) ?> <?= $esc(strtolower($label)) ?> — review affected records and available fixes
+        </summary>
+        <ul class="w36-qlist" style="margin-top:8px;max-height:340px;overflow:auto;padding-right:8px;">
+          <?php foreach ($by_level[$level] as $q):
+            $equipment_id = isset($q['equipment_id']) ? (int)$q['equipment_id'] : 0;
+            $issue_code = isset($q['code']) ? (string)$q['code'] : '';
+            $action_url = null; $action_label = null;
+            if ($issue_code === 'status_without_wo' && $can_create_wo && $equipment_id > 0) {
+                $action_url = 'workorders/create?fleet_availability=1&fleet_kind=breakdown&equipment_id=' . $equipment_id . '&week_start=' . rawurlencode($week['start']);
+                $action_label = 'Create breakdown WO';
+            } elseif ($issue_code === 'wo_without_status' && !empty($q['work_order_ids'][0])) {
+                $action_url = 'workorders/' . ($can_create_wo ? 'edit/' : 'view/') . (int)$q['work_order_ids'][0];
+                $action_label = $can_create_wo ? 'Correct open WO' : 'View open WO';
+            } elseif ($issue_code === 'no_target' && $can_edit_equipment) {
+                $action_url = 'reports/weekly_targets?week_start=' . rawurlencode($week['start']);
+                $action_label = 'Review targets';
+            } elseif (in_array($issue_code, array('no_group', 'no_site', 'site_not_approved'), true) && $can_edit_equipment && $equipment_id > 0) {
+                $action_url = 'equipment/edit/' . $equipment_id;
+                $action_label = 'Edit equipment';
+            }
+          ?>
+            <li style="padding:4px 0;">
+              <span class="w36-qcode"><?= $esc($issue_code) ?></span> <?= $esc(isset($q['message']) ? $q['message'] : '') ?>
+              <?php if ($action_url): ?> <a class="w36-btn" style="min-height:28px;padding:3px 8px;margin-left:5px;" href="<?= $esc(base_url($action_url)) ?>"><?= $esc($action_label) ?> <span aria-hidden="true">→</span></a><?php endif; ?>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      </details>
+    <?php endforeach; ?>
   </div>
 
   <?php /* ── the grid: the sheet's machine rows ───────────────────────── */ ?>

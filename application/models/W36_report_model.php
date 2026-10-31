@@ -568,6 +568,22 @@ class W36_report_model extends CI_Model {
                                         . ') exceeds the week — the machine was already down before it (D4).');
         }
 
+        // Carry stable IDs with each readiness issue so the screen can offer a
+        // direct correction path instead of asking the reader to search by label.
+        $open_work_order_ids = array();
+        foreach ($entry['events'] as $event) {
+            if (empty($event['open'])) continue;
+            foreach ((array)(isset($event['work_orders']) ? $event['work_orders'] : array()) as $wo_id) {
+                $wo_id = (int)$wo_id;
+                if ($wo_id > 0) $open_work_order_ids[$wo_id] = $wo_id;
+            }
+        }
+        foreach ($notes as &$note) {
+            $note['equipment_id'] = (int)$entry['equipment_id'];
+            $note['work_order_ids'] = $note['code'] === 'wo_without_status'
+                ? array_values($open_work_order_ids) : array();
+        }
+        unset($note);
         return $notes;
     }
 

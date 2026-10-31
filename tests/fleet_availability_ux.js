@@ -24,11 +24,15 @@ assert.match(weekly, /\$daily, \$day, \$index/);
 assert.match(weekly, /\$daily\[\$day\]/, 'weekly daily rows support date-string keys');
 assert.match(availability, /Availability is not defined for this period/);
 assert.match(availability, /Download Excel/);
+assert.match(weekly, /<details class="w36-quality-details"/, 'long readiness issue lists are collapsed in the screen view');
+assert.match(weekly, /Create breakdown WO/, 'status/work-order mismatches have a direct corrective-work-order path');
+assert.match(w36, /\$note\['equipment_id'\]/, 'quality issues carry the stable equipment ID for deep links');
 assert.match(downtime, /workorders\/create\?fleet_availability=1/);
 assert.match(downtime, /hours_in_period/);
 assert.match(woForm, /name="fleet_availability"/);
 assert.match(workorders, /_normalize_local_datetime/);
 assert.match(workorders, /restoration must not be earlier than the start/);
+assert.match(workorders, /reports\/downtime_log\?week_start=.*live=1/, 'successful capture returns to an explicit live log so the new WO is visible');
 assert.doesNotMatch(dashboardModel, /availability_pct'\]\s*===\s*null\s*\?\s*100/);
 
 console.log('Fleet Availability integration structural checks passed.');
