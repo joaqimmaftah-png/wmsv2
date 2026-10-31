@@ -1,0 +1,506 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Fleet Availability Report</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout concept: fixed left rail + one working column. Summary first, machines on demand, 70-column sheet becomes expandable rows with a 7-day strip. */
+:root{
+  --bg:#ECEFF0; --surface:#F8F9F9; --surface2:#E2E8EA; --ink:#14232B; --muted:#586A72; --line:#D0D8DB;
+  --accent:#0B6E7F; --accent-ink:#FFFFFF; --accent-soft:#D5EAEE;
+  --good:#1F8A55; --good-bg:#D4ECDF; --warn:#C28A12; --warn-ink:#80570A; --warn-bg:#F6E6C2;
+  --bad:#C0392B; --bad-bg:#F5D5D0; --prev:#3A6FD0; --prev-bg:#D6E2F7;
+  --f-head:'Barlow Condensed','Arial Narrow',sans-serif; --f-body:'IBM Plex Sans',system-ui,sans-serif; --f-mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0E171B; --surface:#152227; --surface2:#1F3037; --ink:#E5EEF0; --muted:#8FA4AC; --line:#263840;
+  --accent:#55C2D4; --accent-ink:#0B1A1E; --accent-soft:#17343B;
+  --good:#45C284; --good-bg:#1B3A2C; --warn:#E3AE3F; --warn-ink:#E3AE3F; --warn-bg:#3B3116;
+  --bad:#EE6D5E; --bad-bg:#432322; --prev:#6C9BEA; --prev-bg:#1E2F52; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E171B; --surface:#152227; --surface2:#1F3037; --ink:#E5EEF0; --muted:#8FA4AC; --line:#263840;
+  --accent:#55C2D4; --accent-ink:#0B1A1E; --accent-soft:#17343B;
+  --good:#45C284; --good-bg:#1B3A2C; --warn:#E3AE3F; --warn-ink:#E3AE3F; --warn-bg:#3B3116;
+  --bad:#EE6D5E; --bad-bg:#432322; --prev:#6C9BEA; --prev-bg:#1E2F52; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:var(--f-head);font-weight:600;letter-spacing:.01em;margin:0;text-wrap:balance}
+
+.app{display:grid;grid-template-columns:216px minmax(0,1fr);min-height:100vh}
+.rail{background:var(--surface);border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:22px;position:sticky;top:0;height:100vh;align-self:start}
+.brand{display:flex;align-items:center;gap:10px;padding:0 6px}
+.brand-mark{width:30px;height:30px;border-radius:6px;background:var(--accent);display:grid;place-items:center}
+.brand b{font-family:var(--f-head);font-size:19px;font-weight:700;line-height:1;letter-spacing:.02em}
+.brand span{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:500}
+.nav a:hover{background:var(--surface2);color:var(--ink)}
+.nav a[aria-current="page"]{background:var(--accent-soft);color:var(--accent)}
+.rail-note{margin-top:auto;font-size:12px;color:var(--muted);padding:0 6px;line-height:1.5}
+.rail-note b{color:var(--ink);font-weight:600}
+
+.main{min-width:0;padding-block:22px 48px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px))}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:14px 20px;flex-wrap:wrap;margin-bottom:20px}
+.top h1{font-size:32px;line-height:1.05}
+.top .sub{color:var(--muted);margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.weekchip{font-family:var(--f-mono);font-size:12px;background:var(--surface2);border-radius:4px;padding:2px 8px;color:var(--ink)}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:8px 12px;font-weight:500}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08);color:var(--accent-ink)}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;min-width:0}
+.panel h2{font-size:20px}
+.panel .hint{color:var(--muted);font-size:12.5px;margin:2px 0 14px}
+.grid{display:grid;gap:16px}
+.g-kpi{grid-template-columns:repeat(6,minmax(0,1fr));margin-bottom:16px}
+.g-2{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);margin-bottom:16px}
+.g-2b{grid-template-columns:minmax(0,1fr) minmax(0,1fr);margin-bottom:16px}
+
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.kpi .l{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.kpi .v{font-family:var(--f-head);font-weight:600;font-size:40px;line-height:1;display:flex;align-items:baseline;gap:5px}
+.kpi .v small{font-size:17px;color:var(--muted);font-weight:500}
+.kpi .s{font-size:12.5px;color:var(--muted)}
+.kpi.main-kpi{grid-column:span 2}
+.meter{height:8px;background:var(--surface2);border-radius:4px;position:relative;margin:8px 0 2px}
+.meter i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}
+.meter u{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink);text-decoration:none}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.pill.good{background:var(--good-bg);color:var(--good)}
+.pill.warn{background:var(--warn-bg);color:var(--warn-ink)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.fg-good{color:var(--good)}.fg-warn{color:var(--warn-ink)}.fg-bad{color:var(--bad)}
+.bg-good{background:var(--good)}.bg-warn{background:var(--warn)}.bg-bad{background:var(--bad)}
+
+/* horizontal bars */
+.hbars{display:flex;flex-direction:column;gap:7px}
+.hrow{display:grid;grid-template-columns:104px minmax(0,1fr) 52px;gap:10px;align-items:center;background:none;border:0;padding:2px 0;text-align:left;width:100%}
+.hrow:hover .hname{color:var(--accent)}
+.hname{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.htrack{height:14px;background:var(--surface2);border-radius:3px;position:relative}
+.htrack i{position:absolute;inset:0 auto 0 0;border-radius:3px}
+.htrack u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);opacity:.85;text-decoration:none}
+.hval{font-size:12.5px;text-align:right}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:12px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:2px;display:inline-block}
+.tick-sw{width:2px;height:12px;background:var(--ink);display:inline-block}
+
+svg.chart text{fill:var(--muted);font-family:var(--f-mono);font-size:10.5px}
+svg.chart .grid-l{stroke:var(--line);stroke-width:1}
+svg.chart .tg{stroke:var(--ink);stroke-width:1.5;stroke-dasharray:4 3}
+svg.chart .val{fill:var(--ink);font-weight:500}
+
+/* tables */
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:500;text-align:right;padding:9px 10px;border-bottom:1px solid var(--line);background:var(--surface);white-space:nowrap;position:sticky;top:0}
+th:first-child,td:first-child{text-align:left}
+th.l{text-align:left}
+td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+td.l{text-align:left}
+tr.grp td{background:var(--surface2);font-weight:600}
+tr.grp:hover td,tr.mach:hover td{background:var(--accent-soft)}
+tr.mach td{background:var(--surface)}
+tr.mach td:first-child{padding-left:42px}
+tr.tot td{font-weight:600;border-top:2px solid var(--ink);border-bottom:0}
+.gbtn{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:2px 0}
+.gbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.gbtn svg{transition:transform .15s}
+.gbtn[aria-expanded="true"] svg{transform:rotate(90deg)}
+.gsub{font-weight:400;font-size:12px;color:var(--muted);margin-left:2px}
+.mbtn{all:unset;cursor:pointer;display:inline-flex;flex-direction:column}
+.mbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mbtn b{font-family:var(--f-mono);font-weight:500;font-size:13px;color:var(--accent)}
+.mbtn span{font-size:11.5px;color:var(--muted)}
+.strip{display:inline-flex;gap:2px;vertical-align:middle}
+.strip i{width:13px;height:18px;border-radius:2px;display:block}
+.c-good{background:var(--good-bg)}.c-warn{background:var(--warn)}.c-bad{background:var(--bad)}.c-prev{background:var(--prev)}
+.avbar{display:inline-flex;align-items:center;gap:8px;justify-content:flex-end}
+.avbar .t{width:54px;height:6px;border-radius:3px;background:var(--surface2);position:relative;display:inline-block}
+.avbar .t i{position:absolute;inset:0 auto 0 0;border-radius:3px}
+.flag{display:inline-block;margin-left:5px;width:16px;height:16px;border-radius:50%;background:var(--warn-bg);color:var(--warn-ink);font-size:11px;font-weight:600;text-align:center;line-height:16px;cursor:help;font-family:var(--f-body)}
+
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.toolbar input[type=search],.toolbar select,.field input,.field select,.field textarea{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:8px 10px;min-width:0}
+.toolbar input[type=search]{flex:1 1 200px;max-width:320px}
+.chk{display:inline-flex;gap:7px;align-items:center;color:var(--muted)}
+.callout{border:1px solid var(--warn);background:var(--warn-bg);color:var(--ink);border-radius:8px;padding:12px 14px;display:flex;gap:12px;align-items:flex-start;margin-bottom:16px}
+.callout b{color:var(--warn-ink)}
+.callout p{margin:2px 0 0;color:var(--ink)}
+
+/* entry */
+.g-entry{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:16px;margin-bottom:16px;align-items:start}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;min-width:0}
+.field label,.field .lab{font-size:12px;color:var(--muted);font-weight:500;letter-spacing:.04em;text-transform:uppercase}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg label{padding:8px;text-align:center;cursor:pointer;color:var(--muted);text-transform:none;letter-spacing:0;font-size:14px;font-weight:500}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg input:checked+span{display:block;margin:-8px;padding:8px;background:var(--accent);color:var(--accent-ink)}
+.seg label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+.err{color:var(--bad);font-size:12.5px;min-height:18px;margin:0 0 8px}
+.pv{width:100%}
+.pv td,.pv th{padding:7px 8px}
+.pv td.arrow{color:var(--muted);text-align:center;padding:7px 2px}
+.formula{margin-top:12px;font-size:12px;color:var(--muted);display:grid;gap:3px}
+.formula code{font-family:var(--f-mono);color:var(--ink);background:var(--surface2);padding:1px 5px;border-radius:3px}
+.board{display:flex;flex-direction:column;gap:10px}
+.bgroup{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;align-items:start}
+.bgroup>b{font-size:12px;color:var(--muted);font-weight:500;padding-top:5px}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{border:1px solid transparent;border-radius:5px;padding:3px 7px;font-family:var(--f-mono);font-size:11.5px}
+.chip.c-good{background:var(--good-bg);color:var(--good)}
+.chip.c-warn{background:var(--warn);color:#1b1305}
+.chip.c-bad{background:var(--bad);color:#fff}
+.chip.c-prev{background:var(--prev);color:#fff}
+.chip.sel{outline:2px solid var(--ink);outline-offset:1px}
+.empty{color:var(--muted);padding:18px;text-align:center;border:1px dashed var(--line);border-radius:8px}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:rgba(10,20,24,.45);z-index:30}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(460px,100%);background:var(--surface);border-left:1px solid var(--line);z-index:31;overflow-y:auto;padding:20px max(20px,env(safe-area-inset-right,0px)) 28px 20px;padding-top:max(20px,env(safe-area-inset-top,0px))}
+.dh{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px}
+.dh h2{font-size:30px;line-height:1}
+.dh p{margin:4px 0 0;color:var(--muted)}
+.x{border:1px solid var(--line);background:var(--surface);border-radius:6px;width:34px;height:34px;display:grid;place-items:center}
+.dk{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}
+.dk div{background:var(--surface2);border-radius:6px;padding:8px 10px}
+.dk small{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.dk b{font-family:var(--f-head);font-size:24px;font-weight:600}
+.dbars{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin:8px 0 4px}
+.dcol{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11.5px;color:var(--muted)}
+.dstack{width:100%;max-width:38px;height:110px;border-radius:4px;overflow:hidden;display:flex;flex-direction:column-reverse;background:var(--good-bg)}
+.dstack i{display:block;width:100%}
+.dcol span{font-family:var(--f-mono);color:var(--ink)}
+.evl{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:6px}
+.evl li{display:flex;justify-content:space-between;gap:8px;background:var(--surface2);border-radius:6px;padding:7px 10px;font-size:13px}
+.xbtn{all:unset;cursor:pointer;color:var(--bad);font-size:12.5px;font-weight:500}
+.xbtn:focus-visible{outline:2px solid var(--accent)}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:50;max-width:min(520px,calc(100% - 32px));box-shadow:0 6px 24px rgba(0,0,0,.25)}
+
+@media (max-width:1100px){.g-kpi{grid-template-columns:repeat(2,minmax(0,1fr))}.g-2,.g-2b,.g-entry{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:860px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .rail{position:static;height:auto;flex-direction:row;align-items:center;gap:10px;padding:10px max(16px,env(safe-area-inset-left,0px));overflow-x:auto;border-right:0;border-bottom:1px solid var(--line)}
+  .nav{flex-direction:row}.nav a{white-space:nowrap}
+  .rail-note{display:none}
+  .brand span{display:none}
+  .main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .top h1{font-size:28px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app">
+  <nav class="rail" aria-label="Main">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg></div>
+      <div><b>FLEET KPI</b><span>Workshop reporting</span></div>
+    </div>
+    <div class="nav" id="nav">
+      <a href="#dashboard" data-v="dashboard"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Dashboard</a>
+      <a href="#report" data-v="report"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>Weekly report</a>
+      <a href="#entry" data-v="entry"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Log downtime</a>
+    </div>
+    <div class="rail-note"><b>Mockup</b><br>Loaded with the W36 numbers from your Excel report. Log an event under Log downtime and watch every screen recalculate.</div>
+  </nav>
+  <main class="main" id="main"></main>
+</div>
+<div id="layer"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+const D={"machines":[{"t":"Excavators","id":"EX 001","model":"SY500H","loc":"MET PLANT","d":[[0.5,0,0],[9.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0]],"tg":0.8443},{"t":"Excavators","id":"EX 002","model":"XCMG XE500","loc":"WORKSHOP","d":[[0.5,0,0],[0.5,0,0],[0,2.67,1],[0,4.83,1],[0,24.0,0],[0,24.0,0],[0.5,24.0,0]],"tg":0.8443},{"t":"Excavators","id":"EX 003","model":"CAT 390","loc":"WORKSHOP","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.8314},{"t":"Excavators","id":"EX 004","model":"XCMG XE950DA","loc":"KALIMVA","d":[[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0]],"tg":0.8314},{"t":"Excavators","id":"EX 005","model":"XCMG XE950DA","loc":"KALIMVA","d":[[0.5,0,0],[0.5,0,0],[0.5,0,0],[0,0,0],[0,0,0],[0.5,0,0],[0,0,0]],"tg":0.8443},{"t":"Excavators","id":"EX 007","model":"XCMG XE950DA","loc":"WORKSHOP","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,0,0],[0,0,0],[0.5,0,0]],"tg":0.8443},{"t":"Dozers","id":"DZ 001","model":"CAT D8R","loc":"WORKSHOP","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.0},{"t":"Dozers","id":"DZ 002","model":"LIUGONG","loc":"WORKSHOP","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.0},{"t":"Dozers","id":"DZ 003","model":"LIUGONG","loc":"WORKSHOP","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.8443},{"t":"Dozers","id":"DZ 004","model":"XCMG D260","loc":"KALIMVA","d":[[1.0,0,0],[1.0,0,0],[1.0,0,0],[1.0,0,0],[1.0,0,0],[1.0,0,0],[0.5,0,0]],"tg":0.8443},{"t":"Dozers","id":"DZ 005","model":"XCMG D260","loc":"KALIMVA","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,10.5,0]],"tg":0.0},{"t":"Dozers","id":"DZ 006","model":"XCMG D360","loc":"KALIMVA","d":[[0.5,0,0],[0.5,0,0],[2.0,0,0],[2.0,0,0],[0.5,0,0],[0.5,0,0],[0,1.0,1]],"tg":0.8443},{"t":"Dozers","id":"DZ 008","model":"LIUGONG","loc":"KALIMVA","d":[[0,10.0,1],[0,10.0,0],[1.0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8443},{"t":"Dozers","id":"DZ 007","model":"XCMG D360","loc":"MET PLANT","d":[[0.5,0,0],[0.5,0,0],[0.5,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8314},{"t":"ADTs","id":"ADT 001","model":"CAT 745","loc":"KALIMVA","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.8443},{"t":"ADTs","id":"ADT 002","model":"CAT 745","loc":"KALIMVA","d":[[0,24.0,1],[0,24.0,0],[0,10.0,0],[0,0,0],[0,1.0,1],[0,0,0],[0,0,0]],"tg":0.8443},{"t":"ADTs","id":"ADT 003","model":"CAT 745","loc":"KALIMVA","d":[[1.0,0,0],[1.0,0,0],[6.5,0,0],[0,0,0],[0.5,0,0],[0,0,0],[0.5,0,0]],"tg":0.8443},{"t":"ADTs","id":"ADT 004","model":"CAT 745","loc":"KALIMVA","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.0},{"t":"ADTs","id":"ADT 007","model":"CAT 745","loc":"KALIMVA","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8443},{"t":"ADTs","id":"ADT 008","model":"CAT 745","loc":"WORKSHOP","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8443},{"t":"ADTs","id":"ADT 009","model":"XCMG XDA45","loc":"KALIMVA","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,2.0,1],[0,0,0],[0,0,0]],"tg":0.8443},{"t":"ADTs","id":"ADT 010","model":"XCMG XDA45","loc":"WORKSHOP","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,4.83,0],[0,4.83,0],[0,0,0],[0,0,0]],"tg":0.8314},{"t":"ADTs","id":"ADT 011","model":"XCMG XDA45","loc":"KALIMVA","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.0},{"t":"ADTs","id":"ADT 012","model":"XCMG XDA45","loc":"KALIMVA","d":[[0.5,0,0],[0.5,0,0],[0.5,0,0],[0,15.42,0],[0,15.42,0],[0,0,0],[0,0,0]],"tg":0.8443},{"t":"ADTs","id":"ADT 013","model":"XCMG XDA45","loc":"KALIMVA","d":[[0,22.0,1],[0,24.0,0],[0,24.0,0],[0,8.83,0],[0,0,0],[0,0,0],[0,0.75,0]],"tg":0.8314},{"t":"ADTs","id":"ADT 014","model":"XCMG XDA45","loc":"KALIMVA","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8314},{"t":"ADTs","id":"ADT 015","model":"XCMG XDA45","loc":"KALIMVA","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8314},{"t":"ADTs","id":"ADT 016","model":"XCMG XDA45","loc":"WORKSHOP","d":[[0,14.0,1],[0,8.0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8443},{"t":"ADTs","id":"ADT 017","model":"XCMG XDA45","loc":"WORKSHOP","d":[[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.0},{"t":"ADTs","id":"ADT 018","model":"XCMG XDA45","loc":"WORKSHOP","d":[[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,1.0,0],[0,0,0]],"tg":0.8314},{"t":"ADTs","id":"ADT 019","model":"XCMG XDA45","loc":"WORKSHOP","d":[[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8443},{"t":"ADTs","id":"ADT 020","model":"XCMG XDA45","loc":"TTB PAMAO","d":[[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.83,0,0],[0,0,0],[0,0,0],[0.5,0,0]],"tg":0.8443},{"t":"ADTs","id":"ADT 021","model":"XCMG XDA45","loc":"TTB PAMAO","d":[[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.0,0,0],[0,0,0],[0,0,0],[0.5,0,0]],"tg":0.8443},{"t":"ADTs","id":"ADT 022","model":"XCMG XDA45","loc":"TTB PAMAO","d":[[0.0,0,0],[0.0,0,0],[0.0,0,0],[0.0,0,0],[0.5,0,0],[0,0,0],[0,0,0]],"tg":0.8443},{"t":"ADTs","id":"ADT 023","model":"XCMG XDA45","loc":"TTB PAMAO","d":[[0,0.67,1],[0.5,0,0],[0.5,0,0],[0,5.67,1],[0.5,0,0],[0.5,0,0],[0,0,0]],"tg":0.8443},{"t":"ADTs","id":"ADT 024","model":"XCMG XDA46","loc":"TTB PAMAO","d":[[0.33,0,0],[0.33,0,0],[0.33,0,0],[0,0,0],[0.5,0,0],[0.5,0,0],[0,0,0]],"tg":0.8314},{"t":"Graders","id":"GR001","model":"XCMG GR2405T","loc":"WORKSHOP","d":[[0.5,0,0],[0.5,0,0],[0.5,0,0],[0,2.93,1],[0,0,0],[0.5,0,0],[0.5,0,0]],"tg":0.8443},{"t":"Graders","id":"GR002","model":"XCMG GR2405T","loc":"WORKSHOP","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.0},{"t":"Graders","id":"GR003","model":"SANY SMG 200C-8","loc":"KALIMVA","d":[[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0]],"tg":0.8443},{"t":"Graders","id":"GR004","model":"SANY SMG 200C-8","loc":"KALIMVA","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.8443},{"t":"Fuel bowsers","id":"DB 001","model":"SINO","loc":"TTB PAMAO","d":[[0.17,0,0],[0.17,0,0],[0.17,0,0],[0.17,0,0],[0.17,0,0],[0.17,0,0],[0.17,0,0]],"tg":0.8557},{"t":"Fuel bowsers","id":"DB 002","model":"SINO","loc":"KALIMVA","d":[[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0,0,0]],"tg":0.8557},{"t":"Fuel bowsers","id":"DB 003","model":"SINO","loc":"KALIMVA","d":[[0.33,0,0],[0.33,0,0],[0.33,0,0],[0.33,0,0],[0.33,0,0],[0.33,0,0],[0.33,0,0]],"tg":0.8557},{"t":"Water bowsers","id":"WB 001","model":"SINO","loc":"KALIMVA","d":[[0,1.75,2],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0],[0.5,0,0]],"tg":0.8557},{"t":"Water bowsers","id":"WB 002","model":"SINO","loc":"TTB PAMAO","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.8557},{"t":"Rigs","id":"RIG 001","model":"PRD","loc":"IKAMVA","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":1.0},{"t":"Rigs","id":"RIG 002","model":"PRD","loc":"WORKSHOP","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":1.0},{"t":"Rigs","id":"RIG 003","model":"TATA HITACHI","loc":"TTB PAMAO","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,18.0,0]],"tg":0.8443},{"t":"Cranes","id":"TC001","model":"XCMG HIGH UP 5T","loc":"WORKSHOP","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.88},{"t":"Cranes","id":"TC002","model":"XCMG HIGH UP 5T","loc":"WORKSHOP","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":1.0},{"t":"Cranes","id":"CR001","model":"XCMG CRANE 80T","loc":"DOKO","d":[[0,24.0,1],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.88},{"t":"Forklifts","id":"FL001","model":"XCMG 5T","loc":"WORKSHOP","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8557},{"t":"Forklifts","id":"FL002","model":"HELI 3T","loc":"WORKSHOP","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8557},{"t":"Generators","id":"GEN001","model":"ASHOK LEYLAND","loc":"WORKSHOP","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.88},{"t":"Generators","id":"GEN002","model":"F-WILSON","loc":"BANDAYI","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.88},{"t":"Generators","id":"GEN003","model":"F-WILSON","loc":"AMS WORKSHOP","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":1.0},{"t":"Generators","id":"GEN004","model":"F-WILSON","loc":"STORE","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":1.0},{"t":"Tower lights","id":"TL001","model":"ATLAS COPCO","loc":"MET PLANT","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.762},{"t":"Tower lights","id":"TL002","model":"ATLAS COPCO","loc":"WORKSHOP","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.762},{"t":"Tower lights","id":"TL003","model":"ATLAS COPCO","loc":"WORKSHOP","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.762},{"t":"Tower lights","id":"TL004","model":"ATLAS COPCO","loc":"WORKSHOP","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.762},{"t":"Tower lights","id":"TL005","model":"ATLAS COPCO","loc":"KALIMVA","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.762},{"t":"Tower lights","id":"TL006","model":"ATLAS COPCO","loc":"KALIMVA","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.762},{"t":"Tower lights","id":"TL007","model":"GARISON","loc":"KALIMVA","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.762},{"t":"Tower lights","id":"TL008","model":"GARISON","loc":"KALIMVA","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.762},{"t":"Buses","id":"BS001","model":"TATA","loc":"KALIMVA","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.0},{"t":"Buses","id":"BS002","model":"TATA","loc":"KALIMVA","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8557},{"t":"Light vehicles","id":"LV001","model":"LAND CRUISER","loc":"CEO","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV002","model":"LAND CRUISER","loc":"GM","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV003","model":"LAND CRUISER","loc":"PM","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV004","model":"GWM","loc":"FINANCE","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8671},{"t":"Light vehicles","id":"LV005","model":"LAND CRUISER","loc":"WORKSHOP","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV006","model":"LAND CRUISER","loc":"PRODUCTION","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV007","model":"GWM","loc":"LOGISTIC","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV008","model":"LAND CRUISER","loc":"PRODUCTION","d":[[0,0,0],[0,0,0],[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV009","model":"LAND CRUISER","loc":"PRODUCTION","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.0},{"t":"Light vehicles","id":"LV010","model":"LAND CRUISER","loc":"PRODUCTION","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV011","model":"LAND CRUISER","loc":"MAINTENANCE","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV012","model":"LAND CRUISER","loc":"PRODUCTION","d":[[0,24.0,1],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV013","model":"LAND CRUISER","loc":"SAFETY","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV014","model":"LAND CRUISER","loc":"PRODUCTION","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV015","model":"LAND CRUISER","loc":"DRILLING","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV016","model":"HILUX","loc":"LOGISTIC","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.88},{"t":"Light vehicles","id":"LV017","model":"LAND CRUISER","loc":"MAINTENANCE","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV018","model":"HILUX","loc":"DRILLING","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8371},{"t":"Light vehicles","id":"LV019","model":"HILUX","loc":"MAINTENANCE","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.88},{"t":"Light vehicles","id":"LV020","model":"GWM","loc":"MAINTENANCE","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV021","model":"GWM","loc":"SECURITY","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":1.0},{"t":"Light vehicles","id":"LV022","model":"GWM","loc":"XCMG TEAM","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV023","model":"GWM","loc":"CEO","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV024","model":"GWM","loc":"FLEET MANAGER","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Light vehicles","id":"LV025","model":"GWM","loc":"PRODUCTION MANAGER","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.8614},{"t":"Water pumps","id":"WP001","model":null,"loc":"KALIMVA","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.88},{"t":"Water pumps","id":"WP002","model":null,"loc":"PAKAKA","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.88},{"t":"Water pumps","id":"WP003","model":null,"loc":"WORKSHOP","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0]],"tg":0.0},{"t":"Water pumps","id":"WP004","model":null,"loc":"MET PLANT","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.88},{"t":"Water pumps","id":"WP005","model":null,"loc":"MET PLANT","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.88},{"t":"Water pumps","id":"WP006","model":null,"loc":"STORE","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":1.0},{"t":"Compressors","id":"COMP 001","model":"ATLAS COPCO","loc":"RIG 001","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":1.0},{"t":"Compressors","id":"COMP 002","model":"ATLAS COPCO","loc":"RIG 002","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":1.0},{"t":"Compressors","id":"COMP 003","model":"EUFI","loc":"RIG 003","d":[[0,24.0,1],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,24.0,0],[0,18.0,0]],"tg":0.0},{"t":"Compressors","id":"COMP 004","model":"AIRMAN","loc":"WORKSHOP","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.88},{"t":"Welding plant","id":"WM 001","model":"ATLAS COPCO","loc":"WORKSHOP","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.7533},{"t":"Service van","id":"SV 001","model":"SINOTRUCK","loc":"WORKSHOP","d":[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],"tg":0.7533}],"apps":[{"n":"Excavators","fa":4,"fb":2,"prev":3.33,"req":164.67,"down":343.5,"nf":4,"mtbf":100.17,"mttr":101.25,"av":0.6582,"tg":0.84},{"n":"Dozers","fa":5,"fb":3,"prev":1.87,"req":166.13,"down":679.5,"nf":6,"mtbf":81.19,"mttr":113.25,"av":0.4943,"tg":0.5261},{"n":"ADTs","fa":18,"fb":4,"prev":0.99,"req":167.01,"down":1146.42,"nf":12,"mtbf":123.33,"mttr":79.39,"av":0.7763,"tg":0.7256},{"n":"Graders","fa":2,"fb":2,"prev":1.5,"req":166.5,"down":338.93,"nf":3,"mtbf":81.77,"mttr":112.98,"av":0.4956,"tg":0.6332},{"n":"Fuel bowsers","fa":3,"fb":0,"prev":2.17,"req":165.83,"down":0.0,"nf":0,"mtbf":165.83,"mttr":0,"av":1.0,"tg":0.8557},{"n":"Water bowsers","fa":1,"fb":1,"prev":1.5,"req":166.5,"down":169.75,"nf":3,"mtbf":40.81,"mttr":84.44,"av":0.4947,"tg":0.8557},{"n":"Rigs","fa":2,"fb":1,"prev":0.0,"req":168.0,"down":162.0,"nf":1,"mtbf":114.0,"mttr":162.0,"av":0.6786,"tg":0.9481},{"n":"Cranes","fa":3,"fb":0,"prev":0.0,"req":168.0,"down":120.0,"nf":2,"mtbf":128.0,"mttr":60.0,"av":0.7619,"tg":0.92},{"n":"Forklifts","fa":2,"fb":0,"prev":0.0,"req":168.0,"down":0.0,"nf":0,"mtbf":168.0,"mttr":0,"av":1.0,"tg":0.8557},{"n":"Generators","fa":4,"fb":0,"prev":0.0,"req":168.0,"down":0.0,"nf":0,"mtbf":168.0,"mttr":0,"av":1.0,"tg":0.94},{"n":"Tower lights","fa":6,"fb":3,"prev":0.0,"req":168.0,"down":504.0,"nf":3,"mtbf":105.0,"mttr":168.0,"av":0.625,"tg":0.762},{"n":"Light vehicles","fa":20,"fb":5,"prev":0.0,"req":168.0,"down":744.0,"nf":6,"mtbf":138.24,"mttr":124.0,"av":0.8229,"tg":0.8333},{"n":"Buses","fa":2,"fb":0,"prev":0.0,"req":168.0,"down":168.0,"nf":1,"mtbf":84.0,"mttr":168.0,"av":0.5,"tg":0.4279},{"n":"Water pumps","fa":5,"fb":1,"prev":0.0,"req":168.0,"down":168.0,"nf":1,"mtbf":140.0,"mttr":168.0,"av":0.8333,"tg":0.7533},{"n":"Compressors","fa":4,"fb":0,"prev":0.0,"req":168.0,"down":162.0,"nf":1,"mtbf":127.5,"mttr":162.0,"av":0.7589,"tg":0.72},{"n":"Welding plant","fa":1,"fb":0,"prev":0.0,"req":168.0,"down":0.0,"nf":0,"mtbf":168.0,"mttr":0,"av":1.0,"tg":0.7533},{"n":"Service van","fa":1,"fb":0,"prev":0.0,"req":168.0,"down":0.0,"nf":0,"mtbf":168.0,"mttr":0,"av":1.0,"tg":0.7533}],"fleet":{"av":0.7588077771932642,"down":4706.1,"nf":43,"mtbf":123.64,"mttr":109.44,"tg":0.7659}};
+const DAYL=['Mon 31 Aug','Tue 1 Sep','Wed 2 Sep','Thu 3 Sep','Fri 4 Sep','Sat 5 Sep','Sun 6 Sep'];
+const DS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const REASONS=['Hydraulic leak','Engine fault','Electrical fault','Tyres / undercarriage','Brakes','Scheduled service','Accident damage','Waiting for parts','Other'];
+const N=D.machines.length;
+D.machines.forEach((m,i)=>{m.i=i});
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=(x,d=1)=>x==null?'–':Number(x).toLocaleString('en',{minimumFractionDigits:d,maximumFractionDigits:d});
+const pct=(x,d=1)=>x==null?'–':(x*100).toFixed(d)+'%';
+const ICON_CH='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+
+function dayAv(d){const req=24-d[0];if(req<=0)return 1;return Math.max(0,(req-Math.min(d[1],req))/req)}
+function wk(days){
+  const prev=days.reduce((a,d)=>a+d[0],0),down=days.reduce((a,d)=>a+d[1],0),nf=days.reduce((a,d)=>a+d[2],0);
+  const req=168-prev;
+  return{prev,down,nf,req,av:req>0?Math.max(0,(req-down)/req):1,mtbf:nf?Math.max(0,(req-down)/nf):null,mttr:nf?down/nf:null};
+}
+const mt=m=>m.tg>0?m.tg:D.fleet.tg;
+const st=(av,tg)=>av>=tg?'good':av>=tg-0.15?'warn':'bad';
+const stLabel={good:'On target',warn:'Near target',bad:'Below target'};
+const dayCls=(av,prev)=>av>=0.99?(prev>0?'c-prev':'c-good'):av>=0.5?'c-warn':'c-bad';
+
+let events=[],nextId=1;
+const ui={drawer:null,open:new Set(['Excavators','Dozers']),q:'',loc:'',below:false,
+  entry:{mi:D.machines.findIndex(m=>m.id==='EX 004'),day:3,kind:'breakdown',start:'08:00',end:'14:30',still:false,reason:'Hydraulic leak',note:''}};
+
+function compute(evs){
+  const ms=D.machines.map(m=>({m,days:m.d.map(x=>x.slice())}));
+  evs.forEach(e=>{const d=ms[e.mi].days[e.day];if(e.kind==='breakdown'){d[1]+=e.hours;d[2]+=1}else d[0]+=e.hours});
+  ms.forEach(o=>{o.w=wk(o.days);o.b=o.m.base||(o.m.base=wk(o.m.d));o.da=o.days.map(dayAv)});
+  const groups=D.apps.map(a=>{
+    const mem=ms.filter(o=>o.m.t===a.n);
+    const addDown=mem.reduce((s,o)=>s+o.w.down-o.b.down,0),addNf=mem.reduce((s,o)=>s+o.w.nf-o.b.nf,0);
+    const dAv=mem.reduce((s,o)=>s+o.w.av-o.b.av,0)/mem.length;
+    const nf=a.nf+addNf;
+    const fail=mem.filter(o=>o.w.nf>0);
+    /* Type-level rules reverse-engineered from the Excel sheet: MTBF = average of machine MTBF (required hours when no failure); MTTR = average of machine MTTR over machines that failed */
+    const mtbf=mem.reduce((s,o)=>s+(o.w.nf?o.w.mtbf:o.w.req),0)/mem.length;
+    const mttr=fail.length?fail.reduce((s,o)=>s+o.w.mttr,0)/fail.length:null;
+    return{a,mem,n:a.n,av:Math.min(1,Math.max(0,a.av+dAv)),down:a.down+addDown,nf,
+      prev:a.prev+mem.reduce((s,o)=>s+o.w.prev-o.b.prev,0)/mem.length,
+      mtbf,mttr,tg:a.tg,
+      da:[0,1,2,3,4,5,6].map(d=>mem.reduce((s,o)=>s+o.da[d],0)/mem.length)};
+  });
+  const F=D.fleet;
+  const addDown=ms.reduce((s,o)=>s+o.w.down-o.b.down,0),addNf=ms.reduce((s,o)=>s+o.w.nf-o.b.nf,0);
+  const nf=F.nf+addNf;
+  const fleet={av:groups.reduce((s,g)=>s+g.av,0)/groups.length,down:F.down+addDown,nf,tg:groups.reduce((s,g)=>s+g.tg,0)/groups.length,
+    mtbf:groups.reduce((s,g)=>s+g.mtbf,0)/groups.length,mttr:nf?(F.down+addDown)/nf:null,
+    da:[0,1,2,3,4,5,6].map(d=>ms.reduce((s,o)=>s+o.da[d],0)/N)};
+  return{ms,groups,fleet};
+}
+let C=compute(events);
+const sheetGap=()=>C.ms.filter(o=>o.b.nf===0&&o.b.down>0);
+
+function toast(t){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>{el.hidden=true},3600)}
+function head(title,sub){
+  return`<header class="top"><div><h1>${title}</h1><div class="sub"><span class="weekchip">W36</span><span>31 Aug – 6 Sep 2026</span><span aria-hidden="true">·</span><span>${N} machines, 17 equipment types</span></div></div>
+  <div class="btns"><button class="btn" data-a="export">Export Excel</button><button class="btn" data-a="export">Export PDF</button></div></header>`;
+}
+
+/* ---------- dashboard ---------- */
+function kpi(l,v,u,s,extra=''){return`<div class="kpi ${extra}"><div class="l">${l}</div><div class="v num-h">${v}<small>${u}</small></div><div class="s">${s}</div></div>`}
+function viewDashboard(){
+  const f=C.fleet,s=st(f.av,f.tg),gap=(f.av-f.tg)*100;
+  const g=[...C.groups].sort((a,b)=>a.av-b.av);
+  const bars=g.map(x=>{const k=st(x.av,x.tg);return`<button class="hrow" data-a="goto" data-g="${esc(x.n)}" aria-label="${esc(x.n)} availability ${pct(x.av)}, open in report">
+    <span class="hname">${esc(x.n)}</span><span class="htrack"><i class="bg-${k}" style="width:${x.av*100}%"></i><u style="left:${x.tg*100}%"></u></span><span class="hval num">${pct(x.av,0)}</span></button>`}).join('');
+  const W=420,H=210,L=34,B=26,T=18,pw=W-L-8,ph=H-B-T,bw=pw/7;
+  let svg=`<svg class="chart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Fleet availability by day">`;
+  [0,25,50,75,100].forEach(v=>{const y=T+ph*(1-v/100);svg+=`<line class="grid-l" x1="${L}" x2="${W-8}" y1="${y}" y2="${y}"/><text x="${L-6}" y="${y+3.5}" text-anchor="end">${v}</text>`});
+  f.da.forEach((v,i)=>{const k=st(v,f.tg),h=ph*v,x=L+i*bw+bw*.18,w=bw*.64,y=T+ph-h;
+    svg+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" style="fill:var(--${k==='good'?'good':k==='warn'?'warn':'bad'})"/><text class="val" x="${x+w/2}" y="${y-5}" text-anchor="middle">${(v*100).toFixed(0)}</text><text x="${x+w/2}" y="${H-8}" text-anchor="middle">${DS[i]}</text>`});
+  const ty=T+ph*(1-f.tg);svg+=`<line class="tg" x1="${L}" x2="${W-8}" y1="${ty}" y2="${ty}"/></svg>`;
+  const loc={};C.ms.forEach(o=>{(loc[o.m.loc]=loc[o.m.loc]||[]).push(o)});
+  const locs=Object.entries(loc).sort((a,b)=>b[1].length-a[1].length).slice(0,6).map(([n,a])=>{const av=a.reduce((s,o)=>s+o.w.av,0)/a.length,k=st(av,f.tg);
+    return`<div class="hrow" style="cursor:default"><span class="hname">${esc(n.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()))}</span><span class="htrack"><i class="bg-${k}" style="width:${av*100}%"></i><u style="left:${f.tg*100}%"></u></span><span class="hval num">${pct(av,0)}</span></div>`}).join('');
+  const worst=[...C.ms].sort((a,b)=>b.w.down-a.w.down).slice(0,8).map(o=>{const k=st(o.w.av,mt(o.m));
+    return`<tr><td class="l"><button class="mbtn" data-a="machine" data-i="${o.m.i}"><b>${esc(o.m.id)}</b><span>${esc(o.m.model)} · ${esc(o.m.loc.toLowerCase())}</span></button></td><td class="num">${fmt(o.w.down,0)}</td><td class="num">${o.w.nf}</td><td><span class="pill ${k}">${pct(o.w.av,0)}</span></td></tr>`}).join('');
+  const gap3=sheetGap();
+  return head('Fleet availability')+`
+  ${gap3.length?`<div class="callout" role="note"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--warn-ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:2px"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.01"/></svg><div><b>Data check on the source sheet</b><p>${gap3.map(o=>esc(o.m.id)).join(', ')} show downtime but no failure count, so Excel reports them at 100% availability. This system calculates ${gap3.map(o=>pct(o.b.av,0)).join(', ')}. Fleet and type availability still follow your Excel figures.</p></div></div>`:''}
+  <section class="grid g-kpi" aria-label="Key figures">
+    <div class="kpi main-kpi"><div class="l">Fleet availability</div><div class="v">${(f.av*100).toFixed(1)}<small>%</small> <span class="pill ${s}" style="margin-left:8px;font-family:var(--f-body)">${stLabel[s]}</span></div>
+      <div class="meter"><i class="bg-${s}" style="width:${f.av*100}%"></i><u style="left:${f.tg*100}%"></u></div>
+      <div class="s">Target ${pct(f.tg)} · ${gap>=0?'+':'−'}${Math.abs(gap).toFixed(1)} pt ${gap>=0?'above':'below'}</div></div>
+    ${kpi('Downtime',fmt(f.down,0),'h','Across all machines')}
+    ${kpi('Failures',f.nf,'','Breakdowns logged')}
+    ${kpi('MTBF',fmt(f.mtbf,0),'h','Mean time between failures')}
+    ${kpi('MTTR',fmt(f.mttr,0),'h','Mean time to repair')}
+  </section>
+  <section class="grid g-2">
+    <div class="panel"><h2>Availability by equipment type</h2><p class="hint">Worst first. The black tick is each type's weekly target. Select a bar to open it in the report.</p>
+      <div class="hbars">${bars}</div>
+      <div class="legend"><span><i class="sw bg-good"></i>On target</span><span><i class="sw bg-warn"></i>Within 15 pts</span><span><i class="sw bg-bad"></i>Below</span><span><i class="tick-sw"></i>Target</span></div></div>
+    <div class="grid" style="align-content:start">
+      <div class="panel"><h2>Fleet availability by day</h2><p class="hint">Average across all machines, %. Dashed line is the fleet target.</p>${svg}</div>
+      <div class="panel"><h2>By location</h2><p class="hint">Six locations with the most machines.</p><div class="hbars">${locs}</div></div>
+    </div>
+  </section>
+  <section class="panel"><h2>Machines needing attention</h2><p class="hint">Most downtime this week. Select a machine for its daily breakdown.</p>
+    <div class="tw" style="border:0"><table><thead><tr><th class="l">Machine</th><th>Down h</th><th>Failures</th><th>Availability</th></tr></thead><tbody>${worst}</tbody></table></div></section>`;
+}
+
+/* ---------- weekly report ---------- */
+function strip(arr,prevArr){return`<span class="strip">${arr.map((v,i)=>`<i class="${dayCls(v,prevArr?prevArr[i]:0)}" title="${DAYL[i]}: ${(v*100).toFixed(0)}% available"></i>`).join('')}</span>`}
+function avCell(av,tg){const k=st(av,tg);return`<span class="avbar"><span class="t"><i class="bg-${k}" style="width:${av*100}%"></i></span><span class="num fg-${k}">${pct(av)}</span></span>`}
+function viewReport(){
+  const locs=[...new Set(D.machines.map(m=>m.loc))].sort();
+  const q=ui.q.trim().toLowerCase();
+  let body='';
+  C.groups.forEach(g=>{
+    let mem=g.mem.filter(o=>(!q||(o.m.id+' '+o.m.model+' '+o.m.loc).toLowerCase().includes(q))&&(!ui.loc||o.m.loc===ui.loc)&&(!ui.below||o.w.av<o.m.tg));
+    const filtered=q||ui.loc||ui.below;
+    if(filtered&&!mem.length)return;
+    const open=filtered||ui.open.has(g.n);
+    const k=st(g.av,g.tg);
+    const dn=g.mem.filter(o=>o.w.down>=168-.5).length;
+    body+=`<tr class="grp"><td class="l"><button class="gbtn" data-a="toggle" data-g="${esc(g.n)}" aria-expanded="${open}">${ICON_CH}<span>${esc(g.n)}</span><span class="gsub">${g.mem.length} machines</span></button></td>
+      <td class="l">${strip(g.da)}</td><td class="num">${fmt(g.prev)}</td><td class="num">${fmt(g.down)}</td><td class="num">${g.nf}</td><td class="num">${fmt(g.mtbf)}</td><td class="num">${fmt(g.mttr)}</td><td>${avCell(g.av,g.tg)}</td><td class="num">${pct(g.tg,0)}</td></tr>`;
+    if(open)mem.forEach(o=>{
+      const m=o.m,flag=o.b.nf===0&&o.b.down>0&&!events.some(e=>e.mi===m.i)?`<span class="flag" title="Downtime recorded with no failure count. Excel shows 100%.">!</span>`:'';
+      body+=`<tr class="mach"><td class="l"><button class="mbtn" data-a="machine" data-i="${m.i}"><b>${esc(m.id)}</b><span>${esc(m.model)} · ${esc(m.loc.toLowerCase())}</span></button></td>
+      <td class="l">${strip(o.da,o.days.map(d=>d[0]))}</td><td class="num">${fmt(o.w.prev)}</td><td class="num">${fmt(o.w.down)}</td><td class="num">${o.w.nf}</td><td class="num">${fmt(o.w.mtbf)}</td><td class="num">${fmt(o.w.mttr)}</td><td>${avCell(o.w.av,mt(m))}${flag}</td><td class="num">${m.tg>0?pct(m.tg,0):'–'}</td></tr>`});
+  });
+  const f=C.fleet;
+  const prevAll=C.ms.reduce((s,o)=>s+o.w.prev,0)/N;
+  body+=`<tr class="tot"><td class="l">Fleet total</td><td class="l">${strip(f.da)}</td><td class="num">${fmt(prevAll)}</td><td class="num">${fmt(f.down)}</td><td class="num">${f.nf}</td><td class="num">${fmt(f.mtbf)}</td><td class="num">${fmt(f.mttr)}</td><td>${avCell(f.av,f.tg)}</td><td class="num">${pct(f.tg,0)}</td></tr>`;
+  return head('Weekly report')+`
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Search machine, model or location" value="${esc(ui.q)}" aria-label="Search machines">
+    <select id="loc" aria-label="Location"><option value="">All locations</option>${locs.map(l=>`<option ${l===ui.loc?'selected':''}>${esc(l)}</option>`).join('')}</select>
+    <label class="chk"><input type="checkbox" id="below" ${ui.below?'checked':''}> Below target only</label>
+    <span style="margin-left:auto" class="btns"><button class="btn" data-a="all">Expand all</button><button class="btn" data-a="none">Collapse all</button></span>
+  </div>
+  <div class="tw"><table><thead><tr><th class="l">Equipment</th><th class="l">Daily availability Mon–Sun</th><th>Preventive h</th><th>Down h</th><th>Failures</th><th>MTBF h</th><th>MTTR h</th><th>Availability</th><th>Target</th></tr></thead><tbody>${body}</tbody></table></div>
+  <div class="legend"><span><i class="sw c-good" style="border:1px solid var(--good)"></i>Available</span><span><i class="sw c-prev"></i>Preventive maintenance</span><span><i class="sw c-warn"></i>Partly down</span><span><i class="sw c-bad"></i>Mostly down</span><span>Type rows show the average of their machines.</span></div>`;
+}
+
+/* ---------- log downtime ---------- */
+const tmin=t=>{const [h,m]=t.split(':').map(Number);return h*60+m};
+function entryHours(){const e=ui.entry;const end=e.still?1440:tmin(e.end||'00:00');return Math.max(0,(end-tmin(e.start||'00:00'))/60)}
+function renderPreview(){
+  const e=ui.entry,o=C.ms[e.mi],h=entryHours();
+  if(!(h>0)){$('#preview').innerHTML=`<div class="empty">Set a start and end time to see the effect on ${esc(o.m.id)}.</div>`;return}
+  const days=o.days.map(x=>x.slice());const d=days[e.day];
+  if(e.kind==='breakdown'){d[1]+=h;d[2]+=1}else d[0]+=h;
+  const a=wk(o.days),b=wk(days),da=dayAv(o.days[e.day]),db=dayAv(d);
+  const row=(l,x,y,f,bad)=>`<tr><td class="l">${l}</td><td class="num">${f(x)}</td><td class="arrow">→</td><td class="num ${bad?'fg-bad':''}">${f(y)}</td></tr>`;
+  $('#preview').innerHTML=`<table class="pv"><thead><tr><th class="l">${esc(o.m.id)} · ${DAYL[e.day]}</th><th>Now</th><th></th><th>After</th></tr></thead><tbody>
+    ${row('Availability that day',da,db,x=>pct(x,0),db<da)}
+    ${row('Availability this week',a.av,b.av,x=>pct(x),b.av<a.av)}
+    ${row('Down hours',a.down,b.down,x=>fmt(x))}
+    ${row('Preventive hours',a.prev,b.prev,x=>fmt(x))}
+    ${row('Failures',a.nf,b.nf,x=>x)}
+    ${row('MTBF h',a.mtbf,b.mtbf,x=>fmt(x))}
+    ${row('MTTR h',a.mttr,b.mttr,x=>fmt(x))}</tbody></table>
+    <div class="formula"><span>Required time = 168 − preventive hours</span><span>Availability = <code>(required − down) ÷ required</code></span><span>MTBF = <code>(required − down) ÷ failures</code> · MTTR = <code>down ÷ failures</code></span></div>`;
+}
+function renderBoard(){
+  const e=ui.entry,by={};
+  C.ms.forEach(o=>{(by[o.m.t]=by[o.m.t]||[]).push(o)});
+  $('#board').innerHTML=Object.entries(by).map(([t,a])=>`<div class="bgroup"><b>${esc(t)}</b><div class="chips">${a.map(o=>{const d=o.days[e.day];
+    return`<button type="button" class="chip ${dayCls(dayAv(d),d[0])} ${o.m.i===e.mi?'sel':''}" data-a="pick" data-i="${o.m.i}" title="${esc(o.m.model)}: ${(dayAv(d)*100).toFixed(0)}% available on ${DAYL[e.day]}">${esc(o.m.id)}</button>`}).join('')}</div></div>`).join('');
+}
+function renderLog(){
+  const el=$('#log');
+  el.innerHTML=events.length?`<ul class="evl">${events.map(v=>`<li><span><b class="num">${esc(D.machines[v.mi].id)}</b> · ${DAYL[v.day]} · ${v.kind==='breakdown'?'Breakdown':'Preventive'} ${fmt(v.hours)} h · ${esc(v.reason)}${v.note?' · '+esc(v.note):''}</span><button class="xbtn" data-a="del" data-id="${v.id}">Remove</button></li>`).join('')}</ul>`:`<div class="empty">Nothing logged yet. Events you add here change the numbers on the dashboard and the weekly report.</div>`;
+}
+function viewEntry(){
+  const e=ui.entry,by={};D.machines.forEach(m=>{(by[m.t]=by[m.t]||[]).push(m)});
+  return head('Log downtime')+`
+  <div class="g-entry">
+    <form class="panel" id="form" novalidate>
+      <h2>New event</h2><p class="hint">Users enter what happened. The system calculates every KPI.</p>
+      <div class="row2"><div class="field"><label for="f-day">Date</label><select id="f-day">${DAYL.map((d,i)=>`<option value="${i}" ${i===e.day?'selected':''}>${d}</option>`).join('')}</select></div>
+      <div class="field"><label for="f-mi">Machine</label><select id="f-mi">${Object.entries(by).map(([t,a])=>`<optgroup label="${esc(t)}">${a.map(m=>`<option value="${m.i}" ${m.i===e.mi?'selected':''}>${esc(m.id)}</option>`).join('')}</optgroup>`).join('')}</select></div></div>
+      <div class="field"><span class="lab">Type</span><div class="seg" role="radiogroup" aria-label="Event type"><label><input type="radio" name="kind" value="breakdown" ${e.kind==='breakdown'?'checked':''}><span>Breakdown</span></label><label><input type="radio" name="kind" value="preventive" ${e.kind==='preventive'?'checked':''}><span>Preventive</span></label></div></div>
+      <div class="row2"><div class="field"><label for="f-start">Down from</label><input type="time" id="f-start" value="${e.start}"></div>
+      <div class="field"><label for="f-end">Back at</label><input type="time" id="f-end" value="${e.end}" ${e.still?'disabled':''}></div></div>
+      <label class="chk" style="margin:-4px 0 12px"><input type="checkbox" id="f-still" ${e.still?'checked':''}> Still down at end of day</label>
+      <div class="field"><label for="f-reason">Reason</label><select id="f-reason">${REASONS.map(r=>`<option ${r===e.reason?'selected':''}>${r}</option>`).join('')}</select></div>
+      <div class="field"><label for="f-note">Comment (optional)</label><textarea id="f-note" rows="2" placeholder="Part ordered, mechanic on site…">${esc(e.note)}</textarea></div>
+      <p class="err" id="err" role="alert"></p>
+      <button class="btn primary" type="submit">Log event</button>
+    </form>
+    <div class="panel"><h2>Effect on the report</h2><p class="hint">Updates as you type.</p><div id="preview"></div></div>
+  </div>
+  <div class="grid g-2b">
+    <div class="panel"><h2>Machine status on the day</h2><p class="hint">Pick a machine to fill the form. Colours follow the date selected.</p><div class="board" id="board"></div>
+      <div class="legend"><span><i class="sw c-good" style="border:1px solid var(--good)"></i>Available</span><span><i class="sw c-prev"></i>Preventive</span><span><i class="sw c-warn"></i>Partly down</span><span><i class="sw c-bad"></i>Mostly down</span></div></div>
+    <div class="panel"><h2>Events logged in this session</h2><p class="hint">Remove one to restore the original figure.</p><div id="log"></div></div>
+  </div>`;
+}
+function afterEntry(){renderPreview();renderBoard();renderLog()}
+
+/* ---------- drawer ---------- */
+function drawerHtml(i){
+  const o=C.ms[i],m=o.m,k=st(o.w.av,mt(m)),ev=events.filter(e=>e.mi===i);
+  const cols=o.days.map((d,j)=>{const down=Math.min(d[1],24-d[0]),up=24-d[0]-down;
+    return`<div class="dcol"><div class="dstack" title="${DAYL[j]}: ${fmt(down)} h down, ${fmt(d[0])} h preventive"><i style="height:${down/24*100}%;background:var(--bad)"></i><i style="height:${d[0]/24*100}%;background:var(--prev)"></i></div><span>${down>0?fmt(down,0):'·'}</span>${DS[j]}</div>`}).join('');
+  return`<div class="scrim" data-a="close"></div><aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(m.id)} detail">
+    <div class="dh"><div><h2>${esc(m.id)}</h2><p>${esc(m.model)} · ${esc(m.t)} · ${esc(m.loc.toLowerCase())}</p></div><button class="x" data-a="close" id="xbtn" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <span class="pill ${k}">${stLabel[k]} · ${pct(o.w.av)} vs ${pct(mt(m),0)}</span>
+    <div class="dk"><div><small>Down h</small><b>${fmt(o.w.down)}</b></div><div><small>Failures</small><b>${o.w.nf}</b></div><div><small>Preventive h</small><b>${fmt(o.w.prev)}</b></div><div><small>MTBF h</small><b>${fmt(o.w.mtbf)}</b></div><div><small>MTTR h</small><b>${fmt(o.w.mttr)}</b></div><div><small>Required h</small><b>${fmt(o.w.req)}</b></div></div>
+    <h3 style="font-size:18px;margin-top:6px">Hours down per day</h3>
+    <div class="dbars">${cols}</div>
+    <div class="legend"><span><i class="sw" style="background:var(--bad)"></i>Down</span><span><i class="sw" style="background:var(--prev)"></i>Preventive</span><span><i class="sw" style="background:var(--good-bg);border:1px solid var(--good)"></i>Available</span></div>
+    ${o.b.nf===0&&o.b.down>0?`<div class="callout" style="margin:14px 0 0"><div><b>Data check</b><p>Downtime is recorded but no failure was counted, so the source sheet shows 100%. Calculated here: ${pct(o.b.av,0)}.</p></div></div>`:''}
+    <h3 style="font-size:18px;margin-top:18px">Events logged here</h3>
+    ${ev.length?`<ul class="evl">${ev.map(v=>`<li><span>${DAYL[v.day]} · ${v.kind==='breakdown'?'Breakdown':'Preventive'} ${fmt(v.hours)} h · ${esc(v.reason)}</span></li>`).join('')}</ul>`:`<p class="hint" style="margin-top:6px">None this session.</p>`}
+    <div class="btns" style="margin-top:16px"><button class="btn primary" data-a="logfor" data-i="${i}">Log downtime for ${esc(m.id)}</button></div></aside>`;
+}
+let lastFocus=null;
+function openDrawer(i){lastFocus=document.activeElement;ui.drawer=i;$('#layer').innerHTML=drawerHtml(i);$('#xbtn').focus()}
+function closeDrawer(){ui.drawer=null;$('#layer').innerHTML='';if(lastFocus&&document.contains(lastFocus))lastFocus.focus()}
+
+/* ---------- router ---------- */
+function route(){
+  const v=['dashboard','report','entry'].includes(location.hash.slice(1))?location.hash.slice(1):'dashboard';
+  ui.view=v;
+  document.querySelectorAll('#nav a').forEach(a=>{if(a.dataset.v===v)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+  render();
+}
+function render(){
+  C=compute(events);
+  $('#main').innerHTML=ui.view==='dashboard'?viewDashboard():ui.view==='report'?viewReport():viewEntry();
+  if(ui.view==='entry')afterEntry();
+  if(ui.drawer!=null){$('#layer').innerHTML=drawerHtml(ui.drawer);}
+}
+window.addEventListener('hashchange',()=>{closeDrawer();route();window.scrollTo(0,0)});
+
+document.addEventListener('click',ev=>{
+  const t=ev.target.closest('[data-a]');if(!t)return;
+  const a=t.dataset.a;
+  if(a==='toggle'){const g=t.dataset.g;ui.open.has(g)?ui.open.delete(g):ui.open.add(g);render();
+    const b=document.querySelector(`[data-a="toggle"][data-g="${CSS.escape(g)}"]`);if(b)b.focus()}
+  else if(a==='all'){D.apps.forEach(x=>ui.open.add(x.n));render()}
+  else if(a==='none'){ui.open.clear();ui.q='';ui.loc='';ui.below=false;render()}
+  else if(a==='machine')openDrawer(+t.dataset.i);
+  else if(a==='close')closeDrawer();
+  else if(a==='export')toast('Export is not part of this mockup. The real system produces .xlsx and PDF in the same layout as your sheet.');
+  else if(a==='goto'){ui.open.add(t.dataset.g);ui.q='';ui.loc='';ui.below=false;location.hash='#report';setTimeout(()=>{const b=document.querySelector(`[data-a="toggle"][data-g="${CSS.escape(t.dataset.g)}"]`);if(b){b.scrollIntoView({block:'center'});b.focus()}},30)}
+  else if(a==='pick'){ui.entry.mi=+t.dataset.i;$('#f-mi').value=t.dataset.i;renderPreview();renderBoard()}
+  else if(a==='logfor'){ui.entry.mi=+t.dataset.i;closeDrawer();if(location.hash==='#entry')render();else location.hash='#entry'}
+  else if(a==='del'){events=events.filter(e=>e.id!==+t.dataset.id);C=compute(events);afterEntry();toast('Event removed. Figures restored.')}
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ui.drawer!=null)closeDrawer()});
+document.addEventListener('input',e=>{
+  const id=e.target.id;
+  if(id==='q'){ui.q=e.target.value;const p=e.target.selectionStart;render();const q=$('#q');q.focus();q.setSelectionRange(p,p)}
+  else if(id==='loc'){ui.loc=e.target.value;render();$('#loc').focus()}
+  else if(id==='below'){ui.below=e.target.checked;render();$('#below').focus()}
+  else if(id&&id.startsWith('f-')||e.target.name==='kind'){
+    const en=ui.entry;
+    if(id==='f-day')en.day=+e.target.value;
+    else if(id==='f-mi')en.mi=+e.target.value;
+    else if(e.target.name==='kind')en.kind=e.target.value;
+    else if(id==='f-start')en.start=e.target.value;
+    else if(id==='f-end')en.end=e.target.value;
+    else if(id==='f-still'){en.still=e.target.checked;$('#f-end').disabled=en.still}
+    else if(id==='f-reason')en.reason=e.target.value;
+    else if(id==='f-note')en.note=e.target.value;
+    renderPreview();renderBoard();
+  }
+});
+document.addEventListener('submit',e=>{
+  if(e.target.id!=='form')return;e.preventDefault();
+  const en=ui.entry,h=entryHours(),err=$('#err');
+  if(!(h>0)){err.textContent='The end time must be later than the start time.';return}
+  const prevH=C.ms[en.mi].days[en.day][0]+C.ms[en.mi].days[en.day][1];
+  if(prevH+h>24.01){err.textContent='That adds up to more than 24 hours for this machine on this day.';return}
+  err.textContent='';
+  events.push({id:nextId++,mi:en.mi,day:en.day,kind:en.kind,hours:h,reason:en.reason,note:en.note.trim()});
+  en.note='';$('#f-note').value='';
+  C=compute(events);afterEntry();
+  toast(`Logged ${fmt(h)} h for ${D.machines[en.mi].id}. Dashboard and weekly report are updated.`);
+});
+route();
+</script>
+
+</body></html>
