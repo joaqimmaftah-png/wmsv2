@@ -19,6 +19,8 @@ assert.match(view, /reports\/export_workshop_weekly_pdf\?week_start=/);
 assert.match(view, /equipment\/view\//);
 assert.match(view, /workorders\/view\//);
 assert.doesNotMatch(view, /EX 004|Hydraulic leak|events logged here/i, 'reference mock data and mock logging must not enter production');
+assert.doesNotMatch(view, /IBM Plex|Barlow Condensed|JetBrains Mono/, 'report typography must inherit the shared WMS font stack');
+assert.match(view, /\.wwr\{[^}]*font-family:inherit/s, 'report root inherits the application font');
 assert.match(view, /Below target only/);
 assert.match(view, /Expand all/);
 assert.match(view, /Collapse all/);
