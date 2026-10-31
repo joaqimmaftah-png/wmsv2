@@ -1321,6 +1321,18 @@ class Reports extends MY_Controller {
             $machine_target = $this->Kpi_engine_model->target_for($eq->id, $week_end);
             $totalDt        = $k === null ? 0.0 : round((float)$k['downtime_hours'], 2);
 
+            $machine_wos = [];
+            foreach ($eq_wos as $wo) {
+                $machine_wos[] = [
+                    'id' => (int)$wo->id,
+                    'number' => isset($wo->wo_number) ? (string)$wo->wo_number : ('WO #'.(int)$wo->id),
+                    'status' => isset($wo->status) ? (string)$wo->status : '',
+                    'date' => !empty($wo->start_datetime) ? date('Y-m-d', strtotime($wo->start_datetime)) : '',
+                    'observation' => trim((string)($wo->symptoms ?? ($wo->description ?? ($wo->title ?? '')))),
+                    'action' => trim((string)($wo->action_taken ?? '')),
+                ];
+            }
+
             $groups[$type]['machines'][] = [
                 'equipment_id' => (int)$eq->id,
                 'machine_id'   => $eq->registration_no,
@@ -1331,6 +1343,13 @@ class Reports extends MY_Controller {
                 'days_down'    => $daysDown,
                 'availability' => $availability,
                 'target'       => $machine_target,
+                'preventive_hours' => $k === null ? 0.0 : (float)$k['preventive_hours'],
+                'required_time_hours' => $k === null ? 0.0 : (float)$k['required_time_hours'],
+                'failures'     => $k === null ? 0 : (int)$k['breakdowns'],
+                'mtbf_hours'   => $k === null ? null : $k['mtbf_hours'],
+                'mttr_hours'   => $k === null ? null : $k['mttr_hours'],
+                'daily'        => $k === null ? [] : $k['daily'],
+                'work_orders'  => $machine_wos,
                 'status_code'  => $statusCode,
                 'status_label' => $isDown ? 'Not Operational' : 'Operational',
                 'observations' => $observations,
@@ -1343,6 +1362,7 @@ class Reports extends MY_Controller {
 
         // Group summaries — the group's availability is a required-weighted rollup
         // of its machines (engine->rollup), not the average of their percentages.
+        $fleet_target = $this->Kpi_engine_model->target_for(null, $week_end);
         foreach ($groups as &$g) {
             $total = count($g['machines']);
             $down  = 0; $kpi_members = [];
@@ -1360,7 +1380,54 @@ class Reports extends MY_Controller {
             $g['weekly_kpi']= $rollup['availability'] === null ? null : round($rollup['availability'], 4);
             $g['kpi_rollup']= $rollup;                       // downtime / breakdowns / MTTR / MTBF for the group
             $g['target']    = $rollup['weekly_target'] !== null ? $rollup['weekly_target'] : $default_target;
+
+            // Keep the seven-day summary on the same required-time-weighted KPI
+            // engine as the weekly figures; do not average machine percentages.
+            $g['daily'] = [];
+            for ($day_offset = 0; $day_offset < 7; $day_offset++) {
+                $day = date('Y-m-d', strtotime($week_start.' +'.$day_offset.' days'));
+                $daily_members = [];
+                foreach ($g['machines'] as $machine) {
+                    $cell = isset($machine['daily'][$day]) ? $machine['daily'][$day] : null;
+                    if ($cell === null) continue;
+                    $daily_members[] = [
+                        'required_time_hours' => isset($cell['required_hours']) ? $cell['required_hours'] : 0,
+                        'downtime_hours' => isset($cell['downtime_hours']) ? $cell['downtime_hours'] : 0,
+                        'preventive_hours' => isset($cell['preventive_hours']) ? $cell['preventive_hours'] : 0,
+                        'breakdowns' => isset($cell['failures']) ? $cell['failures'] : 0,
+                        'target' => $machine['target'],
+                    ];
+                }
+                $daily_rollup = $this->Kpi_engine_model->rollup($daily_members);
+                $daily_rollup['date'] = $day;
+                $g['daily'][$day] = $daily_rollup;
+            }
+            // The fleet card uses the engine's existing fleet roll-up (not a
+            // mean of type percentages). Repeated as metadata so the returned
+            // report remains the same group-keyed structure used by exports.
+            $g['fleet_kpi'] = $kpi_window['fleet'];
+            $g['fleet_target'] = $fleet_target;
         }
+        unset($g);
+
+        $fleet_daily = [];
+        for ($day_offset = 0; $day_offset < 7; $day_offset++) {
+            $day = date('Y-m-d', strtotime($week_start.' +'.$day_offset.' days'));
+            $daily_members = [];
+            foreach ($kpi_window['machines'] as $machine_kpi) {
+                $cell = isset($machine_kpi['daily'][$day]) ? $machine_kpi['daily'][$day] : null;
+                if ($cell === null) continue;
+                $daily_members[] = [
+                    'required_time_hours' => isset($cell['required_hours']) ? $cell['required_hours'] : 0,
+                    'downtime_hours' => isset($cell['downtime_hours']) ? $cell['downtime_hours'] : 0,
+                    'preventive_hours' => isset($cell['preventive_hours']) ? $cell['preventive_hours'] : 0,
+                    'breakdowns' => isset($cell['failures']) ? $cell['failures'] : 0,
+                ];
+            }
+            $fleet_daily[$day] = $this->Kpi_engine_model->rollup($daily_members);
+            $fleet_daily[$day]['date'] = $day;
+        }
+        foreach ($groups as &$g) $g['fleet_daily'] = $fleet_daily;
         unset($g);
 
         return $groups;
