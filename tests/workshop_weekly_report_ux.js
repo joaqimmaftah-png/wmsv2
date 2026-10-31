@@ -25,6 +25,10 @@ assert.match(view, /Below target only/);
 assert.match(view, /Expand all/);
 assert.match(view, /Collapse all/);
 assert.match(view, /Daily availability/);
+assert.match(view, /availability >= \$target - \.15/, 'availability tones use the reference report threshold');
+assert.match(view, /wwr-av-track/);
+assert.match(view, /width:54px;height:6px/, 'availability is shown with the reference-style micro bar');
+assert.match(view, /\$availabilityBar\(\$machineAv, \$machineTarget\)/);
 
 function makeGroup(id) {
   const button = { attrs: {}, setAttribute(name, value) { this.attrs[name] = value; } };
