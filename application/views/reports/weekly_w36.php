@@ -76,6 +76,12 @@ $pct = function ($v) use ($num) {
 $misses = function ($value, $target) {
     return $value !== null && $target !== null && (float)$value < (float)$target;
 };
+$availability_tone = function ($value, $target) {
+    if ($value === null || $target === null) return 'neutral';
+    if ((float)$value >= (float)$target) return 'good';
+    if ((float)$value >= (float)$target - .15) return 'warn';
+    return 'bad';
+};
 
 $day_name = function ($d) { return date('D d/m', strtotime($d)); };
 // Current W36 payloads key daily values by ISO date. Accept numeric keys as a
@@ -84,6 +90,32 @@ $day_row = function ($daily, $day, $index) {
     if (!is_array($daily)) return null;
     if (isset($daily[$day]) && is_array($daily[$day])) return $daily[$day];
     return isset($daily[$index]) && is_array($daily[$index]) ? $daily[$index] : null;
+};
+
+$availability_bar = function ($value, $target) use ($esc, $pct, $availability_tone) {
+    $tone = $availability_tone($value, $target);
+    $width = $value === null ? 0 : max(0, min(100, (float)$value * 100));
+    $label = $pct($value);
+    return '<span class="w36-avbar" aria-label="Availability '.$esc($label).'"><span class="w36-av-track"><i class="w36-av-fill '.$esc($tone).'" style="width:'.$width.'%"></i></span><span class="w36-av-value '.$esc($tone).'">'.$esc($label).'</span></span>';
+};
+$daily_strip = function ($daily) use ($days, $day_row, $pct, $availability_tone, $esc) {
+    $html = '<span class="w36-strip" aria-label="Daily availability Monday to Sunday">';
+    foreach ($days as $i => $day) {
+        $cell = $day_row($daily, $day, $i);
+        $value = $cell && isset($cell['availability']) ? $cell['availability'] : null;
+        $target = $cell && array_key_exists('target', $cell) ? $cell['target'] : null;
+        $tone = $availability_tone($value, $target);
+        $preventive = $cell && isset($cell['preventive_hours']) ? (float)$cell['preventive_hours'] : 0;
+        if ($value !== null && $preventive > 0 && (float)$value >= .99) $tone = 'prev';
+        $title = $day_name = date('D d M', strtotime($day));
+        $title .= ': '.$pct($value);
+        if ($target !== null) $title .= ' vs target '.$pct($target);
+        if ($cell && isset($cell['downtime_hours'])) $title .= ' · '.$cell['downtime_hours'].' h down';
+        if ($preventive > 0) $title .= ' · '.$preventive.' h preventive';
+        if ($value === null) $title .= ' · no reading';
+        $html .= '<i class="'.$esc($tone).'" title="'.$esc($title).'"></i>';
+    }
+    return $html.'</span>';
 };
 
 // the data-readiness panel buckets the model's notes
@@ -110,6 +142,16 @@ foreach ($order as $id) {
     if ((float)$machines[$id]['weekly']['hours_down'] > 0) $down_machines++;
 }
 $machine_total = count($machines);
+$fleet_available = max(0, $machine_total - $down_machines);
+$locations = array();
+$unclassified_ids = array();
+foreach ($order as $id) {
+    if (empty($machines[$id])) continue;
+    $site_label = trim((string)(isset($machines[$id]['site']['label']) ? $machines[$id]['site']['label'] : ''));
+    if ($site_label !== '') $locations[$site_label] = $site_label;
+    if (empty($machines[$id]['group_code'])) $unclassified_ids[] = $id;
+}
+ksort($locations, SORT_NATURAL | SORT_FLAG_CASE);
 
 // the weekly block, in the sheet's own order (BG:BP).  OPEN-5/D28: the D4 days-down
 // count is its first column, as on the sheet.
@@ -124,6 +166,16 @@ $weekly_cols = array(
     'mttr'      => 'MTTR',
     'av'        => 'OPERATIONAL AVAILABILITY',
     'target'    => 'DAILY TARGET KPI',
+);
+
+$detail_rows = array(
+    'Preventive h' => 'preventive_hours', 'Down h' => 'downtime_hours', 'Failures' => 'failures',
+    'MTBF h' => 'mtbf_hours', 'MTTR h' => 'mttr_hours', 'Availability' => 'availability', 'Target' => 'target',
+);
+$detail_week_key = array(
+    'preventive_hours' => 'preventive_hours', 'downtime_hours' => 'downtime_hours',
+    'failures' => 'breakdowns', 'mtbf_hours' => 'mtbf_hours', 'mttr_hours' => 'mttr_hours',
+    'availability' => 'availability', 'target' => 'weekly_target',
 );
 
 $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
@@ -222,6 +274,78 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   .w36-meter-tick{ position:absolute; top:-3px; bottom:-3px; width:2px; background:#111827; }
   .w36-chart-note{ color:#6b7280; font-size:12px; margin-top:6px; }
   .w36-small   { font-size:12px; color:#6b7280; }
+
+  /* Main W36 grid follows the Workshop Weekly table hierarchy: one compact
+     summary row per type, a seven-day strip, and details on demand. */
+  .w36-main-wrap { overflow:auto; border:1px solid #d0d8db; border-radius:8px; background:#f8f9f9; }
+  .w36-table-tools { align-items:center; gap:8px; margin:14px 0 8px; }
+  .w36-table-tools[hidden] { display:none!important; }
+  .w36-table-tools label { font-size:12px; color:#586a72; }
+  .w36-table-tools input[type=search], .w36-table-tools select { height:36px; padding:0 10px; border:1px solid #d0d8db; border-radius:6px; background:#f8f9f9; color:#14232b; font:inherit; }
+  .w36-table-tools input[type=search] { width:min(310px,70vw); }
+  .w36-table-tools select { min-width:145px; }
+  .w36-filter-below { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .w36-filter-below input { accent-color:#0b6e7f; }
+  #w36-search-count { margin-left:auto; color:#586a72; font-size:11px; white-space:nowrap; }
+  .w36-table-actions { display:flex; gap:7px; margin-left:auto; }
+  .w36-table-actions .w36-btn { padding:7px 11px; background:#f8f9f9; color:#14232b; border-color:#d0d8db; font-size:12px; font-weight:600; cursor:pointer; }
+  .w36-table-actions .w36-btn:hover { border-color:#0b6e7f; color:#0b6e7f; }
+  .w36-sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  .w36-main-wrap table.w36-summary-table { min-width:1040px; width:100%; border-collapse:collapse; border-spacing:0; white-space:nowrap; font:inherit; font-size:12px; color:#14232b; }
+  .w36-main-wrap table.w36-summary-table th { position:sticky; top:0; z-index:2; padding:9px 10px; border:0; border-bottom:1px solid #d0d8db; background:#f8f9f9; color:#586a72; font:inherit; font-size:10px; font-weight:600; letter-spacing:.065em; text-transform:uppercase; text-align:right; }
+  .w36-main-wrap table.w36-summary-table th.w36-left, .w36-main-wrap table.w36-summary-table td.w36-left { text-align:left; }
+  .w36-main-wrap table.w36-summary-table td { padding:8px 10px; border:0; border-bottom:1px solid #d0d8db; text-align:right; vertical-align:middle; }
+  .w36-main-wrap table.w36-summary-table tbody tr.fleet td { background:#e7eff1; font-weight:600; }
+  .w36-main-wrap table.w36-summary-table tbody tr.grp td { background:#e2e8ea; font-weight:600; }
+  .w36-main-wrap table.w36-summary-table tbody tr.machine td { background:#f8f9f9; }
+  .w36-main-wrap table.w36-summary-table tbody tr.fleet:hover td,
+  .w36-main-wrap table.w36-summary-table tbody tr.grp:hover td,
+  .w36-main-wrap table.w36-summary-table tbody tr.machine:hover td { background:#d5eaee; }
+  .w36-main-wrap table.w36-summary-table tbody tr.detail > td { padding:0 12px 14px; border-bottom:1px solid #d0d8db; background:#eef3f4; white-space:normal; }
+  .w36-summary-table caption { padding:7px 10px; color:#586a72; text-align:left; }
+  .w36-fleet-row td:first-child strong { display:block; font-size:14px; }
+  .w36-fleet-row td:first-child small { display:block; margin-top:2px; color:#586a72; font-size:11px; font-weight:400; }
+  .w36-group-toggle, .w36-machine-toggle { display:inline-flex; align-items:center; gap:8px; padding:0; border:0; background:transparent; color:#14232b; font:inherit; text-align:left; cursor:pointer; }
+  .w36-group-toggle svg, .w36-machine-toggle svg { width:14px; height:14px; flex:none; fill:none; stroke:currentColor; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; transition:transform .15s; }
+  .w36-group-toggle[aria-expanded="true"] svg, .w36-machine-toggle[aria-expanded="true"] svg { transform:rotate(90deg); }
+  .w36-group-toggle span { font-weight:700; }
+  .w36-group-toggle small { margin-left:2px; color:#586a72; font-size:11px; font-weight:400; }
+  .w36-machine-toggle span { display:flex; flex-direction:column; gap:1px; }
+  .w36-machine-toggle b { color:#0b6e7f; font-weight:600; font-variant-numeric:tabular-nums; }
+  .w36-machine-toggle small { color:#586a72; font-size:10.5px; font-weight:400; }
+  .w36-status { padding:2px 7px; border-radius:5px; background:#e2e8ea; color:#586a72; font-size:10px; font-weight:500; }
+  .w36-strip { display:inline-flex; gap:2px; vertical-align:middle; }
+  .w36-strip i { display:block; width:13px; height:18px; border-radius:2px; background:#e2e8ea; }
+  .w36-strip i.good { background:#d4ecdf; box-shadow:inset 0 0 0 1px #1f8a55; }
+  .w36-strip i.warn { background:#c28a12; }
+  .w36-strip i.bad { background:#c0392b; }
+  .w36-strip i.prev { background:#3a6fd0; }
+  .w36-strip i.neutral { background:#e2e8ea; background-image:repeating-linear-gradient(135deg,transparent,transparent 3px,#d0d8db 3px,#d0d8db 4px); }
+  .w36-avbar { display:inline-flex; align-items:center; justify-content:flex-end; gap:8px; min-width:96px; }
+  .w36-av-track { position:relative; display:inline-block; width:54px; height:6px; flex:none; overflow:hidden; border-radius:3px; background:#e2e8ea; }
+  .w36-av-fill { position:absolute; inset:0 auto 0 0; border-radius:3px; }
+  .w36-av-fill.good { background:#1f8a55; }.w36-av-fill.warn { background:#c28a12; }.w36-av-fill.bad { background:#c0392b; }.w36-av-fill.neutral { background:#586a72; }
+  .w36-av-value { min-width:48px; text-align:right; font-size:11px; font-variant-numeric:tabular-nums; }
+  .w36-av-value.good { color:#1f8a55; }.w36-av-value.warn { color:#80570a; }.w36-av-value.bad { color:#c0392b; }.w36-av-value.neutral { color:#586a72; }
+  .w36-machine-detail { padding-top:12px; }
+  .w36-detail-heading { display:flex; align-items:baseline; justify-content:space-between; gap:8px 16px; flex-wrap:wrap; margin:0 0 10px; }
+  .w36-detail-heading strong { font-size:14px; }.w36-detail-heading span { color:#586a72; font-size:11px; }
+  .w36-detail-grid { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(260px,1fr); gap:14px; align-items:start; }
+  .w36-detail-grid h4, .w36-event-details h4 { margin:0 0 6px; font-size:12px; font-weight:700; }
+  .w36-detail-scroll { overflow-x:auto; }
+  .w36-detail-tbl { width:100%; border-collapse:collapse; margin:0; background:#f8f9f9; white-space:nowrap; }
+  .w36-detail-tbl th, .w36-detail-tbl td { border:1px solid #d0d8db; padding:5px 7px; text-align:right; font-size:11px; }
+  .w36-detail-tbl th:first-child { text-align:left; }
+  .w36-detail-tbl thead th { background:#e2e8ea; color:#586a72; font-size:10px; font-weight:600; text-transform:uppercase; }
+  .w36-weekly-detail { display:grid; grid-template-columns:1fr 1fr; margin:0; border:1px solid #d0d8db; border-radius:6px; overflow:hidden; }
+  .w36-weekly-detail div { display:flex; flex-direction:column; gap:2px; padding:7px 9px; border-right:1px solid #d0d8db; border-bottom:1px solid #d0d8db; background:#f8f9f9; }
+  .w36-weekly-detail dt { color:#586a72; font-size:9px; letter-spacing:.04em; text-transform:uppercase; }
+  .w36-weekly-detail dd { margin:0; font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .w36-event-details { margin-top:12px; }
+  .w36-main-wrap [hidden], #w36-no-matches[hidden] { display:none!important; }
+  .w36-no-matches { margin:8px 0; padding:16px; border:1px dashed #d0d8db; color:#586a72; text-align:center; }
+  @media(max-width:760px) { .w36-detail-grid { grid-template-columns:1fr; }.w36-table-actions { margin-left:0; }.w36-table-tools #w36-search-count { margin-left:0; } }
+  @media print { .w36-table-tools,.w36-scroll-hint,.w36-no-matches { display:none!important; }.w36-main-wrap { overflow:visible; border:0; }.w36-main-wrap table.w36-summary-table { min-width:0; font-size:8px; }.w36-main-wrap table.w36-summary-table th,.w36-main-wrap table.w36-summary-table td { position:static; padding:3px; font-size:8px; }.w36-machine-toggle svg,.w36-group-toggle svg { display:none; }.w36-weekly-detail { grid-template-columns:repeat(2,1fr); } }
 </style>
 
 <div class="w36-wrap<?= $print_mode ? ' w36-print' : '' ?>">
@@ -472,193 +596,134 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
     <?php endforeach; ?>
   </div>
 
-  <?php /* ── the grid: the sheet's machine rows ───────────────────────── */ ?>
+  <?php /* ── the machine table, restyled to match Workshop Weekly ─────── */ ?>
   <?php if (!$print_mode): ?>
   <div class="w36-table-tools" id="w36-search-tools" hidden>
-    <label for="w36-machine-search">Find a machine</label>
+    <label class="w36-search-label" for="w36-machine-search">Find a machine</label>
     <input id="w36-machine-search" type="search" placeholder="ID, model or location" autocomplete="off">
+    <label class="w36-filter-location"><span class="w36-sr-only">Filter by location</span>
+      <select id="w36-location-filter"><option value="">All locations</option><?php foreach ($locations as $location): ?><option value="<?= $esc(function_exists('mb_strtolower') ? mb_strtolower($location, 'UTF-8') : strtolower($location)) ?>"><?= $esc($location) ?></option><?php endforeach; ?></select>
+    </label>
+    <label class="w36-filter-below"><input id="w36-below-target" type="checkbox"> <span>Below target only</span></label>
     <span id="w36-search-count" role="status" aria-live="polite"></span>
+    <span class="w36-table-actions"><button type="button" class="w36-btn" data-w36-action="expand">Expand all</button><button type="button" class="w36-btn" data-w36-action="collapse">Collapse all</button></span>
   </div>
-  <p class="w36-scroll-hint">Scroll horizontally to compare daily and weekly figures. Fleet and group totals always represent the full report; search only hides machine rows and does not affect exports.</p>
+  <p class="w36-scroll-hint">Filter equipment and expand a type or machine for daily and weekly detail. Summary totals stay fixed and filters do not affect exports.</p>
   <?php endif; ?>
-  <div class="w36-tblwrap" tabindex="0" role="region" aria-label="Weekly machine report, scroll horizontally to see all columns">
-    <table class="w36" id="w36-machine-table">
+  <div class="w36-tblwrap w36-main-wrap" tabindex="0" role="region" aria-label="Weekly machine report">
+    <table class="w36 w36-summary-table" id="w36-machine-table">
       <caption class="w36-small">Fleet, group and machine availability for <?= $esc($week_label) ?></caption>
-      <thead>
-        <tr>
-          <th rowspan="2">TYPE</th>
-          <th rowspan="2">EQUIPMENT</th>
-          <th rowspan="2">AVAILABLE</th>
-          <th rowspan="2">DOWN</th>
-          <th rowspan="2">MACHINE ID</th>
-          <th rowspan="2">MODEL</th>
-          <th rowspan="2">LOCATION</th>
-          <?php foreach ($days as $d): ?>
-            <th colspan="1"><?= $esc($day_name($d)) ?></th>
-          <?php endforeach; ?>
-          <?php foreach ($weekly_cols as $key => $label): ?>
-            <th class="wk"><?= $esc($label) ?></th>
-          <?php endforeach; ?>
-        </tr>
-        <tr>
-          <?php foreach ($days as $d): ?><th>AVAILABILITY<span class="w36-day-target">target</span></th><?php endforeach; ?>
-          <?php foreach ($weekly_cols as $key => $label): ?><th class="wk"><?= $esc($label === 'NUMBER OF DAYS DOWN' ? 'd' : ($label === 'WEEKLY OPEN TIME' ? 'h' : ($label === 'OPERATIONAL AVAILABILITY' ? '%' : ''))) ?></th><?php endforeach; ?>
-        </tr>
-      </thead>
+      <thead><tr>
+        <th class="w36-left">Equipment</th>
+        <th class="w36-left">Daily availability · Mon–Sun</th>
+        <th>Preventive h</th><th>Down h</th><th>Failures</th><th>MTBF h</th><th>MTTR h</th><th>Availability</th><th>Target</th>
+      </tr></thead>
       <tbody>
-        <?php /* row 4 in the sheet: the fleet roll-up, data-driven (D-W3) */ ?>
-        <?php if (!empty($fleet)): $fc = $weekly_cells($fleet, $week['open_hours']); ?>
-          <tr class="fleet">
-            <td colspan="4">FLEET</td>
-            <td colspan="3" class="w36-small"><?= (int)$machine_total ?> reportable machines</td>
-            <?php foreach ($days as $i => $d): ?>
-              <?php $fd = $day_row(isset($fleet['daily']) ? $fleet['daily'] : array(), $d, $i); ?>
-              <td class="num"><?= $esc($pct($fd && isset($fd['availability']) ? $fd['availability'] : null)) ?></td>
-            <?php endforeach; ?>
-            <?php foreach ($fc as $k => $v): ?>
-              <td class="num wk"><?= $esc($v) ?></td>
-            <?php endforeach; ?>
+        <?php if (!empty($fleet)): $fc = $weekly_cells($fleet, isset($week['open_hours']) ? $week['open_hours'] : null); $fr = isset($fleet['rollup']) ? $fleet['rollup'] : array(); ?>
+          <tr class="fleet w36-fleet-row">
+            <td class="w36-left"><strong>Fleet</strong><small><?= (int)$machine_total ?> reportable machines · <?= (int)$fleet_available ?> available · <?= (int)$down_machines ?> down</small></td>
+            <td class="w36-left"><?= $daily_strip(isset($fleet['daily']) ? $fleet['daily'] : array()) ?></td>
+            <td><?= $esc(isset($fc['pt']) ? $fc['pt'] : '—') ?></td>
+            <td><?= $esc(isset($fc['dt']) ? $fc['dt'] : '—') ?></td>
+            <td><?= $esc(isset($fc['f']) ? $fc['f'] : '—') ?></td>
+            <td><?= $esc(isset($fc['mtbf']) ? $fc['mtbf'] : '—') ?></td>
+            <td><?= $esc(isset($fc['mttr']) ? $fc['mttr'] : '—') ?></td>
+            <td><?= $availability_bar(isset($fr['availability']) ? $fr['availability'] : null, isset($fr['weekly_target']) ? $fr['weekly_target'] : null) ?></td>
+            <td><?= $esc(isset($fc['target']) ? $fc['target'] : '—') ?></td>
           </tr>
         <?php endif; ?>
 
         <?php foreach ($groups as $g): ?>
           <?php
-            // a group with no machine in it is not printed (its rows would be empty)
             if ((int)$g['row_count'] === 0) continue;
             $pt = isset($per_type[$g['code']]) ? $per_type[$g['code']] : array();
-            $gc = $weekly_cells($g, $week['open_hours']);
+            $roll = isset($g['rollup']) ? $g['rollup'] : array();
+            $gc = $weekly_cells($g, isset($week['open_hours']) ? $week['open_hours'] : null);
+            $group_id = 'w36-group-'.substr(sha1((string)$g['code']), 0, 10);
           ?>
-          <tr class="grp">
-            <td colspan="2"><?= $esc($g['label']) ?></td>
-            <td class="num"><?= (int)(isset($pt['available']) ? $pt['available'] : 0) ?></td>
-            <td class="num"><?= (int)(isset($pt['down']) ? $pt['down'] : 0) ?></td>
-            <td colspan="2" class="w36-small"><?= (int)$g['row_count'] ?> machine(s)</td>
-            <td class="w36-small">group roll-up</td>
-            <?php foreach ($days as $i => $d): ?>
-              <?php $gd = $day_row(isset($g['daily']) ? $g['daily'] : array(), $d, $i); ?>
-              <td class="num"><?= $esc($pct($gd && isset($gd['availability']) ? $gd['availability'] : null)) ?></td>
-            <?php endforeach; ?>
-            <?php foreach ($gc as $k => $v): ?>
-              <td class="num wk"><?= $esc($v) ?></td>
-            <?php endforeach; ?>
+          <tr class="grp w36-group-row" data-group-row="<?= $esc($group_id) ?>" data-open="<?= $print_mode ? '1' : '0' ?>">
+            <td class="w36-left"><button type="button" class="w36-group-toggle" data-w36-action="toggle-group" data-group="<?= $esc($group_id) ?>" aria-expanded="<?= $print_mode ? 'true' : 'false' ?>">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span><?= $esc($g['label']) ?></span><small><?= (int)$g['row_count'] ?> machines · <?= (int)(isset($pt['available']) ? $pt['available'] : 0) ?> available · <?= (int)(isset($pt['down']) ? $pt['down'] : 0) ?> down</small>
+            </button></td>
+            <td class="w36-left"><?= $daily_strip(isset($g['daily']) ? $g['daily'] : array()) ?></td>
+            <td><?= $esc(isset($gc['pt']) ? $gc['pt'] : '—') ?></td>
+            <td><?= $esc(isset($gc['dt']) ? $gc['dt'] : '—') ?></td>
+            <td><?= $esc(isset($gc['f']) ? $gc['f'] : '—') ?></td>
+            <td><?= $esc(isset($gc['mtbf']) ? $gc['mtbf'] : '—') ?></td>
+            <td><?= $esc(isset($gc['mttr']) ? $gc['mttr'] : '—') ?></td>
+            <td><?= $availability_bar(isset($roll['availability']) ? $roll['availability'] : null, isset($roll['weekly_target']) ? $roll['weekly_target'] : null) ?></td>
+            <td><?= $esc(isset($gc['target']) ? $gc['target'] : '—') ?></td>
           </tr>
 
-          <?php foreach ($g['machines'] as $id): if (empty($machines[$id])) continue; $m = $machines[$id]; $mc = $weekly_cells($m['weekly'], $week['open_hours']); $mw = $m['weekly']; ?>
-            <tr class="machine" data-machine-search="<?= $esc($m['machine_id'] . ' '. $m['model'] . ' '. $m['site']['label']) ?>">
-              <td colspan="2"></td>
-              <td></td>
-              <td></td>
-              <td class="w36-who"><?= $esc($m['machine_id']) ?></td>
-              <td><?= $esc($m['model']) ?></td>
-              <td>
-                <?= $esc($m['site']['label']) ?>
-                <?php if (empty($m['site']['approved'])): ?><span class="w36-badge wrn" title="not in the approved site list">unlisted</span><?php endif; ?>
-              </td>
-              <?php foreach ($days as $i => $d): ?>
-                <?php $dd = $day_row(isset($m['daily']) ? $m['daily'] : array(), $d, $i);
-                      $av = $dd ? $dd['availability'] : null;
-                      $tg = $dd ? $dd['target'] : null; ?>
-                <td class="num <?= $misses($av, $tg) ? 'miss' : '' ?>">
-                  <?= $esc($pct($av)) ?><?= $misses($av, $tg) ? ' <span class="w36-small">(below target)</span>' : '' ?>
-                  <span class="w36-day-target"><?= $esc($tg === null ? 'no target' : $pct($tg)) ?></span>
-                </td>
-              <?php endforeach; ?>
-              <?php foreach ($mc as $k => $v): ?>
-                <td class="num wk <?= ($k === 'av' && $misses($mw['availability'], isset($mw['weekly_target']) ? $mw['weekly_target'] : null)) ? 'miss' : '' ?>"><?= $esc($v) ?><?= ($k === 'av' && $misses($mw['availability'], isset($mw['weekly_target']) ? $mw['weekly_target'] : null)) ? ' <span class="w36-small">(below target)</span>' : '' ?></td>
-              <?php endforeach; ?>
+          <?php foreach ($g['machines'] as $id): if (empty($machines[$id])) continue; $m = $machines[$id]; $mw = isset($m['weekly']) ? $m['weekly'] : array(); $mc = $weekly_cells($mw, isset($week['open_hours']) ? $week['open_hours'] : null); $machine_id = 'w36-machine-'.$id; $detail_id = 'w36-detail-'.$id; $machine_target = isset($mw['weekly_target']) ? $mw['weekly_target'] : null; $av = isset($mw['availability']) ? $mw['availability'] : null; $search_text = $m['machine_id'].' '.$m['model'].' '.(isset($m['site']['label']) ? $m['site']['label'] : ''); $location_text = trim((string)(isset($m['site']['label']) ? $m['site']['label'] : '')); $machine_down = isset($mw['hours_down']) ? (float)$mw['hours_down'] > 0 : (isset($mw['downtime_hours']) && (float)$mw['downtime_hours'] > 0); ?>
+            <tr class="machine w36-machine-row" id="<?= $esc($machine_id) ?>" data-machine-search="<?= $esc($search_text) ?>" data-location="<?= $esc(function_exists('mb_strtolower') ? mb_strtolower($location_text, 'UTF-8') : strtolower($location_text)) ?>" data-below="<?= $misses($av, $machine_target) ? '1' : '0' ?>" data-parent="<?= $esc($group_id) ?>" data-detail="<?= $esc($detail_id) ?>" data-detail-open="0" <?= $print_mode ? '' : 'hidden' ?>>
+              <td class="w36-left w36-equipment-cell"><button type="button" class="w36-machine-toggle" data-w36-action="toggle-machine" data-detail="<?= $esc($detail_id) ?>" aria-expanded="false" aria-controls="<?= $esc($detail_id) ?>">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span><b><?= $esc($m['machine_id']) ?></b><small><?= $esc($m['model']) ?> · <?= $esc($location_text !== '' ? $location_text : 'Site not set') ?></small></span><em class="w36-status"><?= $esc($m['status'] !== null ? $m['status'] : 'Status unknown') ?></em>
+              </button></td>
+              <td class="w36-left"><?= $daily_strip(isset($m['daily']) ? $m['daily'] : array()) ?></td>
+              <td><?= $esc(isset($mc['pt']) ? $mc['pt'] : '—') ?></td>
+              <td><?= $esc(isset($mc['dt']) ? $mc['dt'] : '—') ?></td>
+              <td><?= $esc(isset($mc['f']) ? $mc['f'] : '—') ?></td>
+              <td><?= $esc(isset($mc['mtbf']) ? $mc['mtbf'] : '—') ?></td>
+              <td><?= $esc(isset($mc['mttr']) ? $mc['mttr'] : '—') ?></td>
+              <td><?= $availability_bar($av, $machine_target) ?></td>
+              <td><?= $esc(isset($mc['target']) ? $mc['target'] : '—') ?></td>
             </tr>
-            <tr class="detail">
-              <td colspan="<?= 7 + count($days) + count($weekly_cols) ?>">
-                <details<?= $print_mode ? ' open' : '' ?>>
-                  <summary>
-                    <?= $esc($m['machine_id']) ?> — the seven day blocks as the Excel prints them
-                    <span class="w36-small">
-                      · <?= $esc($m['status'] !== null ? $m['status'] : 'status unknown') ?>
-                      <?php if (!empty($m['events'])): ?>
-                        · <?= count($m['events']) ?> breakdown event(s)
-                        · <?= (int)$mw['days_down'] ?> day(s) down · <?= $esc($num($mw['hours_down'], 2)) ?> h down
-                      <?php else: ?>
-                        · no breakdown this week
-                      <?php endif; ?>
-                      <?php if ((int)$m['unresolved_target_days'] > 0): ?>
-                        · <?= (int)$m['unresolved_target_days'] ?> day(s) without a resolved target
-                      <?php endif; ?>
-                    </span>
-                  </summary>
-
-                  <table class="w36-detail-tbl">
-                    <tr><th>DAY</th><?php foreach ($days as $d): ?><th><?= $esc($d) ?></th><?php endforeach; ?><th>WEEK</th></tr>
-                    <?php
-                      $rows_out = array(
-                        'PREVENTIVE TIME (h)'      => 'preventive_hours',
-                        'TOTAL DOWN TIME (h)'      => 'downtime_hours',
-                        'NUMBER OF FAILURES'       => 'failures',
-                        'MTBF (h)'                 => 'mtbf_hours',
-                        'MTTR (h)'                 => 'mttr_hours',
-                        'AVAILABILITY (%)'           => 'availability',
-                        'DAILY TARGET KPI (%)'     => 'target',
-                      );
-                      $week_key = array('preventive_hours' => 'preventive_hours', 'downtime_hours' => 'downtime_hours',
-                                        'failures' => 'breakdowns', 'mtbf_hours' => 'mtbf_hours', 'mttr_hours' => 'mttr_hours',
-                                        'availability' => 'availability', 'target' => 'weekly_target');
-                    ?>
-                    <?php foreach ($rows_out as $label => $key): ?>
-                      <tr>
-                        <th><?= $esc($label) ?></th>
-                        <?php foreach ($days as $i => $d): ?>
-                          <?php $dd = $day_row(isset($m['daily']) ? $m['daily'] : array(), $d, $i);
-                                $val = $dd && array_key_exists($key, $dd) ? $dd[$key] : null; ?>
-                          <td class="<?= $misses($key === 'availability' ? $val : null, $key === 'availability' && $dd ? $dd['target'] : null) ? 'miss' : '' ?>">
-                            <?= $esc($key === 'availability' || $key === 'target' ? $pct($val) : $num($val, 2)) ?>
-                          </td>
+            <tr class="detail w36-detail-row" id="<?= $esc($detail_id) ?>" data-detail-for="<?= $esc($machine_id) ?>" <?= $print_mode ? '' : 'hidden' ?>>
+              <td colspan="9">
+                <div class="w36-machine-detail">
+                  <div class="w36-detail-heading"><strong><?= $esc($m['machine_id']) ?> · Weekly details</strong><span>
+                    <?php if (!empty($m['events'])): ?><?= count($m['events']) ?> breakdown event(s) · <?= (int)(isset($mw['days_down']) ? $mw['days_down'] : 0) ?> day(s) down · <?= $esc($num(isset($mw['hours_down']) ? $mw['hours_down'] : null, 2)) ?> h down<?php else: ?>No breakdown events this week<?php endif; ?>
+                    <?php if ((int)(isset($m['unresolved_target_days']) ? $m['unresolved_target_days'] : 0) > 0): ?> · <?= (int)$m['unresolved_target_days'] ?> day(s) without a resolved target<?php endif; ?>
+                  </span></div>
+                  <div class="w36-detail-grid">
+                    <section><h4>Daily figures</h4><div class="w36-detail-scroll"><table class="w36-detail-tbl">
+                      <thead><tr><th>Measure</th><?php foreach ($days as $d): ?><th><?= $esc($day_name($d)) ?></th><?php endforeach; ?><th>Week</th></tr></thead>
+                      <tbody>
+                      <?php foreach ($detail_rows as $label => $key): ?>
+                        <tr><th><?= $esc($label) ?></th>
+                        <?php foreach ($days as $i => $d): $dd = $day_row(isset($m['daily']) ? $m['daily'] : array(), $d, $i); $val = $dd && array_key_exists($key, $dd) ? $dd[$key] : null; ?>
+                          <td class="<?= $misses($key === 'availability' ? $val : null, $key === 'availability' && $dd ? $dd['target'] : null) ? 'miss' : '' ?>"><?= $esc($key === 'availability' || $key === 'target' ? $pct($val) : $num($val, 2)) ?></td>
                         <?php endforeach; ?>
-                        <?php $wk = isset($mw[$week_key[$key]]) ? $mw[$week_key[$key]] : null; ?>
-                        <td><strong><?= $esc($key === 'availability' || $key === 'target' ? $pct($wk) : $num($wk, 2)) ?></strong></td>
-                      </tr>
-                    <?php endforeach; ?>
-                  </table>
-
-                  <?php if (!empty($m['events'])): ?>
-                    <div class="w36-small"><strong>Breakdown events in this period</strong></div>
-                    <ul class="w36-evts">
-                      <?php foreach ($m['events'] as $e): ?>
-                        <li>
-                          <?= $esc($e['start']) ?> → <?= $e['open'] ? '<span class="open">still down</span>' : $esc($e['end']) ?>
-                          <?php if (!empty($e['carried_in'])): ?><em>(started before the week)</em><?php endif; ?>
-                          <?php if (empty($e['counts_as_breakdown'])): ?><em>(does not count as a new breakdown)</em><?php endif; ?>
-                        </li>
+                        <?php $wk = isset($mw[$detail_week_key[$key]]) ? $mw[$detail_week_key[$key]] : null; ?>
+                        <td><strong><?= $esc($key === 'availability' || $key === 'target' ? $pct($wk) : $num($wk, 2)) ?></strong></td></tr>
                       <?php endforeach; ?>
-                    </ul>
-                  <?php endif; ?>
-                </details>
+                      </tbody>
+                    </table></div></section>
+                    <section><h4>Weekly workbook block</h4><dl class="w36-weekly-detail">
+                      <?php foreach ($weekly_cols as $key => $label): $cell_key = array('days'=>'days','open'=>'open','pt'=>'pt','rt'=>'rt','dt'=>'dt','f'=>'f','mtbf'=>'mtbf','mttr'=>'mttr','av'=>'av','target'=>'target'); ?>
+                        <div><dt><?= $esc($label) ?></dt><dd><?= $esc(isset($mc[$cell_key[$key]]) ? $mc[$cell_key[$key]] : '—') ?></dd></div>
+                      <?php endforeach; ?>
+                    </dl></section>
+                  </div>
+                  <?php if (!empty($m['events'])): ?><section class="w36-event-details"><h4>Breakdown events in this period</h4><ul class="w36-evts">
+                    <?php foreach ($m['events'] as $e): ?><li><?= $esc($e['start']) ?> → <?= $e['open'] ? '<span class="open">still down</span>' : $esc($e['end']) ?><?php if (!empty($e['carried_in'])): ?> <em>(started before the week)</em><?php endif; ?><?php if (empty($e['counts_as_breakdown'])): ?> <em>(not counted as a new breakdown)</em><?php endif; ?></li><?php endforeach; ?>
+                  </ul></section><?php endif; ?>
+                </div>
               </td>
             </tr>
           <?php endforeach; ?>
         <?php endforeach; ?>
 
-        <?php if ($unclassified = array_filter($order, function ($id) use ($machines) { return isset($machines[$id]) && empty($machines[$id]['group_code']); })): ?>
-          <?php /*
-             machines with no group code cannot sit inside a group block, but they
-             must still be visible (and counted in the fleet) or the report would
-             silently lose them — that is what happened to the sample's rows 101-108
-           */ ?>
-          <tr class="grp">
-            <td colspan="8">Unclassified machines — listed here, counted in the fleet row, printed in no group block</td>
+        <?php if (!empty($unclassified_ids)): $unclassified_group = 'w36-group-unclassified'; ?>
+          <tr class="grp w36-group-row" data-group-row="<?= $esc($unclassified_group) ?>" data-open="<?= $print_mode ? '1' : '0' ?>">
+            <td class="w36-left"><button type="button" class="w36-group-toggle" data-w36-action="toggle-group" data-group="<?= $esc($unclassified_group) ?>" aria-expanded="<?= $print_mode ? 'true' : 'false' ?>">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span>Unclassified</span><small><?= count($unclassified_ids) ?> machines · no type roll-up</small>
+            </button></td>
+            <td class="w36-left"><span class="w36-muted">Daily values appear on each machine</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
           </tr>
-          <?php foreach ($unclassified as $id): $m = $machines[$id]; $mc = $weekly_cells($m['weekly'], $week['open_hours']); ?>
-            <tr class="machine" data-machine-search="<?= $esc($m['machine_id'] . ' '. $m['model'] . ' '. $m['site']['label']) ?>">
-              <td colspan="7"><?= $esc($m['machine_id']) ?> · <?= $esc($m['model']) ?> · <?= $esc($m['site']['label']) ?></td>
-              <?php foreach ($days as $i => $d): ?>
-                <?php $dd = $day_row(isset($m['daily']) ? $m['daily'] : array(), $d, $i); ?>
-                <td class="num"><?= $esc($pct($dd ? $dd['availability'] : null)) ?></td>
-              <?php endforeach; ?>
-              <?php foreach ($mc as $k => $v): ?><td class="num wk"><?= $esc($v) ?></td><?php endforeach; ?>
+          <?php foreach ($unclassified_ids as $id): $m = $machines[$id]; $mw = isset($m['weekly']) ? $m['weekly'] : array(); $mc = $weekly_cells($mw, isset($week['open_hours']) ? $week['open_hours'] : null); $machine_id = 'w36-machine-'.$id; $detail_id = 'w36-detail-'.$id; $machine_target = isset($mw['weekly_target']) ? $mw['weekly_target'] : null; $av = isset($mw['availability']) ? $mw['availability'] : null; $search_text = $m['machine_id'].' '.$m['model'].' '.(isset($m['site']['label']) ? $m['site']['label'] : ''); $location_text = trim((string)(isset($m['site']['label']) ? $m['site']['label'] : '')); ?>
+            <tr class="machine w36-machine-row" id="<?= $esc($machine_id) ?>" data-machine-search="<?= $esc($search_text) ?>" data-location="<?= $esc(function_exists('mb_strtolower') ? mb_strtolower($location_text, 'UTF-8') : strtolower($location_text)) ?>" data-below="<?= $misses($av, $machine_target) ? '1' : '0' ?>" data-parent="<?= $esc($unclassified_group) ?>" data-detail="<?= $esc($detail_id) ?>" data-detail-open="0" <?= $print_mode ? '' : 'hidden' ?>>
+              <td class="w36-left w36-equipment-cell"><button type="button" class="w36-machine-toggle" data-w36-action="toggle-machine" data-detail="<?= $esc($detail_id) ?>" aria-expanded="false" aria-controls="<?= $esc($detail_id) ?>"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span><b><?= $esc($m['machine_id']) ?></b><small><?= $esc($m['model']) ?> · <?= $esc($location_text !== '' ? $location_text : 'Site not set') ?></small></span><em class="w36-status"><?= $esc($m['status'] !== null ? $m['status'] : 'Status unknown') ?></em></button></td>
+              <td class="w36-left"><?= $daily_strip(isset($m['daily']) ? $m['daily'] : array()) ?></td><td><?= $esc(isset($mc['pt']) ? $mc['pt'] : '—') ?></td><td><?= $esc(isset($mc['dt']) ? $mc['dt'] : '—') ?></td><td><?= $esc(isset($mc['f']) ? $mc['f'] : '—') ?></td><td><?= $esc(isset($mc['mtbf']) ? $mc['mtbf'] : '—') ?></td><td><?= $esc(isset($mc['mttr']) ? $mc['mttr'] : '—') ?></td><td><?= $availability_bar($av, $machine_target) ?></td><td><?= $esc(isset($mc['target']) ? $mc['target'] : '—') ?></td>
             </tr>
+            <tr class="detail w36-detail-row" id="<?= $esc($detail_id) ?>" data-detail-for="<?= $esc($machine_id) ?>" <?= $print_mode ? '' : 'hidden' ?>><td colspan="9"><div class="w36-machine-detail"><div class="w36-detail-heading"><strong><?= $esc($m['machine_id']) ?> · Weekly details</strong><span><?= !empty($m['events']) ? count($m['events']).' breakdown event(s)' : 'No breakdown events this week' ?><?php if ((int)(isset($m['unresolved_target_days']) ? $m['unresolved_target_days'] : 0) > 0): ?> · <?= (int)$m['unresolved_target_days'] ?> day(s) without a resolved target<?php endif; ?></span></div><div class="w36-detail-grid"><section><h4>Daily figures</h4><div class="w36-detail-scroll"><table class="w36-detail-tbl"><thead><tr><th>Measure</th><?php foreach ($days as $d): ?><th><?= $esc($day_name($d)) ?></th><?php endforeach; ?><th>Week</th></tr></thead><tbody><?php foreach ($detail_rows as $label => $key): ?><tr><th><?= $esc($label) ?></th><?php foreach ($days as $i => $d): $dd = $day_row(isset($m['daily']) ? $m['daily'] : array(), $d, $i); $val = $dd && array_key_exists($key, $dd) ? $dd[$key] : null; ?><td><?= $esc($key === 'availability' || $key === 'target' ? $pct($val) : $num($val, 2)) ?></td><?php endforeach; ?><?php $wk = isset($mw[$detail_week_key[$key]]) ? $mw[$detail_week_key[$key]] : null; ?><td><strong><?= $esc($key === 'availability' || $key === 'target' ? $pct($wk) : $num($wk, 2)) ?></strong></td></tr><?php endforeach; ?></tbody></table></div></section><section><h4>Weekly workbook block</h4><dl class="w36-weekly-detail"><?php foreach ($weekly_cols as $key => $label): ?><div><dt><?= $esc($label) ?></dt><dd><?= $esc(isset($mc[$key]) ? $mc[$key] : '—') ?></dd></div><?php endforeach; ?></dl></section></div><?php if (!empty($m['events'])): ?><section class="w36-event-details"><h4>Breakdown events in this period</h4><ul class="w36-evts"><?php foreach ($m['events'] as $e): ?><li><?= $esc($e['start']) ?> → <?= $e['open'] ? '<span class="open">still down</span>' : $esc($e['end']) ?></li><?php endforeach; ?></ul></section><?php endif; ?></div></td></tr>
           <?php endforeach; ?>
         <?php endif; ?>
       </tbody>
     </table>
   </div>
+  <div id="w36-no-matches" class="w36-no-matches" hidden>No machines match these filters.</div>
 
   <?php /* ── the per-type block (BQ:CB) ───────────────────────────────── */ ?>
   <?php
@@ -988,25 +1053,89 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
 (function () {
   var tools = document.getElementById('w36-search-tools');
   var input = document.getElementById('w36-machine-search');
+  var location = document.getElementById('w36-location-filter');
+  var below = document.getElementById('w36-below-target');
   var count = document.getElementById('w36-search-count');
+  var noMatches = document.getElementById('w36-no-matches');
   var table = document.getElementById('w36-machine-table');
   if (!tools || !input || !table) return;
+
   var rows = Array.prototype.slice.call(table.querySelectorAll('tr.machine[data-machine-search]'));
+  var groups = Array.prototype.slice.call(table.querySelectorAll('tr.w36-group-row[data-group-row]'));
   tools.hidden = false;
-  function filter() {
-    var term = input.value.trim().toLocaleLowerCase();
-    var visible = 0;
-    rows.forEach(function (row) {
-      var matches = row.getAttribute('data-machine-search').toLocaleLowerCase().indexOf(term) !== -1;
-      row.hidden = !matches;
-      var next = row.nextElementSibling;
-      if (next && next.classList.contains('detail')) next.hidden = !matches;
-      if (matches) visible++;
-    });
-    count.textContent = visible + ' of ' + rows.length + ' machine rows shown' + (visible === 0 ? ' — no matches' : '');
+
+  function activeFilter() {
+    return !!(input.value.trim() || (location && location.value) || (below && below.checked));
   }
-  input.addEventListener('input', filter);
-  filter();
+  function matches(row, term, selectedLocation, onlyBelow) {
+    return (!term || row.getAttribute('data-machine-search').toLocaleLowerCase().indexOf(term) !== -1) &&
+      (!selectedLocation || row.getAttribute('data-location') === selectedLocation) &&
+      (!onlyBelow || row.getAttribute('data-below') === '1');
+  }
+  function applyFilters() {
+    var term = input.value.trim().toLocaleLowerCase();
+    var selectedLocation = location ? location.value : '';
+    var onlyBelow = below ? below.checked : false;
+    var filtered = activeFilter();
+    var matching = 0;
+
+    rows.forEach(function (row) {
+      var yes = matches(row, term, selectedLocation, onlyBelow);
+      row.dataset.matches = yes ? '1' : '0';
+      if (yes) matching++;
+    });
+
+    groups.forEach(function (group) {
+      var groupId = group.getAttribute('data-group-row');
+      var children = rows.filter(function (row) { return row.getAttribute('data-parent') === groupId; });
+      var hasMatch = children.some(function (row) { return row.dataset.matches === '1'; });
+      var open = filtered ? hasMatch : group.dataset.open === '1';
+      group.hidden = filtered && !hasMatch;
+      var toggle = group.querySelector('[data-w36-action="toggle-group"]');
+      if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      children.forEach(function (row) {
+        var visible = open && row.dataset.matches === '1';
+        row.hidden = !visible;
+        var detail = row.nextElementSibling;
+        var machineToggle = row.querySelector('[data-w36-action="toggle-machine"]');
+        var detailOpen = row.dataset.detailOpen === '1';
+        if (detail && detail.classList.contains('detail')) detail.hidden = !(visible && detailOpen);
+        if (machineToggle) machineToggle.setAttribute('aria-expanded', detailOpen && visible ? 'true' : 'false');
+      });
+    });
+    if (count) count.textContent = matching + ' of ' + rows.length + ' machine rows match';
+    if (noMatches) noMatches.hidden = matching !== 0;
+  }
+  function setAll(open) {
+    groups.forEach(function (group) { group.dataset.open = open ? '1' : '0'; });
+    applyFilters();
+  }
+
+  tools.addEventListener('click', function (event) {
+    var action = event.target.closest('[data-w36-action]');
+    if (!action) return;
+    if (action.dataset.w36Action === 'expand') setAll(true);
+    else if (action.dataset.w36Action === 'collapse') setAll(false);
+  });
+  table.addEventListener('click', function (event) {
+    var action = event.target.closest('[data-w36-action]');
+    if (!action) return;
+    if (action.dataset.w36Action === 'toggle-group') {
+      var group = groups.find(function (row) { return row.getAttribute('data-group-row') === action.dataset.group; });
+      if (!group) return;
+      group.dataset.open = group.dataset.open === '1' ? '0' : '1';
+      applyFilters();
+    } else if (action.dataset.w36Action === 'toggle-machine') {
+      var machine = action.closest('tr.machine');
+      if (!machine) return;
+      machine.dataset.detailOpen = machine.dataset.detailOpen === '1' ? '0' : '1';
+      applyFilters();
+    }
+  });
+  input.addEventListener('input', applyFilters);
+  if (location) location.addEventListener('change', applyFilters);
+  if (below) below.addEventListener('change', applyFilters);
+  applyFilters();
 }());
 </script>
 <?php endif; ?>
