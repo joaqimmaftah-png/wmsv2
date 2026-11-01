@@ -256,10 +256,6 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   .w36-insp.undone { background:#fffbeb; color:#92400e; border:1px solid #fde68a; }
   .w36-insp.breakdown { background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
   .w36-syn  td.wrap { white-space:normal; min-width:220px; max-width:420px; }
-  .w36-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:4px 0; }
-  .w36-kpi  { border:1px solid #eceff3; border-radius:8px; padding:8px 10px; }
-  .w36-kpi .n { display:block; font-size:20px; font-weight:700; }
-  .w36-kpi .l { display:block; color:#6b7280; font-size:11px; text-transform:uppercase; letter-spacing:.02em; }
   .w36-chart   { border:1px solid #eceff3; border-radius:8px; padding:10px 12px; }
   .w36-chart-title { font-weight:600; margin-bottom:8px; }
   .w36-bar-row { display:flex; align-items:center; gap:8px; margin:3px 0; }
@@ -347,48 +343,63 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   @media(max-width:760px) { .w36-detail-grid { grid-template-columns:1fr; }.w36-table-actions { margin-left:0; }.w36-table-tools #w36-search-count { margin-left:0; } }
   @media print { .w36-table-tools,.w36-scroll-hint,.w36-no-matches { display:none!important; }.w36-main-wrap { overflow:visible; border:0; }.w36-main-wrap table.w36-summary-table { min-width:0; font-size:8px; }.w36-main-wrap table.w36-summary-table th,.w36-main-wrap table.w36-summary-table td { position:static; padding:3px; font-size:8px; }.w36-machine-toggle svg,.w36-group-toggle svg { display:none; }.w36-weekly-detail { grid-template-columns:repeat(2,1fr); } }
 
-  /* sheet `Synthese` action plan — the Workshop Weekly design rules: summary
-     counters, a screen filter bar, collapsible category summary rows whose
-     availability and target stay aligned with the machine columns, text cells
-     that wrap, and cues that never rely on colour alone */
-  .w36-syn-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin:10px 0 4px; }
-  .w36-syn-kpi { min-width:0; padding:11px 14px; background:#f8f9f9; border:1px solid #d0d8db; border-radius:8px; }
-  .w36-syn-kpi .l { display:block; color:#586a72; font-size:10px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; }
-  .w36-syn-kpi .k { display:block; margin-top:2px; color:#14232b; font-size:24px; font-weight:600; line-height:1.12; font-variant-numeric:tabular-nums; }
-  .w36-syn-kpi .k.good { color:#1f8a55; } .w36-syn-kpi .k.warn { color:#c28a12; } .w36-syn-kpi .k.bad { color:#c0392b; }
-  .w36-syn-kpi .s { display:block; margin-top:3px; color:#586a72; font-size:11px; line-height:1.4; }
-  .w36-syn-wrap { overflow:auto; border:1px solid #d0d8db; border-radius:8px; background:#f8f9f9; }
-  .w36-syn-wrap table.w36-syn-table { min-width:1060px; width:100%; border-collapse:collapse; border-spacing:0; white-space:nowrap; font:inherit; font-size:12px; color:#14232b; }
-  .w36-syn-wrap table.w36-syn-table thead th { position:sticky; top:0; z-index:2; padding:9px 10px; border:0; border-bottom:1px solid #d0d8db; background:#f8f9f9; color:#586a72; font:inherit; font-size:10px; font-weight:600; letter-spacing:.065em; text-transform:uppercase; text-align:right; }
-  .w36-syn-wrap table.w36-syn-table th.w36-left, .w36-syn-wrap table.w36-syn-table td.w36-left { text-align:left; }
-  .w36-syn-wrap table.w36-syn-table td { padding:8px 10px; border:0; border-bottom:1px solid #d0d8db; text-align:right; vertical-align:top; }
-  .w36-syn-wrap table.w36-syn-table tbody tr:last-child td { border-bottom:0; }
-  .w36-syn-wrap table.w36-syn-table tbody tr.grp td { background:#e2e8ea; font-weight:600; vertical-align:middle; }
-  .w36-syn-wrap table.w36-syn-table tbody tr.machine td { background:#f8f9f9; }
-  .w36-syn-wrap table.w36-syn-table tbody tr.grp:hover td, .w36-syn-wrap table.w36-syn-table tbody tr.machine:hover td { background:#d5eaee; }
-  .w36-syn-wrap table.w36-syn-table tr.machine td:first-child { padding-left:28px; }
-  .w36-syn-wrap table.w36-syn-table td.w36-wrap { white-space:normal; text-align:left; min-width:200px; max-width:400px; }
-  .w36-syn-table .w36-group-toggle span { font-weight:700; }
-  .w36-syn-table caption { caption-side:top; padding:7px 10px; color:#586a72; text-align:left; }
+  /* sheet `Synthese` — the Workshop Weekly design rules for both panels, the
+     action plan and the inspection/PM registers: summary counters, a screen
+     filter bar, collapsible category summary rows whose values stay aligned with
+     the machine columns, text cells that wrap, and cues that never rely on
+     colour alone */
+  .w36-syn-kpis, .w36-reg-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin:10px 0 4px; }
+  .w36-syn-kpi, .w36-reg-kpi { min-width:0; padding:11px 14px; background:#f8f9f9; border:1px solid #d0d8db; border-radius:8px; }
+  .w36-syn-kpi .l, .w36-reg-kpi .l { display:block; color:#586a72; font-size:10px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; }
+  .w36-syn-kpi .k, .w36-reg-kpi .k { display:block; margin-top:2px; color:#14232b; font-size:24px; font-weight:600; line-height:1.12; font-variant-numeric:tabular-nums; }
+  .w36-syn-kpi .k.good, .w36-reg-kpi .k.good { color:#1f8a55; } .w36-syn-kpi .k.warn, .w36-reg-kpi .k.warn { color:#c28a12; } .w36-syn-kpi .k.bad, .w36-reg-kpi .k.bad { color:#c0392b; }
+  .w36-syn-kpi .s, .w36-reg-kpi .s { display:block; margin-top:3px; color:#586a72; font-size:11px; line-height:1.4; }
+  .w36-syn-wrap, .w36-reg-wrap { overflow:auto; border:1px solid #d0d8db; border-radius:8px; background:#f8f9f9; }
+  .w36-syn-wrap table.w36-syn-table, .w36-reg-wrap table.w36-reg-table { min-width:1060px; width:100%; border-collapse:collapse; border-spacing:0; white-space:nowrap; font:inherit; font-size:12px; color:#14232b; }
+  .w36-reg-wrap table.w36-reg-table { min-width:960px; }
+  .w36-syn-wrap table.w36-syn-table thead th, .w36-reg-wrap table.w36-reg-table thead th { position:sticky; top:0; z-index:2; padding:9px 10px; border:0; border-bottom:1px solid #d0d8db; background:#f8f9f9; color:#586a72; font:inherit; font-size:10px; font-weight:600; letter-spacing:.065em; text-transform:uppercase; text-align:right; }
+  .w36-syn-wrap table.w36-syn-table th.w36-left, .w36-syn-wrap table.w36-syn-table td.w36-left, .w36-reg-wrap table.w36-reg-table th.w36-left, .w36-reg-wrap table.w36-reg-table td.w36-left { text-align:left; }
+  .w36-syn-wrap table.w36-syn-table td, .w36-reg-wrap table.w36-reg-table td { padding:8px 10px; border:0; border-bottom:1px solid #d0d8db; text-align:right; vertical-align:top; }
+  .w36-syn-wrap table.w36-syn-table tbody tr:last-child td, .w36-reg-wrap table.w36-reg-table tbody tr:last-child td { border-bottom:0; }
+  .w36-syn-wrap table.w36-syn-table tbody tr.grp td, .w36-reg-wrap table.w36-reg-table tbody tr.grp td { background:#e2e8ea; font-weight:600; vertical-align:middle; }
+  .w36-syn-wrap table.w36-syn-table tbody tr.machine td, .w36-reg-wrap table.w36-reg-table tbody tr.machine td { background:#f8f9f9; }
+  .w36-syn-wrap table.w36-syn-table tbody tr.grp:hover td, .w36-syn-wrap table.w36-syn-table tbody tr.machine:hover td, .w36-reg-wrap table.w36-reg-table tbody tr.grp:hover td, .w36-reg-wrap table.w36-reg-table tbody tr.machine:hover td { background:#d5eaee; }
+  .w36-syn-wrap table.w36-syn-table tr.machine td:first-child, .w36-reg-wrap table.w36-reg-table tr.machine td:first-child { padding-left:28px; }
+  .w36-syn-wrap table.w36-syn-table td.w36-wrap, .w36-reg-wrap table.w36-reg-table td.w36-wrap { white-space:normal; text-align:left; min-width:200px; max-width:400px; }
+  .w36-syn-table .w36-group-toggle span, .w36-reg-table .w36-group-toggle span { font-weight:700; }
+  .w36-syn-table caption, .w36-reg-table caption { caption-side:top; padding:7px 10px; color:#586a72; text-align:left; }
   .w36-syn-machine { display:flex; flex-direction:column; align-items:flex-start; gap:1px; max-width:240px; white-space:normal; }
   .w36-syn-machine b { color:#0b6e7f; font-weight:600; font-variant-numeric:tabular-nums; }
   .w36-syn-machine small { color:#586a72; font-size:10.5px; font-weight:400; }
   .w36-syn-machine .w36-status { margin-top:3px; font-style:normal; }
   .w36-syn-wo { display:block; margin-top:6px; color:#586a72; font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
   .w36-days { display:inline-block; min-width:32px; padding:2px 7px; border-radius:5px; background:#f5d5d0; color:#c0392b; font-weight:700; font-variant-numeric:tabular-nums; }
-  .w36-syn-foot { display:flex; align-items:flex-start; gap:6px 16px; flex-wrap:wrap; margin-top:10px; color:#586a72; font-size:11px; }
-  .w36-syn-foot > span { max-width:520px; }
-  .w36-syn-wrap [hidden] { display:none!important; }
-  @media(max-width:760px) { .w36-syn-wrap table.w36-syn-table td.w36-wrap { min-width:170px; }.w36-syn-wrap table.w36-syn-table tr.machine td:first-child { padding-left:18px; } }
-  .w36-print .w36-syn-kpis { grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin-bottom:8px; }
-  .w36-print .w36-syn-kpi { padding:6px 8px; }
-  .w36-print .w36-syn-kpi .k { font-size:15px; }
-  .w36-print .w36-syn-kpi .s { font-size:8px; }
-  .w36-print .w36-syn-wrap { overflow:visible; border:0; border-radius:0; background:transparent; }
-  .w36-print .w36-syn-wrap table.w36-syn-table { min-width:0; font-size:8px; }
-  .w36-print .w36-syn-wrap table.w36-syn-table thead th { position:static; font-size:8px; }
-  .w36-print .w36-syn-wrap table.w36-syn-table td { padding:2px 4px; font-size:8px; }
-  .w36-print .w36-syn-wrap table.w36-syn-table tr.machine td:first-child { padding-left:10px; }
+  .w36-syn-foot, .w36-reg-foot { display:flex; align-items:flex-start; gap:6px 16px; flex-wrap:wrap; margin-top:10px; color:#586a72; font-size:11px; }
+  .w36-syn-foot > span, .w36-reg-foot > span { max-width:520px; }
+  .w36-syn-wrap [hidden], .w36-reg-wrap [hidden] { display:none!important; }
+  /* the registers: status and date stacked in one cell, and one line per service
+     so a status and the reason that belongs to it never drift apart */
+  .w36-reg-insp { display:flex; flex-direction:column; align-items:flex-start; gap:3px; white-space:normal; max-width:190px; }
+  .w36-reg-insp small { color:#586a72; font-size:10.5px; }
+  .w36-reg-counts { display:inline-block; color:#2f444d; font-size:11px; font-weight:600; letter-spacing:.02em; white-space:normal; }
+  .w36-reg-pms { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:5px; min-width:220px; }
+  .w36-reg-pm { display:flex; align-items:baseline; flex-wrap:wrap; gap:3px 6px; }
+  .w36-reg-svc { color:#14232b; font-weight:600; font-variant-numeric:tabular-nums; }
+  .w36-reg-why { color:#92400e; font-size:11px; font-style:normal; }
+  .w36-reg-ev { display:block; flex-basis:100%; color:#586a72; font-size:10px; font-style:normal; }
+  .w36-reg-none { color:#586a72; font-size:11px; }
+  @media(max-width:760px) { .w36-syn-wrap table.w36-syn-table td.w36-wrap, .w36-reg-wrap table.w36-reg-table td.w36-wrap { min-width:170px; }.w36-syn-wrap table.w36-syn-table tr.machine td:first-child, .w36-reg-wrap table.w36-reg-table tr.machine td:first-child { padding-left:18px; }.w36-reg-pms { min-width:0; } }
+  .w36-print .w36-syn-kpis, .w36-print .w36-reg-kpis { grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin-bottom:8px; }
+  .w36-print .w36-syn-kpi, .w36-print .w36-reg-kpi { padding:6px 8px; }
+  .w36-print .w36-syn-kpi .k, .w36-print .w36-reg-kpi .k { font-size:15px; }
+  .w36-print .w36-syn-kpi .s, .w36-print .w36-reg-kpi .s { font-size:8px; }
+  .w36-print .w36-syn-wrap, .w36-print .w36-reg-wrap { overflow:visible; border:0; border-radius:0; background:transparent; }
+  .w36-print .w36-syn-wrap table.w36-syn-table, .w36-print .w36-reg-wrap table.w36-reg-table { min-width:0; font-size:8px; }
+  .w36-print .w36-syn-wrap table.w36-syn-table thead th, .w36-print .w36-reg-wrap table.w36-reg-table thead th { position:static; font-size:8px; }
+  .w36-print .w36-syn-wrap table.w36-syn-table td, .w36-print .w36-reg-wrap table.w36-reg-table td { padding:2px 4px; font-size:8px; }
+  .w36-print .w36-syn-wrap table.w36-syn-table tr.machine td:first-child, .w36-print .w36-reg-wrap table.w36-reg-table tr.machine td:first-child { padding-left:10px; }
+  .w36-print .w36-reg-insp, .w36-print .w36-reg-pms { white-space:normal; }
+  .w36-print .w36-reg-insp small, .w36-print .w36-reg-why, .w36-print .w36-reg-ev { font-size:7px; }
 </style>
 
 <div class="w36-wrap<?= $print_mode ? ' w36-print' : '' ?>">
@@ -418,7 +429,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
     .w36-print-foot { border-top:1px solid #9ca3af; margin-top:10px; padding-top:5px; font-size:9px; color:#374151; }
     .w36-print-foot .w36-sign { margin-top:6px; font-size:9px; }
     thead { display:table-header-group; }
-    tr, .w36-chart, .w36-kpi, .w36-panel { page-break-inside:avoid; }
+    tr, .w36-chart, .w36-panel, .w36-syn-kpi, .w36-reg-kpi { page-break-inside:avoid; }
   </style>
   <div class="w36-print-head">
     <img src="<?= $esc(isset($logo_url) ? $logo_url : base_url('uploads/logoam.png')) ?>" alt="A&amp;M">
@@ -811,6 +822,8 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   $sy     = isset($report['synthese']) ? $report['synthese'] : array();
   $plan   = isset($sy['action_plan']) ? $sy['action_plan'] : array();
   $reg    = isset($sy['register']) ? $sy['register'] : array();
+  // the model's own KPI block is what the workbook writes; every screen counter
+  // below is instead counted from the rows the screen prints (BR-27)
   $skpi   = isset($sy['kpi']) ? $sy['kpi'] : array();
   $legend = isset($sy['legend']) ? $sy['legend'] : array();
   $svc_join = function ($services, $key) {
@@ -834,6 +847,57 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
       $syn_days += isset($syn_row['days_down']) ? (int)$syn_row['days_down'] : 0;
   }
   $low = function ($s) { $s = (string)$s; return function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s); };
+
+  // header counters for the two registers — same BR-27 habit as the plan above:
+  // counted from the very rows the screen prints, never typed in, never touched by
+  // a screen filter. $reg_groups holds the same tallies per category for its
+  // summary row, so a category's figures are the sum of the machines beneath it.
+  $reg_total = 0; $reg_insp_done = 0; $reg_insp_undone = 0; $reg_insp_breakdown = 0;
+  $reg_insp_on_file = 0; $reg_pm_total = 0; $reg_pm_done = 0; $reg_pm_undone = 0;
+  $reg_groups = array(); $reg_code = null;
+  foreach ($reg as $reg_row) {
+      if (!is_array($reg_row)) continue;
+      if ((isset($reg_row['type']) ? $reg_row['type'] : '') === 'group') {
+          $reg_code = (string)(isset($reg_row['code']) ? $reg_row['code'] : '');
+          $reg_groups[$reg_code] = array('machines' => 0, 'done' => 0, 'undone' => 0,
+              'breakdown' => 0, 'pm_total' => 0, 'pm_done' => 0, 'pm_undone' => 0, 'hours_down' => 0.0);
+          continue;
+      }
+      $reg_status = strtoupper(trim((string)(isset($reg_row['inspection']['status']) ? $reg_row['inspection']['status'] : '')));
+      $reg_is_done = $reg_status === 'DONE';
+      $reg_is_bd   = $reg_status === 'BREAKDOWN';
+      $reg_undone  = $reg_is_done || $reg_is_bd ? 0 : 1;      // anything unrecognised counts as outstanding
+      if (isset($reg_row['inspection']['inspected_on']) && $reg_row['inspection']['inspected_on'] !== null) $reg_insp_on_file++;
+
+      $row_pm_total = 0; $row_pm_done = 0;
+      foreach ((array)(isset($reg_row['pm']['services']) ? $reg_row['pm']['services'] : array()) as $reg_svc) {
+          $row_pm_total++;
+          if (strtoupper(trim((string)(isset($reg_svc['status']) ? $reg_svc['status'] : ''))) === 'DONE') $row_pm_done++;
+      }
+      $row_pm_undone = $row_pm_total - $row_pm_done;
+
+      $reg_total++; $reg_pm_total += $row_pm_total; $reg_pm_done += $row_pm_done; $reg_pm_undone += $row_pm_undone;
+      if ($reg_is_done) $reg_insp_done++;
+      elseif ($reg_is_bd) $reg_insp_breakdown++;
+      else $reg_insp_undone += $reg_undone;
+
+      if ($reg_code !== null && isset($reg_groups[$reg_code])) {
+          $reg_groups[$reg_code]['machines']++;
+          if ($reg_is_done) $reg_groups[$reg_code]['done']++;
+          elseif ($reg_is_bd) $reg_groups[$reg_code]['breakdown']++;
+          else $reg_groups[$reg_code]['undone'] += $reg_undone;
+          $reg_groups[$reg_code]['pm_total']  += $row_pm_total;
+          $reg_groups[$reg_code]['pm_done']   += $row_pm_done;
+          $reg_groups[$reg_code]['pm_undone'] += $row_pm_undone;
+          $reg_groups[$reg_code]['hours_down'] += (float)(isset($reg_row['hours_down']) ? $reg_row['hours_down'] : 0);
+      }
+  }
+  // not inspected = nothing on file, however the row is labelled (a down machine
+  // cannot be inspected, so BREAKDOWN is outstanding too)
+  $reg_insp_out = $reg_insp_undone + $reg_insp_breakdown;
+  $reg_pm_ratio = $reg_pm_total > 0 ? $reg_pm_done / $reg_pm_total : null;
+  // the sheet's own M198: the machines inspected plus the PM services planned
+  $reg_planified = $reg_total + $reg_pm_total;
   ?>
   <?php /* the action plan panel follows the Workshop Weekly table design: summary
            counters, a screen-only filter bar, collapsible category summaries whose
@@ -961,62 +1025,163 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
     <?php endif; ?>
   </div>
 
+  <?php /* the two registers follow the same Workshop Weekly design as the plan
+           above: summary counters, a screen filter bar, collapsible category rows,
+           each PM service paired with its own status and reason instead of two
+           comma lists that lost the pairing, and cues that never rely on colour */ ?>
   <div class="w36-panel">
-    <h3>Weekly inspection report &amp; weekly planned PM services</h3>
-    <p class="w36-legend">
-      One row per machine: the inspection status and the inspector's comments on the left,
-      the planned PM services, with the interval the database stores, on the right.
+    <h3>Weekly inspection report &amp; weekly planned PM services — sheet <code><?= $esc($report_name . ' Synthese') ?></code></h3>
+    <p class="w36-legend" style="margin-top:4px">
+      Every reportable machine, in sheet order, under one summary row per category — expand a category for its machines.
+      The inspection status, its date and the comments are the submitted inspection's own record; every planned PM service carries the
+      interval the database stores, its own status and the reason the report computed for it. The Excel sheet keeps its seven-column
+      layout; this preview pairs each service with its own status instead of two parallel lists.
     </p>
     <?php if (empty($reg)): ?>
       <div class="w36-note">No reportable machine in this week — nothing to report.</div>
     <?php else: ?>
-      <div class="w36-tblwrap w36-syn">
-        <table class="w36">
+      <div class="w36-reg-kpis" aria-label="Inspection and planned PM summary for the week">
+        <div class="w36-reg-kpi">
+          <span class="l">Machines inspected</span>
+          <span class="k<?= $reg_total > 0 && $reg_insp_done === $reg_total ? ' good' : '' ?>"><?= (int)$reg_insp_done ?></span>
+          <span class="s">of <?= (int)$reg_total ?> on the register<?php if ($reg_insp_on_file > 0): ?> · <?= (int)$reg_insp_on_file ?> with an inspection dated this week<?php endif; ?></span>
+        </div>
+        <div class="w36-reg-kpi">
+          <span class="l">Not inspected</span>
+          <span class="k <?= $reg_insp_out > 0 ? 'bad' : 'good' ?>"><?= (int)$reg_insp_out ?></span>
+          <span class="s"><?= (int)$reg_insp_undone ?> UNDONE · <?= (int)$reg_insp_breakdown ?> BREAKDOWN (machine down)</span>
+        </div>
+        <div class="w36-reg-kpi">
+          <span class="l">PM services due</span>
+          <span class="k"><?= (int)$reg_pm_total ?></span>
+          <span class="s"><?= (int)$reg_pm_done ?> done · <?= (int)$reg_pm_undone ?> not done</span>
+        </div>
+        <div class="w36-reg-kpi">
+          <span class="l">PM done ratio</span>
+          <span class="k <?= $reg_pm_ratio === null ? '' : ($reg_pm_undone > 0 ? 'warn' : 'good') ?>"><?= $reg_pm_ratio === null ? '—' : $esc($pct($reg_pm_ratio)) ?></span>
+          <span class="s">of the services the week asked for · <?= (int)$reg_planified ?> actions planified in the sheet</span>
+        </div>
+      </div>
+
+      <?php if (!$print_mode): ?>
+      <div class="w36-table-tools" id="w36-reg-tools" hidden>
+        <label class="w36-search-label" for="w36-reg-search">Search the registers</label>
+        <input id="w36-reg-search" type="search" placeholder="ID, category, inspection, comment or service" autocomplete="off">
+        <label class="w36-filter-below"><input id="w36-reg-insp" type="checkbox"> <span>Not inspected only</span></label>
+        <label class="w36-filter-below"><input id="w36-reg-pm" type="checkbox"> <span>PM not done only</span></label>
+        <span id="w36-reg-count" role="status" aria-live="polite"></span>
+        <span class="w36-table-actions"><button type="button" class="w36-btn" data-w36-action="reg-expand">Expand all</button><button type="button" class="w36-btn" data-w36-action="reg-collapse">Collapse all</button></span>
+      </div>
+      <p class="w36-scroll-hint">Search or narrow the registers, then expand a category for its machines. Screen filters never change the counters above, the printed sheet or the Excel download.</p>
+      <?php endif; ?>
+
+      <div class="w36-tblwrap w36-reg-wrap" tabindex="0" role="region" aria-label="Weekly inspection report and planned PM services — scroll horizontally for every column">
+        <table class="w36 w36-reg-table" id="w36-reg-table">
+          <caption class="w36-small">One row per machine: the inspection status and date, the inspector's comments, and every planned PM service with its interval, its own status and the computed reason</caption>
           <thead>
             <tr>
-              <th>CATEGORIE</th><th>MACHINE ID</th><th>INSPECTION COMMENTS</th><th>STATUS</th>
-              <th>TYPE</th><th>STATUS</th><th>PM COMMENTS</th>
+              <th class="w36-left">Equipment</th>
+              <th class="w36-left">Inspection</th>
+              <th class="w36-left">Inspection comments</th>
+              <th class="w36-left">Planned PM services</th>
+              <th>Down h</th>
             </tr>
           </thead>
           <tbody>
-          <?php foreach ($reg as $r): ?>
+          <?php $reg_gid = 'w36-reg-group-none'; foreach ($reg as $r): ?>
             <?php if ($r['type'] === 'group'): ?>
-              <tr class="grp"><td colspan="7"><strong><?= $esc($r['label']) ?></strong> · <?= (int)$r['machines'] ?> machine<?= (int)$r['machines'] === 1 ? '' : 's' ?></td></tr>
+              <?php
+              $reg_gid = 'w36-reg-group-'.substr(sha1((string)$r['code']), 0, 10);
+              $rg      = isset($reg_groups[$r['code']]) ? $reg_groups[$r['code']] : array();
+              $rg_out  = (int)(isset($rg['undone']) ? $rg['undone'] : 0) + (int)(isset($rg['breakdown']) ? $rg['breakdown'] : 0);
+              ?>
+              <tr class="grp w36-reg-group" data-group-row="<?= $esc($reg_gid) ?>" data-open="<?= $print_mode ? '1' : '0' ?>">
+                <td class="w36-left"><button type="button" class="w36-group-toggle" data-w36-action="reg-toggle-group" data-group="<?= $esc($reg_gid) ?>" aria-expanded="<?= $print_mode ? 'true' : 'false' ?>">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span><?= $esc($r['label']) ?></span><small><?= (int)$r['machines'] ?> machine<?= (int)$r['machines'] === 1 ? '' : 's' ?><?php if (!empty($rg)): ?> · <?= (int)$rg['done'] ?> inspected · <?= $rg_out ?> not inspected<?php endif; ?></small>
+                </button></td>
+                <td class="w36-left"><?php if (empty($rg)): ?>—<?php else: ?><span class="w36-reg-counts"><?= (int)$rg['done'] ?> DONE · <?= (int)$rg['undone'] ?> UNDONE · <?= (int)$rg['breakdown'] ?> BREAKDOWN</span><?php endif; ?></td>
+                <td class="w36-left w36-wrap" aria-hidden="true">—</td>
+                <td class="w36-left w36-wrap"><?php if (empty($rg)): ?>—<?php else: ?><span class="w36-reg-counts"><?= (int)$rg['pm_total'] ?> service<?= (int)$rg['pm_total'] === 1 ? '' : 's' ?> · <?= (int)$rg['pm_done'] ?> done<?php if ((int)$rg['pm_undone'] > 0): ?> · <?= (int)$rg['pm_undone'] ?> not done<?php endif; ?></span><?php endif; ?></td>
+                <td><?php if (!empty($rg) && (float)$rg['hours_down'] > 0): ?><span class="w36-days"><?= $esc($num($rg['hours_down'], 1)) ?>&nbsp;h</span><?php else: ?>—<?php endif; ?></td>
+              </tr>
             <?php else: ?>
               <?php
-              $insp_cls = strtolower((string)($r['inspection']['status']));
-              $types    = $svc_join($r['pm']['services'], 'type');
-              $statuses = $svc_join($r['pm']['services'], 'status');
-              $reasons  = $svc_join($r['pm']['services'], 'comment');
+              $insp_status = (string)$r['inspection']['status'];
+              $insp_cls    = strtolower($insp_status);
+              $insp_on     = isset($r['inspection']['inspected_on']) ? $r['inspection']['inspected_on'] : null;
+              $comments    = isset($r['inspection']['comments']) ? (array)$r['inspection']['comments'] : array();
+              $services    = isset($r['pm']['services']) ? (array)$r['pm']['services'] : array();
+              $types       = $svc_join($services, 'type');
+              $statuses    = $svc_join($services, 'status');
+              $reasons     = $svc_join($services, 'comment');
+              $row_pm_undone = 0;
+              foreach ($services as $svc_n) {
+                  if (strtoupper(trim((string)(isset($svc_n['status']) ? $svc_n['status'] : ''))) !== 'DONE') $row_pm_undone++;
+              }
+              $reg_loc  = trim((string)($r['group_label'] !== null ? $r['group_label'] : ''));
+              $reg_dn   = (float)(isset($r['hours_down']) ? $r['hours_down'] : 0);
+              // everything the finder can match, one line, case handled by the script
+              $reg_text = trim((string)preg_replace('/\s+/', ' ', implode(' ', array_merge(
+                  array((string)$r['machine_id'], $reg_loc, $insp_status, (string)$insp_on),
+                  $comments, $types, $statuses, $reasons
+              ))));
               ?>
-              <tr class="machine" data-machine-search="<?= $esc($m['machine_id'] . ' '. $m['model'] . ' '. $m['site']['label']) ?>">
-                <td><?= $esc($r['group_label'] !== null ? $r['group_label'] : '—') ?></td>
-                <td class="w36-who"><?= $esc($r['machine_id']) ?></td>
-                <td class="wrap"><?= empty($r['inspection']['comments']) ? '—' : nl2br((string)($esc(implode("\n", $r['inspection']['comments'])))) ?></td>
-                <td><span class="w36-insp <?= $esc($insp_cls) ?>"><?= $esc($r['inspection']['status']) ?></span></td>
-                <td><?= empty($types) ? '—' : $esc(implode(', ', $types)) ?></td>
-                <td class="num"><?= empty($statuses) ? '—' : $esc(implode(', ', $statuses)) ?></td>
-                <td class="wrap"><?= empty($reasons) ? '—' : $esc(implode(', ', $reasons)) ?></td>
+              <tr class="machine w36-reg-row" data-machine-search="<?= $esc($reg_text) ?>" data-insp="<?= $esc($insp_cls) ?>" data-pm="<?= $row_pm_undone > 0 ? '1' : '0' ?>" data-parent="<?= $esc($reg_gid) ?>" <?= $print_mode ? '' : 'hidden' ?>>
+                <td class="w36-left"><div class="w36-syn-machine">
+                  <b><?= $esc($r['machine_id']) ?></b>
+                  <small><?= $esc($reg_loc === '' ? 'Category not set' : $reg_loc) ?></small>
+                </div></td>
+                <td class="w36-left"><div class="w36-reg-insp">
+                  <span class="w36-insp <?= $esc($insp_cls) ?>"><?= $esc($insp_status === '' ? 'UNKNOWN' : $insp_status) ?></span>
+                  <small><?= $insp_on !== null && $insp_on !== '' ? 'Inspected '.$esc($insp_on) : 'No inspection on file this week' ?></small>
+                </div></td>
+                <td class="w36-left w36-wrap"><?= empty($comments) ? '—' : nl2br((string)($esc(implode("\n", $comments)))) ?></td>
+                <td class="w36-left w36-wrap">
+                  <?php if (empty($services)): ?>
+                    <span class="w36-reg-none">No PM service due this week</span>
+                  <?php else: ?>
+                    <ul class="w36-reg-pms">
+                      <?php foreach ($services as $svc_r):
+                        $svc_status = (string)(isset($svc_r['status']) ? $svc_r['status'] : '');
+                        $svc_done   = strtoupper(trim($svc_status)) === 'DONE';
+                        $svc_type   = (string)(isset($svc_r['type']) ? $svc_r['type'] : '');
+                        $svc_why    = isset($svc_r['comment']) ? $svc_r['comment'] : null;
+                        $svc_due    = (string)(isset($svc_r['due_by']) ? $svc_r['due_by'] : '');
+                        $svc_meter  = isset($svc_r['meter_value']) ? $svc_r['meter_value'] : null;
+                        $svc_seen   = isset($svc_r['meter_reading_on']) ? $svc_r['meter_reading_on'] : null;
+                        $svc_ev     = '';
+                        if ($svc_due !== '' && $svc_due !== 'date' && $svc_meter !== null) {
+                            $svc_ev = 'judged at ' . $num($svc_meter, 1) . ($svc_due === 'km' ? ' km' : ' h')
+                                    . ($svc_seen !== null && $svc_seen !== '' ? ' — reading dated ' . $svc_seen : ' — no reading on file');
+                        }
+                      ?>
+                        <li class="w36-reg-pm">
+                          <span class="w36-reg-svc"><?= $esc($svc_type === '' ? 'Interval not set' : $svc_type) ?></span>
+                          <span class="w36-insp <?= $svc_done ? 'done' : 'undone' ?>"><?= $esc($svc_status === '' ? 'UNKNOWN' : $svc_status) ?></span>
+                          <?php if ($svc_why !== null && $svc_why !== ''): ?><em class="w36-reg-why"><?= $esc($svc_why) ?></em><?php endif; ?>
+                          <?php if ($svc_ev !== ''): ?><em class="w36-reg-ev"><?= $esc($svc_ev) ?></em><?php endif; ?>
+                        </li>
+                      <?php endforeach; ?>
+                    </ul>
+                  <?php endif; ?>
+                </td>
+                <td><?php if ($reg_dn > 0): ?><span class="w36-days" title="<?= $esc($num($reg_dn, 2)) ?> hours of downtime recorded this week"><?= $esc($num($reg_dn, 1)) ?>&nbsp;h</span><?php else: ?>—<?php endif; ?></td>
               </tr>
             <?php endif; ?>
           <?php endforeach; ?>
           </tbody>
         </table>
       </div>
+      <div id="w36-reg-no-matches" class="w36-no-matches" hidden>No machines match these filters.</div>
+      <div class="w36-reg-foot">
+        <span>Inspection status: <span class="w36-insp breakdown">BREAKDOWN</span> wins over <span class="w36-insp done">DONE</span> when the machine is down now or was still down at the week's end, and <span class="w36-insp done">DONE</span> needs a submitted inspection inside the week — otherwise the row is <span class="w36-insp undone">UNDONE</span>. A dash means nothing was recorded.</span>
+        <span>Each service shows the interval the database stores with its own status; a service that is not done carries the reason the report computed, never a typed one. “Down h” counts the machine's downtime hours for the week.</span>
+      </div>
     <?php endif; ?>
 
-    <?php $kpm = isset($skpi['pm']) ? $skpi['pm'] : array(); $kin = isset($skpi['inspection']) ? $skpi['inspection'] : array(); ?>
-    <div class="w36-kpis">
-      <div class="w36-kpi"><span class="n"><?= (int)$kpm['planned'] ?></span><span class="l">PM planned</span></div>
-      <div class="w36-kpi"><span class="n"><?= (int)$kpm['done'] ?></span><span class="l">PM done</span></div>
-      <div class="w36-kpi"><span class="n"><?= (int)$kpm['undone'] ?></span><span class="l">PM undone</span></div>
-      <div class="w36-kpi"><span class="n"><?= $pct($kpm['ratio_done']) ?></span><span class="l">PM done ratio</span></div>
-      <div class="w36-kpi"><span class="n"><?= (int)$kin['machines'] ?></span><span class="l">Machines inspected</span></div>
-      <div class="w36-kpi"><span class="n"><?= (int)$kin['done'] ?></span><span class="l">Inspections DONE</span></div>
-      <div class="w36-kpi"><span class="n"><?= (int)$kin['undone'] ?></span><span class="l">Inspections UNDONE</span></div>
-      <div class="w36-kpi"><span class="n"><?= (int)$kin['breakdown'] ?></span><span class="l">Inspections BREAKDOWN</span></div>
-      <div class="w36-kpi"><span class="n"><?= (int)$skpi['total_planned'] ?></span><span class="l">Total action planified</span></div>
-    </div>
+    <?php /* the counters the panel used to print as a nine-tile strip live in the
+             four summary cards above now — each figure once, each one counted from
+             the rows beneath instead of a second, separately maintained tally */ ?>
   </div>
 
   <?php /* ── W4.3 — the charts (decision D6: here and in the PDF, never in the Excel file) ── */ ?>
@@ -1338,6 +1503,82 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   if (location) location.addEventListener('change', applyFilters);
   if (below) below.addEventListener('change', applyFilters);
   if (hold) hold.addEventListener('change', applyFilters);
+  applyFilters();
+}());
+
+/* the inspection/PM registers — same interaction rules again, its own ids: the
+   filters only touch screen rows, categories start collapsed, a category that
+   matches opens itself so a search never hides its own result. */
+(function () {
+  var tools = document.getElementById('w36-reg-tools');
+  var input = document.getElementById('w36-reg-search');
+  var insp = document.getElementById('w36-reg-insp');
+  var pm = document.getElementById('w36-reg-pm');
+  var count = document.getElementById('w36-reg-count');
+  var noMatches = document.getElementById('w36-reg-no-matches');
+  var table = document.getElementById('w36-reg-table');
+  if (!input || !table) return;
+
+  var rows = Array.prototype.slice.call(table.querySelectorAll('tr.machine[data-machine-search]'));
+  var groups = Array.prototype.slice.call(table.querySelectorAll('tr.w36-reg-group[data-group-row]'));
+  if (tools) tools.hidden = false;
+
+  function activeFilter() {
+    return !!(input.value.trim() || (insp && insp.checked) || (pm && pm.checked));
+  }
+  function matches(row, term, onlyInsp, onlyPm) {
+    return (!term || (row.getAttribute('data-machine-search') || '').toLocaleLowerCase().indexOf(term) !== -1) &&
+      (!onlyInsp || (row.getAttribute('data-insp') || '') !== 'done') &&
+      (!onlyPm || row.getAttribute('data-pm') === '1');
+  }
+  function applyFilters() {
+    var term = input.value.trim().toLocaleLowerCase();
+    var onlyInsp = insp ? insp.checked : false;
+    var onlyPm = pm ? pm.checked : false;
+    var filtered = activeFilter();
+    var matching = 0;
+
+    rows.forEach(function (row) {
+      var yes = matches(row, term, onlyInsp, onlyPm);
+      row.dataset.matches = yes ? '1' : '0';
+      if (yes) matching++;
+    });
+
+    groups.forEach(function (group) {
+      var groupId = group.getAttribute('data-group-row');
+      var children = rows.filter(function (row) { return row.getAttribute('data-parent') === groupId; });
+      var hasMatch = children.some(function (row) { return row.dataset.matches === '1'; });
+      var open = filtered ? hasMatch : group.dataset.open === '1';
+      group.hidden = filtered && !hasMatch;
+      var toggle = group.querySelector('[data-w36-action="reg-toggle-group"]');
+      if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      children.forEach(function (row) { row.hidden = !(open && row.dataset.matches === '1'); });
+    });
+    if (count) count.textContent = matching + ' of ' + rows.length + ' machines shown';
+    if (noMatches) noMatches.hidden = matching !== 0;
+  }
+  function setAll(open) {
+    groups.forEach(function (group) { group.dataset.open = open ? '1' : '0'; });
+    applyFilters();
+  }
+
+  if (tools) tools.addEventListener('click', function (event) {
+    var action = event.target.closest('[data-w36-action]');
+    if (!action) return;
+    if (action.dataset.w36Action === 'reg-expand') setAll(true);
+    else if (action.dataset.w36Action === 'reg-collapse') setAll(false);
+  });
+  table.addEventListener('click', function (event) {
+    var action = event.target.closest('[data-w36-action]');
+    if (!action || action.dataset.w36Action !== 'reg-toggle-group') return;
+    var group = groups.find(function (row) { return row.getAttribute('data-group-row') === action.dataset.group; });
+    if (!group) return;
+    group.dataset.open = group.dataset.open === '1' ? '0' : '1';
+    applyFilters();
+  });
+  input.addEventListener('input', applyFilters);
+  if (insp) insp.addEventListener('change', applyFilters);
+  if (pm) pm.addEventListener('change', applyFilters);
   applyFilters();
 }());
 </script>
