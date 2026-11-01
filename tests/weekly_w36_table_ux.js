@@ -94,4 +94,71 @@ const picker = view.slice(view.indexOf('<form class="w36-picker" method="get"'),
 assert.match(picker, /<\/form>[\s\S]*<form class="w36-picker" method="get"[\s\S]*name="week_start"/);
 const lookup = model.slice(model.indexOf('public function report_for_week'), model.indexOf('private function payload_matches'));
 assert.match(lookup, /}\s*\/\/ A live reading[\s\S]*snapshot_row\(\$start\)/);
+
+// ── the `Synthese` action-plan table: same delegated rules, its own ids ──────
+const synHandlers = {};
+function synRow(parent, text, loc, below, hold) {
+  return {
+    hidden: true, dataset: {},
+    getAttribute(name) {
+      return ({'data-machine-search':text,'data-location':loc,'data-below':below,'data-hold':hold,'data-parent':parent})[name] || '';
+    }
+  };
+}
+function synGroup(id) {
+  const toggle = control('syn-toggle-group', {group:id});
+  return {
+    hidden: false, dataset: {open:'0'}, toggle,
+    getAttribute(name) { return name === 'data-group-row' ? id : ''; },
+    querySelector: selector => selector === '[data-w36-action="syn-toggle-group"]' ? toggle : null
+  };
+}
+const sg1 = synGroup('sg1'), sg2 = synGroup('sg2');
+const synRows = [synRow('sg1','EX-1 excavator north oil leak','north','1','0'), synRow('sg2','DO-1 dozer south awaiting parts','south','0','1')];
+const synGroups = [sg1,sg2];
+const synToolsEl = {hidden:true,addEventListener(type,fn){synHandlers[`tools-${type}`]=fn;}};
+const synInput = {value:'',addEventListener(type,fn){synHandlers[`search-${type}`]=fn;}};
+const synLocation = {value:'',addEventListener(type,fn){synHandlers[`location-${type}`]=fn;}};
+const synBelow = {checked:false,addEventListener(type,fn){synHandlers[`below-${type}`]=fn;}};
+const synHold = {checked:false,addEventListener(type,fn){synHandlers[`hold-${type}`]=fn;}};
+const synCount = {}, synNoMatches = {hidden:true};
+const synTable = {
+  querySelectorAll(selector) { return selector.indexOf('tr.machine') === 0 ? synRows : synGroups; },
+  addEventListener(type,fn){synHandlers[`table-${type}`]=fn;}
+};
+const elements2 = Object.assign({}, elements, {
+  'w36-syn-tools':synToolsEl,'w36-syn-search':synInput,'w36-syn-location':synLocation,
+  'w36-syn-below':synBelow,'w36-syn-hold':synHold,'w36-syn-count':synCount,
+  'w36-syn-no-matches':synNoMatches,'w36-syn-table':synTable
+});
+vm.runInNewContext(script,{document:{getElementById:id=>elements2[id]}});
+assert.equal(synToolsEl.hidden,false,'the plan toolbar appears when JS runs');
+assert.equal(synCount.textContent,'2 of 2 machines shown');
+assert.equal(synRows[0].hidden,true,'categories start collapsed');
+synHandlers['table-click']({target:{closest:selector=>selector==='[data-w36-action]'?sg1.toggle:null}});
+assert.equal(synRows[0].hidden,false,'a category toggle opens its machines');
+synInput.value='leak';synHandlers['search-input']();
+assert.equal(synRows[0].hidden,false);assert.equal(synRows[1].hidden,true);assert.equal(sg2.hidden,true);
+synInput.value='';synBelow.checked=true;synHandlers['below-change']();
+assert.equal(synRows[0].hidden,false);assert.equal(synRows[1].hidden,true,'below-target filter keeps only misses');
+synBelow.checked=false;synHold.checked=true;synHandlers['hold-change']();
+assert.equal(synRows[0].hidden,true);assert.equal(synRows[1].hidden,false,'on-hold filter keeps only held machines');
+synInput.value='missing';synHandlers['search-input']();
+assert.equal(synNoMatches.hidden,false,'no matches show the empty state');
+synInput.value='';synHold.checked=false;synHandlers['hold-change']();
+synHandlers['tools-click']({target:{closest:selector=>selector==='[data-w36-action]'?control('syn-expand'):null}});
+assert.equal(synRows[0].hidden,false);assert.equal(synRows[1].hidden,false,'expand all opens every category');
+synHandlers['tools-click']({target:{closest:selector=>selector==='[data-w36-action]'?control('syn-collapse'):null}});
+assert.equal(synRows[0].hidden,true,'collapse all closes every category');
+
+assert.match(view, /id="w36-syn-table"/);
+assert.match(view, /w36-syn-kpis/);
+assert.match(view, /data-w36-action="syn-toggle-group"/);
+assert.match(view, /data-w36-action="syn-expand"/);
+assert.match(view, /w36-syn-search/);
+assert.match(view, /On hold only/);
+assert.match(view, /w36-syn-wo/);
+assert.match(view, /Work order <\?= \$esc\(\$r\['work_order'\]\)/);
+assert.match(view, /data-hold="<\?= \$r\['hold_code'\] !== null \? '1' : '0' \?>"/);
+assert.match(view, /data-machine-search="<\?= \$esc\(\$r_text\)/);
 console.log('weekly W36 table UX checks passed');
