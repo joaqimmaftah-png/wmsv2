@@ -3067,6 +3067,7 @@ check('LUB-01, LUB-02 & LUB-06 Clean Render Across All 6 Views, XSS Neutralizati
     && strpos($lubSupHtml, 'id="lubRecordBtn"') !== FALSE
     && strpos($lubSupHtml, 'Compliance Report') !== FALSE
     && strpos($lubSupHtml, '+ Add Lube Type') !== FALSE
+    && strpos($lubSupHtml, 'Open Lube Budget') !== FALSE
     && strpos($lubStoreHtml, 'id="lubRecordBtn"') !== FALSE
     && strpos($lubStoreHtml, 'id="lubBudgetShell"') !== FALSE
     && strpos($lubStoreHtml, 'Compliance Report') === FALSE
