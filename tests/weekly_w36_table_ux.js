@@ -161,4 +161,80 @@ assert.match(view, /w36-syn-wo/);
 assert.match(view, /Work order <\?= \$esc\(\$r\['work_order'\]\)/);
 assert.match(view, /data-hold="<\?= \$r\['hold_code'\] !== null \? '1' : '0' \?>"/);
 assert.match(view, /data-machine-search="<\?= \$esc\(\$r_text\)/);
+
+// ── the inspection / PM registers: the same rules once more, its own ids ─────
+const regHandlers = {};
+function regRow(parent, text, insp, pm) {
+  return {
+    hidden: true, dataset: {},
+    getAttribute(name) {
+      return ({'data-machine-search':text,'data-insp':insp,'data-pm':pm,'data-parent':parent})[name] || '';
+    }
+  };
+}
+function regGroup(id) {
+  const toggle = control('reg-toggle-group', {group:id});
+  return {
+    hidden: false, dataset: {open:'0'}, toggle,
+    getAttribute(name) { return name === 'data-group-row' ? id : ''; },
+    querySelector: selector => selector === '[data-w36-action="reg-toggle-group"]' ? toggle : null
+  };
+}
+const rg1 = regGroup('rg1'), rg2 = regGroup('rg2');
+const regRows = [
+  regRow('rg1', 'EX 006 excavators done 500 hours', 'done', '0'),
+  regRow('rg2', 'EX 011 excavators breakdown 250 hours', 'breakdown', '1')
+];
+const regGroups = [rg1, rg2];
+const regToolsEl = {hidden:true,addEventListener(type,fn){regHandlers[`tools-${type}`]=fn;}};
+const regInput = {value:'',addEventListener(type,fn){regHandlers[`search-${type}`]=fn;}};
+const regInsp = {checked:false,addEventListener(type,fn){regHandlers[`insp-${type}`]=fn;}};
+const regPm = {checked:false,addEventListener(type,fn){regHandlers[`pm-${type}`]=fn;}};
+const regCount = {}, regNoMatches = {hidden:true};
+const regTable = {
+  querySelectorAll(selector) { return selector.indexOf('tr.machine') === 0 ? regRows : regGroups; },
+  addEventListener(type,fn){regHandlers[`table-${type}`]=fn;}
+};
+const elements3 = {
+  'w36-reg-tools':regToolsEl,'w36-reg-search':regInput,'w36-reg-insp':regInsp,
+  'w36-reg-pm':regPm,'w36-reg-count':regCount,'w36-reg-no-matches':regNoMatches,
+  'w36-reg-table':regTable
+};
+vm.runInNewContext(script,{document:{getElementById:id=>elements3[id]}});
+assert.equal(regToolsEl.hidden,false,'the register toolbar appears when JS runs');
+assert.equal(regCount.textContent,'2 of 2 machines shown');
+assert.equal(regRows[0].hidden,true,'categories start collapsed');
+regHandlers['table-click']({target:{closest:selector=>selector==='[data-w36-action]'?rg1.toggle:null}});
+assert.equal(regRows[0].hidden,false,'a category toggle opens its machines');
+regInput.value='250 hours';regHandlers['search-input']();
+assert.equal(regRows[0].hidden,true);assert.equal(regRows[1].hidden,false,"search matches a service interval");
+assert.equal(rg1.hidden,true,'a category with no match is hidden');
+regInput.value='';regInsp.checked=true;regHandlers['insp-change']();
+assert.equal(regRows[0].hidden,true);assert.equal(regRows[1].hidden,false,'a BREAKDOWN row counts as not inspected');
+regInsp.checked=false;regPm.checked=true;regHandlers['pm-change']();
+assert.equal(regRows[0].hidden,true);assert.equal(regRows[1].hidden,false,'PM-not-done keeps only rows with an outstanding service');
+regPm.checked=false;regHandlers['search-input']();
+regInput.value='nothing here';regHandlers['search-input']();
+assert.equal(regNoMatches.hidden,false,'no matches show the empty state');
+regInput.value='';regHandlers['search-input']();
+assert.equal(regNoMatches.hidden,true);
+regHandlers['tools-click']({target:{closest:selector=>selector==='[data-w36-action]'?control('reg-expand'):null}});
+assert.equal(regRows[0].hidden,false);assert.equal(regRows[1].hidden,false,'expand all opens every category');
+regHandlers['tools-click']({target:{closest:selector=>selector==='[data-w36-action]'?control('reg-collapse'):null}});
+assert.equal(regRows[0].hidden,true,'collapse all closes every category');
+
+assert.match(view, /id="w36-reg-table"/);
+assert.match(view, /w36-reg-kpis/);
+assert.match(view, /data-w36-action="reg-toggle-group"/);
+assert.match(view, /data-w36-action="reg-expand"/);
+assert.match(view, /id="w36-reg-search"/);
+assert.match(view, /Not inspected only/);
+assert.match(view, /PM not done only/);
+assert.match(view, /data-insp="<\?= \$esc\(\$insp_cls\) \?>"/);
+assert.match(view, /data-pm="<\?= \$row_pm_undone > 0 \? '1' : '0' \?>"/);
+assert.match(view, /data-machine-search="<\?= \$esc\(\$reg_text\)/);
+// the register's finder text must be its own row, never the earlier grid loop's $m
+const regPanel = view.slice(view.indexOf('Weekly inspection report'), view.indexOf('Charts — this week'));
+assert.ok(regPanel.indexOf('$m[') === -1, 'the register panel no longer reads the main grid loop variable');
+assert.ok(regPanel.indexOf("$r['inspection']['comments']") !== -1);
 console.log('weekly W36 table UX checks passed');
