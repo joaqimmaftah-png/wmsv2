@@ -237,4 +237,23 @@ assert.match(view, /data-machine-search="<\?= \$esc\(\$reg_text\)/);
 const regPanel = view.slice(view.indexOf('Weekly inspection report'), view.indexOf('Charts — this week'));
 assert.ok(regPanel.indexOf('$m[') === -1, 'the register panel no longer reads the main grid loop variable');
 assert.ok(regPanel.indexOf("$r['inspection']['comments']") !== -1);
+
+// ── the per-type weekly block (BQ:CB) ────────────────────────────────────────
+// from the panel's own PHP block, so the sheet-header array is in scope
+const ptPanel = view.slice(view.indexOf('the per-type block (BQ:CB)'), view.indexOf('Workshop action plan'));
+assert.match(ptPanel, /id="w36-pt-table"/);
+assert.match(ptPanel, /class="w36-tblwrap w36-pt-wrap" tabindex="0" role="region"/);
+assert.match(ptPanel, /<th class="w36-left w36-pt-type" scope="row">/, 'the type leads its own row');
+assert.match(ptPanel, /class="fleet w36-pt-row w36-pt-fleet"/, 'a computed fleet row closes the table');
+assert.match(ptPanel, /\$availability_bar\(/, 'availability is the shared bar, not a bare percentage');
+assert.match(ptPanel, /\$misses\(/, 'the below-target comparison is the shared BR-W17 helper');
+assert.match(ptPanel, /w36-pt-flag/, 'below target is stated in words, not colour alone');
+assert.match(ptPanel, /scope="col"/);
+// the sheet's misspelled headers survive only as traceability, never as live headers
+assert.equal((ptPanel.match(/Fleet Availible Nb/g) || []).length, 1);
+assert.equal((ptPanel.match(/NUMBER OF FAILLURE Nb/g) || []).length, 1);
+assert.ok(ptPanel.indexOf('<th scope="col">Fleet Availible Nb') === -1, 'the old header spelling is not a column');
+assert.ok(view.indexOf('$block_cols') === -1, 'the ad-hoc header array is gone');
+assert.ok(view.indexOf('class="wk"') === -1, 'the old sheet-cell class is gone');
+assert.ok(view.indexOf('th.wk') === -1, 'its now-dead CSS rule is gone too');
 console.log('weekly W36 table UX checks passed');
