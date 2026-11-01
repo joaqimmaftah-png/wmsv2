@@ -228,7 +228,6 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   table.w36 th, table.w36 td { border-bottom:1px solid #eceff3; border-right:1px solid #eceff3; padding:4px 7px; }
   table.w36 thead th { position:sticky; top:0; background:#f3f4f6; font-size:11px; text-transform:uppercase;
                        letter-spacing:.02em; color:#374151; z-index:2; }
-  table.w36 thead th.wk { background:#e8eefc; }
   table.w36 tbody tr.fleet td { background:#eef2ff; font-weight:600; }
   table.w36 tbody tr.grp td { background:#f8fafc; font-weight:600; }
   table.w36 tbody tr.machine:hover td { background:#fbfdff; }
@@ -400,6 +399,38 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   .w36-print .w36-syn-wrap table.w36-syn-table tr.machine td:first-child, .w36-print .w36-reg-wrap table.w36-reg-table tr.machine td:first-child { padding-left:10px; }
   .w36-print .w36-reg-insp, .w36-print .w36-reg-pms { white-space:normal; }
   .w36-print .w36-reg-insp small, .w36-print .w36-reg-why, .w36-print .w36-reg-ev { font-size:7px; }
+
+  /* the per-type weekly block (BQ:CB): the sheet's twelve figures with the type
+     leading its row, the same sticky header and availability bar as the rest of
+     the page, and a computed fleet row */
+  .w36-pt-panel { margin-top:16px; }
+  .w36-pt-sheet { color:#586a72; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
+  .w36-pt-wrap { overflow:auto; border:1px solid #d0d8db; border-radius:8px; background:#f8f9f9; }
+  .w36-pt-wrap table.w36-pt-table { min-width:1080px; width:100%; border-collapse:collapse; border-spacing:0; white-space:nowrap; font:inherit; font-size:12px; color:#14232b; }
+  .w36-pt-wrap table.w36-pt-table thead th { position:sticky; top:0; z-index:2; padding:9px 10px; border:0; border-bottom:1px solid #d0d8db; background:#f8f9f9; color:#586a72; font:inherit; font-size:10px; font-weight:600; letter-spacing:.065em; text-transform:uppercase; text-align:right; }
+  .w36-pt-wrap table.w36-pt-table th.w36-left, .w36-pt-wrap table.w36-pt-table td.w36-left { text-align:left; }
+  .w36-pt-wrap table.w36-pt-table td, .w36-pt-wrap table.w36-pt-table tbody th { padding:8px 10px; border:0; border-bottom:1px solid #d0d8db; text-align:right; vertical-align:middle; font-variant-numeric:tabular-nums; }
+  .w36-pt-wrap table.w36-pt-table tbody th { font-weight:400; }
+  .w36-pt-wrap table.w36-pt-table tbody tr:last-child td, .w36-pt-wrap table.w36-pt-table tbody tr:last-child th { border-bottom:0; }
+  .w36-pt-wrap table.w36-pt-table tbody tr.type:hover td, .w36-pt-wrap table.w36-pt-table tbody tr.type:hover th { background:#d5eaee; }
+  .w36-pt-wrap table.w36-pt-table tbody tr.fleet td, .w36-pt-wrap table.w36-pt-table tbody tr.fleet th { background:#e2e8ea; font-weight:600; }
+  .w36-pt-wrap table.w36-pt-table caption { caption-side:top; padding:7px 10px; color:#586a72; text-align:left; white-space:normal; }
+  .w36-pt-unit { color:#8a9aa1; font-size:9px; font-weight:600; }
+  .w36-pt-type span { display:block; color:#0b6e7f; font-weight:600; }
+  .w36-pt-type small { display:block; margin-top:1px; color:#586a72; font-size:10.5px; }
+  .w36-pt-flag { display:inline-block; margin-top:3px; padding:0 6px; border-radius:999px; background:#f5d5d0; color:#c0392b;
+                 font-size:10px; font-style:normal; font-weight:700; letter-spacing:.02em; }
+  .w36-pt-foot { display:flex; align-items:flex-start; gap:6px 16px; flex-wrap:wrap; margin-top:10px; color:#586a72; font-size:11px; }
+  .w36-pt-foot > span { max-width:560px; }
+  .w36-pt-foot em { font-style:normal; color:#2f444d; }
+  .w36-pt-wrap [hidden] { display:none!important; }
+  @media(max-width:760px) { .w36-pt-wrap table.w36-pt-table { min-width:900px; } }
+  .w36-print .w36-pt-panel { page-break-inside:avoid; }
+  .w36-print .w36-pt-wrap { overflow:visible; border:0; border-radius:0; background:transparent; }
+  .w36-print .w36-pt-wrap table.w36-pt-table { min-width:0; font-size:8px; }
+  .w36-print .w36-pt-wrap table.w36-pt-table thead th { position:static; font-size:8px; }
+  .w36-print .w36-pt-wrap table.w36-pt-table td, .w36-print .w36-pt-wrap table.w36-pt-table tbody th { padding:2px 4px; font-size:8px; }
+  .w36-print .w36-pt-type small, .w36-print .w36-pt-flag, .w36-print .w36-pt-foot { font-size:7px; }
 </style>
 
 <div class="w36-wrap<?= $print_mode ? ' w36-print' : '' ?>">
@@ -779,42 +810,119 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   </div>
   <div id="w36-no-matches" class="w36-no-matches" hidden>No machines match these filters.</div>
 
-  <?php /* ── the per-type block (BQ:CB) ───────────────────────────────── */ ?>
+  <?php /* ── the per-type block (BQ:CB), in the same design language as the two
+           `Synthese` panels below: the type leads its row, the sheet's own headers
+           are spelled out, availability is a bar against its target, and a computed
+           fleet row closes the table so nothing has to be added up by eye */ ?>
   <?php
-    $block_cols = array('Fleet Availible Nb', 'Fleet Breakdown Nb', 'APPLICATION',
-                        'WEEKLY OPEN TIME h', 'PREVENTIVE TIME h', 'REQUIRED TIME h', 'TOTAL DOWN TIME h',
-                        'NUMBER OF FAILLURE Nb', 'MTBF h', 'MTTR h', 'AVAIBILITY OPERATIONAL %', 'WEEKLY TARGET KPI %');
+    $pt_rows = array();
+    foreach ($groups as $g) {
+        if ((int)$g['row_count'] === 0) continue;
+        $pt_rows[] = $g;
+    }
+    // the twelve figures the sheet carries in BQ:CB, in the order it carries them
+    $pt_sheet_cols = array('Fleet Availible Nb', 'Fleet Breakdown Nb', 'APPLICATION', 'WEEKLY OPEN TIME h',
+                           'PREVENTIVE TIME h', 'REQUIRED TIME h', 'TOTAL DOWN TIME h', 'NUMBER OF FAILLURE Nb',
+                           'MTBF h', 'MTTR h', 'AVAIBILITY OPERATIONAL %', 'WEEKLY TARGET KPI %');
+    $pt_fleet = isset($fleet['rollup']) ? $fleet['rollup'] : null;
   ?>
-  <div class="w36-tblwrap" style="margin-top:16px">
-    <table class="w36">
-      <thead>
-        <tr><?php foreach ($block_cols as $c): ?><th class="wk"><?= $esc($c) ?></th><?php endforeach; ?></tr>
-      </thead>
-      <tbody>
-        <?php foreach ($groups as $g): if ((int)$g['row_count'] === 0) continue; $pt = isset($per_type[$g['code']]) ? $per_type[$g['code']] : array(); $r = $g['rollup']; ?>
-          <tr>
-            <td class="num wk"><?= (int)(isset($pt['available']) ? $pt['available'] : 0) ?></td>
-            <td class="num wk"><?= (int)(isset($pt['down']) ? $pt['down'] : 0) ?></td>
-            <td class="wk"><?= $esc($g['label']) ?></td>
-            <td class="num wk"><?= $esc($num($week['open_hours'], 0)) ?></td>
-            <td class="num wk"><?= $esc($num($r['preventive_hours'], 2)) ?></td>
-            <td class="num wk"><?= $esc($num($r['required_time_hours'], 2)) ?></td>
-            <td class="num wk"><?= $esc($num($r['downtime_hours'], 2)) ?></td>
-            <td class="num wk"><?= $esc($num($r['breakdowns'], 0)) ?></td>
-            <td class="num wk"><?= $esc($num($r['mtbf_hours'], 2)) ?></td>
-            <td class="num wk"><?= $esc($num($r['mttr_hours'], 2)) ?></td>
-            <td class="num wk"><?= $esc($pct($r['availability'])) ?></td>
-            <td class="num wk"><?= $esc($pct($r['weekly_target'])) ?></td>
-          </tr>
-        <?php endforeach; ?>
-      </tbody>
-    </table>
-  </div>
+  <div class="w36-panel w36-pt-panel">
+    <h3>Per-type weekly block — sheet <code><?= $esc($report_name) ?></code> <span class="w36-pt-sheet">columns BQ:CB</span></h3>
+    <p class="w36-legend" style="margin-top:4px">
+      The sheet's twelve figures, one row per equipment type in the sheet's order. The type leads its row; the sheet's own headers
+      are spelled out beneath the table. Everything else is unchanged: the same weekly block the availability grid computes, the
+      same target comparison (BR-W17), and a fleet row the report calculates rather than leaves the reader to add up.
+    </p>
+    <?php if (empty($pt_rows)): ?>
+      <div class="w36-note">No reportable machine in this week — no type to block up.</div>
+    <?php else: ?>
+      <div class="w36-tblwrap w36-pt-wrap" tabindex="0" role="region" aria-label="Per-type weekly block — scroll horizontally for every column">
+        <table class="w36 w36-pt-table" id="w36-pt-table">
+          <caption class="w36-small">One row per equipment type: fleet counts, open time, preventive and required hours, downtime, failures, MTBF, MTTR, and operational availability against the weekly target</caption>
+          <thead>
+            <tr>
+              <th class="w36-left" scope="col">Equipment type</th>
+              <th scope="col">Available</th>
+              <th scope="col">Down</th>
+              <th scope="col">Open time <span class="w36-pt-unit">h</span></th>
+              <th scope="col">Preventive <span class="w36-pt-unit">h</span></th>
+              <th scope="col">Required <span class="w36-pt-unit">h</span></th>
+              <th scope="col">Down <span class="w36-pt-unit">h</span></th>
+              <th scope="col">Failures</th>
+              <th scope="col">MTBF <span class="w36-pt-unit">h</span></th>
+              <th scope="col">MTTR <span class="w36-pt-unit">h</span></th>
+              <th scope="col">Availability</th>
+              <th scope="col">Target</th>
+            </tr>
+          </thead>
+          <tbody>
+          <?php foreach ($pt_rows as $g):
+            $pt     = isset($per_type[$g['code']]) ? $per_type[$g['code']] : array();
+            $r      = $g['rollup'];
+            $pt_below = $misses(isset($r['availability']) ? $r['availability'] : null, isset($r['weekly_target']) ? $r['weekly_target'] : null);
+          ?>
+            <tr class="type w36-pt-row" data-type-search="<?= $esc($g['label']) ?>">
+              <th class="w36-left w36-pt-type" scope="row">
+                <span><?= $esc($g['label']) ?></span>
+                <small><?= (int)$g['row_count'] ?> machine<?= (int)$g['row_count'] === 1 ? '' : 's' ?></small>
+                <?php if ($pt_below): ?><em class="w36-pt-flag" title="Availability is below this type's weekly target KPI">below target</em><?php endif; ?>
+              </th>
+              <td><?= (int)(isset($pt['available']) ? $pt['available'] : 0) ?></td>
+              <td><?= (int)(isset($pt['down']) ? $pt['down'] : 0) ?></td>
+              <td title="The week's open hours per machine — the same for every type"><?= $esc($num($week['open_hours'], 0)) ?></td>
+              <td><?= $esc($num($r['preventive_hours'], 2)) ?></td>
+              <td><?= $esc($num($r['required_time_hours'], 2)) ?></td>
+              <td><?php if ((float)$r['downtime_hours'] > 0): ?><span class="w36-days" title="Hours of downtime recorded this week"><?= $esc($num($r['downtime_hours'], 2)) ?></span><?php else: ?><?= $esc($num(isset($r['downtime_hours']) ? $r['downtime_hours'] : null, 2)) ?><?php endif; ?></td>
+              <td><?= $esc($num($r['breakdowns'], 0)) ?></td>
+              <td><?= $esc($num($r['mtbf_hours'], 2)) ?></td>
+              <td><?= $esc($num($r['mttr_hours'], 2)) ?></td>
+              <td><?= $availability_bar(isset($r['availability']) ? $r['availability'] : null, isset($r['weekly_target']) ? $r['weekly_target'] : null) ?></td>
+              <td><?= $esc($pct(isset($r['weekly_target']) ? $r['weekly_target'] : null)) ?></td>
+            </tr>
+          <?php endforeach; ?>
 
-  <p class="w36-legend">
-    Red bold marks a value below its target (BR-W17). The weekly block is BG:BP, the table above it is BQ:CB — the same
-    figures the downloaded Excel file carries, at preview density; expand a machine for its seven day blocks.
-  </p>
+          <?php if ($pt_fleet !== null): $pt_fleet_below = $misses(isset($pt_fleet['availability']) ? $pt_fleet['availability'] : null, isset($pt_fleet['weekly_target']) ? $pt_fleet['weekly_target'] : null); ?>
+            <tr class="fleet w36-pt-row w36-pt-fleet">
+              <th class="w36-left w36-pt-type" scope="row">
+                <span>Fleet</span>
+                <small><?= (int)$machine_total ?> machines · computed by the report</small>
+                <?php if ($pt_fleet_below): ?><em class="w36-pt-flag" title="Fleet availability is below the fleet weekly target KPI">below target</em><?php endif; ?>
+              </th>
+              <td><?= (int)$fleet_available ?></td>
+              <td><?= (int)$down_machines ?></td>
+              <td><?= $esc($num($week['open_hours'], 0)) ?></td>
+              <td><?= $esc($num(isset($pt_fleet['preventive_hours']) ? $pt_fleet['preventive_hours'] : null, 2)) ?></td>
+              <td><?= $esc($num(isset($pt_fleet['required_time_hours']) ? $pt_fleet['required_time_hours'] : null, 2)) ?></td>
+              <td><?php if ((float)(isset($pt_fleet['downtime_hours']) ? $pt_fleet['downtime_hours'] : 0) > 0): ?><span class="w36-days" title="Hours of downtime recorded this week"><?= $esc($num($pt_fleet['downtime_hours'], 2)) ?></span><?php else: ?><?= $esc($num(isset($pt_fleet['downtime_hours']) ? $pt_fleet['downtime_hours'] : null, 2)) ?><?php endif; ?></td>
+              <td><?= $esc($num(isset($pt_fleet['breakdowns']) ? $pt_fleet['breakdowns'] : null, 0)) ?></td>
+              <td><?= $esc($num(isset($pt_fleet['mtbf_hours']) ? $pt_fleet['mtbf_hours'] : null, 2)) ?></td>
+              <td><?= $esc($num(isset($pt_fleet['mttr_hours']) ? $pt_fleet['mttr_hours'] : null, 2)) ?></td>
+              <td><?= $availability_bar(isset($pt_fleet['availability']) ? $pt_fleet['availability'] : null, isset($pt_fleet['weekly_target']) ? $pt_fleet['weekly_target'] : null) ?></td>
+              <td><?= $esc($pct(isset($pt_fleet['weekly_target']) ? $pt_fleet['weekly_target'] : null)) ?></td>
+            </tr>
+          <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+      <div class="w36-pt-foot">
+        <span>
+          <strong>Sheet mapping</strong> — BQ:CB, in order:
+          <?php $pt_sep = ''; foreach ($pt_sheet_cols as $pt_col): ?><?= $pt_sep ?><em><?= $esc($pt_col) ?></em><?php $pt_sep = ' · '; endforeach; ?>.
+          The preview spells them out and leads each row with the type the sheet keeps in column BS.
+        </span>
+        <span>
+          The fleet row is the report's own roll-up: counts and hours are the sums of the rows above, while MTBF, MTTR and availability
+          are recomputed for the fleet as a whole — averaging the type rows would not be the same figure. A red bar, and a
+          “below target” note on the type, mark availability under its weekly target KPI; a red downtime figure is emphasis, and a
+          zero is printed as a zero rather than a dash.
+        </span>
+        <span>
+          The weekly block is BG:BP (the grid above, where a machine expands to its seven day blocks); this block is BQ:CB.
+          Both carry the same figures the downloaded Excel file does.
+        </span>
+      </div>
+    <?php endif; ?>
+  </div>
 
   <?php /* ── W5.5 — sheet `W36 Synthese` on screen: the action plan, the two
            registers and their counters (decisions D16/D17) ──────────────── */ ?>
