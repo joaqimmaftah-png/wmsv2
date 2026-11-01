@@ -157,6 +157,7 @@ class TestLoader {
             else $this->ctrl->Backlog_model = new TestBacklogModel($this->ctrl->db);
         }
         if ($name === 'Maintenance_plan_model') $this->ctrl->Maintenance_plan_model = $GLOBALS['testPlan'];
+        if ($name === 'Settings_model') $this->ctrl->Settings_model = new TestSettings();
     }
 }
 class MY_Controller {
@@ -459,12 +460,29 @@ class TestWorkOrderModel {
 }
 class TestEquipment { public $status; public function update_status($id, $status) { $this->status = $status; } }
 class TestSpares { public function auto_issue_for_wo($id, $actor) { return 0; } }
+
+/**
+ * Settings_model stand-in. Workorders::create() resolves its Fleet Availability
+ * return week up front (_fleet_return_week -> Settings_model::week_start()), so
+ * every create() path needs this model loaded — the real constructor autoloads
+ * it, but newInstanceWithoutConstructor() does not. Mirrors the Monday-anchored
+ * arithmetic of Settings_model::week_start() so return links stay in one week.
+ */
+class TestSettings {
+    public $start_day = 1;                              // 1 = Monday, as report_week_start_day() defaults
+    public function week_start($date = NULL) {
+        $date   = $date ? date('Y-m-d', strtotime($date)) : date('Y-m-d');
+        $offset = ((int)date('N', strtotime($date)) - $this->start_day + 7) % 7;
+        return $offset === 0 ? $date : date('Y-m-d', strtotime($date . ' -' . $offset . ' days'));
+    }
+}
 function wo_fixture($status, $sup) {
     reset_fixture($sup);
     $c = (new ReflectionClass('Workorders'))->newInstanceWithoutConstructor();
     $c->db = $GLOBALS['testDB']; $c->input = $GLOBALS['testInput']; $c->session = $GLOBALS['testSession'];
     $c->supervisor = $sup; $c->load = new TestLoader($c); $c->Workorder_model = new TestWorkOrderModel($c->db);
     $c->Equipment_model = new TestEquipment(); $c->Spareparts_model = new TestSpares();
+    $c->Settings_model = new TestSettings();
     $c->db->tables['work_orders'][10] = array('id'=>10, 'wo_number'=>'WO-10', 'equipment_id'=>1, 'type'=>'Corrective Maintenance',
         'status'=>$status, 'start_datetime'=>'2020-01-01 08:00:00', 'end_datetime'=>'2020-02-01 09:00:00',
         'completed_by'=>20, 'downtime_hours'=>5, 'action_taken'=>'Hose replaced', 'assigned_to'=>'');
@@ -494,6 +512,20 @@ expect('work order edit rechecks status under lock', strpos($c->session->message
 $c = wo_fixture('Open', TRUE);
 wo_submit($c, 'edit', array('status'=>'Open', 'type'=>'Corrective Maintenance', 'priority'=>'Medium', 'title'=>'Repair updated'));
 expect('ordinary work order edit commits while still open', $c->db->tables['work_orders'][10]['title'] === 'Repair updated' && $c->db->snap === NULL && isset($c->session->messages['success']));
+
+/* create() resolves the Fleet Availability return week before it validates the
+   submitted status, so this path must never depend on a missing model. Pin the
+   invariant rather than a hard-coded date: any input lands on the configured
+   week start, within the same week. */
+$c = wo_fixture('Open', FALSE);
+$fleetWeek = new ReflectionMethod('Workorders', '_fleet_return_week'); $fleetWeek->setAccessible(TRUE);
+$thursday = date('Y-m-d', strtotime('next thursday'));
+$resolved = $fleetWeek->invoke($c, $thursday);
+expect('fleet return week anchors a dated request to the week start',
+    $resolved !== NULL && (int)date('N', strtotime($resolved)) === (int)$c->Settings_model->start_day
+    && strtotime($thursday) - strtotime($resolved) >= 0 && strtotime($thursday) - strtotime($resolved) < 7 * 86400);
+expect('fleet return week ignores unusable input instead of breaking create()',
+    preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/', (string)$fleetWeek->invoke($c, 'not-a-date')) === 1);
 
 foreach (array('Completed', 'Closed') as $finished) {
     $c = wo_fixture($finished, FALSE);

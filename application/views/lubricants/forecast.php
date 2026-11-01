@@ -29,6 +29,13 @@ foreach (($forecast ?? array()) as $m_key => $m_lubes) {
 $this_month  = isset($month_keys[0]) ? $month_keys[0] : date('Y-m');
 $next_month  = isset($month_keys[1]) ? $month_keys[1] : date('Y-m', strtotime('+1 month'));
 
+/* lub_budget_action: the budget matrix is writable only by supervisor and
+   store (Lubricants::_can_lube_write()); read-only roles must not be offered a
+   button that the controller only answers with "Access denied." */
+$lub_budget_action = $can_write
+    ? '<a href="' . $lub_esc(base_url('lubricants/budget')) . '" class="btn btn-ghost btn-sm">Open Lube Budget</a>'
+    : '';
+
 /* Per-month demand — counts of grades, never a sum across mixed units. */
 $demand_this  = 0;
 $demand_next  = 0;
@@ -89,7 +96,7 @@ $has_visible_demand = ($demand_this + $demand_next) > 0;
       'title'    => 'Lubricant Consumption Forecast',
       'pill'     => '2-month PM horizon',
       'subtitle' => 'Dated active PM schedules multiplied by OEM quantities, for this month and next. Hour-based projections and specification intervals are not included.',
-      'actions'  => '<a href="' . base_url('lubricants/budget') . '" class="btn btn-ghost btn-sm">Open Lube Budget</a>',
+      'actions'  => $lub_budget_action,
   )) ?>
 
   <div class="lub-kpi-grid no-print">
