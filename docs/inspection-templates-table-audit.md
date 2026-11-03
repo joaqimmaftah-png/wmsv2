@@ -18,7 +18,7 @@
 
 | Principle | Status | Evidence and assessment |
 |---|---|---|
-| 1 Status-based navigation | PARTIAL | Formerly none; now an All/Active/Inactive select with full-register counts. Search and status combine; counts intentionally do not narrow with search. Runtime/browser count accuracy not verified. |
+| 1 Status-based navigation | PARTIAL | Formerly none; now an All/Active/Inactive buttons with full-register counts. Search and status combine; counts intentionally do not narrow with search. Runtime/browser count accuracy not verified. |
 | 2 Toolbar | PARTIAL | New search, status and reset plus authorized create action; no export, sort or page-size controls existed and none were invented. Search resets on navigation. |
 | 3 Table | PARTIAL | Actual names, code, category, layout, record count, status and existing actions retained; long table scrolls. Dynamic results and formatting await browser/DB testing. |
 | 4 Cards | NOT APPLICABLE | Small administrative register requires direct comparison and actions; a second view adds duplication without evidence of benefit. Reassess with mobile users. |
@@ -55,7 +55,7 @@
 ## 7–8. Table and interaction specification
 
 - **Columns:** English and French template name (primary), code, English category, layout, right-aligned record count, active/inactive, actions. Default backend order remains ascending ID. No extra fields or optional-column controls.
-- **Toolbar:** text search matches English/French names, code and English/French categories; status select offers All, Active, Inactive. Counts are computed over all loaded templates, independent of search; result announcement gives filtered matches out of total. Reset restores both filters. With JS disabled, controls stay hidden and all records/actions remain usable. No unsupported export, sorting, card view or pagination.
+- **Toolbar:** text search matches English/French names, code and English/French categories; status buttons offer All, Active, Inactive. Counts are computed over all loaded templates, independent of search; result announcement gives filtered matches out of total. Reset restores both filters. With JS disabled, controls stay hidden and all records/actions remain usable. No unsupported export, sorting, card view or pagination.
 - **Actions:** Fill and Records use existing code routes; Edit uses ID; Delete appears only when the current count is zero and submits the existing CSRF-protected POST with confirmation. Backend remains the authority. Inactive direct Fill remains available pending IT-05. Existing editor owns validation and form state.
 - **Visual/responsive:** inherited shared font; slate text, white surfaces, subtle borders, blue primary action, green active / neutral inactive and red destructive action; explicit text accompanies color. Narrow layouts wrap controls; horizontally scrollable table retains all columns and actions. No essential information is hidden. Empty register, no-match, success and error states are distinct; a server-rendered full page needs no synthetic loading state.
 
