@@ -60,6 +60,24 @@ $report_name = isset($report['report_name']) && trim((string)$report['report_nam
     : ('W' . (int)(isset($week['iso_week']) ? $week['iso_week'] : (isset($week_label) && preg_match('/-W([0-9]+)$/', $week_label, $wm) ? $wm[1] : date('W'))));
 
 $esc = function ($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); };
+// Tidy historical and current quality messages for display without changing the stored report.
+$quality_message = function (array $issue) {
+    $message = isset($issue['message']) ? (string)$issue['message'] : '';
+    if (isset($issue['code']) && $issue['code'] === 'reconcile') {
+        return 'Fleet totals do not match the machine totals. Please review the report before publishing.';
+    }
+    $message = preg_replace('/\s*\((?:OPEN-\d+|D4|G4|BR-[A-Z0-9-]+)\)/', '', $message);
+    $message = str_replace(array('NOT JUDGED', 'so the LOCATION column will be empty', 'so it cannot be printed inside a group block'),
+        array('not assessed', 'so its location is missing', 'so it cannot be included in a category'), $message);
+    return $message;
+};
+$chart_titles = array(
+    'fleet_availability' => 'Fleet availability', 'availability_by_type' => 'Availability by equipment type',
+    'fleet_state_by_type' => 'Available and down machines by type', 'downtime_by_type' => 'Downtime by equipment type',
+    'breakdowns_by_type' => 'Breakdowns by equipment type', 'mttr_by_type' => 'Average repair time by type (MTTR)',
+    'mtbf_by_type' => 'Average time between failures by type (MTBF)', 'worst_machines' => 'Machines with the most downtime',
+    'pm_services' => 'Planned maintenance services', 'inspections' => 'Weekly inspections',
+);
 
 $num = function ($v, $dec = 2) {
     if ($v === null || $v === '' || $v === false) return '—';
@@ -99,7 +117,7 @@ $availability_bar = function ($value, $target) use ($esc, $pct, $availability_to
     return '<span class="w36-avbar" aria-label="Availability '.$esc($label).'"><span class="w36-av-track"><i class="w36-av-fill '.$esc($tone).'" style="width:'.$width.'%"></i></span><span class="w36-av-value '.$esc($tone).'">'.$esc($label).'</span></span>';
 };
 $daily_strip = function ($daily) use ($days, $day_row, $pct, $availability_tone, $esc) {
-    $html = '<span class="w36-strip" aria-label="Daily availability Monday to Sunday">';
+    $html = '<span class="w36-strip" aria-label="Daily availability for the selected week">';
     foreach ($days as $i => $day) {
         $cell = $day_row($daily, $day, $i);
         $value = $cell && isset($cell['availability']) ? $cell['availability'] : null;
@@ -156,16 +174,16 @@ ksort($locations, SORT_NATURAL | SORT_FLAG_CASE);
 // the weekly block, in the sheet's own order (BG:BP).  OPEN-5/D28: the D4 days-down
 // count is its first column, as on the sheet.
 $weekly_cols = array(
-    'days'      => 'NUMBER OF DAYS DOWN',
-    'open'      => 'WEEKLY OPEN TIME',
-    'pt'        => 'PREVENTIVE TIME',
-    'rt'        => 'REQUIRED TIME',
-    'dt'        => 'TOTAL DOWN TIME',
-    'f'         => 'NUMBER OF FAILURES',
+    'days'      => 'Days down',
+    'open'      => 'Weekly open time (h)',
+    'pt'        => 'Preventive maintenance (h)',
+    'rt'        => 'Required time (h)',
+    'dt'        => 'Downtime (h)',
+    'f'         => 'Failures',
     'mtbf'      => 'MTBF',
     'mttr'      => 'MTTR',
-    'av'        => 'OPERATIONAL AVAILABILITY',
-    'target'    => 'DAILY TARGET KPI',
+    'av'        => 'Operational availability',
+    'target'    => 'Availability target',
 );
 
 $detail_rows = array(
@@ -480,8 +498,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
       · days down <?= (int)(isset($fleet['rollup']['days_down']) ? $fleet['rollup']['days_down'] : 0) ?>
       · hours down <?= $num(isset($fleet['rollup']['hours_down']) ? $fleet['rollup']['hours_down'] : null, 2) ?><br>
       <?php if ($snapshot !== null): ?>
-        <strong>PUBLISHED</strong> <?= $esc($snapshot['published_at']) ?><br>
-        checksum <?= $esc(substr((string)$snapshot['checksum'], 0, 12)) ?>&hellip;
+        <strong>PUBLISHED</strong> <?= $esc($snapshot['published_at']) ?>
       <?php elseif ($published !== null): ?>
         <strong>LIVE READING</strong> — published <?= $esc($published['published_at']) ?><br>
         figures recomputed to <?= $esc(date('d/m/Y', strtotime(isset($week['cutoff']) ? $week['cutoff'] : 'today'))) ?>
@@ -491,24 +508,18 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
       <br>printed <?= $esc($generated_at) ?>
     </div>
   </div>
-  <div class="w36-print-hint">
-    Print or save as PDF (A4 landscape). Sheet <code><?= $esc($report_name) ?></code> prints first, then
-    <code><?= $esc($report_name . ' Synthese') ?></code> — the action plan, the two registers and the counters.
-    The charts are here and on the screen only; the Excel download carries the workbook without them (D6).
-  </div>
   <?php endif; ?>
 
   <?php if (!$print_mode): ?>
   <?php $this->load->view('reports/_fleet_nav', array('fleet_nav_active' => 'weekly', 'week_start' => $week['start'])); ?>
   <div class="w36-head">
     <div>
-      <h1 class="w36-title">Weekly Report <?= $esc($report_name) ?> — preview</h1>
+      <h1 class="w36-title">Workshop Weekly Report — <?= $esc($report_name) ?></h1>
       <p class="w36-sub">
         <?= $esc($week_label) ?> ·
         <?= $esc(date('D d M Y', strtotime($week['start']))) ?> → <?= $esc(date('D d M Y', strtotime($week['end']))) ?> ·
         open time <?= $esc($num($week['open_hours'], 0)) ?> h (<?= $esc($num($week['daily_open_hours'], 0)) ?> h/day) ·
         <?= (int)$machine_total ?> reportable machines
-        <?php if ($build_ms !== null): ?> · built in <?= (int)$build_ms ?> ms<?php endif; ?>
       </p>
     </div>
     <div>
@@ -520,7 +531,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
         <form method="post" style="display:inline"
               action="<?= $esc(base_url('reports/publish_workshop_weekly?week=' . $week_label)) ?>">
           <?= $csrf_field() ?>
-          <button type="submit" class="w36-btn">Publish snapshot</button>
+          <button type="submit" class="w36-btn">Publish report</button>
         </form>
       <?php elseif ($may_publish && $snapshot === null): ?>
         <?php /* live reading of a published week: only a forced re-freeze is left */ ?>
@@ -528,13 +539,13 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
               action="<?= $esc(base_url('reports/publish_workshop_weekly?week=' . $week_label)) ?>">
           <?= $csrf_field() ?>
           <input type="hidden" name="force" value="1">
-          <button type="submit" class="w36-btn">Re-publish from live</button>
+          <button type="submit" class="w36-btn">Publish current figures</button>
         </form>
         <span class="w36-badge ok">published</span>
       <?php elseif ($published !== null): ?>
         <span class="w36-badge ok">published</span>
       <?php endif; ?>
-      <div class="w36-small"><?php if ($snapshot === null && $published !== null): ?>Excel downloads the published snapshot; Print / PDF uses this live reading.<?php else: ?>Downloads use this week’s <?= $snapshot !== null ? 'published snapshot' : 'live reading' ?>.<?php endif; ?> · <?= $esc($week_label) ?></div>
+      <div class="w36-small"><?php if ($snapshot === null && $published !== null): ?>Excel downloads the published report; Print / PDF uses this live reading.<?php else: ?>Downloads use this week’s <?= $snapshot !== null ? 'published report' : 'live reading' ?>.<?php endif; ?> · <?= $esc($week_label) ?></div>
     </div>
   </div>
   <?php endif; /* !$print_mode — the toolbar is screen chrome */ ?>
@@ -545,16 +556,13 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
 
   <?php if ($snapshot !== null): ?>
     <div class="w36-note ok">
-      <strong>Published snapshot</strong> — frozen on <?= $esc($snapshot['published_at']) ?>
-      <?php if (!empty($snapshot['checksum'])): ?>
-        · checksum <code><?= $esc(substr((string)$snapshot['checksum'], 0, 12)) ?>…</code>
-      <?php endif; ?>
+      <strong>Published report</strong> — saved on <?= $esc($snapshot['published_at']) ?>
       <?php if (empty($snapshot['complete'])): ?>
-        <span class="w36-badge err">the stored payload does not match its checksum</span>
+        <span class="w36-badge err">The saved report could not be verified. Please contact an administrator.</span>
       <?php endif; ?>
       <div class="w36-small">
         This week is read <strong>as published</strong>: the numbers below — and every download of it — are the frozen ones,
-        so later work orders cannot change them. Days down are frozen at the week's last day (D4).
+        so later work orders cannot change them. Days down are counted up to the week's last day.
         <a href="<?= $esc(base_url('reports/workshop_weekly?week=' . $week_label . '&live=1')) ?>">See the live reading</a>
         <?php if ($may_publish): ?> ·
           <form method="post" style="display:inline"
@@ -568,7 +576,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
     </div>
   <?php elseif ($is_live): ?>
     <div class="w36-note warn">
-      <strong>Live reading</strong> — a machine that is still down keeps counting to <em>today</em> (D4).
+      <strong>Live reading</strong> — a machine that is still down keeps counting to <em>today</em>.
       <div class="w36-small">
         <?php if ($published !== null): ?>
           This week was published on <?= $esc($published['published_at']) ?>; the figures below are today's, not the frozen ones.
@@ -584,15 +592,11 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   <form class="w36-picker" method="get" action="<?= $esc(base_url('reports/workshop_weekly')) ?>">
     <?php if ($live_query !== ''): ?><input type="hidden" name="live" value="1"><?php endif; ?>
     <a class="w36-btn" href="<?= $esc(base_url('reports/workshop_weekly?week=' . $prev_week . $live_query)) ?>" title="previous week">◀ <?= $esc($prev_week) ?></a>
-    <label>ISO week
+    <label>Week
       <input type="week" name="week" value="<?= $esc($week_label) ?>">
     </label>
     <button type="submit" class="w36-btn w36-btn-primary">Show week</button>
     <a class="w36-btn" href="<?= $esc(base_url('reports/workshop_weekly?week=' . $next_week . $live_query)) ?>" title="next week"><?= $esc($next_week) ?> ▶</a>
-    <span class="w36-small">
-      breakdown count: <?= $esc(isset($modes['breakdown_count_mode']) ? $modes['breakdown_count_mode'] : '—') ?> ·
-      zero-failure MTBF: <?= $esc(isset($modes['mtbf_zero_failure_mode']) ? $modes['mtbf_zero_failure_mode'] : '—') ?>
-    </span>
   </form>
   <form class="w36-picker" method="get" action="<?= $esc(base_url('reports/workshop_weekly')) ?>">
     <?php if ($live_query !== ''): ?><input type="hidden" name="live" value="1"><?php endif; ?>
@@ -605,7 +609,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
     <label>Report name
       <input type="text" name="report_name" value="<?= $esc($report_name) ?>" maxlength="22" required<?= $snapshot !== null ? ' readonly' : '' ?>>
     </label>
-    <span class="w36-small">Used in this page, the Excel filename, both workbook sheet names and the print/PDF title<?= $snapshot !== null ? '; frozen with the published snapshot' : '' ?>.</span>
+    <span class="w36-small">Used on the report and downloads<?= $snapshot !== null ? '; saved with the published report' : '' ?>.</span>
     <?php if ($may_publish && $snapshot === null): ?><button type="submit" class="w36-btn">Save name</button><?php endif; ?>
   </form>
   <?php endif; ?>
@@ -672,7 +676,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
             }
           ?>
             <li style="padding:4px 0;">
-              <span class="w36-qcode"><?= $esc($issue_code) ?></span> <?= $esc(isset($q['message']) ? $q['message'] : '') ?>
+              <?= $esc($quality_message($q)) ?>
               <?php if ($action_url): ?> <a class="w36-btn" style="min-height:28px;padding:3px 8px;margin-left:5px;" href="<?= $esc(base_url($action_url)) ?>"><?= $esc($action_label) ?> <span aria-hidden="true">→</span></a><?php endif; ?>
             </li>
           <?php endforeach; ?>
@@ -693,14 +697,15 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
     <span id="w36-search-count" role="status" aria-live="polite"></span>
     <span class="w36-table-actions"><button type="button" class="w36-btn" data-w36-action="expand">Expand all</button><button type="button" class="w36-btn" data-w36-action="collapse">Collapse all</button></span>
   </div>
-  <p class="w36-scroll-hint">Filter equipment and expand a type or machine for daily and weekly detail. Summary totals stay fixed and filters do not affect exports.</p>
+  <p class="w36-scroll-hint">Filter equipment and expand a type or machine for daily and weekly detail. Filters do not change totals or downloads.</p>
   <?php endif; ?>
+  <p class="w36-legend">MTBF: average time between failures. MTTR: average time to repair. Hours are shown as h.</p>
   <div class="w36-tblwrap w36-main-wrap" tabindex="0" role="region" aria-label="Weekly machine report">
     <table class="w36 w36-summary-table" id="w36-machine-table">
       <caption class="w36-small">Fleet, group and machine availability for <?= $esc($week_label) ?></caption>
       <thead><tr>
         <th class="w36-left">Equipment</th>
-        <th class="w36-left">Daily availability · Mon–Sun</th>
+        <th class="w36-left">Daily availability · 7 days</th>
         <th>Preventive h</th><th>Down h</th><th>Failures</th><th>MTBF h</th><th>MTTR h</th><th>Availability</th><th>Target</th>
       </tr></thead>
       <tbody>
@@ -775,7 +780,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
                       <?php endforeach; ?>
                       </tbody>
                     </table></div></section>
-                    <section><h4>Weekly workbook block</h4><dl class="w36-weekly-detail">
+                    <section><h4>Weekly figures</h4><dl class="w36-weekly-detail">
                       <?php foreach ($weekly_cols as $key => $label): $cell_key = array('days'=>'days','open'=>'open','pt'=>'pt','rt'=>'rt','dt'=>'dt','f'=>'f','mtbf'=>'mtbf','mttr'=>'mttr','av'=>'av','target'=>'target'); ?>
                         <div><dt><?= $esc($label) ?></dt><dd><?= $esc(isset($mc[$cell_key[$key]]) ? $mc[$cell_key[$key]] : '—') ?></dd></div>
                       <?php endforeach; ?>
@@ -802,7 +807,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
               <td class="w36-left w36-equipment-cell"><button type="button" class="w36-machine-toggle" data-w36-action="toggle-machine" data-detail="<?= $esc($detail_id) ?>" aria-expanded="false" aria-controls="<?= $esc($detail_id) ?>"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span><b><?= $esc($m['machine_id']) ?></b><small><?= $esc($m['model']) ?> · <?= $esc($location_text !== '' ? $location_text : 'Site not set') ?></small></span><em class="w36-status"><?= $esc($m['status'] !== null ? $m['status'] : 'Status unknown') ?></em></button></td>
               <td class="w36-left"><?= $daily_strip(isset($m['daily']) ? $m['daily'] : array()) ?></td><td><?= $esc(isset($mc['pt']) ? $mc['pt'] : '—') ?></td><td><?= $esc(isset($mc['dt']) ? $mc['dt'] : '—') ?></td><td><?= $esc(isset($mc['f']) ? $mc['f'] : '—') ?></td><td><?= $esc(isset($mc['mtbf']) ? $mc['mtbf'] : '—') ?></td><td><?= $esc(isset($mc['mttr']) ? $mc['mttr'] : '—') ?></td><td><?= $availability_bar($av, $machine_target) ?></td><td><?= $esc(isset($mc['target']) ? $mc['target'] : '—') ?></td>
             </tr>
-            <tr class="detail w36-detail-row" id="<?= $esc($detail_id) ?>" data-detail-for="<?= $esc($machine_id) ?>" <?= $print_mode ? '' : 'hidden' ?>><td colspan="9"><div class="w36-machine-detail"><div class="w36-detail-heading"><strong><?= $esc($m['machine_id']) ?> · Weekly details</strong><span><?= !empty($m['events']) ? count($m['events']).' breakdown event(s)' : 'No breakdown events this week' ?><?php if ((int)(isset($m['unresolved_target_days']) ? $m['unresolved_target_days'] : 0) > 0): ?> · <?= (int)$m['unresolved_target_days'] ?> day(s) without a resolved target<?php endif; ?></span></div><div class="w36-detail-grid"><section><h4>Daily figures</h4><div class="w36-detail-scroll"><table class="w36-detail-tbl"><thead><tr><th>Measure</th><?php foreach ($days as $d): ?><th><?= $esc($day_name($d)) ?></th><?php endforeach; ?><th>Week</th></tr></thead><tbody><?php foreach ($detail_rows as $label => $key): ?><tr><th><?= $esc($label) ?></th><?php foreach ($days as $i => $d): $dd = $day_row(isset($m['daily']) ? $m['daily'] : array(), $d, $i); $val = $dd && array_key_exists($key, $dd) ? $dd[$key] : null; ?><td><?= $esc($key === 'availability' || $key === 'target' ? $pct($val) : $num($val, 2)) ?></td><?php endforeach; ?><?php $wk = isset($mw[$detail_week_key[$key]]) ? $mw[$detail_week_key[$key]] : null; ?><td><strong><?= $esc($key === 'availability' || $key === 'target' ? $pct($wk) : $num($wk, 2)) ?></strong></td></tr><?php endforeach; ?></tbody></table></div></section><section><h4>Weekly workbook block</h4><dl class="w36-weekly-detail"><?php foreach ($weekly_cols as $key => $label): ?><div><dt><?= $esc($label) ?></dt><dd><?= $esc(isset($mc[$key]) ? $mc[$key] : '—') ?></dd></div><?php endforeach; ?></dl></section></div><?php if (!empty($m['events'])): ?><section class="w36-event-details"><h4>Breakdown events in this period</h4><ul class="w36-evts"><?php foreach ($m['events'] as $e): ?><li><?= $esc($e['start']) ?> → <?= $e['open'] ? '<span class="open">still down</span>' : $esc($e['end']) ?></li><?php endforeach; ?></ul></section><?php endif; ?></div></td></tr>
+            <tr class="detail w36-detail-row" id="<?= $esc($detail_id) ?>" data-detail-for="<?= $esc($machine_id) ?>" <?= $print_mode ? '' : 'hidden' ?>><td colspan="9"><div class="w36-machine-detail"><div class="w36-detail-heading"><strong><?= $esc($m['machine_id']) ?> · Weekly details</strong><span><?= !empty($m['events']) ? count($m['events']).' breakdown event(s)' : 'No breakdown events this week' ?><?php if ((int)(isset($m['unresolved_target_days']) ? $m['unresolved_target_days'] : 0) > 0): ?> · <?= (int)$m['unresolved_target_days'] ?> day(s) without a resolved target<?php endif; ?></span></div><div class="w36-detail-grid"><section><h4>Daily figures</h4><div class="w36-detail-scroll"><table class="w36-detail-tbl"><thead><tr><th>Measure</th><?php foreach ($days as $d): ?><th><?= $esc($day_name($d)) ?></th><?php endforeach; ?><th>Week</th></tr></thead><tbody><?php foreach ($detail_rows as $label => $key): ?><tr><th><?= $esc($label) ?></th><?php foreach ($days as $i => $d): $dd = $day_row(isset($m['daily']) ? $m['daily'] : array(), $d, $i); $val = $dd && array_key_exists($key, $dd) ? $dd[$key] : null; ?><td><?= $esc($key === 'availability' || $key === 'target' ? $pct($val) : $num($val, 2)) ?></td><?php endforeach; ?><?php $wk = isset($mw[$detail_week_key[$key]]) ? $mw[$detail_week_key[$key]] : null; ?><td><strong><?= $esc($key === 'availability' || $key === 'target' ? $pct($wk) : $num($wk, 2)) ?></strong></td></tr><?php endforeach; ?></tbody></table></div></section><section><h4>Weekly figures</h4><dl class="w36-weekly-detail"><?php foreach ($weekly_cols as $key => $label): ?><div><dt><?= $esc($label) ?></dt><dd><?= $esc(isset($mc[$key]) ? $mc[$key] : '—') ?></dd></div><?php endforeach; ?></dl></section></div><?php if (!empty($m['events'])): ?><section class="w36-event-details"><h4>Breakdown events in this period</h4><ul class="w36-evts"><?php foreach ($m['events'] as $e): ?><li><?= $esc($e['start']) ?> → <?= $e['open'] ? '<span class="open">still down</span>' : $esc($e['end']) ?></li><?php endforeach; ?></ul></section><?php endif; ?></div></td></tr>
           <?php endforeach; ?>
         <?php endif; ?>
       </tbody>
@@ -820,21 +825,13 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
         if ((int)$g['row_count'] === 0) continue;
         $pt_rows[] = $g;
     }
-    // the twelve figures the sheet carries in BQ:CB, in the order it carries them
-    $pt_sheet_cols = array('Fleet Availible Nb', 'Fleet Breakdown Nb', 'APPLICATION', 'WEEKLY OPEN TIME h',
-                           'PREVENTIVE TIME h', 'REQUIRED TIME h', 'TOTAL DOWN TIME h', 'NUMBER OF FAILLURE Nb',
-                           'MTBF h', 'MTTR h', 'AVAIBILITY OPERATIONAL %', 'WEEKLY TARGET KPI %');
     $pt_fleet = isset($fleet['rollup']) ? $fleet['rollup'] : null;
   ?>
   <div class="w36-panel w36-pt-panel">
-    <h3>Per-type weekly block — sheet <code><?= $esc($report_name) ?></code> <span class="w36-pt-sheet">columns BQ:CB</span></h3>
-    <p class="w36-legend" style="margin-top:4px">
-      The sheet's twelve figures, one row per equipment type in the sheet's order. The type leads its row; the sheet's own headers
-      are spelled out beneath the table. Everything else is unchanged: the same weekly block the availability grid computes, the
-      same target comparison (BR-W17), and a fleet row the report calculates rather than leaves the reader to add up.
-    </p>
+    <h3>Weekly performance by equipment type</h3>
+    <p class="w36-legend" style="margin-top:4px">Compare each equipment type with its availability target. The fleet row summarizes all types.</p>
     <?php if (empty($pt_rows)): ?>
-      <div class="w36-note">No reportable machine in this week — no type to block up.</div>
+      <div class="w36-note">No machines to report for this week.</div>
     <?php else: ?>
       <div class="w36-tblwrap w36-pt-wrap" tabindex="0" role="region" aria-label="Per-type weekly block — scroll horizontally for every column">
         <table class="w36 w36-pt-table" id="w36-pt-table">
@@ -904,23 +901,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
           </tbody>
         </table>
       </div>
-      <div class="w36-pt-foot">
-        <span>
-          <strong>Sheet mapping</strong> — BQ:CB, in order:
-          <?php $pt_sep = ''; foreach ($pt_sheet_cols as $pt_col): ?><?= $pt_sep ?><em><?= $esc($pt_col) ?></em><?php $pt_sep = ' · '; endforeach; ?>.
-          The preview spells them out and leads each row with the type the sheet keeps in column BS.
-        </span>
-        <span>
-          The fleet row is the report's own roll-up: counts and hours are the sums of the rows above, while MTBF, MTTR and availability
-          are recomputed for the fleet as a whole — averaging the type rows would not be the same figure. A red bar, and a
-          “below target” note on the type, mark availability under its weekly target KPI; a red downtime figure is emphasis, and a
-          zero is printed as a zero rather than a dash.
-        </span>
-        <span>
-          The weekly block is BG:BP (the grid above, where a machine expands to its seven day blocks); this block is BQ:CB.
-          Both carry the same figures the downloaded Excel file does.
-        </span>
-      </div>
+      <div class="w36-pt-foot"><span>Availability below target is marked in red. Fleet availability is calculated for the whole fleet, not averaged across types.</span></div>
     <?php endif; ?>
   </div>
 
@@ -1012,12 +993,8 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
            availability/target stay aligned with the machine columns, wrapping text
            cells and text-with-colour cues (never colour alone) */ ?>
   <div class="w36-panel">
-    <h3>Workshop action plan — sheet <code><?= $esc($report_name . ' Synthese') ?></code></h3>
-    <p class="w36-legend" style="margin-top:4px">
-      Every reportable machine, in sheet order, under one summary row per category — expand a category for its machines.
-      The comment, the action and the hold status are read from the machine's own work order — nothing is typed into the report.
-      The Excel sheet keeps its own twelve-column layout; this preview groups the same fields the way the availability grid above does.
-    </p>
+    <h3>Workshop action plan</h3>
+    <p class="w36-legend" style="margin-top:4px">Expand a category to see its machines, work-order actions and any holds.</p>
     <?php if (empty($plan)): ?>
       <div class="w36-note">No reportable machine in this week — nothing to plan.</div>
     <?php else: ?>
@@ -1056,7 +1033,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
         <span id="w36-syn-count" role="status" aria-live="polite"></span>
         <span class="w36-table-actions"><button type="button" class="w36-btn" data-w36-action="syn-expand">Expand all</button><button type="button" class="w36-btn" data-w36-action="syn-collapse">Collapse all</button></span>
       </div>
-      <p class="w36-scroll-hint">Search or narrow the plan, then expand a category for its machines. Screen filters never change the counters above, the printed sheet or the Excel download.</p>
+      <p class="w36-scroll-hint">Search or narrow the plan, then expand a category for its machines. Screen filters never change the counters above, the printed report or Excel download.</p>
       <?php endif; ?>
 
       <div class="w36-tblwrap w36-syn-wrap" tabindex="0" role="region" aria-label="Workshop action plan — scroll horizontally for every column">
@@ -1138,13 +1115,8 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
            each PM service paired with its own status and reason instead of two
            comma lists that lost the pairing, and cues that never rely on colour */ ?>
   <div class="w36-panel">
-    <h3>Weekly inspection report &amp; weekly planned PM services — sheet <code><?= $esc($report_name . ' Synthese') ?></code></h3>
-    <p class="w36-legend" style="margin-top:4px">
-      Every reportable machine, in sheet order, under one summary row per category — expand a category for its machines.
-      The inspection status, its date and the comments are the submitted inspection's own record; every planned PM service carries the
-      interval the database stores, its own status and the reason the report computed for it. The Excel sheet keeps its seven-column
-      layout; this preview pairs each service with its own status instead of two parallel lists.
-    </p>
+    <h3>Weekly inspections and planned maintenance</h3>
+    <p class="w36-legend" style="margin-top:4px">Expand a category to see inspection results and planned maintenance for each machine.</p>
     <?php if (empty($reg)): ?>
       <div class="w36-note">No reportable machine in this week — nothing to report.</div>
     <?php else: ?>
@@ -1167,7 +1139,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
         <div class="w36-reg-kpi">
           <span class="l">PM done ratio</span>
           <span class="k <?= $reg_pm_ratio === null ? '' : ($reg_pm_undone > 0 ? 'warn' : 'good') ?>"><?= $reg_pm_ratio === null ? '—' : $esc($pct($reg_pm_ratio)) ?></span>
-          <span class="s">of the services the week asked for · <?= (int)$reg_planified ?> actions planified in the sheet</span>
+          <span class="s">of the services the week asked for · <?= (int)$reg_planified ?> planned actions</span>
         </div>
       </div>
 
@@ -1180,7 +1152,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
         <span id="w36-reg-count" role="status" aria-live="polite"></span>
         <span class="w36-table-actions"><button type="button" class="w36-btn" data-w36-action="reg-expand">Expand all</button><button type="button" class="w36-btn" data-w36-action="reg-collapse">Collapse all</button></span>
       </div>
-      <p class="w36-scroll-hint">Search or narrow the registers, then expand a category for its machines. Screen filters never change the counters above, the printed sheet or the Excel download.</p>
+      <p class="w36-scroll-hint">Search or narrow the registers, then expand a category for its machines. Screen filters never change the counters above, the printed report or Excel download.</p>
       <?php endif; ?>
 
       <div class="w36-tblwrap w36-reg-wrap" tabindex="0" role="region" aria-label="Weekly inspection report and planned PM services — scroll horizontally for every column">
@@ -1283,7 +1255,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
       <div id="w36-reg-no-matches" class="w36-no-matches" hidden>No machines match these filters.</div>
       <div class="w36-reg-foot">
         <span>Inspection status: <span class="w36-insp breakdown">BREAKDOWN</span> wins over <span class="w36-insp done">DONE</span> when the machine is down now or was still down at the week's end, and <span class="w36-insp done">DONE</span> needs a submitted inspection inside the week — otherwise the row is <span class="w36-insp undone">UNDONE</span>. A dash means nothing was recorded.</span>
-        <span>Each service shows the interval the database stores with its own status; a service that is not done carries the reason the report computed, never a typed one. “Down h” counts the machine's downtime hours for the week.</span>
+        <span>Each planned service shows its status and, where available, why it was not completed. “Down h” is the downtime recorded during the week.</span>
       </div>
     <?php endif; ?>
 
@@ -1294,7 +1266,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
 
   <?php /* ── W4.3 — the charts (decision D6: here and in the PDF, never in the Excel file) ── */ ?>
   <div class="w36-panel">
-    <h3>Charts — this week, computed from the same figures as the sheet</h3>
+    <h3>Weekly charts</h3>
     <?php
       // one renderer for every chart: the bar colours follow the metric's meaning
       $bar_colour = function (array $chart, $which) {
@@ -1317,7 +1289,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
         ?>
         <div class="w36-chart">
           <div class="w36-chart-title">
-            <?= $esc($chart['title']) ?>
+            <?= $esc(isset($chart['key'], $chart_titles[$chart['key']]) ? $chart_titles[$chart['key']] : $chart['title']) ?>
             <?php if ($unit !== '' && $unit !== '%'): ?><span class="w36-small">(<?= $esc($unit) ?>)</span><?php endif; ?>
           </div>
 
@@ -1375,39 +1347,16 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
       <?php endforeach; ?>
     </div>
     <p class="w36-legend">
-      The nine charts of the sample workbook are drawn here (and in the PDF) from the same arrays the sheet is built
-      from — the downloaded Excel carries none of them (decision D6). The black tick is the row's own target;
-      green means at or above it, red below (BR-W23) — exactly the colour the sheet's cells carry.
+      On availability charts, the black tick marks the target. Green means the target was met; red means it was not.
     </p>
     <?php if (!empty($pm) || !empty($inspect)): ?>
       <p class="w36-legend">
         PM services: <?= (int)$pm['planned'] ?> planned, <?= (int)$pm['done'] ?> done, <?= (int)$pm['undone'] ?> undone
         (<?= (int)$pm['done'] ?>/<?= (int)$pm['planned'] ?> completed)
-        <?php if (!empty($pm['not_judged'])): ?> · <strong><?= count($pm['not_judged']) ?> hours-based schedule(s) cannot be judged without a meter reading (gap G4)</strong><?php endif; ?>.
+        <?php if (!empty($pm['not_judged'])): ?> · <strong><?= count($pm['not_judged']) ?> hours-based schedule(s) cannot be judged without a meter reading</strong><?php endif; ?>.
         Inspections: <?= (int)$inspect['planned'] ?> machines — <?= (int)$inspect['done'] ?> done,
-        <?= (int)$inspect['undone'] ?> undone, <?= (int)$inspect['breakdown'] ?> down (BREAKDOWN comes first in the sample's rule, BR-23).
+        <?= (int)$inspect['undone'] ?> undone, <?= (int)$inspect['breakdown'] ?> down.
       </p>
-    <?php endif; ?>
-  </div>
-
-  <?php /* ── the data-quality panel (W2.2 / V4, V8–V10, V13) ──────────── */ ?>
-  <div class="w36-panel">
-    <h3>Data quality — what to fix before publishing</h3>
-    <?php if (empty($quality)): ?>
-      <div class="w36-small">No problems found in this week.</div>
-    <?php else: ?>
-      <ul class="w36-qlist">
-        <?php foreach (array('error', 'warn', 'info') as $lvl): ?>
-          <?php foreach ($by_level[$lvl] as $q): ?>
-            <li>
-              <span class="w36-badge <?= $lvl === 'error' ? 'err' : ($lvl === 'warn' ? 'wrn' : 'inf') ?>"><?= $esc($lvl) ?></span>
-              <?php if (!empty($q['machine'])): ?><strong><?= $esc($q['machine']) ?></strong><?php endif; ?>
-              <?= $esc($q['message']) ?>
-              <span class="w36-qcode"><?= $esc($q['code']) ?></span>
-            </li>
-          <?php endforeach; ?>
-        <?php endforeach; ?>
-      </ul>
     <?php endif; ?>
   </div>
 
@@ -1423,24 +1372,13 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
       </div>
       <div class="w36-sign">
         Source: WMS weekly report <?= $esc($week_label) ?>
-        <?php if ($snapshot !== null): ?>· published snapshot (frozen)<?php else: ?>· live reading<?php endif; ?>
+        <?php if ($snapshot !== null): ?>· published report<?php else: ?>· live reading<?php endif; ?>
         · printed <?= $esc($generated_at) ?>
       </div>
       <div class="w36-sign">Prepared by ______________________ · Checked by ______________________ · Approved by ______________________</div>
     </div>
   <?php endif; ?>
 
-  <?php if (!$print_mode): ?>
-  <div class="w36-panel">
-    <h3>Preview vs the approved sample</h3>
-    <ul class="w36-qlist">
-      <li>The fleet row is computed over every reportable machine — the sample's own formula stopped at row 100 while its data ran to 108 (D-W3).</li>
-      <li>Group, fleet and per-type figures are capacity-weighted, not an average of the machine values (D-W4 / D-W11 / BR-W18).</li>
-      <li>The per-type block uses the same approved label list as the grid (D-W13: the sample spelled EXCAVITORs, FUEL BOWSERs, GENERATORSs differently).</li>
-      <li>Every daily target is shown with its provenance on the targets screen; a day with no target anywhere is listed under data quality, never guessed.</li>
-    </ul>
-  </div>
-  <?php endif; /* !$print_mode — the reviewer's note is not part of the report */ ?>
 
 </div>
 
