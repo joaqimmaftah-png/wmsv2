@@ -287,7 +287,7 @@ if ($live) {
             'detail' => 'Reporting week ends ' . $deadline_txt
                       . ' · review the draft now so it can be published on time',
             'count' => null,
-            'href' => $bu('reports/weekly_w36?week_start=' . $week_start),
+            'href' => $bu('reports/workshop_weekly?week_start=' . $week_start),
             'action' => 'Review draft',
         );
     }
@@ -297,7 +297,7 @@ if ($live) {
             'label' => $iso_week . ' weekly report — Unpublished — Action required',
             'detail' => 'Publication deadline was ' . $deadline_txt . ' · publish the frozen report now',
             'count' => null,
-            'href' => $bu('reports/weekly_w36?week_start=' . $week_start),
+            'href' => $bu('reports/workshop_weekly?week_start=' . $week_start),
             'action' => 'Review & publish',
         );
     }
@@ -308,7 +308,7 @@ if ($live) {
             'detail' => 'Week ended ' . date('d M Y', strtotime($pub_previous['end']))
                       . ' · deadline passed · publish to freeze the figures',
             'count' => null,
-            'href' => $bu('reports/weekly_w36?week_start=' . $pub_previous['start']),
+            'href' => $bu('reports/workshop_weekly?week_start=' . $pub_previous['start']),
             'action' => 'Review & publish',
         );
     }
@@ -322,7 +322,7 @@ if ($live) {
                       . ' · ' . $pub_unpublished_total . ' of the last ' . $pub_window
                       . ' completed weeks are unpublished',
             'count' => $pub_older_count,
-            'href' => $bu('reports/weekly_w36?week_start=' . $pub_older['start']),
+            'href' => $bu('reports/workshop_weekly?week_start=' . $pub_older['start']),
             'action' => 'Review & publish',
         );
     }
@@ -381,19 +381,6 @@ $sections = array(
             ),
             array(
                 'title' => 'Workshop Weekly Report',
-                'desc' => 'Seven-day fleet performance, target analysis and KPI charts per machine type.',
-                'meta' => 'Weekly · Screen, Excel, print',
-                'form' => array(
-                    'action' => 'reports/workshop_weekly',
-                    'control' => array('type' => 'date', 'name' => 'week_start', 'label' => 'Week from', 'value' => $week_start, 'max' => $today),
-                    'buttons' => array(
-                        array('action' => 'reports/export_workshop_weekly_xlsx', 'label' => 'Excel'),
-                        array('action' => 'reports/export_workshop_weekly_pdf', 'label' => 'Print', 'target' => '_blank'),
-                    ),
-                ),
-            ),
-            array(
-                'title' => $report_name . ' Weekly Report',
                 'desc' => 'The approved weekly sheet generated from the system, with data-quality checks and a frozen publication option.',
                 'meta' => 'Weekly · ' . $iso_week . ' · Screen, Excel, print',
                 'badge' => $pub_meta['badge'],
@@ -401,11 +388,11 @@ $sections = array(
                 'note' => $w36_row_note,
                 'featured' => true,
                 'form' => array(
-                    'action' => 'reports/weekly_w36',
+                    'action' => 'reports/workshop_weekly',
                     'control' => array('type' => 'date', 'name' => 'week_start', 'label' => 'Week from', 'value' => $week_start),
                     'buttons' => array(
-                        array('action' => 'reports/export_weekly_w36_xlsx', 'label' => 'Excel'),
-                        array('action' => 'reports/export_weekly_w36_pdf', 'label' => 'Print', 'target' => '_blank'),
+                        array('action' => 'reports/export_workshop_weekly_xlsx', 'label' => 'Excel'),
+                        array('action' => 'reports/export_workshop_weekly_pdf', 'label' => 'Print', 'target' => '_blank'),
                     ),
                 ),
             ),
@@ -913,7 +900,7 @@ $sections = array(
       <div class="rpt-context-note">Figures read <?= $h(date('d M Y, H:i')) ?> · server time</div>
     </div>
     <a class="rpt-status <?= $h($pub_meta['class']) ?>"
-       href="<?= $h($bu('reports/weekly_w36?week=' . $iso_week)) ?>">
+       href="<?= $h($bu('reports/workshop_weekly?week=' . $iso_week)) ?>">
       <span class="dot" aria-hidden="true"></span>
       <span class="rpt-status-txt">
         <span class="rpt-status-display"><b><?= $h($report_name) ?></b> · <?= $h($pub_meta['display']) ?></span>
@@ -925,7 +912,7 @@ $sections = array(
 
   <nav aria-label="Fleet availability reports" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px;">
     <a class="rpt-btn" href="<?= $h($bu('reports/fleet_availability?week_start=' . $week_start)) ?>">Fleet availability</a>
-    <a class="rpt-btn" href="<?= $h($bu('reports/weekly_w36?week_start=' . $week_start)) ?>">Weekly W36 report</a>
+    <a class="rpt-btn" href="<?= $h($bu('reports/workshop_weekly?week_start=' . $week_start)) ?>">Workshop weekly report</a>
     <a class="rpt-btn" href="<?= $h($bu('reports/downtime_log?week_start=' . $week_start)) ?>">Log downtime</a>
   </nav>
 

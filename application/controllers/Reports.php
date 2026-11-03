@@ -1178,37 +1178,22 @@ class Reports extends MY_Controller {
        WORKSHOP WEEKLY REPORT
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+    // The weekly sheet is the canonical workshop report. Keep the historical
+    // weekly_w36 actions as aliases for existing bookmarks and integrations.
     public function workshop_weekly() {
-        $week_start = $this->_resolve_report_date(
-            $this->input->get('week_start', TRUE),
-            $this->Settings_model->week_start()
-        );
-        $week_end   = date('Y-m-d', strtotime($week_start.' +6 days'));
-        $data['week_start'] = $week_start;
-        $data['week_end']   = $week_end;
-        $data['report']     = $this->_build_workshop_weekly($week_start, $week_end);
-        $data['page_title'] = 'Workshop Weekly Report — '.date('d M', strtotime($week_start)).' to '.date('d M Y', strtotime($week_end));
-        $this->render('reports/workshop_weekly', $data);
+        $this->weekly_w36();
     }
 
     public function export_workshop_weekly_xlsx() {
-        $week_start = $this->_resolve_report_date(
-            $this->input->get('week_start', TRUE),
-            $this->Settings_model->week_start()
-        );
-        $week_end   = date('Y-m-d', strtotime($week_start.' +6 days'));
-        $report     = $this->_build_workshop_weekly($week_start, $week_end);
-        $this->_export_workshop_weekly_xlsx($report, $week_start, $week_end);
+        $this->export_weekly_w36_xlsx();
     }
 
     public function export_workshop_weekly_pdf() {
-        $week_start = $this->_resolve_report_date(
-            $this->input->get('week_start', TRUE),
-            $this->Settings_model->week_start()
-        );
-        $week_end   = date('Y-m-d', strtotime($week_start.' +6 days'));
-        $report     = $this->_build_workshop_weekly($week_start, $week_end);
-        $this->_export_workshop_weekly_pdf($report, $week_start, $week_end);
+        $this->export_weekly_w36_pdf();
+    }
+
+    public function publish_workshop_weekly() {
+        $this->publish_weekly_w36();
     }
 
     private function _build_workshop_weekly($week_start, $week_end) {
@@ -3263,9 +3248,9 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
     public function weekly_report_name() {
         if (!$this->is_supervisor() && !$this->is_manager()) {
             $this->session->set_flashdata('error', 'Only a supervisor or a manager can change a weekly report name.');
-            redirect('reports/weekly_w36');
+            redirect('reports/workshop_weekly');
         }
-        if ($this->input->method() !== 'post') redirect('reports/weekly_w36');
+        if ($this->input->method() !== 'post') redirect('reports/workshop_weekly');
 
         $requested = trim((string)$this->input->post('week'));
         $week_start = $this->Settings_model->iso_week_start($requested);
@@ -3278,7 +3263,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
 
         if ($this->W36_report_model->is_published($week_start)) {
             $this->session->set_flashdata('error', 'A published weekly report is frozen; re-publish it to change its name.');
-            redirect('reports/weekly_w36?week=' . $this->Settings_model->iso_week_label($week_start));
+            redirect('reports/workshop_weekly?week=' . $this->Settings_model->iso_week_label($week_start));
         }
 
         $name = trim((string)$this->input->post('report_name'));
@@ -3290,7 +3275,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         }
 
         $label = $this->Settings_model->iso_week_label($week_start);
-        redirect('reports/weekly_w36?week=' . $label);
+        redirect('reports/workshop_weekly?week=' . $label);
     }
 
     /**
@@ -3411,7 +3396,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         if (!$this->require_post()) return;
         if (!$this->is_supervisor() && !$this->is_manager()) {
             $this->session->set_flashdata('error', 'Only a supervisor or a manager can publish a weekly report.');
-            redirect('reports/weekly_w36');
+            redirect('reports/workshop_weekly');
         }
 
         $week_start = $this->Settings_model->iso_week_start(trim((string)$this->input->get('week')));
@@ -3439,6 +3424,6 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                 'The week could not be published (' . (isset($result['reason']) ? $result['reason'] : 'unknown') . ').');
         }
 
-        redirect('reports/weekly_w36?week=' . $label);
+        redirect('reports/workshop_weekly?week=' . $label);
     }
 }

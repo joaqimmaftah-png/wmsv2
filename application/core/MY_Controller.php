@@ -199,7 +199,8 @@ class MY_Controller extends CI_Controller {
         // Publishing (freezing) a weekly report is the sign-off on a week's
         // figures, which Manager may perform as well as Supervisor — so
         // this POST is allowed through.
-        'reports/publish_weekly_w36',
+        'reports/publish_weekly_w36', // legacy alias
+        'reports/publish_workshop_weekly',
         'reports/weekly_report_name',
     );
 

@@ -513,19 +513,19 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
     </div>
     <div>
       <a class="w36-btn w36-btn-primary"
-         href="<?= $esc(base_url('reports/export_weekly_w36_xlsx?week=' . $week_label . ($snapshot === null && $published !== null ? '&live=1' : ''))) ?>">Download Excel</a>
+         href="<?= $esc(base_url('reports/export_workshop_weekly_xlsx?week=' . $week_label . ($snapshot === null && $published !== null ? '&live=1' : ''))) ?>">Download Excel</a>
       <a class="w36-btn" target="_blank" rel="noopener"
-         href="<?= $esc(base_url('reports/export_weekly_w36_pdf?week=' . $week_label . ($snapshot === null && $published !== null ? '&live=1' : ''))) ?>">Print / PDF</a>
+         href="<?= $esc(base_url('reports/export_workshop_weekly_pdf?week=' . $week_label . ($snapshot === null && $published !== null ? '&live=1' : ''))) ?>">Print / PDF</a>
       <?php if ($may_publish && $published === null): ?>
         <form method="post" style="display:inline"
-              action="<?= $esc(base_url('reports/publish_weekly_w36?week=' . $week_label)) ?>">
+              action="<?= $esc(base_url('reports/publish_workshop_weekly?week=' . $week_label)) ?>">
           <?= $csrf_field() ?>
           <button type="submit" class="w36-btn">Publish snapshot</button>
         </form>
       <?php elseif ($may_publish && $snapshot === null): ?>
         <?php /* live reading of a published week: only a forced re-freeze is left */ ?>
         <form method="post" style="display:inline"
-              action="<?= $esc(base_url('reports/publish_weekly_w36?week=' . $week_label)) ?>">
+              action="<?= $esc(base_url('reports/publish_workshop_weekly?week=' . $week_label)) ?>">
           <?= $csrf_field() ?>
           <input type="hidden" name="force" value="1">
           <button type="submit" class="w36-btn">Re-publish from live</button>
@@ -555,10 +555,10 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
       <div class="w36-small">
         This week is read <strong>as published</strong>: the numbers below — and every download of it — are the frozen ones,
         so later work orders cannot change them. Days down are frozen at the week's last day (D4).
-        <a href="<?= $esc(base_url('reports/weekly_w36?week=' . $week_label . '&live=1')) ?>">See the live reading</a>
+        <a href="<?= $esc(base_url('reports/workshop_weekly?week=' . $week_label . '&live=1')) ?>">See the live reading</a>
         <?php if ($may_publish): ?> ·
           <form method="post" style="display:inline"
-                action="<?= $esc(base_url('reports/publish_weekly_w36?week=' . $week_label)) ?>">
+                action="<?= $esc(base_url('reports/publish_workshop_weekly?week=' . $week_label)) ?>">
             <?= $csrf_field() ?>
             <input type="hidden" name="force" value="1">
             <button type="submit" class="w36-btn" style="padding:2px 8px;font-size:12px">Re-publish</button>
@@ -572,7 +572,7 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
       <div class="w36-small">
         <?php if ($published !== null): ?>
           This week was published on <?= $esc($published['published_at']) ?>; the figures below are today's, not the frozen ones.
-          <a href="<?= $esc(base_url('reports/weekly_w36?week=' . $week_label)) ?>">Back to the published reading</a>
+          <a href="<?= $esc(base_url('reports/workshop_weekly?week=' . $week_label)) ?>">Back to the published reading</a>
         <?php else: ?>
           Publish the week to freeze these figures at its last day and to make a re-download reproducible.
         <?php endif; ?>
@@ -581,20 +581,20 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   <?php endif; ?>
 
   <?php if (!$print_mode): /* the picker is screen chrome — paper has no links */ ?>
-  <form class="w36-picker" method="get" action="<?= $esc(base_url('reports/weekly_w36')) ?>">
+  <form class="w36-picker" method="get" action="<?= $esc(base_url('reports/workshop_weekly')) ?>">
     <?php if ($live_query !== ''): ?><input type="hidden" name="live" value="1"><?php endif; ?>
-    <a class="w36-btn" href="<?= $esc(base_url('reports/weekly_w36?week=' . $prev_week . $live_query)) ?>" title="previous week">◀ <?= $esc($prev_week) ?></a>
+    <a class="w36-btn" href="<?= $esc(base_url('reports/workshop_weekly?week=' . $prev_week . $live_query)) ?>" title="previous week">◀ <?= $esc($prev_week) ?></a>
     <label>ISO week
       <input type="week" name="week" value="<?= $esc($week_label) ?>">
     </label>
     <button type="submit" class="w36-btn w36-btn-primary">Show week</button>
-    <a class="w36-btn" href="<?= $esc(base_url('reports/weekly_w36?week=' . $next_week . $live_query)) ?>" title="next week"><?= $esc($next_week) ?> ▶</a>
+    <a class="w36-btn" href="<?= $esc(base_url('reports/workshop_weekly?week=' . $next_week . $live_query)) ?>" title="next week"><?= $esc($next_week) ?> ▶</a>
     <span class="w36-small">
       breakdown count: <?= $esc(isset($modes['breakdown_count_mode']) ? $modes['breakdown_count_mode'] : '—') ?> ·
       zero-failure MTBF: <?= $esc(isset($modes['mtbf_zero_failure_mode']) ? $modes['mtbf_zero_failure_mode'] : '—') ?>
     </span>
   </form>
-  <form class="w36-picker" method="get" action="<?= $esc(base_url('reports/weekly_w36')) ?>">
+  <form class="w36-picker" method="get" action="<?= $esc(base_url('reports/workshop_weekly')) ?>">
     <?php if ($live_query !== ''): ?><input type="hidden" name="live" value="1"><?php endif; ?>
     <label>Or select any date in the week <input type="date" name="week_start" value="<?= $esc($week['start']) ?>"></label>
     <button type="submit" class="w36-btn">Show date’s week</button>

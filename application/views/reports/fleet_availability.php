@@ -32,8 +32,8 @@ $fleet_nav_active = 'dashboard';
       <p class="fa-sub"><?= $esc(isset($week['label']) ? $week['label'] : '') ?> · <?= (int)(isset($report['meta']['machines']) ? $report['meta']['machines'] : count($machines)) ?> reportable assets · based on the W36 KPI calculation</p>
     </div>
     <div class="fa-actions">
-      <a class="fa-button" href="<?= base_url('reports/export_weekly_w36_xlsx?week=' . rawurlencode($week_label) . $live_export) ?>">Download Excel</a>
-      <a class="fa-button" target="_blank" rel="noopener" href="<?= base_url('reports/export_weekly_w36_pdf?week=' . rawurlencode($week_label) . (empty($snapshot) && !empty($published) ? '&live=1' : '')) ?>">Print / PDF</a>
+      <a class="fa-button" href="<?= base_url('reports/export_workshop_weekly_xlsx?week=' . rawurlencode($week_label) . $live_export) ?>">Download Excel</a>
+      <a class="fa-button" target="_blank" rel="noopener" href="<?= base_url('reports/export_workshop_weekly_pdf?week=' . rawurlencode($week_label) . (empty($snapshot) && !empty($published) ? '&live=1' : '')) ?>">Print / PDF</a>
     </div>
   </header>
 
@@ -99,7 +99,7 @@ $fleet_nav_active = 'dashboard';
   <?php if ($quality_errors || $quality_warns): ?>
     <section class="fa-quality <?= $quality_errors ? 'has-error' : '' ?>" aria-label="Data quality summary">
       <div><strong><?= $quality_errors ? 'Data quality needs review' : 'Data quality notes' ?></strong><p><?= $quality_errors ?> error(s) · <?= $quality_warns ?> warning(s). Review the detailed notes in the weekly report before publication.</p></div>
-      <a class="fa-button" href="<?= base_url('reports/weekly_w36?week=' . rawurlencode($week_label)) ?>">Review weekly report</a>
+      <a class="fa-button" href="<?= base_url('reports/workshop_weekly?week=' . rawurlencode($week_label)) ?>">Review weekly report</a>
     </section>
   <?php endif; ?>
 

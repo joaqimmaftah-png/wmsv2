@@ -214,7 +214,7 @@ $security_alert_label = $security_alert_count . ' security event' . ($security_a
     <?php if ($is_supervisor || $is_manager): ?>
     <div class="nav-sep"></div>
     <div class="nav-section-label">Reports</div>
-    <a href="<?= base_url('reports'); ?>" class="ni <?= (ni_active('reports') && !ni_active('reports/workshop_daily') && !ni_active('reports/workshop_weekly') && !ni_active('reports/mttr_mtbf') && !ni_active('reports/availability_forecast') && !ni_active('reports/monthly_plan') && !ni_active('reports/asset_register') && !ni_active('reports/lube_compliance') && !ni_active('reports/store_analytics') && !ni_active('reports/issue_register') && !ni_active('reports/receipt_register') && !ni_active('reports/reorder')) ? 'on' : ''; ?>" title="Reports">
+    <a href="<?= base_url('reports'); ?>" class="ni <?= (ni_active('reports') && !ni_active('reports/workshop_daily') && !ni_active('reports/workshop_weekly') && !ni_active('reports/weekly_w36') && !ni_active('reports/mttr_mtbf') && !ni_active('reports/availability_forecast') && !ni_active('reports/monthly_plan') && !ni_active('reports/asset_register') && !ni_active('reports/lube_compliance') && !ni_active('reports/store_analytics') && !ni_active('reports/issue_register') && !ni_active('reports/receipt_register') && !ni_active('reports/reorder')) ? 'on' : ''; ?>" title="Reports">
       <div class="ni-icon"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
       <span class="ni-label">Reports</span>
       <span class="ni-tip">All Reports</span>
@@ -224,7 +224,7 @@ $security_alert_label = $security_alert_count . ' security event' . ($security_a
       <span class="ni-label">Daily Report</span>
       <span class="ni-tip">Workshop Daily Report</span>
     </a>
-    <a href="<?= base_url('reports/workshop_weekly'); ?>" class="ni <?= ni_active('reports/workshop_weekly'); ?>" title="Workshop Weekly">
+    <a href="<?= base_url('reports/workshop_weekly'); ?>" class="ni <?= (ni_active('reports/workshop_weekly') || ni_active('reports/weekly_w36')) ? 'on' : ''; ?>" title="Workshop Weekly">
       <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg></div>
       <span class="ni-label">Weekly Report</span>
       <span class="ni-tip">Workshop Weekly Report</span>
