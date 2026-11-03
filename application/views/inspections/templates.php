@@ -53,6 +53,16 @@ $total_count = count($templates);
 .it-row-actions { display:flex; justify-content:flex-end; align-items:center; gap:4px; flex-wrap:wrap; }
 .it-row-actions form { display:inline-flex; margin:0; } .it-row-actions .it-btn { min-height:34px; padding:5px 9px; border-radius:6px; font-size:11.5px; font-weight:500; }
 .it-row-actions .it-edit { background:var(--blue-lt); border-color:rgba(0,113,227,.25); color:var(--blue); font-weight:600; }
+/* Compact actions follow the Timesheet hierarchy; links remain visible without JS. */
+.it-more-wrap { display:inline-flex; align-items:center; }
+.it-more-toggle[hidden], .it-more-menu[hidden] { display:none!important; }
+.it-more-menu { display:inline-flex; align-items:center; gap:4px; }
+.it-more-menu.is-enhanced { position:fixed; z-index:1000; display:flex; flex-direction:column; align-items:stretch; gap:0; width:205px; padding:5px; background:var(--surface); border:1px solid var(--sep-opaque); border-radius:var(--r-md); box-shadow:var(--shadow-md); text-align:left; }
+.it-more-menu.is-enhanced .it-menu-item { display:flex; align-items:center; width:100%; min-height:36px; padding:7px 9px; border:0; border-radius:6px; background:transparent; color:var(--t1); font:inherit; font-size:12.5px; text-align:left; text-decoration:none; cursor:pointer; }
+.it-more-menu.is-enhanced .it-menu-item:hover { background:var(--fill); color:var(--blue); }
+.it-more-menu.is-enhanced .it-delete-form { display:block; margin:4px 0 0; padding-top:4px; border-top:1px solid var(--sep); }
+.it-more-menu.is-enhanced .it-menu-danger { color:#B91C1C; }
+.it-more-menu.is-enhanced .it-menu-danger:hover { background:#FEF2F2; color:#991B1B; }
 .it-empty { padding:48px 24px; text-align:center; color:var(--t2); font-size:13px; }
 .it-foot { margin:12px 0; color:var(--t3); font-size:12px; line-height:1.5; }
 @media(max-width:700px) { .it-head { flex-direction:column; } .it-tools-right { width:100%; margin-left:0; } .it-field { flex:1 1 180px; } .it-field input { width:100%; } }
@@ -101,14 +111,19 @@ $total_count = count($templates);
               <td class="it-number"><?= $records ?></td>
               <td><span class="it-badge <?= $h($status) ?>"><?= $status === 'active' ? 'Active' : 'Inactive' ?></span></td>
               <td><div class="it-row-actions">
-                <a class="it-btn" href="<?= $h(base_url('inspections/fill/' . $url_code . '/en')) ?>" aria-label="Fill <?= $h($t->name_en) ?>">Fill</a>
-                <a class="it-btn" href="<?= $h(base_url('inspections/records/' . $url_code)) ?>" aria-label="Records for <?= $h($t->name_en) ?>">Records</a>
                 <a class="it-btn it-edit" href="<?= $h(base_url('inspections/template_edit/' . (int)$t->id)) ?>" aria-label="Edit <?= $h($t->name_en) ?>">Edit</a>
-                <?php if ($records === 0): ?>
-                  <?= form_open('inspections/template_delete/' . (int)$t->id, array('class' => 'it-delete-form')) ?>
-                    <button class="it-btn it-btn-danger" type="submit" aria-label="Delete <?= $h($t->name_en) ?>" onclick="return confirm('Delete this template and its checklist rows? This cannot be undone.');">Delete</button>
-                  <?= form_close() ?>
-                <?php endif; ?>
+                <a class="it-btn" href="<?= $h(base_url('inspections/records/' . $url_code)) ?>" aria-label="Records for <?= $h($t->name_en) ?>">Records</a>
+                <div class="it-more-wrap">
+                  <button type="button" class="it-btn it-more-toggle" aria-expanded="false" aria-controls="it-more-<?= (int)$t->id ?>" aria-label="More actions for <?= $h($t->name_en) ?>" hidden>&bull;&bull;&bull;</button>
+                  <div class="it-more-menu" id="it-more-<?= (int)$t->id ?>">
+                    <a class="it-btn it-menu-item" href="<?= $h(base_url('inspections/fill/' . $url_code . '/en')) ?>" aria-label="Fill <?= $h($t->name_en) ?>">Fill inspection</a>
+                    <?php if ($records === 0): ?>
+                      <?= form_open('inspections/template_delete/' . (int)$t->id, array('class' => 'it-delete-form')) ?>
+                        <button class="it-btn it-btn-danger it-menu-item it-menu-danger" type="submit" aria-label="Delete <?= $h($t->name_en) ?>" onclick="return confirm('Delete this template and its checklist rows? This cannot be undone.');">Delete template</button>
+                      <?= form_close() ?>
+                    <?php endif; ?>
+                  </div>
+                </div>
               </div></td>
             </tr>
           <?php endforeach; ?>
@@ -135,6 +150,7 @@ $total_count = count($templates);
   var reset = document.getElementById('it-reset');
   var rows = Array.prototype.slice.call(table.querySelectorAll('[data-template-row]'));
   function update() {
+    closeMenu();
     var term = search.value.trim().toLocaleLowerCase();
     var matches = 0;
     rows.forEach(function (row) {
@@ -145,6 +161,53 @@ $total_count = count($templates);
     results.textContent = matches + ' of ' + rows.length + ' templates shown';
     empty.hidden = matches !== 0;
   }
+  // Fixed-position menus escape the horizontally scrolling table's clipping.
+  var openMenu = null;
+  var openButton = null;
+  function closeMenu(restoreFocus) {
+    if (!openMenu) return;
+    openMenu.hidden = true;
+    openButton.setAttribute('aria-expanded', 'false');
+    var previous = openButton;
+    openMenu = null;
+    openButton = null;
+    if (restoreFocus) previous.focus();
+  }
+  var toggles = Array.prototype.slice.call(table.querySelectorAll('.it-more-toggle'));
+  toggles.forEach(function (button) {
+    var menu = document.getElementById(button.getAttribute('aria-controls'));
+    if (!menu) return;
+    menu.classList.add('is-enhanced');
+    menu.hidden = true;
+    button.hidden = false;
+    button.addEventListener('click', function () {
+      var wasOpen = openMenu === menu;
+      closeMenu();
+      if (wasOpen) return;
+      openMenu = menu;
+      openButton = button;
+      menu.hidden = false;
+      button.setAttribute('aria-expanded', 'true');
+      var rect = button.getBoundingClientRect();
+      var width = menu.offsetWidth, height = menu.offsetHeight;
+      var left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+      var top = rect.bottom + 4;
+      if (top + height > window.innerHeight - 8 && rect.top - height - 4 >= 8) top = rect.top - height - 4;
+      menu.style.left = left + 'px';
+      menu.style.top = Math.max(8, Math.min(top, window.innerHeight - height - 8)) + 'px';
+    });
+  });
+  document.addEventListener('click', function (event) {
+    if (openMenu && !openMenu.contains(event.target) && !openButton.contains(event.target)) closeMenu();
+  });
+  document.addEventListener('focusin', function (event) {
+    if (openMenu && !openMenu.contains(event.target) && !openButton.contains(event.target)) closeMenu();
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && openMenu) { event.preventDefault(); closeMenu(true); }
+  });
+  window.addEventListener('resize', function () { closeMenu(); });
+  window.addEventListener('scroll', function () { closeMenu(); }, true);
   search.addEventListener('input', update);
   function selectStatus(value) {
     choice = value;
