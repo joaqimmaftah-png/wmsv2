@@ -1159,10 +1159,13 @@ Answers "which pending jobs can proceed now that parts arrived?".
   The lubricants "forecast" page shows this and next month's PM-date-driven
   requirement (date check only).
 
-### 7.9 Weekly report (W36)
+### 7.9 Workshop weekly report
+
+The legacy `weekly_w36` screen, export and publish URLs remain supported as aliases.
+The canonical screen and exports use `workshop_weekly` / `export_workshop_weekly_*`.
 
 `W36_report_model::build(week_start)` produces the single array every W36
-consumer reads (screen `reports/weekly_w36`, Excel via `W36_excel`, print
+consumer reads (screen `reports/workshop_weekly`, Excel via `W36_excel`, print
 HTML, Forecast's plan-vs-actual actuals):
 
 - Population: reportable machines (§7.2), ordered by `report_groups.sort_order`
@@ -1177,7 +1180,7 @@ HTML, Forecast's plan-vs-actual actuals):
   data-quality list explaining anomalies (missing targets provenance etc.).
 - Week resolution honours `report_week_start_day`; URL input accepts ISO
   labels (`2026-W36`) validated against real ISO weeks, or a date.
-- **Publish** (`reports/publish_weekly_w36`, Supervisor or Manager): stores
+- **Publish** (`reports/publish_workshop_weekly`, Supervisor or Manager): stores
   the JSON payload + SHA-256 + build time in `weekly_report_snapshots`;
   afterwards `report_for_week()` serves the frozen snapshot (checksum-verified)
   unless `?live=1` is passed to the print/PDF endpoints. The week's display

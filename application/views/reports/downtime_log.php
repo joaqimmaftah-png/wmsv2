@@ -52,7 +52,7 @@ $live_query = empty($snapshot) && !empty($published) ? '&live=1' : '';
         $search = (isset($event['machine_id']) ? $event['machine_id'] : '') . ' ' . (isset($event['model']) ? $event['model'] : '') . ' ' . (isset($event['location']) ? $event['location'] : '') . ' ' . implode(' ', $words);
       ?>
         <tr data-search="<?= $esc($search) ?>" data-open="<?= !empty($event['open']) ? '1' : '0' ?>">
-          <td><a class="fd-asset" href="<?= base_url('reports/weekly_w36?week=' . rawurlencode($week_label)) ?>"><?= $esc(isset($event['machine_id']) ? $event['machine_id'] : '') ?></a><small><?= $esc(isset($event['model']) ? $event['model'] : '') ?> · <?= $esc(isset($event['location']) ? $event['location'] : 'Unspecified location') ?></small></td>
+          <td><a class="fd-asset" href="<?= base_url('reports/workshop_weekly?week=' . rawurlencode($week_label)) ?>"><?= $esc(isset($event['machine_id']) ? $event['machine_id'] : '') ?></a><small><?= $esc(isset($event['model']) ? $event['model'] : '') ?> · <?= $esc(isset($event['location']) ? $event['location'] : 'Unspecified location') ?></small></td>
           <td><?= $esc($start ?: '—') ?><?php if (!empty($event['carried_in'])): ?><small>Started before this week</small><?php endif; ?></td>
           <td><?= !empty($event['open']) ? '<span class="fd-open">Still open</span>' : $esc($end ?: '—') ?></td>
           <td class="fd-num"><?= $esc($fmt($hours)) ?></td>

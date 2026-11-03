@@ -5,7 +5,7 @@ $nav_query = '?week_start=' . rawurlencode($nav_week) . (!empty($is_live) && !em
 ?>
 <nav class="fleet-report-nav" aria-label="Fleet availability reports">
   <a class="<?= $nav_active === 'dashboard' ? 'is-active' : '' ?>" <?= $nav_active === 'dashboard' ? 'aria-current="page"' : '' ?> href="<?= base_url('reports/fleet_availability' . $nav_query) ?>">Availability</a>
-  <a class="<?= $nav_active === 'weekly' ? 'is-active' : '' ?>" <?= $nav_active === 'weekly' ? 'aria-current="page"' : '' ?> href="<?= base_url('reports/weekly_w36' . $nav_query) ?>">Weekly report</a>
+  <a class="<?= $nav_active === 'weekly' ? 'is-active' : '' ?>" <?= $nav_active === 'weekly' ? 'aria-current="page"' : '' ?> href="<?= base_url('reports/workshop_weekly' . $nav_query) ?>">Weekly report</a>
   <a class="<?= $nav_active === 'downtime' ? 'is-active' : '' ?>" <?= $nav_active === 'downtime' ? 'aria-current="page"' : '' ?> href="<?= base_url('reports/downtime_log' . $nav_query) ?>">Log downtime</a>
 </nav>
 <style>

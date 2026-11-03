@@ -80,7 +80,7 @@ clickTools(control('collapse'));assert.equal(rows[0].hidden,true);
 clickTools(control('expand'));assert.equal(rows[0].hidden,false);assert.equal(rows[1].hidden,false);
 
 assert.match(view, /<tr class="fleet w36-fleet-row">/);
-assert.match(view, /Daily availability · Mon–Sun/);
+assert.match(view, /Daily availability · 7 days/);
 assert.match(view, /w36-avbar/);
 assert.match(view, /w36-group-toggle/);
 assert.match(view, /w36-machine-toggle/);
@@ -88,7 +88,7 @@ assert.match(view, /w36-weekly-detail/);
 assert.match(view, /Below target only/);
 assert.match(view, /Expand all/);
 assert.match(view, /Collapse all/);
-assert.match(view, /published snapshot; Print \/ PDF uses this live reading/);
+assert.match(view, /published report; Print \/ PDF uses this live reading/);
 assert.match(view, /\?week=' \. \$week_label \. \(\$snapshot === null && \$published !== null \? '&live=1'/);
 const picker = view.slice(view.indexOf('<form class="w36-picker" method="get"'), view.indexOf('<form class="w36-picker" method="post"'));
 assert.match(picker, /<\/form>[\s\S]*<form class="w36-picker" method="get"[\s\S]*name="week_start"/);
@@ -234,7 +234,7 @@ assert.match(view, /data-insp="<\?= \$esc\(\$insp_cls\) \?>"/);
 assert.match(view, /data-pm="<\?= \$row_pm_undone > 0 \? '1' : '0' \?>"/);
 assert.match(view, /data-machine-search="<\?= \$esc\(\$reg_text\)/);
 // the register's finder text must be its own row, never the earlier grid loop's $m
-const regPanel = view.slice(view.indexOf('Weekly inspection report'), view.indexOf('Charts — this week'));
+const regPanel = view.slice(view.indexOf('<h3>Weekly inspections and planned maintenance'), view.indexOf('<h3>Weekly charts'));
 assert.ok(regPanel.indexOf('$m[') === -1, 'the register panel no longer reads the main grid loop variable');
 assert.ok(regPanel.indexOf("$r['inspection']['comments']") !== -1);
 
@@ -249,11 +249,21 @@ assert.match(ptPanel, /\$availability_bar\(/, 'availability is the shared bar, n
 assert.match(ptPanel, /\$misses\(/, 'the below-target comparison is the shared BR-W17 helper');
 assert.match(ptPanel, /w36-pt-flag/, 'below target is stated in words, not colour alone');
 assert.match(ptPanel, /scope="col"/);
-// the sheet's misspelled headers survive only as traceability, never as live headers
-assert.equal((ptPanel.match(/Fleet Availible Nb/g) || []).length, 1);
-assert.equal((ptPanel.match(/NUMBER OF FAILLURE Nb/g) || []).length, 1);
+// Spreadsheet headers and mappings should not appear in the user-facing report.
+assert.equal((ptPanel.match(/Fleet Availible Nb/g) || []).length, 0);
+assert.equal((ptPanel.match(/NUMBER OF FAILLURE Nb/g) || []).length, 0);
 assert.ok(ptPanel.indexOf('<th scope="col">Fleet Availible Nb') === -1, 'the old header spelling is not a column');
 assert.ok(view.indexOf('$block_cols') === -1, 'the ad-hoc header array is gone');
 assert.ok(view.indexOf('class="wk"') === -1, 'the old sheet-cell class is gone');
 assert.ok(view.indexOf('th.wk') === -1, 'its now-dead CSS rule is gone too');
 console.log('weekly W36 table UX checks passed');
+
+// End-user copy should explain the report, not the development spreadsheet.
+for (const text of ['Sheet mapping', 'Preview vs the approved sample', 'columns BQ:CB',
+  'built in <?=', 'the stored payload does not match its checksum', 'Weekly workbook block']) {
+  assert.ok(!view.includes(text), `technical copy should not be displayed: ${text}`);
+}
+assert.match(view, /\$esc\(\$quality_message\(\$q\)\)/, 'quality messages remain escaped and actionable');
+assert.match(view, /saved report could not be verified/, 'report integrity warning remains visible');
+assert.match(view, /MTBF: average time between failures/);
+assert.match(view, /\$chart_titles\[\$chart\['key'\]\]/, 'chart titles are readable even for older published reports');

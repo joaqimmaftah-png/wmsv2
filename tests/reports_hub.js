@@ -87,7 +87,7 @@ assert.ok(view.includes('was published — no action needed'),
   'an already published previous week is explicitly No action');
 assert.ok(view.includes('unpublished — Overdue'),
   'older unpublished completed weeks are Overdue');
-assert.ok(view.includes('reports/weekly_w36?week_start='),
+assert.ok(view.includes('reports/workshop_weekly?week_start='),
   'every publication item links by exact week start, honouring a non-Monday week start');
 assert.ok(!view.includes('if (!$w36_published)'),
   'the in-progress draft is not blanket-added to the attention list');
@@ -107,7 +107,7 @@ assert.ok(view.includes('most recent completed weekly reports'),
   'the all-clear sentence names the bounded window it checked');
 
 /* ── User-controlled weekly report name is escaped, never trusted ────── */
-assert.ok(view.includes("'title' => $report_name . ' Weekly Report'"), 'name stays raw in the spec');
+assert.ok(view.includes("$h($report_name)"), 'weekly report name is escaped on the hub');
 assert.ok(view.includes("$h($item['title'])"), 'row titles are escaped at render');
 assert.ok(view.includes("$h($ex['label'])"), 'exception labels are escaped at render');
 assert.ok(!/<\?=\s*\$report_name\s*\?>/.test(view), 'no raw report name in markup');
