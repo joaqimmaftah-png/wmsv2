@@ -449,9 +449,60 @@ $weekly_cells = function (array $r, $open_hours = null) use ($num, $pct) {
   .w36-print .w36-pt-wrap table.w36-pt-table thead th { position:static; font-size:8px; }
   .w36-print .w36-pt-wrap table.w36-pt-table td, .w36-print .w36-pt-wrap table.w36-pt-table tbody th { padding:2px 4px; font-size:8px; }
   .w36-print .w36-pt-type small, .w36-print .w36-pt-flag, .w36-print .w36-pt-foot { font-size:7px; }
+
+  /* Screen-only slate surfaces and typography, aligned with Dashboard and Transactions.
+     Keep the standalone print layout and semantic status colours independent. */
+  @media screen {
+    .w36-screen { max-width:100%; color:#0F172A; font-family:inherit; font-size:13px; }
+    .w36-screen .w36-title { font-size:20px; font-weight:700; letter-spacing:-.02em; color:#0F172A; }
+    .w36-screen .w36-sub, .w36-screen .w36-small, .w36-screen .w36-legend,
+    .w36-screen .w36-scroll-hint { color:#64748B; }
+    .w36-screen .w36-panel { background:#fff; border:1px solid #E2E8F0; border-radius:14px; padding:16px; }
+    .w36-screen .w36-panel h3 { color:#0F172A; font-size:14px; font-weight:700; }
+    .w36-screen .w36-picker { background:#fff; border:1px solid #E2E8F0; border-radius:12px; }
+    .w36-screen .w36-picker label, .w36-screen .w36-table-tools label { color:#475569; font-size:12px; font-weight:600; }
+    .w36-screen .w36-picker input, .w36-screen .w36-table-tools input[type=search],
+    .w36-screen .w36-table-tools select { min-height:35px; padding:0 10px; border:1px solid #CBD5E1; border-radius:8px; background:#fff; color:#0F172A; font:inherit; }
+    .w36-screen .w36-btn, .w36-screen .w36-table-actions .w36-btn {
+      display:inline-flex; align-items:center; justify-content:center; min-height:35px; padding:7px 12px;
+      border:1px solid #CBD5E1; border-radius:8px; background:#fff; color:#1E293B;
+      font:inherit; font-size:12.5px; font-weight:600; text-decoration:none; cursor:pointer;
+    }
+    .w36-screen .w36-btn:hover, .w36-screen .w36-table-actions .w36-btn:hover { background:#F8FAFC; border-color:#94A3B8; color:#0F172A; }
+    .w36-screen .w36-btn-primary, .w36-screen .w36-btn-primary:hover { background:#1D4ED8; border-color:#1D4ED8; color:#fff; }
+    .w36-screen .w36-btn-primary:hover { background:#1E40AF; border-color:#1E40AF; }
+    .w36-screen :focus-visible { outline:3px solid #1D4ED8; outline-offset:2px; }
+    .w36-screen .w36-syn-kpi, .w36-screen .w36-reg-kpi { background:#fff; border:1px solid #E2E8F0; border-radius:12px; padding:13px 15px; }
+    .w36-screen .w36-syn-kpi .l, .w36-screen .w36-reg-kpi .l { color:#64748B; font-size:11px; letter-spacing:.04em; }
+    .w36-screen .w36-syn-kpi .k, .w36-screen .w36-reg-kpi .k { color:#0F172A; font-size:22px; font-weight:700; line-height:1.15; }
+    .w36-screen .w36-syn-kpi .k.good, .w36-screen .w36-reg-kpi .k.good { color:#047857; }
+    .w36-screen .w36-syn-kpi .k.warn, .w36-screen .w36-reg-kpi .k.warn { color:#B45309; }
+    .w36-screen .w36-syn-kpi .k.bad, .w36-screen .w36-reg-kpi .k.bad { color:#B91C1C; }
+    .w36-screen .w36-syn-kpi .s, .w36-screen .w36-reg-kpi .s { color:#64748B; font-size:11.5px; }
+    .w36-screen .w36-chart { background:#fff; border:1px solid #E2E8F0; border-radius:12px; padding:13px 15px; }
+    .w36-screen .w36-chart-title { color:#0F172A; font-weight:700; }
+    .w36-screen :is(.w36-main-wrap,.w36-pt-wrap,.w36-syn-wrap,.w36-reg-wrap) { background:#fff; border-color:#E2E8F0; border-radius:12px; }
+    .w36-screen :is(.w36-main-wrap,.w36-pt-wrap,.w36-syn-wrap,.w36-reg-wrap) table { color:#1E293B; font-size:12.5px; }
+    .w36-screen :is(.w36-main-wrap,.w36-pt-wrap,.w36-syn-wrap,.w36-reg-wrap) table thead th { background:#F8FAFC; border-color:#E2E8F0; color:#475569; font-size:11px; font-weight:700; letter-spacing:.04em; }
+    .w36-screen :is(.w36-main-wrap,.w36-pt-wrap,.w36-syn-wrap,.w36-reg-wrap) table tbody :is(td,th) { border-color:#F1F5F9; }
+    .w36-screen :is(.w36-main-wrap,.w36-syn-wrap,.w36-reg-wrap) table tbody tr.machine td { background:#fff; }
+    .w36-screen :is(.w36-main-wrap,.w36-syn-wrap,.w36-reg-wrap) table tbody tr.grp td,
+    .w36-screen :is(.w36-main-wrap,.w36-pt-wrap) table tbody tr.fleet :is(td,th) { background:#F1F5F9; }
+    .w36-screen :is(.w36-main-wrap,.w36-pt-wrap,.w36-syn-wrap,.w36-reg-wrap) table.w36 tbody tr:is(.machine,.grp,.fleet,.type):hover :is(td,th) { background:#F8FAFC; }
+    .w36-screen .w36-main-wrap table tbody tr.detail > td { background:#F8FAFC; border-color:#E2E8F0; }
+    .w36-screen :is(.w36-machine-toggle b,.w36-syn-machine b,.w36-pt-type span) { color:#1D4ED8; }
+    .w36-screen :is(.w36-group-toggle,.w36-machine-toggle) { color:#0F172A; }
+    .w36-screen .w36-table-tools input[type=checkbox] { accent-color:#1D4ED8; }
+    .w36-screen :is(.w36-detail-tbl,.w36-weekly-detail div) { background:#fff; }
+    .w36-screen .w36-detail-tbl thead th { background:#F8FAFC; color:#475569; }
+    .w36-screen :is(.w36-detail-tbl th,.w36-detail-tbl td,.w36-weekly-detail,.w36-weekly-detail div) { border-color:#E2E8F0; }
+    .w36-screen :is(.w36-strip i.neutral,.w36-av-track,.w36-bar-track,.w36-meter) { background-color:#E2E8F0; }
+    .w36-screen .w36-no-matches { border-color:#CBD5E1; color:#64748B; border-radius:8px; }
+  }
+  @media screen and (max-width:760px) { .w36-screen .w36-panel { padding:12px; } .w36-screen .w36-charts { grid-template-columns:repeat(auto-fit,minmax(min(100%, 330px),1fr)); } }
 </style>
 
-<div class="w36-wrap<?= $print_mode ? ' w36-print' : '' ?>">
+<div class="w36-wrap<?= $print_mode ? ' w36-print' : ' w36-screen' ?>">
 
   <?php if ($print_mode): ?>
   <style>
