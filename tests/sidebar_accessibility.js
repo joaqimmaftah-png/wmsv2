@@ -49,6 +49,11 @@ assert.deepEqual(routeOwners, [
   ['lubricants', 'inventory'],
   ['workspace/planning', 'planning'],
   ['forecast', 'planning'],
+  ['reports/weekly_targets', 'planning'],
+  ['reports/weekly_targets_save', 'planning'],
+  ['reports/weekly_targets_bulk', 'planning'],
+  ['reports/weekly_targets_copy', 'planning'],
+  ['reports/weekly_targets_delete', 'planning'],
   ['reports', 'reports'],
   ['workspace/team', 'team'],
   ['team', 'team'],
@@ -67,12 +72,17 @@ assert.ok(ruleIndex('settings/security') < ruleIndex('settings'),
 assert.ok(ruleIndex('users/profile') < ruleIndex('users') &&
           ruleIndex('users/change_password') < ruleIndex('users'),
   'account menu routes win over the broader User Management prefix');
+assert.ok(ruleIndex('reports/weekly_targets') < ruleIndex('reports'),
+  'the planning configuration route wins over the broader Reports route owner');
 const resolveOwner = uri => uri === '' ? 'dashboard' :
   (routeOwners.find(([route]) => uri === route || uri.startsWith(`${route}/`)) || [null, null])[1];
 for (const [uri, owner] of [
   ['', 'dashboard'], ['dashboard', 'dashboard'], ['workspace/maintenance', 'maintenance'],
   ['workorders/view/12', 'maintenance'], ['materials/inventory', 'inventory'],
-  ['forecast/plan_vs_actual', 'planning'], ['reports/annual_report', 'reports'],
+  ['forecast/plan_vs_actual', 'planning'], ['reports/weekly_targets', 'planning'],
+  ['reports/weekly_targets_save', 'planning'], ['reports/weekly_targets_bulk', 'planning'],
+  ['reports/weekly_targets_copy', 'planning'], ['reports/weekly_targets_delete/3', 'planning'],
+  ['reports/annual_report', 'reports'],
   ['team/shift_roster', 'team'], ['attendance/log', 'team'],
   ['attendance/sites/edit/3', 'admin-sites'], ['settings', 'admin-settings'],
   ['settings/security/audit', 'admin-security'], ['users/profile', 'account-profile'],

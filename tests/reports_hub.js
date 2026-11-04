@@ -139,6 +139,9 @@ assert.ok(reportNav.includes('$is_supervisor || $is_manager'),
   'the existing Supervisor/Manager visibility boundary is unchanged');
 assert.ok(reportNav.includes('$reports_active') && reportNav.includes("$nav_aria_current('reports', 'reports')"),
   'the Reports destination uses the explicit route owner and current-location state');
+assert.ok(!view.includes("'title' => 'Availability Targets'") &&
+          !view.includes("'action' => 'reports/weekly_targets'"),
+  'the Planning configuration destination no longer sits in the Reports catalogue');
 for (const route of [
   'reports/workshop_daily', 'reports/workshop_weekly', 'reports/mttr_mtbf',
   'reports/availability_forecast', 'reports/monthly_plan', 'reports/lube_compliance',

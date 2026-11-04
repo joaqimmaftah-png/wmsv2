@@ -11,7 +11,8 @@ if (!function_exists('wms_sidebar_route_matches')) {
 
 $uri = trim((string)uri_string(), '/');
 // Keep specific paths before broader controller prefixes so each URL has one
-// navigation owner (notably Attendance Sites vs Attendance and Security vs Settings).
+// navigation owner (notably Attendance Sites vs Attendance, Planning targets vs
+// Reports, and Sign-in Security vs Settings).
 $nav_route_owners = array(
     'attendance/sites'       => 'admin-sites',
     'settings/security'      => 'admin-security',
@@ -30,8 +31,13 @@ $nav_route_owners = array(
     'suppliers'              => 'inventory',
     'lubricants'             => 'inventory',
     'workspace/planning'     => 'planning',
-    'forecast'               => 'planning',
-    'reports'                => 'reports',
+    'forecast'                       => 'planning',
+    'reports/weekly_targets'         => 'planning',
+    'reports/weekly_targets_save'    => 'planning',
+    'reports/weekly_targets_bulk'    => 'planning',
+    'reports/weekly_targets_copy'    => 'planning',
+    'reports/weekly_targets_delete'  => 'planning',
+    'reports'                        => 'reports',
     'workspace/team'         => 'team',
     'team'                   => 'team',
     'attendance'             => 'team',

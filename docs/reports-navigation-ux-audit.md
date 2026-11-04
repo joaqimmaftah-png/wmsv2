@@ -214,7 +214,7 @@ These are not requests to delete working functionality. They are candidates for 
 | Weekly Snapshot | Another “Weekly Report” with a different content contract. | **Work & Attendance — Weekly**, or merge only after parity review; never substitute it for canonical W36. |
 | Monthly Summary | Monthly performance overlaps Annual Report’s monthly table and MTTR trends. | Place Monthly, Reliability, and Annual under Performance with a shared KPI basis and explicit scope. |
 | Fleet Availability and Downtime Log | Related weekly tasks appear as separate hub launchers but already have local navigation. | Keep as local Weekly Report tabs/actions, not additional global sidebar items. |
-| Availability Targets | CRUD/configuration presented among reports. | Settings or Weekly Report → Targets for authorised Supervisors; retain POST and role rules. |
+| Availability Targets | CRUD/configuration presented among reports. | Planning workspace → Targets for existing Supervisor/Manager readers; writes remain Supervisor-only. Retain the Weekly Report's contextual no-target link, canonical route, POSTs, and role checks. |
 | Materials Movement | Complements Issue and Receipt registers but has a separate mental model. | Stock Movements local views: Issues, Receipts, Stock on Hand; preserve existing routes. |
 | Equipment History | Requires an asset context and is not a natural peer of Annual Report. | Asset Register row/profile → Equipment History; optionally list under Asset Records with an equipment picker. |
 | Asset import / Add Equipment | Administrative actions inside a reporting destination. | Equipment administration, with return links to the read-only register. |
@@ -487,7 +487,7 @@ Reports
 │   ├── Workshop Weekly
 │   │   ├── Fleet availability
 │   │   ├── Downtime log
-│   │   └── Availability targets   [authorised configuration link]
+│   │   └── Availability targets   [contextual link from a no-target warning]
 │   └── Work & Attendance
 │       ├── Daily activity
 │       └── Weekly snapshot
@@ -519,7 +519,7 @@ Reports
 Administration, outside report consumption:
 ├── Equipment → Add Equipment / Import Asset Register
 ├── Inventory → Issue / Receive Stock
-├── Settings / Weekly Report → Availability Targets
+├── Planning workspace → Availability Targets [same route; writes remain Supervisor-only]
 └── Work Orders / PM / Orders → operational create and update actions
 ```
 
@@ -845,3 +845,16 @@ This navigation-only change makes the existing sidebar usable without hover and 
 - **Regression coverage:** `tests/sidebar_accessibility.js` checks the route-owner map, current-state markup, explicit controls, focus/ARIA behavior, overlay/drawer structure, reduced motion, touch sizing, and visible overflow cue. It is wired into CI and described in `tests/README.md`; existing report/workspace tests now assert the explicit owner behavior.
 - **Verification:** all 14 CI report/navigation structural Node suites passed, and `node --check` passed for the test files. `git diff --check` and the conflict-marker scan passed. PHP lint/rendering is unavailable in this workspace; responsive browser, keyboard, touch, screen-reader, and authenticated role acceptance remain necessary because source checks cannot demonstrate those interactions.
 - **Deliberately unchanged:** all report and operational routes, role checks, the Reports and workspace hub inventories, business/report definitions, and the CEO's Executive Summary-only sidebar remain unchanged.
+
+---
+
+## Implementation addendum — ninth Phase 1 sub-batch: H-03 planning-task relocation
+
+This is a bounded, navigation-only H-03 slice. It moves the Availability Targets destination out of the report catalogue and into the Planning workspace without changing the URL or authorization:
+
+- **Task destination clarified:** the Reports catalogue no longer lists Availability Targets as a report. The existing Planning workspace now links to `reports/weekly_targets`; the route and page remain in `Reports`, so existing callers and bookmarks continue to work.
+- **Role checks preserved:** Planning exposes the link to the same existing Supervisor and Manager roles that can read the target page. Managers remain read-only; target writes continue to require Supervisor authorization. Route authorization and the Reports access matrix were not changed.
+- **Active-location consistency:** the sidebar route-owner map assigns the weekly-target page and its existing write endpoints to Planning before the broader Reports route rule. This changes only which workspace is highlighted, not which controller executes or who may access it.
+- **Regression coverage:** `tests/sidebar_workspaces.js` checks the Planning link, existing Reports role scope, page read/write split, and Supervisor-only target mutations; `tests/reports_hub.js` checks the item is absent from the Reports catalogue; `tests/sidebar_accessibility.js` checks the specific route owners. The workspace test notes describe the added coverage.
+- **Approval boundary retained:** this is not a blanket completion of H-03. No Store Keeper or Technician report access was added. Other mixed read/write destinations, including Asset Register import actions, remain unchanged for further review. C-01 and substantive C-03 metric-definition changes remain out of scope.
+- **Verification:** all 14 report/navigation structural Node suites passed; the three directly affected suites and their `node --check` checks passed. `git diff --check` and the scoped conflict-marker scan passed. PHP lint/rendering and authenticated role/browser acceptance remain outstanding because the PHP CLI and an authenticated browser/database session were unavailable in this workspace.

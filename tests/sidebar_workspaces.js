@@ -35,7 +35,7 @@ const groups = [
     key: 'planning',
     section: section('<!-- ── 3b. PLANNING', '<!-- ── 4. REPORTS'),
     roleGuard: '$is_supervisor || $is_manager',
-    directRoutes: ['forecast', 'forecast/plan_vs_actual', 'forecast/rolling', 'forecast/spares', 'forecast/allowances'],
+    directRoutes: ['forecast', 'reports/weekly_targets', 'forecast/plan_vs_actual', 'forecast/rolling', 'forecast/spares', 'forecast/allowances'],
   },
   {
     key: 'team',
@@ -103,7 +103,8 @@ const destinationRoutes = [
   ['materials/inventory', 'Materials', 'inventory'], ['materials/transactions', 'Materials', 'transactions'],
   ['orders', 'Orders', 'index'], ['spareparts', 'Spareparts', 'index'], ['suppliers', 'Suppliers', 'index'],
   ['lubricants', 'Lubricants', 'index'], ['lubricants/budget', 'Lubricants', 'budget'],
-  ['forecast', 'Forecast', 'index'], ['forecast/plan_vs_actual', 'Forecast', 'plan_vs_actual'],
+  ['forecast', 'Forecast', 'index'], ['reports/weekly_targets', 'Reports', 'weekly_targets'],
+  ['forecast/plan_vs_actual', 'Forecast', 'plan_vs_actual'],
   ['forecast/rolling', 'Forecast', 'rolling'], ['forecast/spares', 'Forecast', 'spares'],
   ['forecast/allowances', 'Forecast', 'allowances'], ['team', 'Team', 'index'],
   ['team/view/{user_id}', 'Team', 'view'], ['team/attendance', 'Team', 'attendance'],
@@ -116,6 +117,26 @@ for (const [route, controller, method] of destinationRoutes) {
   const src = source(`application/controllers/${controller}.php`);
   assert.ok(new RegExp(`public function\\s+${method}\\s*\\(`).test(src),
     `workspace destination ${route} resolves to ${controller}::${method}()`);
+}
+
+const planningStart = workspace.indexOf('public function planning()');
+const planningEnd = workspace.indexOf('public function team()', planningStart);
+const planningWorkspace = workspace.slice(planningStart, planningEnd);
+assert.ok(planningWorkspace.includes("$this->_item('Availability Targets', 'reports/weekly_targets', 'Review weekly machine and group targets; edits remain Supervisor-only.', array(1, 4))"),
+  'Availability Targets is moved into the existing Supervisor/Manager Planning hub');
+assert.ok(/'reports'\s*=>\s*array\(1,\s*4\)/.test(baseController),
+  'the Reports controller remains available only to the existing Supervisor/Manager roles');
+const reportsController = source('application/controllers/Reports.php');
+const targetReadStart = reportsController.indexOf('public function weekly_targets()');
+const targetReadEnd = reportsController.indexOf('public function weekly_targets_save()', targetReadStart);
+assert.ok(targetReadStart >= 0 && targetReadEnd > targetReadStart &&
+          reportsController.slice(targetReadStart, targetReadEnd).includes("$data['can_edit']        = $this->is_supervisor();"),
+  'the planning launcher retains read access while target editing remains Supervisor-only');
+for (const method of ['weekly_targets_save', 'weekly_targets_bulk', 'weekly_targets_copy', 'weekly_targets_delete']) {
+  const start = reportsController.indexOf(`public function ${method}(`);
+  const end = reportsController.indexOf('public function ', start + 1);
+  assert.ok(start >= 0 && reportsController.slice(start, end < 0 ? undefined : end).includes('!$this->is_supervisor()'),
+    `${method} remains Supervisor-only after the navigation move`);
 }
 
 for (const marker of ['aria-label="Workspace sections"', 'aria-current="page"',

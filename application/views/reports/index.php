@@ -397,16 +397,6 @@ $sections = array(
                 ),
             ),
             array(
-                'title' => 'Availability Targets',
-                'desc' => 'The daily target KPI per machine and per group, with single-day overrides.',
-                'meta' => 'Weekly · Screen' . ($t['targets_ready'] ? '' : ' · targets table not installed'),
-                'form' => array(
-                    'action' => 'reports/weekly_targets',
-                    'control' => array('type' => 'date', 'name' => 'week_start', 'label' => 'Week from', 'value' => $week_start),
-                    'buttons' => array(),
-                ),
-            ),
-            array(
                 'title' => 'Daily Activity',
                 'desc' => 'Work orders, team attendance and PM completions for one selected day.',
                 'meta' => 'Daily · Screen, print',

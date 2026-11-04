@@ -60,6 +60,7 @@ class Workspace extends MY_Controller {
             array(1, 4),
             array(
                 $this->_item('Planned Availability', 'forecast', 'Build and review the weekly availability plan.', array(1, 4)),
+                $this->_item('Availability Targets', 'reports/weekly_targets', 'Review weekly machine and group targets; edits remain Supervisor-only.', array(1, 4)),
                 $this->_item('Plan vs Actual', 'forecast/plan_vs_actual', 'Compare the published plan with actual availability.', array(1, 4)),
                 $this->_item('Rolling Plan', 'forecast/rolling', 'Review the rolling three-week maintenance plan.', array(1, 4)),
                 $this->_item('PM Spare Parts', 'forecast/spares', 'Review spare-parts requirements for planned work.', array(1, 4)),
