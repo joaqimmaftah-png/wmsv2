@@ -161,6 +161,20 @@ and that the hub reads the KPI engine, store ledger, inventory catalogue and
 weekly-report model behind a `Throwable` guard. PHP/MySQL and
 authenticated-browser checks are still required.
 
+## Sidebar workspace flow regressions (Node)
+
+```bash
+node tests/sidebar_workspaces.js
+```
+
+Dependency-free checks that Maintenance, Inventory, Planning, and Team/My Record
+have one role-scoped sidebar entry each, that their in-app workspace hubs retain
+working links to the existing controllers, and that destination lists preserve
+role access (including self-only timesheets and restricted procurement links).
+The launchpads use ordinary GET links and expose accessible section/current-page
+navigation. These structural checks do not replace PHP rendering or authenticated
+role/browser testing.
+
 ## Reports safety regressions (Node)
 
 ```bash

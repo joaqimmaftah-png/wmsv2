@@ -163,6 +163,9 @@ class MY_Controller extends CI_Controller {
         'suppliers'   => array(1, 3, 4),
         'orders'      => array(1, 3, 4),
         'lubricants'  => array(1, 2, 3),
+        // Workspace pages only link to role-appropriate destinations; the
+        // individual workspace method and target controllers retain their guards.
+        'workspace'   => array(1, 2, 3, 4),
         'reports'     => array(1, 4),
         // Planning is a supervisor + manager activity: the supervisor builds
         // and publishes the plan, the manager reads it and the variance.

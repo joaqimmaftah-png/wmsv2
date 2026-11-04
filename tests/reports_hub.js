@@ -130,7 +130,7 @@ assert.ok(controller.includes("$id = $this->input->get('id', TRUE);"), 'picker i
 
 /* ── One global Reports destination; the hub retains the report catalogue ─ */
 const navStart = sidebar.indexOf('<!-- ── 4. REPORTS — Supervisor, Manager ── -->');
-const navEnd = sidebar.indexOf('<!-- ── 5. TEAM ── -->', navStart);
+const navEnd = sidebar.indexOf('<!-- ── 5. TEAM / MY RECORD', navStart);
 assert.ok(navStart >= 0 && navEnd > navStart, 'Reports navigation section is bounded');
 const reportNav = sidebar.slice(navStart, navEnd);
 const reportNavLinks = reportNav.match(/base_url\('reports(?:\/[^']*)?'\)/g) || [];
