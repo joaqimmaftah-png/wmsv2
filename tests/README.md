@@ -175,6 +175,19 @@ The launchpads use ordinary GET links and expose accessible section/current-page
 navigation. These structural checks do not replace PHP rendering or authenticated
 role/browser testing.
 
+## Sidebar accessibility and active-location regressions (Node)
+
+```bash
+node tests/sidebar_accessibility.js
+```
+
+Dependency-free structural checks for the explicit keyboard/touch disclosure,
+visible focus and overflow cues, reduced-motion handling, mobile off-canvas drawer
+(Escape, focus containment/return, and inert background), non-reflowing expansion,
+and the explicit route-owner map that drives a single `aria-current` destination.
+These source checks do not replace responsive browser, screen-reader, or
+authenticated role testing.
+
 ## Reports safety regressions (Node)
 
 ```bash

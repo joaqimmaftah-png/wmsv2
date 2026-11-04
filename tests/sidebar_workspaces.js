@@ -50,8 +50,8 @@ for (const group of groups) {
     `${group.key} sidebar section has one workspace entry point`);
   assert.ok(group.section.includes('$' + group.key + '_active'),
     `${group.key} workspace entry uses the group active state`);
-  assert.ok(group.section.includes('aria-current="location"'),
-    `${group.key} workspace entry identifies the current location`);
+  assert.ok(group.section.includes(`$nav_aria_current('${group.key}', 'workspace/${group.key}')`),
+    `${group.key} workspace entry uses the explicit current-location owner`);
   if (group.roleGuard) {
     assert.ok(group.section.includes(group.roleGuard),
       `${group.key} preserves its prior role visibility boundary`);
@@ -68,8 +68,11 @@ assert.ok(sidebar.includes("$is_ceo ? 'Executive Summary' : 'Dashboard'"),
   'CEO remains on the Executive Summary and does not receive operational workspace links');
 assert.ok(sidebar.includes("$is_store ? 'My Record' : 'Team'"),
   'Store users retain a personal-record label rather than a team-directory label');
-assert.ok(sidebar.includes("$nav_group_active(array('attendance/sites')) !== 'on'"),
-  'Attendance Sites remains under Admin rather than falsely activating the Team workspace');
+const attendanceSitesRule = sidebar.match(/'attendance\/sites'\s*=>\s*'admin-sites'/);
+const attendanceTeamRule = sidebar.match(/'attendance'\s*=>\s*'team'/);
+assert.ok(attendanceSitesRule && attendanceTeamRule &&
+          sidebar.indexOf(attendanceSitesRule[0]) < sidebar.indexOf(attendanceTeamRule[0]),
+  'Attendance Sites resolves to Admin before the broader Attendance-to-Team route rule');
 
 assert.ok(baseController.includes("'workspace'   => array(1, 2, 3, 4)"),
   'workspace controller is limited to the existing non-CEO operational roles');

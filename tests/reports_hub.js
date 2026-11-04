@@ -137,8 +137,8 @@ const reportNavLinks = reportNav.match(/base_url\('reports(?:\/[^']*)?'\)/g) || 
 assert.equal(reportNavLinks.length, 1, 'sidebar has one Reports entry instead of a flat report list');
 assert.ok(reportNav.includes('$is_supervisor || $is_manager'),
   'the existing Supervisor/Manager visibility boundary is unchanged');
-assert.ok(reportNav.includes("ni_active('reports')") && reportNav.includes('aria-current="location"'),
-  'the Reports destination has a single active-location state');
+assert.ok(reportNav.includes('$reports_active') && reportNav.includes("$nav_aria_current('reports', 'reports')"),
+  'the Reports destination uses the explicit route owner and current-location state');
 for (const route of [
   'reports/workshop_daily', 'reports/workshop_weekly', 'reports/mttr_mtbf',
   'reports/availability_forecast', 'reports/monthly_plan', 'reports/lube_compliance',
