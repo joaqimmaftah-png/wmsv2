@@ -86,3 +86,7 @@
 - [ ] Keyboard, screen reader, visual contrast and mobile/tablet usability: **not verified**.
 - [ ] Inactive-template submission policy: **decision required**, IT-05.
 - [ ] Production-scale data, performance and need for pagination: **not verified**, IT-06.
+
+## Follow-up: Timesheet action hierarchy
+
+The register previously displayed Fill, Records, Edit and Delete as separate buttons, unlike `team/report`, which keeps two compact actions visible and places secondary actions in a more menu. The register now keeps Edit and Records visible, and places Fill and eligible Delete in a compact overflow panel. Delete remains a confirmed POST and is shown only for zero-record templates; no backend rules change. The panel uses fixed positioning to avoid clipping by the horizontal table scroller, closes on Escape, outside click, focus leaving, scrolling, resize or filtering, and returns focus to its trigger on Escape. Without JavaScript, Fill and Delete remain visible and usable. Simulated DOM checks cover opening, closing, focus restoration and filtering; visual layout, real keyboard navigation and clipping in browsers still require verification.
