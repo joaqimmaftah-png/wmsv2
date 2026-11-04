@@ -40,6 +40,8 @@ jobs:
         run: |
           node tests/table_ux.js
           node tests/reorder_ux.js
+          node tests/reports_hub.js
+          node tests/reporting_safety.js
 
       - name: Run Global Find & Operational Attention regression checks
         run: |

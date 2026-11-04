@@ -4,6 +4,12 @@ $sel = isset($months) ? (int)$months : 12;
 $trendLabels = array_column($trend, 'month');
 $trendMttr   = array_column($trend, 'mttr');
 $trendMtbf   = array_column($trend, 'mtbf');
+$fmtHours = function ($value, $decimals = 1) {
+    return $value === null ? '—' : number_format((float)$value, $decimals).' h';
+};
+$metricSub = function ($value, $label) {
+    return $value === null ? 'No qualifying breakdowns in this window' : $label;
+};
 ?>
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
@@ -25,8 +31,8 @@ $trendMtbf   = array_column($trend, 'mtbf');
 <div class="grid g-4 mb-4">
   <?php
   $kpis = [
-    ['label'=>'Avg MTTR','val'=>$summary['avg_mttr'].' h','sub'=>'Mean Time To Repair','color'=>'var(--amber)','icon'=>'<line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/><circle cx="12" cy="12" r="10"/>'],
-    ['label'=>'Avg MTBF','val'=>$summary['avg_mtbf'].' h','sub'=>'Mean Time Between Failures','color'=>'var(--green)','icon'=>'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'],
+    ['label'=>'Avg MTTR','val'=>$fmtHours($summary['avg_mttr']),'sub'=>$metricSub($summary['avg_mttr'], 'Mean Time To Repair'),'color'=>$summary['avg_mttr'] === null ? 'var(--t3)' : 'var(--amber)','icon'=>'<line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/><circle cx="12" cy="12" r="10"/>'],
+    ['label'=>'Avg MTBF','val'=>$fmtHours($summary['avg_mtbf']),'sub'=>$metricSub($summary['avg_mtbf'], 'Mean Time Between Failures'),'color'=>$summary['avg_mtbf'] === null ? 'var(--t3)' : 'var(--green)','icon'=>'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'],
     ['label'=>'Total Breakdowns','val'=>$summary['total_bd'],'sub'=>'Last '.$sel.' months','color'=>'var(--red)','icon'=>'<polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>'],
     ['label'=>'Fleet Availability','val'=>$summary['avg_avail'] === null ? '—' : $summary['avg_avail'].'%','sub'=>'Average across all equipment','color'=>'var(--blue)','icon'=>'<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'],
   ];
@@ -55,6 +61,7 @@ $trendMtbf   = array_column($trend, 'mtbf');
     <div style="padding:8px 16px 16px;"><canvas id="mtbfChart" style="max-height:200px;"></canvas></div>
   </div>
 </div>
+<div class="cs mb-3">A dash or chart gap means there were no qualifying breakdowns; it does not mean a zero-hour MTTR or MTBF.</div>
 
 <!-- Per-equipment table -->
 <div class="card" style="overflow-x:auto;">
@@ -83,7 +90,9 @@ $trendMtbf   = array_column($trend, 'mtbf');
       // Q1: compare a machine to ITS target (equipment_kpi_targets → 88 %), not to 90
       $avTgt   = isset($eq['target']) ? (float)$eq['target'] : (isset($target) ? (float)$target : 88.0);
       $avColor = $av === null ? 'var(--t3)' : ($av>=$avTgt?'var(--green)':($av>=$avTgt-10?'var(--amber)':'var(--red)'));
-      $mttrBad = $eq['mttr'] > $summary['avg_mttr'] * 1.5;
+      $mttrBad = $eq['mttr'] !== null && $summary['avg_mttr'] !== null
+        && $eq['mttr'] > $summary['avg_mttr'] * 1.5;
+      $mttrColor = $eq['mttr'] === null ? 'var(--t3)' : ($mttrBad ? 'var(--red)' : 'var(--green)');
     ?>
     <tr>
       <td style="font-size:10.5px;color:var(--blue);font-weight:600;"><?=htmlspecialchars((string)($eq['type']))?></td>
@@ -93,8 +102,8 @@ $trendMtbf   = array_column($trend, 'mtbf');
       <td class="mono" style="text-align:center;"><?=number_format((float)($eq['hours']),0)?></td>
       <td style="text-align:center;font-weight:700;color:<?=$eq['breakdowns']>3?'var(--red)':($eq['breakdowns']>1?'var(--amber)':'var(--t2)')?>;"><?=$eq['breakdowns']?></td>
       <td class="mono" style="text-align:center;color:var(--t2);"><?=number_format((float)($eq['total_down']),1)?> h</td>
-      <td style="text-align:center;font-weight:700;color:<?=$mttrBad?'var(--red)':'var(--green)'?>;"><?=$eq['mttr']?> h</td>
-      <td class="mono" style="text-align:center;"><?=number_format((float)($eq['mtbf']),0)?> h</td>
+      <td style="text-align:center;font-weight:700;color:<?=$mttrColor?>;"><?=$fmtHours($eq['mttr'])?></td>
+      <td class="mono" style="text-align:center;"><?=$fmtHours($eq['mtbf'], 0)?></td>
       <td style="text-align:center;font-weight:700;color:<?=$avColor?>;"><?=$av === null ? '—' : $av.'%'?></td>
       <td class="mono" style="text-align:center;color:var(--t3);"><?=$eq['max_down']?> h</td>
     </tr>
@@ -108,11 +117,10 @@ $trendMtbf   = array_column($trend, 'mtbf');
 var trendLabels = <?=json_encode($trendLabels)?>;
 var trendMttr   = <?=json_encode($trendMttr)?>;
 var trendMtbf   = <?=json_encode($trendMtbf)?>;
-var avgMttr     = <?=$summary['avg_mttr']?>;
 
 function makeChart(id, label, data, color, unit) {
   var ctx = document.getElementById(id);
-  if (!ctx) return;
+  if (!ctx || typeof Chart === 'undefined') return;
   new Chart(ctx, {
     type: 'line',
     data: {
@@ -130,7 +138,7 @@ function makeChart(id, label, data, color, unit) {
       }]
     },
     options: {
-      responsive:true, maintainAspectRatio:true,
+      responsive:true, maintainAspectRatio:true, spanGaps:false,
       plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:function(c){return c.parsed.y+' '+unit; }}}},
       scales:{
         x:{ ticks:{font:{size:9},color:'#888'}, grid:{display:false} },

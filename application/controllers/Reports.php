@@ -771,10 +771,17 @@ class Reports extends MY_Controller {
         $this->load->helper('xlsx');
         $xlsx = new XlsxWriter();
         $year = $data['year'];
+        $totals = $data['totals'];
+        $siteCurrency = wms_site_currency();
+        // Match the Annual screen's resolved site target and 70% watch band.
+        $targetPct = isset($data['target']) && (float)$data['target'] > 0 ? (float)$data['target'] : 88.0;
+        $watchPct = 70.0;
+        $targetFraction = $targetPct / 100;
+        $watchFraction = $watchPct / 100;
 
         // Sheet 1 — Monthly KPI Trend
         $xlsx->addSheet('Monthly KPI Trend');
-        foreach([1=>14,2=>10,3=>10,4=>10,5=>10,6=>12,7=>12,8=>12,9=>12] as $c=>$w) $xlsx->setColWidth($c,$w);
+        foreach([1=>14,2=>10,3=>10,4=>10,5=>10,6=>12,7=>12,8=>12,9=>12,10=>28] as $c=>$w) $xlsx->setColWidth($c,$w);
 
         $sTitle='bold|fontSize:13|align:center|valign:middle|bg:1F4E79|fg:FFFFFF';
         $sHdr  ='bold|fontSize:9|align:center|valign:middle|bg:2E75B6|fg:FFFFFF|border:thin';
@@ -786,15 +793,20 @@ class Reports extends MY_Controller {
 
         $xlsx->setRowHeight(1,28);
         $tc=[['v'=>'ANNUAL REPORT '.$year.' — Monthly KPI Trend','s'=>$sTitle]];
-        for($i=1;$i<9;$i++) $tc[]=['v'=>'','s'=>$sTitle];
-        $xlsx->writeRowStyled($tc); $xlsx->mergeCells('A1','I1');
+        for($i=1;$i<10;$i++) $tc[]=['v'=>'','s'=>$sTitle];
+        $xlsx->writeRowStyled($tc); $xlsx->mergeCells('A1','J1');
 
         $xlsx->setRowHeight(2,32);
-        $xlsx->writeRow(['MONTH','WOs','BREAKDOWNS','PM DONE','COMPLETED','DOWNTIME (h)','AVAILABILITY%','MTTR (h)','MTBF (h)'],$sHdr);
+        $xlsx->writeRow(['MONTH','WOs','BREAKDOWNS','PM DONE','COMPLETED','DOWNTIME (h)','AVAILABILITY%','MTTR (h)','MTBF (h)','LUBRICANT BY UNIT'],$sHdr);
 
         foreach ($data['monthly'] as $row) {
             $av = $row['availability'] === null ? null : $row['availability']/100;
-            $sp = $av === null ? $sCell : ($av>=0.9?$sPctG:($av>=0.7?$sPctW:$sPctR));
+            $sp = $av === null ? $sCell : ($av >= $targetFraction ? $sPctG : ($av >= $watchFraction ? $sPctW : $sPctR));
+            $lubeParts = array();
+            foreach ($row['lube_by_unit'] as $unit => $qty) {
+                $lubeParts[] = number_format((float)$qty, 1).' '.$unit;
+            }
+            $lubeLabel = implode('; ', $lubeParts);
             $xlsx->setRowHeight(null,22);
             $xlsx->writeRowStyled([
                 ['v'=>date('F Y',strtotime($row['month'].'-01')),'s'=>$sCell],
@@ -804,8 +816,9 @@ class Reports extends MY_Controller {
                 ['v'=>$row['completed'],'s'=>$sCell],
                 ['v'=>$row['downtime'],'s'=>$sCell],
                 ['v'=>$av,'s'=>$sp],
-                ['v'=>$row['mttr'],'s'=>$sCell],
-                ['v'=>$row['mtbf'],'s'=>$sCell],
+                ['v'=>$row['mttr'] === null ? null : $row['mttr'],'s'=>$sCell],
+                ['v'=>$row['mtbf'] === null ? null : $row['mtbf'],'s'=>$sCell],
+                ['v'=>$lubeLabel,'s'=>$sCell],
             ]);
         }
 
@@ -820,14 +833,47 @@ class Reports extends MY_Controller {
         $xlsx->writeRow(['TYPE','MACHINE ID','MODEL','LOCATION','BREAKDOWNS','DOWNTIME (h)','MTTR (h)','MTBF (h)','AVAILABILITY%'],$sHdr);
         foreach ($data['eq_reliability'] as $eq) {
             $av=$eq['availability'] === null ? null : $eq['availability']/100;
-            $sp=$av === null ? $sCell : ($av>=0.9?$sPctG:($av>=0.7?$sPctW:$sPctR));
+            $sp=$av === null ? $sCell : ($av >= $targetFraction ? $sPctG : ($av >= $watchFraction ? $sPctW : $sPctR));
             $xlsx->setRowHeight(null,22);
             $xlsx->writeRowStyled([
                 ['v'=>$eq['type'],'s'=>$sCell],['v'=>$eq['machine_id'],'s'=>$sCell],
                 ['v'=>trim((string)($eq['model'])),'s'=>$sCell],['v'=>$eq['location'],'s'=>$sCell],
                 ['v'=>$eq['breakdowns'],'s'=>$sCell],['v'=>$eq['downtime'],'s'=>$sCell],
-                ['v'=>$eq['mttr'],'s'=>$sCell],['v'=>$eq['mtbf'],'s'=>$sCell],
+                ['v'=>$eq['mttr'] === null ? null : $eq['mttr'],'s'=>$sCell],
+                ['v'=>$eq['mtbf'] === null ? null : $eq['mtbf'],'s'=>$sCell],
                 ['v'=>$av,'s'=>$sp],
+            ]);
+        }
+
+        // Sheet 3 — Annual Summary. Null reliability values stay blank; the
+        // spare-part total uses the established configured-site-currency basis.
+        $xlsx->addSheet('Annual Summary');
+        foreach([1=>30,2=>20,3=>62] as $c=>$w) $xlsx->setColWidth($c,$w);
+        $xlsx->setRowHeight(1,28);
+        $xlsx->writeRowStyled([
+            ['v'=>'ANNUAL REPORT '.$year.' — Summary','s'=>$sTitle],
+            ['v'=>'','s'=>$sTitle],['v'=>'','s'=>$sTitle],
+        ]);
+        $xlsx->mergeCells('A1','C1');
+        $xlsx->setRowHeight(2,32);
+        $xlsx->writeRow(['METRIC','VALUE','BASIS / NOTE'],$sHdr);
+        $summaryRows = array(
+            array('Fleet size', $totals['fleet_size'], 'Units'),
+            array('Total WOs', $totals['wo_total'], 'All work orders raised'),
+            array('Breakdowns', $totals['breakdowns'], 'Existing Annual breakdown definition'),
+            array('PM completed', $totals['pm_done'], 'Existing Annual PM definition'),
+            array('Average MTTR (h)', $totals['avg_mttr'], $totals['avg_mttr'] === null ? 'Blank — no qualifying breakdowns' : 'Existing Annual MTTR basis'),
+            array('Unweighted mean monthly availability (%)', $totals['avg_avail'], $totals['avg_avail'] === null ? 'Blank — no month with qualifying availability data' : 'Unweighted mean of measured monthly fleet percentages; not a full-year required-time rollup'),
+            array('Availability target (%)', $targetPct, 'Resolved site target at year-end; used for Annual screen/workbook availability colours'),
+            array('Total downtime (h)', $totals['total_dt'], 'Existing Annual downtime basis'),
+            array('Parts spend ('.$siteCurrency.')', $totals['parts_spend'], 'Configured site currency; existing WO spare-part cost basis; no conversion'),
+        );
+        foreach ($summaryRows as $summaryRow) {
+            $xlsx->setRowHeight(null,22);
+            $xlsx->writeRowStyled([
+                ['v'=>$summaryRow[0],'s'=>$sCell],
+                ['v'=>$summaryRow[1] === null ? null : $summaryRow[1],'s'=>$sCell],
+                ['v'=>$summaryRow[2],'s'=>$sCell],
             ]);
         }
 
@@ -1823,6 +1869,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
 
         $data['date']       = $date;
         $data['report']     = $report; // grouped: KPI strip, fleet summary, charts, exports
+        $data['daily_summary'] = $this->_workshop_daily_summary($report, $date);
         $data['machines']   = array_slice($ctx['rows'], $offset, $per_page);
         $data['total_filtered'] = $total_filtered;
         $data['tab_counts'] = $ctx['tab_counts'];
@@ -1906,7 +1953,13 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
             switch ($sort_by) {
                 case 'type':         $cmp = strcasecmp((string)$a['type'], (string)$b['type']); break;
                 case 'status':       $cmp = strcasecmp((string)$a['status'], (string)$b['status']); break;
-                case 'availability': $cmp = ((float)$a['availability'] <=> (float)$b['availability']); break;
+                case 'availability':
+                    // Unknown values always sort after measured values, in both
+                    // directions; casting null to zero would rank them as 0%.
+                    if ($a['availability'] === null && $b['availability'] !== null) return 1;
+                    if ($b['availability'] === null && $a['availability'] !== null) return -1;
+                    $cmp = ((float)$a['availability'] <=> (float)$b['availability']);
+                    break;
                 case 'days_down':    $cmp = ((int)$a['days_down'] <=> (int)$b['days_down']); break;
                 case 'total_dt':     $cmp = ((float)$a['total_dt'] <=> (float)$b['total_dt']); break;
                 default:             $cmp = strcasecmp((string)$a['machine_id'], (string)$b['machine_id']);
@@ -1942,9 +1995,13 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         // This used to be "(24 − downtime) / 24", a 24-hour day that exists
         // nowhere else in the system.
         $kpi_day = $this->Kpi_engine_model->fleet($date, $date);
-        // Get all equipment joined with type name
+        // Get all equipment joined with type name. Daily reports also resolve
+        // the same report-group target chain as W36 where that optional schema
+        // column exists; older installations fall back safely to equipment / site targets.
+        $equipmentSelect = 'e.id, e.registration_no, et.name AS equip_type, e.brand, e.model, e.location, e.status AS equip_status';
+        if ($this->db->field_exists('report_group', 'equipment')) $equipmentSelect .= ', e.report_group';
         $equipment = $this->db
-            ->select('e.id, e.registration_no, et.name AS equip_type, e.brand, e.model, e.location, e.status AS equip_status')
+            ->select($equipmentSelect)
             ->from('equipment e')
             ->join('equipment_types et', 'et.id = e.equipment_type_id', 'left')
             ->where('e.status !=', 'Retired')
@@ -2023,7 +2080,8 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
             // Availability for the day, from the engine (singleton on this date).
             $k = isset($kpi_day['machines'][(int)$eq->id]) ? $kpi_day['machines'][(int)$eq->id] : null;
             $availability   = ($k !== null && $k['availability'] !== null) ? round($k['availability'], 2) : null;
-            $machine_target = $this->Kpi_engine_model->target_for($eq->id, $date);
+            $reportGroup    = isset($eq->report_group) && $eq->report_group !== '' ? $eq->report_group : null;
+            $machine_target = $this->Kpi_engine_model->target_for($eq->id, $date, $reportGroup);
             if ($k !== null) $downtime = round((float)$k['downtime_hours'], 2);   // the union, not the sum
 
             $groups[$type]['machines'][] = [
@@ -2054,7 +2112,9 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                 if ($m['status']==='Down') $down++;
                 $eid = isset($m['equipment_id']) ? (int)$m['equipment_id'] : null;
                 if ($eid !== null && isset($kpi_day['machines'][$eid])) {
-                    $kpi_members[] = $kpi_day['machines'][$eid];
+                    $member = $kpi_day['machines'][$eid];
+                    $member['target'] = $m['target'];
+                    $kpi_members[] = $member;
                 }
             }
             $rollup = $this->Kpi_engine_model->rollup($kpi_members);
@@ -2072,6 +2132,46 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         return $groups;
     }
 
+    /**
+     * Shared presentation summary for the Daily screen, XLSX and print/PDF.
+     * Readiness is a count of the report's status rows; availability is the
+     * KPI engine's time-based fleet measure. Fleet target uses the same
+     * required-time-weighted target rollup as the per-type summaries. Keeping
+     * these measures named prevents different questions being presented as one percentage.
+     */
+    private function _workshop_daily_summary($report, $date) {
+        $totalEq = $totalAvail = $totalDown = 0;
+        foreach ($report as $g) {
+            $totalEq    += $g['total'];
+            $totalAvail += $g['available'];
+            $totalDown  += $g['down'];
+        }
+        $kpiFleet = $this->Kpi_engine_model->fleet($date, $date);
+        $availability = $kpiFleet['fleet']['availability_pct'];
+        $targetMembers = array();
+        foreach ($report as $g) {
+            foreach ($g['machines'] as $machine) {
+                $equipmentId = isset($machine['equipment_id']) ? (int)$machine['equipment_id'] : null;
+                if ($equipmentId === null || !isset($kpiFleet['machines'][$equipmentId])) continue;
+                $member = $kpiFleet['machines'][$equipmentId];
+                $member['target'] = $machine['target'];
+                $targetMembers[] = $member;
+            }
+        }
+        $targetRollup = $this->Kpi_engine_model->rollup($targetMembers);
+        $fleetTarget = $targetRollup['weekly_target'] !== null
+            ? $targetRollup['weekly_target']
+            : $this->Kpi_engine_model->target_for(null, $date);
+        return array(
+            'total_eq'      => $totalEq,
+            'available'     => $totalAvail,
+            'down'          => $totalDown,
+            'readiness'     => $totalEq > 0 ? $totalAvail / $totalEq : null,
+            'availability'  => $availability === null ? null : $availability / 100,
+            'target'        => $fleetTarget,
+        );
+    }
+
     public function export_workshop_daily_pdf() {
         $date = $this->_resolve_report_date($this->input->get('date', TRUE));
         $report = $this->_build_workshop_daily($date);
@@ -2082,18 +2182,13 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         // Build HTML for browser print-to-PDF (wkhtmltopdf not required)
         $site = isset($this->site_settings['company_name']) ? $this->site_settings['company_name'] : 'Workshop WMS';
 
-        $totalEq = $totalAvail = $totalDown = 0;
-        foreach ($report as $g) {
-            $totalEq    += $g['total'];
-            $totalAvail += $g['available'];
-            $totalDown  += $g['down'];
-        }
-        // time-based availability from the engine, the count kept separately (Q1)
-        $kpi_fleet   = $this->Kpi_engine_model->fleet($date, $date);
-        $overallKpi  = $kpi_fleet['fleet']['availability_pct'] === null
-            ? null : round($kpi_fleet['fleet']['availability_pct']);
-        $readiness   = $totalEq > 0 ? round($totalAvail / $totalEq * 100) : 0;
-        $default_target = $this->Kpi_engine_model->target_for(null, $date);
+        $summary = $this->_workshop_daily_summary($report, $date);
+        $totalEq = $summary['total_eq'];
+        $totalAvail = $summary['available'];
+        $totalDown = $summary['down'];
+        $overallKpi = $summary['availability'] === null ? null : round($summary['availability'] * 100);
+        $readiness = $summary['readiness'] === null ? null : round($summary['readiness'] * 100);
+        $default_target = $summary['target'];
         $fleetTarget = round($default_target * 100);
 
         ob_start();
@@ -2129,6 +2224,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
   .td-pct-good{color:#375623;font-weight:700;text-align:center;}
   .td-pct-warn{color:#7F6000;font-weight:700;text-align:center;}
   .td-pct-bad{color:#C00000;font-weight:700;text-align:center;}
+  .td-pct-neutral{color:#64748b;font-weight:700;text-align:center;}
   .td-kpi{background:#EBF3FB;font-weight:900;font-size:7.5pt;text-align:center;color:#1F4E79;}
   /* Charts section */
   .charts-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;}
@@ -2149,11 +2245,12 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
   <div class="hdr">
     <div>
       <div class="hdr-title">WORKSHOP DAILY REPORT</div>
-      <div class="hdr-date"><?= htmlspecialchars((string)($site)) ?> &nbsp;|&nbsp; <?= date('l, d F Y', strtotime($date)) ?> &nbsp;|&nbsp; <?= $totalAvail ?> of <?= $totalEq ?> machines up &nbsp;|&nbsp; target <?= $fleetTarget ?>%</div>
+      <div class="hdr-date"><?= htmlspecialchars((string)($site)) ?> &nbsp;|&nbsp; <?= date('l, d F Y', strtotime($date)) ?> &nbsp;|&nbsp; status readiness <?= $readiness === null ? '—' : $readiness.'%' ?> (<?= $totalAvail ?> of <?= $totalEq ?>) &nbsp;|&nbsp; time-based availability target <?= $fleetTarget ?>%</div>
     </div>
     <div style="text-align:right;font-size:8pt;color:#555;">
-      Overall Availability<br>
+      Fleet Availability (time-based)<br>
       <span style="font-size:18pt;font-weight:900;color:<?= $overallKpi === null ? '#64748b' : ($overallKpi>=$fleetTarget?'#375623':($overallKpi>=$fleetTarget-10?'#7F6000':'#C00000')) ?>;"><?= $overallKpi === null ? '—' : $overallKpi.'%' ?></span>
+      <?php if ($overallKpi === null): ?><br><span style="font-size:6.5pt;color:#64748b;">No qualifying time base</span><?php endif; ?>
     </div>
   </div>
 
@@ -2166,8 +2263,9 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
     ?>
     <div class="sum-box">
       <div class="sum-type"><?= htmlspecialchars((string)($g['type'])) ?>s</div>
-      <div class="sum-nums"><?= $g['available'] ?> avail / <?= $g['down'] ?> down / <?= $g['total'] ?> total</div>
+      <div class="sum-nums"><?= $g['available'] ?> available (status) / <?= $g['down'] ?> down (status) / <?= $g['total'] ?> total</div>
       <div class="sum-kpi" style="color:<?= $kpiColor ?>"><?= $kpi === null ? '—' : $kpi.'%' ?></div>
+      <div class="sum-nums">Time-based · target <?= $dtgt ?>%</div>
     </div>
     <?php endforeach; ?>
   </div>
@@ -2176,20 +2274,21 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
   <table>
     <thead>
       <tr>
-        <th>TYPE</th><th># EQ</th><th>AVAIL</th><th>DOWN</th>
+        <th>TYPE</th><th># EQ</th><th>AVAILABLE (STATUS)</th><th>DOWN (STATUS)</th>
         <th>MACHINE ID</th><th>MODEL</th><th>LOCATION</th>
         <th style="width:18%;">OBSERVATION</th>
         <th style="width:14%;">ONGOING ACTION</th>
         <th>E/T</th><th>STATUS</th>
         <th>DOWN TIME</th><th>UP TIME</th>
         <th>TOTAL DT</th><th>START DATE</th><th>DAYS DOWN</th>
-        <th>AVAIL%</th><th>DAILY KPI</th>
+        <th>MACHINE AVAIL (TIME)</th><th>TYPE AVAIL (TIME)</th>
       </tr>
     </thead>
     <tbody>
     <?php foreach ($report as $type => $g):
       $first = true;
       $count = count($g['machines']);
+      $groupTarget = round((isset($g['target']) ? $g['target'] : $default_target) * 100);
     ?>
     <?php foreach ($g['machines'] as $m):
       $avail = $m['availability'] === null ? null : round($m['availability'] * 100);
@@ -2217,8 +2316,8 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
       <td class="td-c" style="<?= $m['days_down']>7?'color:#C00000;font-weight:700':($m['days_down']>0?'color:#7F6000;font-weight:700':'') ?>">
         <?= $m['days_down'] > 0 ? $m['days_down'] : '' ?>
       </td>
-      <td class="<?= $pctClass ?>"><?= $avail === null ? '—' : $avail.'%' ?></td>
-      <td class="td-kpi"><?= $first ? ($g['daily_kpi'] === null ? '—' : round($g['daily_kpi']*100).'%') : '' ?></td>
+      <td class="<?= $pctClass ?>"><?= $avail === null ? '—' : $avail.'%' ?><br><small>target <?= $mtgt ?>%</small></td>
+      <td class="td-kpi"><?= $first ? ($g['daily_kpi'] === null ? '—' : round($g['daily_kpi']*100).'%') : '' ?><?= $first ? '<br><small>target '.$groupTarget.'%</small>' : '' ?></td>
     </tr>
     <?php $first = false; endforeach; ?>
     <?php endforeach; ?>
@@ -2266,12 +2365,13 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
     }
 
     private function _export_workshop_xlsx($report, $date) {
-        $default_target = $this->Kpi_engine_model->target_for(null, $date);
+        $summary = $this->_workshop_daily_summary($report, $date);
+        $default_target = $summary['target'];
         $xlsx = new XlsxWriter();
         $xlsx->addSheet('Workshop Daily Report');
 
-        // 18 columns A-R — match PDF layout exactly
-        $colW = [1=>12,2=>7,3=>7,4=>7,5=>11,6=>16,7=>11,8=>32,9=>28,10=>8,11=>11,12=>10,13=>10,14=>9,15=>11,16=>7,17=>12,18=>10];
+        // 20 columns A-T: the two target columns make the colour basis explicit.
+        $colW = [1=>12,2=>7,3=>7,4=>7,5=>11,6=>16,7=>11,8=>32,9=>28,10=>8,11=>11,12=>10,13=>10,14=>9,15=>11,16=>7,17=>12,18=>10,19=>16,20=>14];
         foreach ($colW as $c=>$w) $xlsx->setColWidth($c, $w);
 
         // Styles
@@ -2286,26 +2386,29 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         $sPctG   = 'bold|fontSize:9|align:center|valign:middle|border:thin|numFmt:0%|bg:E2EFDA|fg:375623';
         $sPctW   = 'bold|fontSize:9|align:center|valign:middle|border:thin|numFmt:0%|bg:FFF2CC|fg:7F6000';
         $sPctR   = 'bold|fontSize:9|align:center|valign:middle|border:thin|numFmt:0%|bg:FFD7D7|fg:C00000';
+        $sPctN   = 'bold|fontSize:9|align:center|valign:middle|border:thin|numFmt:0%|bg:E2E8F0|fg:64748B';
+        $sTarget = 'fontSize:9|align:center|valign:middle|border:thin|numFmt:0%|bg:F1F5F9|fg:475569';
         $sTotL   = 'bold|fontSize:10|align:right|valign:middle|bg:1F4E79|fg:FFFFFF|border:thin';
         $sTotN   = 'bold|fontSize:10|align:center|valign:middle|bg:1F4E79|fg:FFFFFF|border:thin';
         $sTotP   = 'bold|fontSize:10|align:center|valign:middle|bg:1F4E79|fg:FFFFFF|border:thin|numFmt:0%';
 
-        foreach ([$sTitle,$sHdr,$sType,$sSumN,$sCell,$sCellC,$sDown,$sAvail,$sPctG,$sPctW,$sPctR,$sTotL,$sTotN,$sTotP] as $s) {
+        foreach ([$sTitle,$sHdr,$sType,$sSumN,$sCell,$sCellC,$sDown,$sAvail,$sPctG,$sPctW,$sPctR,$sPctN,$sTarget,$sTotL,$sTotN,$sTotP] as $s) {
             $xlsx->registerStyle($s);
         }
 
-        // Row 1: Title — exactly 18 cells, all merged
+        // Row 1: Title — exactly 20 cells, all merged
         $xlsx->setRowHeight(1, 30);
         $titleCells = [['v'=>'WORKSHOP DAILY REPORT   |   '.date('d/m/Y', strtotime($date)),'s'=>$sTitle]];
-        for ($i = 1; $i < 18; $i++) $titleCells[] = ['v'=>'','s'=>$sTitle];
+        for ($i = 1; $i < 20; $i++) $titleCells[] = ['v'=>'','s'=>$sTitle];
         $xlsx->writeRowStyled($titleCells);
-        $xlsx->mergeCells('A1','R1');
+        $xlsx->mergeCells('A1','T1');
 
-        // Row 2: Column headers — exactly 18
+        // Row 2: Column headers — exactly 20, including the resolved target basis
         $xlsx->setRowHeight(2, 44);
-        $headers = ['TYPE','# EQUIP','AVAILABLE','DOWN','MACHINE ID','MODEL','LOCATION',
+        $headers = ['TYPE','# EQUIP','AVAILABLE (STATUS)','DOWN (STATUS)','MACHINE ID','MODEL','LOCATION',
                     'OBSERVATION','ONGOING ACTION','E/T','STATUS',
-                    'DOWN TIME','UP TIME','TOTAL DT (h)','START DATE','DAYS DOWN','AVAILABILITY','DAILY KPI'];
+                    'DOWN TIME','UP TIME','TOTAL DT (h)','START DATE','DAYS DOWN','MACHINE AVAILABILITY (TIME)','TYPE AVAILABILITY (TIME)',
+                    'MACHINE TARGET (%)','TYPE TARGET (%)'];
         $xlsx->writeRow($headers, $sHdr);
 
         // Data rows
@@ -2314,14 +2417,26 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
             $startRow = $rowNum;
             $machines = $g['machines'];
             $count    = count($machines);
+            $groupTarget = isset($g['target']) ? $g['target'] : $default_target;
+            $groupDisplayPct = $g['daily_kpi'] === null ? null : round($g['daily_kpi'] * 100);
+            $groupTargetPct = round($groupTarget * 100);
+            $groupPctStyle = $groupDisplayPct === null ? $sPctN
+                : ($groupDisplayPct >= $groupTargetPct ? $sPctG
+                : ($groupDisplayPct >= $groupTargetPct - 10 ? $sPctW : $sPctR));
 
             foreach ($machines as $mi => $m) {
                 $isFirst = ($mi === 0);
                 $sStatus = ($m['status']==='Down') ? $sDown : $sAvail;
 
-                // Pick availability colour style
+                // Machine/target colours use the same rounded-percentage policy
+                // as the screen and PDF; an unknown value is neutral, not zero.
                 $avPct = $m['availability']; // decimal 0.0–1.0
-                $sPctStyle = $avPct === null ? $sCell : ($avPct >= 0.9 ? $sPctG : ($avPct >= 0.7 ? $sPctW : $sPctR));
+                $avTarget = isset($m['target']) ? $m['target'] : $default_target;
+                $avDisplayPct = $avPct === null ? null : round($avPct * 100);
+                $avTargetPct = round($avTarget * 100);
+                $sPctStyle = $avDisplayPct === null ? $sPctN
+                    : ($avDisplayPct >= $avTargetPct ? $sPctG
+                    : ($avDisplayPct >= $avTargetPct - 10 ? $sPctW : $sPctR));
 
                 // Clean down/up time — strip trailing :00 duplication, blank for available machines
                 $downTimeVal = '';
@@ -2361,12 +2476,14 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                     ['v' => $startDateVal,                       's' => $sCellC],
                     ['v' => $m['days_down'] > 0 ? (int)$m['days_down'] : '', 's' => $sCellC],
                     ['v' => $avPct,                              's' => $sPctStyle],
-                    ['v' => $isFirst && $g['daily_kpi'] !== null ? (float)$g['daily_kpi'] : '', 's' => $g['daily_kpi'] === null ? $sCell : $sPctG],
+                    ['v' => $isFirst && $g['daily_kpi'] !== null ? (float)$g['daily_kpi'] : null, 's' => $isFirst ? $groupPctStyle : $sCellC],
+                    ['v' => (float)$avTarget,                    's' => $sTarget],
+                    ['v' => $isFirst ? (float)$groupTarget : null, 's' => $sTarget],
                 ]);
                 $rowNum++;
             }
 
-            // Merge TYPE + summary cols + KPI col across group rows
+            // Merge TYPE + summary columns + group KPI/target across type rows.
             if ($count > 1) {
                 $endRow = $rowNum - 1;
                 $xlsx->mergeCells("A{$startRow}", "A{$endRow}");
@@ -2374,30 +2491,43 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                 $xlsx->mergeCells("C{$startRow}", "C{$endRow}");
                 $xlsx->mergeCells("D{$startRow}", "D{$endRow}");
                 $xlsx->mergeCells("R{$startRow}", "R{$endRow}");
+                $xlsx->mergeCells("T{$startRow}", "T{$endRow}");
             }
         }
 
-        // Summary footer row
+        // Separate count-based readiness from engine time-based availability.
+        // Never average type percentages to manufacture a fleet KPI.
+        $countRow = array();
+        $countLabel = 'REPORTED FLEET: '.$summary['total_eq']
+            .' | AVAILABLE (STATUS): '.$summary['available']
+            .' | DOWN (STATUS): '.$summary['down'];
+        for ($i = 0; $i < 20; $i++) $countRow[] = array('v' => $i === 0 ? $countLabel : '', 's' => $sTotL);
         $xlsx->setRowHeight($rowNum, 22);
-        $totalEq = $totalAvail = $totalDown = 0;
-        $kpiSum = 0; $kpiCount = 0;
-        foreach ($report as $g) {
-            $totalEq    += $g['total'];
-            $totalAvail += $g['available'];
-            $totalDown  += $g['down'];
-            if ($g['daily_kpi'] !== null) { $kpiSum += $g['daily_kpi']; $kpiCount++; }
-        }
-        $overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
-        $overallKpi   = $kpiCount > 0 ? round($kpiSum / $kpiCount, 2) : null;
+        $xlsx->writeRowStyled($countRow);
+        $xlsx->mergeCells("A{$rowNum}", "T{$rowNum}");
+        $rowNum++;
 
-        $footer = [];
-        for ($i = 0; $i < 16; $i++) {
-            $footer[] = ['v' => $i === 3 ? 'TOTAL' : '', 's' => $sTotL];
+        $readinessNote = $summary['readiness'] === null ? ' | NO REPORTED MACHINES' : '';
+        $availabilityNote = $summary['availability'] === null ? ' | NO QUALIFYING TIME BASE' : '';
+        $readinessStyle = $summary['readiness'] === null ? $sPctN : $sTotP;
+        $fleetDisplayPct = $summary['availability'] === null ? null : round($summary['availability'] * 100);
+        $fleetTargetPct = round($default_target * 100);
+        $fleetAvailabilityStyle = $fleetDisplayPct === null ? $sPctN
+            : ($fleetDisplayPct >= $fleetTargetPct ? $sPctG
+            : ($fleetDisplayPct >= $fleetTargetPct - 10 ? $sPctW : $sPctR));
+        $metricRows = array(
+            array('STATUS READINESS — available status rows / reported fleet'.$readinessNote, $summary['readiness'], $readinessStyle),
+            array('FLEET AVAILABILITY — KPI engine time-based | TARGET '.$fleetTargetPct.'% | warning from target −10 points'.$availabilityNote, $summary['availability'], $fleetAvailabilityStyle),
+        );
+        foreach ($metricRows as $metricRow) {
+            $footer = array();
+            for ($i = 0; $i < 19; $i++) $footer[] = array('v' => $i === 0 ? $metricRow[0] : '', 's' => $sTotL);
+            $footer[] = array('v' => $metricRow[1], 's' => $metricRow[2]);
+            $xlsx->setRowHeight($rowNum, 22);
+            $xlsx->writeRowStyled($footer);
+            $xlsx->mergeCells("A{$rowNum}", "S{$rowNum}");
+            $rowNum++;
         }
-        $footer[] = ['v' => $overallAvail, 's' => $sTotP];
-        $footer[] = ['v' => $overallKpi,   's' => $sTotP];
-        $xlsx->writeRowStyled($footer);
-        $xlsx->mergeCells("A{$rowNum}", "P{$rowNum}");
 
         $filename = 'Workshop_Daily_Report_'.date('Ymd', strtotime($date)).'.xlsx';
         $tmp      = wms_temp_path($filename);
@@ -2515,6 +2645,30 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         );
     }
 
+    /** Screen-only pagination; the XLSX callers deliberately retain MAX_ROWS. */
+    private function _store_register_pagination($total) {
+        $allowed = array(10, 25, 50, 100);
+        $pageRaw = $this->input->get('page');
+        $sizeRaw = $this->input->get('per_page');
+        $page = is_scalar($pageRaw) && ctype_digit((string)$pageRaw) ? (int)$pageRaw : 1;
+        $perPage = is_scalar($sizeRaw) && ctype_digit((string)$sizeRaw) ? (int)$sizeRaw : 25;
+        if (!in_array($perPage, $allowed, TRUE)) $perPage = 25;
+
+        $total = max(0, (int)$total);
+        $totalPages = max(1, (int)ceil($total / $perPage));
+        $page = min(max(1, $page), $totalPages);
+        $offset = ($page - 1) * $perPage;
+        return array(
+            'page' => $page,
+            'per_page' => $perPage,
+            'offset' => $offset,
+            'total_pages' => $totalPages,
+            'showing_from' => $total > 0 ? $offset + 1 : 0,
+            'showing_to' => $total > 0 ? min($total, $offset + $perPage) : 0,
+            'total' => $total,
+        );
+    }
+
     private function _valid_date($s) {
         if (!$s) return false;
         $d = DateTime::createFromFormat('Y-m-d', $s);
@@ -2524,13 +2678,18 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
     /* ── ISSUE REGISTER (Sortie) ───────────────────────── */
     public function issue_register() {
         $filter = $this->_store_filter();
+        $totals = $this->Store_model->register_totals('ISSUE', $filter);
+        $pagination = $this->_store_register_pagination($totals['lines']);
         $data = array(
-            'rows'        => $this->Store_model->issue_register($filter),
-            'totals'      => $this->Store_model->register_totals('ISSUE', $filter),
+            'rows'        => $this->Store_model->issue_register($filter, $pagination['per_page'], $pagination['offset']),
+            'totals'      => $totals,
+            'pagination'  => $pagination,
             'by_alloc'    => $this->Store_model->consumption_by_allocation($filter, 15),
             'categories'  => $this->Materials_model->get_categories(),
             'equipment'   => $this->Store_model->equipment_options(),
             'available'   => $this->Store_model->available(),
+            'can_issue_stock' => $this->can_write(),
+            'row_limit'   => Store_model::MAX_ROWS,
             'filter'      => $filter,
             'page_title'  => 'Issue Register (Sortie)',
         );
@@ -2541,18 +2700,23 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         $this->load->helper('xlsx');
         $filter = $this->_store_filter();
         $rows   = $this->Store_model->issue_register($filter);
-        $this->_export_register_xlsx('ISSUE', $rows, $filter);
+        $totals = $this->Store_model->register_totals('ISSUE', $filter);
+        $this->_export_register_xlsx('ISSUE', $rows, $filter, $totals);
     }
 
     /* ── RECEIPT REGISTER (Receipts / MRN) ─────────────── */
     public function receipt_register() {
         $filter = $this->_store_filter();
+        $totals = $this->Store_model->register_totals('RECEIVE', $filter);
+        $pagination = $this->_store_register_pagination($totals['lines']);
         $data = array(
-            'rows'        => $this->Store_model->receipt_register($filter),
-            'totals'      => $this->Store_model->register_totals('RECEIVE', $filter),
+            'rows'        => $this->Store_model->receipt_register($filter, $pagination['per_page'], $pagination['offset']),
+            'totals'      => $totals,
+            'pagination'  => $pagination,
             'suppliers'   => $this->Store_model->receipt_suppliers(),
             'categories'  => $this->Materials_model->get_categories(),
             'available'   => $this->Store_model->available(),
+            'row_limit'   => Store_model::MAX_ROWS,
             'filter'      => $filter,
             'page_title'  => 'Receipt Register',
         );
@@ -2563,16 +2727,22 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         $this->load->helper('xlsx');
         $filter = $this->_store_filter();
         $rows   = $this->Store_model->receipt_register($filter);
-        $this->_export_register_xlsx('RECEIVE', $rows, $filter);
+        $totals = $this->Store_model->register_totals('RECEIVE', $filter);
+        $this->_export_register_xlsx('RECEIVE', $rows, $filter, $totals);
     }
 
     /**
-     * One writer for both registers — the column set differs, the formatting,
-     * the totals row and the filter banner do not.
+     * One writer for both registers — the column set differs, while formatting,
+     * unit/currency summary rows and the filter banner share the same safety rules.
      */
-    private function _export_register_xlsx($type, $rows, $filter) {
-        $isIssue = ($type === 'ISSUE');
-        $title   = $isIssue ? 'ISSUE REGISTER (SORTIE)' : 'RECEIPT REGISTER';
+    private function _export_register_xlsx($type, $rows, $filter, $summary = null) {
+        $isIssue  = ($type === 'ISSUE');
+        $title    = $isIssue ? 'ISSUE REGISTER (SORTIE)' : 'RECEIPT REGISTER';
+        $total_lines = is_array($summary) && isset($summary['lines']) ? (int)$summary['lines'] : null;
+        $qtyByUnit = is_array($summary) && isset($summary['qty_by_unit']) ? $summary['qty_by_unit'] : array();
+        $approvedByUnit = is_array($summary) && isset($summary['qty_approved_by_unit']) ? $summary['qty_approved_by_unit'] : array();
+        $valueByCurrency = is_array($summary) && isset($summary['value_by_currency']) ? $summary['value_by_currency'] : array();
+        $truncated = $total_lines !== null && $total_lines > count($rows);
 
         $cols = $isIssue
             ? array(
@@ -2585,7 +2755,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                 array('Delivery Date', 13), array('MRN / Ref', 13), array('Code', 13),
                 array('Category', 14), array('Description', 34), array('Part No', 18),
                 array('Unit', 7), array('Qty Approved', 12), array('Qty Delivered', 12),
-                array('Unit Price', 14), array('Line Value', 14), array('Supplier', 28),
+                array('Unit Price', 14), array('Currency', 10), array('Line Value', 14), array('Supplier', 28),
               );
 
         $xlsx = new XlsxWriter();
@@ -2621,9 +2791,14 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
             $bits[] = 'Period: '.($filter['date_from'] ?: 'start').' to '.($filter['date_to'] ?: 'today');
         }
         foreach (array('category' => 'Category', 'allocation' => 'Allocation',
-                       'supplier' => 'Supplier', 'reference' => 'Reference',
-                       'person' => 'Person', 'search' => 'Search') as $k => $lbl) {
+                       'equipment_id' => 'Equipment ID', 'supplier' => 'Supplier',
+                       'reference' => 'Reference', 'person' => 'Person',
+                       'search' => 'Search') as $k => $lbl) {
             if (!empty($filter[$k])) $bits[] = $lbl.': '.$filter[$k];
+        }
+        if ($truncated) {
+            $bits[] = 'RESULT LIMITED: latest '.number_format(count($rows)).' of '
+                .number_format((int)$total_lines).' matching lines; narrow the filters for a complete export';
         }
         $xlsx->writeRowStyled(array(array(
             'v' => ($bits ? implode('  |  ', $bits) : 'Filter: none (all records)')
@@ -2667,6 +2842,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
                     array('v' => $x->qty_approved === null ? '' : (float)$x->qty_approved, 's' => $sNum),
                     array('v' => (float)$x->qty,               's' => $sNum),
                     array('v' => $x->unit_price === null ? '' : (float)$x->unit_price, 's' => $sMoney),
+                    array('v' => wms_currency_code($x->currency), 's' => $sC),
                     array('v' => '=I'.$r.'*J'.$r,              's' => $sMoney),
                     array('v' => (string)$x->supplier_name,    's' => $sCell),
                 ));
@@ -2675,19 +2851,49 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
         }
 
         if ($rows) {
-            $end  = $r - 1;
-            $tot  = array();
-            for ($i = 0; $i < $n; $i++) $tot[] = array('v' => '', 's' => $sTot);
-            if ($isIssue) {
-                $tot[5] = array('v' => 'TOTAL', 's' => $sTot);
-                $tot[6] = array('v' => "=SUM(G{$start}:G{$end})", 's' => $sTotN);
+            $blankTotal = function () use ($n, $sTot) {
+                $cells = array();
+                for ($i = 0; $i < $n; $i++) $cells[] = array('v' => '', 's' => $sTot);
+                return $cells;
+            };
+            if ($truncated) {
+                // A capped workbook must not present either a partial total or
+                // a full-filter total as though both scopes were the same.
+                $tot = $blankTotal();
+                $tot[0] = array('v' => 'RESULT LIMITED — NO OVERALL TOTALS', 's' => $sTot);
+                $xlsx->writeRowStyled($tot);
+            } elseif ($isIssue) {
+                $first = true;
+                foreach ($qtyByUnit as $unit => $qty) {
+                    $tot = $blankTotal();
+                    $tot[4] = array('v' => $first ? 'TOTAL BY UNIT' : '', 's' => $sTot);
+                    $tot[5] = array('v' => (string)$unit, 's' => $sTot);
+                    $tot[6] = array('v' => $qty === null ? '' : (float)$qty, 's' => $sTotN);
+                    $xlsx->writeRowStyled($tot);
+                    $first = false;
+                }
             } else {
-                $tot[6] = array('v' => 'TOTAL', 's' => $sTot);
-                $tot[7] = array('v' => "=SUM(H{$start}:H{$end})", 's' => $sTotN);
-                $tot[8] = array('v' => "=SUM(I{$start}:I{$end})", 's' => $sTotN);
-                $tot[10] = array('v' => "=SUM(K{$start}:K{$end})", 's' => $sTotM);
+                $first = true;
+                foreach ($qtyByUnit as $unit => $qty) {
+                    $tot = $blankTotal();
+                    $tot[5] = array('v' => $first ? 'TOTAL BY UNIT' : '', 's' => $sTot);
+                    $tot[6] = array('v' => (string)$unit, 's' => $sTot);
+                    $approved = isset($approvedByUnit[$unit]) ? $approvedByUnit[$unit] : null;
+                    $tot[7] = array('v' => $approved === null ? '' : (float)$approved, 's' => $sTotN);
+                    $tot[8] = array('v' => $qty === null ? '' : (float)$qty, 's' => $sTotN);
+                    $xlsx->writeRowStyled($tot);
+                    $first = false;
+                }
+                $first = true;
+                foreach ($valueByCurrency as $currency => $value) {
+                    $tot = $blankTotal();
+                    $tot[9]  = array('v' => $first ? 'VALUE BY CURRENCY' : '', 's' => $sTot);
+                    $tot[10] = array('v' => (string)$currency, 's' => $sTot);
+                    $tot[11] = array('v' => (float)$value, 's' => $sTotM);
+                    $xlsx->writeRowStyled($tot);
+                    $first = false;
+                }
             }
-            $xlsx->writeRowStyled($tot);
         } else {
             $empty = array();
             for ($i = 0; $i < $n; $i++) $empty[] = array('v' => $i === 0 ? 'No movements match this filter' : '', 's' => $sCell);

@@ -42,29 +42,41 @@ $sort_mark = function ($key) use ($sort_by, $sort_dir) {
 };
 $tab_defs = array(
     'all'       => array('label' => 'All Machines', 'count' => (int)$tab_counts['all']),
-    'down'      => array('label' => 'Down',         'count' => (int)$tab_counts['down']),
-    'available' => array('label' => 'Available',    'count' => (int)$tab_counts['available']),
+    'down'      => array('label' => 'Down (status)',      'count' => (int)$tab_counts['down']),
+    'available' => array('label' => 'Available (status)', 'count' => (int)$tab_counts['available']),
 );
 $has_filters = ($search_query !== '' || $type_filter !== '');
-$avail_color = function ($a) { return $a >= 0.9 ? 'var(--green)' : ($a > 0 ? 'var(--amber)' : 'var(--red)'); };
+$fleetSummary = isset($daily_summary) && is_array($daily_summary) ? $daily_summary : array();
+$fleetAvailability = array_key_exists('availability', $fleetSummary) ? $fleetSummary['availability'] : null;
+$fleetTarget = array_key_exists('target', $fleetSummary) ? $fleetSummary['target'] : null;
+$avail_color = function ($a, $target) {
+    if ($a === null || $target === null) return 'var(--t3)';
+    $pct = round($a * 100);
+    $targetPct = round($target * 100);
+    return $pct >= $targetPct ? 'var(--green)' : ($pct >= $targetPct - 10 ? 'var(--amber)' : 'var(--red)');
+};
 
-// Build per-type chart data for JS
+// Build per-type chart data for JS; null is no qualifying time base, not 0%.
 $chartData = [];
 foreach ($report as $type => $g) {
     $labels = [];
     $values = [];
+    $targets = [];
     foreach ($g['machines'] as $m) {
         $labels[] = $m['machine_id'];
-        $values[] = round($m['availability'] * 100);
+        $values[] = $m['availability'] === null ? null : round($m['availability'] * 100);
+        $targets[] = round($m['target'] * 100);
     }
     $chartData[] = [
         'type'      => $g['type'],
-        'kpi'       => round($g['daily_kpi'] * 100),
+        'kpi'       => $g['daily_kpi'] === null ? null : round($g['daily_kpi'] * 100),
+        'target'    => round($g['target'] * 100),
         'available' => $g['available'],
         'down'      => $g['down'],
         'total'     => $g['total'],
         'labels'    => $labels,
         'values'    => $values,
+        'targets'   => $targets,
     ];
 }
 ?>
@@ -104,35 +116,49 @@ foreach ($report as $g) {
     $totalAvail += $g['available'];
     $totalDown  += $g['down'];
 }
-$overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
+if ($fleetSummary) {
+    $totalEq = $fleetSummary['total_eq'];
+    $totalAvail = $fleetSummary['available'];
+    $totalDown = $fleetSummary['down'];
+}
+$readiness = array_key_exists('readiness', $fleetSummary)
+    ? $fleetSummary['readiness'] : ($totalEq > 0 ? $totalAvail / $totalEq : null);
+$overallKpiPct = $fleetAvailability === null ? null : round($fleetAvailability * 100);
+$fleetTargetPct = $fleetTarget === null ? null : round($fleetTarget * 100);
 ?>
 <div class="grid g-4 mb-4">
   <div class="kpi" style="animation-delay:.04s">
     <div class="kpi-glow" style="background:var(--blue)"></div>
-    <span class="kpi-tag">Total Fleet</span>
+    <span class="kpi-tag">Reported Fleet</span>
     <div class="kpi-num"><?= $totalEq ?><sup>units</sup></div>
+    <div class="cs">Status-report population</div>
   </div>
   <div class="kpi" style="animation-delay:.08s">
     <div class="kpi-glow" style="background:var(--green)"></div>
-    <span class="kpi-tag">Available</span>
+    <span class="kpi-tag">Available (status)</span>
     <div class="kpi-num"><?= $totalAvail ?></div>
-    <div class="kpi-chip chip-up">↑ <?= $totalEq>0?round($totalAvail/$totalEq*100).'%':'-' ?></div>
+    <div class="kpi-chip chip-up">Readiness <?= $readiness === null ? '—' : round($readiness * 100).'%' ?></div>
   </div>
   <div class="kpi" style="animation-delay:.12s">
     <div class="kpi-glow" style="background:var(--red)"></div>
-    <span class="kpi-tag">Down</span>
+    <span class="kpi-tag">Down (status)</span>
     <div class="kpi-num"><?= $totalDown ?></div>
     <?php if ($totalDown > 0): ?>
-    <div class="kpi-chip chip-dn"><?= $totalEq>0?round($totalDown/$totalEq*100).'%':'-' ?></div>
+    <div class="kpi-chip chip-dn"><?= $totalEq>0?round($totalDown/$totalEq*100).'%':'—' ?></div>
     <?php endif; ?>
   </div>
   <div class="kpi" style="animation-delay:.16s">
-    <div class="kpi-glow" style="background:var(--amber)"></div>
-    <span class="kpi-tag">Overall Availability</span>
-    <div class="kpi-num"><?= round($overallAvail*100) ?><sup>%</sup></div>
-    <div class="kpi-chip <?= $overallAvail>=0.8?'chip-up':($overallAvail>=0.6?'chip-warn':'chip-dn') ?>">
-      <?= $overallAvail>=0.8?'Good':($overallAvail>=0.6?'Fair':'Critical') ?>
+    <div class="kpi-glow" style="background:<?= $avail_color($fleetAvailability, $fleetTarget) ?>"></div>
+    <span class="kpi-tag">Fleet Availability</span>
+    <div class="kpi-num" style="color:<?= $avail_color($fleetAvailability, $fleetTarget) ?>"><?= $overallKpiPct === null ? '—' : $overallKpiPct.'<sup>%</sup>' ?></div>
+    <?php if ($overallKpiPct === null || $fleetTargetPct === null): ?>
+    <div class="kpi-chip" style="color:var(--t3)">No qualifying time base</div>
+    <?php else: ?>
+    <div class="kpi-chip <?= $overallKpiPct>=$fleetTargetPct?'chip-up':($overallKpiPct>=$fleetTargetPct-10?'chip-warn':'chip-dn') ?>">
+      <?= $overallKpiPct>=$fleetTargetPct?'Meets target':($overallKpiPct>=$fleetTargetPct-10?'Within 10 points':'Below target') ?>
     </div>
+    <?php endif; ?>
+    <div class="cs">Time-based · KPI engine · target <?= $fleetTargetPct === null ? '—' : $fleetTargetPct.'%' ?></div>
   </div>
 </div>
 
@@ -146,19 +172,21 @@ $overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
   <div style="display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--g2);">
     <?php foreach ($chartData as $i => $ct):
       $kpi   = $ct['kpi'];
-      $color = $kpi >= 90 ? 'var(--green)' : ($kpi >= 70 ? 'var(--amber)' : 'var(--red)');
+      $target = $ct['target'];
+      $color = $kpi === null ? 'var(--t3)' : ($kpi >= $target ? 'var(--green)' : ($kpi >= $target - 10 ? 'var(--amber)' : 'var(--red)'));
     ?>
     <div style="flex:1;min-width:130px;padding:14px 16px;border-right:1px solid var(--g2);<?= $i===count($chartData)-1?'border-right:none':'' ?>">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--t3);margin-bottom:4px;"><?= htmlspecialchars((string)($ct['type'])) ?>s</div>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
-        <div style="font-size:22px;font-weight:800;color:<?= $color ?>;line-height:1;"><?= $kpi ?>%</div>
+        <div style="font-size:22px;font-weight:800;color:<?= $color ?>;line-height:1;"><?= $kpi === null ? '—' : $kpi.'%' ?></div>
         <div style="font-size:10px;color:var(--t3);line-height:1.4;">
-          <div><span style="color:var(--green);font-weight:600;"><?= $ct['available'] ?></span> avail</div>
+          <div>Time-based · target <?= $target ?>%</div>
+          <div><span style="color:var(--green);font-weight:600;"><?= $ct['available'] ?></span> status avail</div>
           <div><span style="color:var(--red);font-weight:600;"><?= $ct['down'] ?></span> down / <?= $ct['total'] ?></div>
         </div>
       </div>
       <div style="height:4px;background:var(--g2);border-radius:3px;overflow:hidden;">
-        <div style="height:100%;width:<?= $kpi ?>%;background:<?= $color ?>;border-radius:3px;"></div>
+        <div style="height:100%;width:<?= $kpi === null ? 0 : max(0, min(100, $kpi)) ?>%;background:<?= $color ?>;border-radius:3px;"></div>
       </div>
     </div>
     <?php endforeach; ?>
@@ -264,7 +292,7 @@ $overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
           <?php if ($m['status'] === 'Down'): ?><span class="badge b-danger">Down</span><?php else: ?><span class="badge b-success">Available</span><?php endif; ?>
         </div>
         <div style="display:flex;gap:14px;margin-top:10px;font-size:12px;">
-          <div><div style="color:var(--t3);font-size:10px;text-transform:uppercase;">Avail</div><strong style="color:<?= $avail_color($m['availability']) ?>;"><?= round($m['availability'] * 100) ?>%</strong></div>
+          <div><div style="color:var(--t3);font-size:10px;text-transform:uppercase;">Avail (time)</div><strong style="color:<?= $avail_color($m['availability'], $m['target']) ?>;"><?= $m['availability'] === null ? '—' : round($m['availability'] * 100).'%' ?></strong><div style="font-size:9px;color:var(--t3);">target <?= round($m['target'] * 100) ?>%</div></div>
           <div><div style="color:var(--t3);font-size:10px;text-transform:uppercase;">Downtime</div><strong><?= $m['total_dt'] > 0 ? number_format((float)$m['total_dt'], 1) . ' h' : '—' ?></strong></div>
           <div><div style="color:var(--t3);font-size:10px;text-transform:uppercase;">Days down</div><strong style="<?= $m['days_down'] > 7 ? 'color:var(--red)' : '' ?>"><?= $m['days_down'] > 0 ? (int)$m['days_down'] : '—' ?></strong></div>
           <div><div style="color:var(--t3);font-size:10px;text-transform:uppercase;">E/T</div><strong><?= $wdh($m['est_time'] ?: '—') ?></strong></div>
@@ -292,7 +320,7 @@ $overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
         <th scope="col" class="sortable-th" style="text-align:right;"<?= $aria_sort('total_dt') ?>><a href="<?= $sort_url('total_dt') ?>">Total DT<?= $sort_mark('total_dt') ?></a></th>
         <th scope="col" style="text-align:center;">Start Date</th>
         <th scope="col" class="sortable-th" style="text-align:center;"<?= $aria_sort('days_down') ?>><a href="<?= $sort_url('days_down') ?>">Days ↓<?= $sort_mark('days_down') ?></a></th>
-        <th scope="col" class="sortable-th" style="text-align:right;"<?= $aria_sort('availability') ?>><a href="<?= $sort_url('availability') ?>">Avail %<?= $sort_mark('availability') ?></a></th>
+        <th scope="col" class="sortable-th" style="text-align:right;"<?= $aria_sort('availability') ?>><a href="<?= $sort_url('availability') ?>">Avail (time) %<?= $sort_mark('availability') ?></a></th>
       </tr>
     </thead>
     <tbody>
@@ -315,7 +343,7 @@ $overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
         <td class="mono" style="text-align:right;font-weight:600;<?= $m['total_dt'] > 0 ? 'color:var(--amber)' : '' ?>"><?= $m['total_dt'] > 0 ? number_format((float)$m['total_dt'], 1) : '—' ?></td>
         <td class="mono" style="text-align:center;font-size:11px;color:var(--t3);"><?= $m['start_date'] ? date('d/m/Y', strtotime($m['start_date'])) : '—' ?></td>
         <td style="text-align:center;font-weight:600;<?= $m['days_down'] > 7 ? 'color:var(--red)' : ($m['days_down'] > 0 ? 'color:var(--amber)' : '') ?>"><?= $m['days_down'] > 0 ? (int)$m['days_down'] : '—' ?></td>
-        <td style="text-align:right;font-weight:600;color:<?= $avail_color($m['availability']) ?>;"><?= round($m['availability'] * 100) ?>%</td>
+        <td style="text-align:right;font-weight:600;color:<?= $avail_color($m['availability'], $m['target']) ?>;"><?= $m['availability'] === null ? '—' : round($m['availability'] * 100).'%' ?><div style="font-size:9px;font-weight:400;color:var(--t3);">target <?= round($m['target'] * 100) ?>%</div></td>
       </tr>
       <?php endforeach; ?>
     </tbody>
@@ -356,9 +384,9 @@ $overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
     <div class="ch" style="padding:12px 16px 8px;">
       <div>
         <div class="ct" style="font-size:12px;">Daily <?= htmlspecialchars((string)($ct['type'])) ?>s KPI</div>
-        <div class="cs">Availability %</div>
+        <div class="cs">Time-based availability · target <?= $ct['target'] ?>%</div>
       </div>
-      <div style="font-size:18px;font-weight:800;color:<?= $ct['kpi']>=90?'var(--green)':($ct['kpi']>=70?'var(--amber)':'var(--red)') ?>;"><?= $ct['kpi'] ?>%</div>
+      <div style="font-size:18px;font-weight:800;color:<?= $ct['kpi'] === null ? 'var(--t3)' : ($ct['kpi'] >= $ct['target'] ? 'var(--green)' : ($ct['kpi'] >= $ct['target'] - 10 ? 'var(--amber)' : 'var(--red)')) ?>;"><?= $ct['kpi'] === null ? '—' : $ct['kpi'].'%' ?></div>
     </div>
     <div style="padding:8px 12px 14px;">
       <canvas id="chart_<?= preg_replace('/\W/','',$ct['type']) ?>" style="max-height:140px;"></canvas>
@@ -370,12 +398,15 @@ $overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
 <script>
 (function(){
   var charts = <?= json_encode($chartData) ?>;
+  if (typeof Chart === 'undefined') return;
   charts.forEach(function(ct) {
     var id = 'chart_' + ct.type.replace(/\W/g,'');
     var canvas = document.getElementById(id);
     if (!canvas) return;
-    var colors = ct.values.map(function(v){
-      return v >= 90 ? 'rgba(28,140,60,0.85)' : (v >= 70 ? 'rgba(180,83,9,0.85)' : 'rgba(192,57,43,0.85)');
+    var colors = ct.values.map(function(v, i){
+      if (v === null) return 'rgba(100,116,139,0.35)';
+      var target = ct.targets[i];
+      return v >= target ? 'rgba(28,140,60,0.85)' : (v >= target - 10 ? 'rgba(180,83,9,0.85)' : 'rgba(192,57,43,0.85)');
     });
     new Chart(canvas, {
       type: 'bar',
@@ -395,7 +426,7 @@ $overallAvail = $totalEq > 0 ? round($totalAvail / $totalEq, 2) : 0;
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: function(ctx){ return ctx.parsed.y + '%'; }
+              label: function(ctx){ return ctx.raw === null ? 'No qualifying time base' : ctx.parsed.y + '% (target ' + ct.targets[ctx.dataIndex] + '%)'; }
             }
           }
         },

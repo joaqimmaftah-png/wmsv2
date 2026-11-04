@@ -6,6 +6,21 @@ $f  = isset($filter) ? $filter : array();
 $g  = function ($k) use ($f) { return isset($f[$k]) && $f[$k] !== null ? $f[$k] : ''; };
 $qs = array_filter((array)$f, function ($v) { return $v !== null && $v !== ''; });
 $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0,'first'=>null,'last'=>null);
+$limit = isset($row_limit) ? (int)$row_limit : 5000;
+$pg = isset($pagination) && is_array($pagination) ? $pagination : array();
+$page = isset($pg['page']) ? (int)$pg['page'] : 1;
+$perPage = isset($pg['per_page']) ? (int)$pg['per_page'] : 25;
+$totalPages = isset($pg['total_pages']) ? (int)$pg['total_pages'] : max(1, (int)ceil((int)$t['lines'] / max(1, $perPage)));
+$showingFrom = isset($pg['showing_from']) ? (int)$pg['showing_from'] : (count($rows) > 0 ? (($page - 1) * $perPage + 1) : 0);
+$showingTo = isset($pg['showing_to']) ? (int)$pg['showing_to'] : (count($rows) > 0 ? min((int)$t['lines'], $showingFrom + count($rows) - 1) : 0);
+$exportTruncated = (int)$t['lines'] > $limit;
+$pageUrl = function ($targetPage) use ($qs, $perPage) {
+    $params = $qs;
+    $params['per_page'] = $perPage;
+    $params['page'] = (int)$targetPage;
+    return base_url('reports/issue_register?'.http_build_query($params));
+};
+$qtyByUnit = isset($t['qty_by_unit']) && is_array($t['qty_by_unit']) ? $t['qty_by_unit'] : array();
 ?>
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
@@ -18,7 +33,10 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
       <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Download Excel
     </a>
-    <a href="<?= base_url('materials/issue') ?>" class="btn btn-ghost btn-sm">Issue stock</a>
+    <?php if (!empty($can_issue_stock)): ?>
+    <a href="<?= base_url('materials/inventory') ?>" class="btn btn-ghost btn-sm"
+       title="Choose an inventory item, then use its Issue action">Select item to issue</a>
+    <?php endif; ?>
   </div>
 </div>
 
@@ -34,7 +52,14 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
   <div class="kpi"><div class="kpi-glow" style="background:var(--blue)"></div>
     <span class="kpi-tag">Issue Lines</span><div class="kpi-num"><?= number_format((float)($t['lines'])) ?></div></div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--amber)"></div>
-    <span class="kpi-tag">Total Qty Issued</span><div class="kpi-num"><?= number_format((float)($t['qty'])) ?></div></div>
+    <span class="kpi-tag">Quantity Issued</span>
+    <div class="kpi-num" style="font-size:18px;">
+      <?php if (empty($qtyByUnit)): ?>—<?php else: foreach ($qtyByUnit as $unit => $qty): ?>
+        <div><?= $qty === null ? '—' : number_format((float)$qty) ?> <span style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)$unit) ?></span></div>
+      <?php endforeach; endif; ?>
+    </div>
+    <div class="cs" style="margin-top:4px;">Full filtered scope · grouped by unit</div>
+  </div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--green)"></div>
     <span class="kpi-tag">Distinct Items</span><div class="kpi-num"><?= number_format((float)($t['items'])) ?></div></div>
   <div class="kpi"><div class="kpi-glow" style="background:var(--t3)"></div>
@@ -43,6 +68,7 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
 </div>
 
 <form method="get" class="flex ai-c gap-10 mb-4" style="flex-wrap:wrap;">
+  <input type="hidden" name="per_page" value="<?= $perPage ?>">
   <input type="date" name="date_from" class="form-control" style="width:150px;" value="<?= htmlspecialchars((string)($g('date_from'))) ?>" title="From">
   <input type="date" name="date_to" class="form-control" style="width:150px;" value="<?= htmlspecialchars((string)($g('date_to'))) ?>" title="To">
   <select name="category" class="form-select" style="width:160px;">
@@ -68,15 +94,16 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
 <?php if (!empty($by_alloc)): ?>
 <div class="card mb-4">
   <div class="ch"><div><div class="ct">Consumption by Allocation</div>
-    <div class="cs">Top cost centres and machines for the selected period</div></div></div>
+    <div class="cs">Top cost centres and machines by movement lines · quantities grouped by unit</div></div></div>
   <div style="overflow-x:auto;margin-top:4px;">
     <table class="tbl">
-      <thead><tr><th>Allocation</th><th>Type</th><th class="text-right">Lines</th><th class="text-right">Qty</th></tr></thead>
+      <thead><tr><th>Allocation</th><th>Type</th><th>Unit</th><th class="text-right">Lines</th><th class="text-right">Qty</th></tr></thead>
       <tbody>
       <?php foreach ($by_alloc as $a): ?>
         <tr>
           <td class="mono" style="font-weight:600;"><?= htmlspecialchars((string)($a->allocation)) ?></td>
           <td style="font-size:11px;"><span class="badge <?= $a->allocation_type === 'Equipment' ? 'b-primary' : 'b-secondary' ?>" style="font-size:10px;"><?= htmlspecialchars((string)($a->allocation_type)) ?></span></td>
+          <td style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)($a->unit ?: '(unit not set)')) ?></td>
           <td class="mono text-right"><?= number_format((float)($a->lines)) ?></td>
           <td class="mono text-right"><?= number_format((float)($a->qty)) ?></td>
         </tr>
@@ -87,10 +114,17 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
 </div>
 <?php endif; ?>
 
+<?php if ($exportTruncated): ?>
+<div class="card mb-3" role="status" style="padding:14px 18px;border-left:3px solid var(--amber);">
+  <strong>The screen is paginated across all <?= number_format((int)$t['lines']) ?> matching lines; Excel includes only the latest <?= number_format($limit) ?>.</strong>
+  Narrow the filters for a complete Excel download. The workbook labels its capped scope and suppresses overall totals.
+</div>
+<?php endif; ?>
+
 <div class="card">
   <div class="ch">
     <div><div class="ct">Issues</div>
-      <div class="cs"><?= number_format((float)(count($rows))) ?> line(s) shown<?= count($rows) >= 5000 ? ' — narrow the filter to see more' : '' ?></div></div>
+      <div class="cs">Showing <?= number_format($showingFrom) ?>–<?= number_format($showingTo) ?> of <?= number_format((int)$t['lines']) ?> matching lines</div></div>
   </div>
   <div style="overflow-x:auto;margin-top:4px;">
     <table class="tbl">
@@ -124,4 +158,34 @@ $t  = isset($totals) ? $totals : array('lines'=>0,'qty'=>0,'value'=>0,'items'=>0
     </table>
   </div>
 </div>
+
+<?php if ((int)$t['lines'] > 0):
+  $pageNumbers = array_values(array_unique(array_filter(array(1, $page - 1, $page, $page + 1, $totalPages), function ($number) use ($totalPages) {
+      return $number >= 1 && $number <= $totalPages;
+  })));
+  sort($pageNumbers);
+  $previousPage = 0;
+?>
+<div class="flex ai-c jb gap-10 mt-3" style="flex-wrap:wrap;">
+  <form method="get" class="flex ai-c gap-10" style="font-size:12px;">
+    <?php foreach ($qs as $key => $value): ?>
+    <input type="hidden" name="<?= htmlspecialchars((string)$key, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8') ?>">
+    <?php endforeach; ?>
+    <label for="issuePerPage">Rows per page</label>
+    <select id="issuePerPage" name="per_page" class="form-select" style="width:auto;">
+      <?php foreach (array(10, 25, 50, 100) as $size): ?><option value="<?= $size ?>" <?= $perPage === $size ? 'selected' : '' ?>><?= $size ?></option><?php endforeach; ?>
+    </select>
+    <button type="submit" class="btn btn-ghost btn-sm">Update</button>
+  </form>
+  <nav class="flex ai-c gap-5" aria-label="Issue register pages">
+    <?php if ($page > 1): ?><a class="btn btn-ghost btn-sm" href="<?= htmlspecialchars($pageUrl($page - 1), ENT_QUOTES, 'UTF-8') ?>">Previous</a><?php else: ?><span class="btn btn-ghost btn-sm" aria-disabled="true">Previous</span><?php endif; ?>
+    <?php foreach ($pageNumbers as $number): ?>
+      <?php if ($previousPage > 0 && $number > $previousPage + 1): ?><span aria-hidden="true">…</span><?php endif; ?>
+      <?php if ($number === $page): ?><span class="btn btn-primary btn-sm" aria-current="page"><?= $number ?></span><?php else: ?><a class="btn btn-ghost btn-sm" href="<?= htmlspecialchars($pageUrl($number), ENT_QUOTES, 'UTF-8') ?>"><?= $number ?></a><?php endif; ?>
+      <?php $previousPage = $number; ?>
+    <?php endforeach; ?>
+    <?php if ($page < $totalPages): ?><a class="btn btn-ghost btn-sm" href="<?= htmlspecialchars($pageUrl($page + 1), ENT_QUOTES, 'UTF-8') ?>">Next</a><?php else: ?><span class="btn btn-ghost btn-sm" aria-disabled="true">Next</span><?php endif; ?>
+  </nav>
+</div>
+<?php endif; ?>
 <?php endif; ?>

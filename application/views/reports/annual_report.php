@@ -10,6 +10,10 @@ $mMttr    = array_column($monthly,'mttr');
 // reads `equipment_kpi_targets` and falls back to 88 %. No view invents its own.
 $targetPct = isset($target) && (float)$target > 0 ? (float)$target : 88.0;
 $amberPct  = 70.0;   // "watch" band, not a target
+$fmtHours = function ($value, $decimals = 1) {
+    return $value === null ? '—' : number_format((float)$value, $decimals).' h';
+};
+$siteCurrency = wms_site_currency();
 ?>
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
@@ -44,10 +48,10 @@ $amberPct  = 70.0;   // "watch" band, not a target
     ['Total WOs',      $t['wo_total'],               'var(--amber)', 'All work orders raised'],
     ['Breakdowns',     $t['breakdowns'],             'var(--red)',   'Corrective interventions'],
     ['PM Completed',   $t['pm_done'],                'var(--green)', 'Preventive jobs done'],
-    ['Avg MTTR',       $t['avg_mttr'].' h',          'var(--amber)', 'Mean time to repair'],
-    ['Avg Avail.',     $t['avg_avail'] === null ? '—' : $t['avg_avail'].'%', $t['avg_avail'] === null ? 'var(--t3)' : ($t['avg_avail']>=$targetPct?'var(--green)':'var(--red)'), 'Fleet average vs '.$targetPct.'% target'],
+    ['Avg MTTR',       $fmtHours($t['avg_mttr']),     $t['avg_mttr'] === null ? 'var(--t3)' : 'var(--amber)', $t['avg_mttr'] === null ? 'No qualifying breakdowns' : 'Mean time to repair'],
+    ['Mean Monthly Avail.', $t['avg_avail'] === null ? '—' : $t['avg_avail'].'%', $t['avg_avail'] === null ? 'var(--t3)' : ($t['avg_avail']>=$targetPct?'var(--green)':'var(--red)'), $t['avg_avail'] === null ? 'No months with qualifying availability data · target '.$targetPct.'%' : 'Unweighted mean of measured months; not a full-year required-time rollup · target '.$targetPct.'%'],
     ['Total Downtime', number_format((float)($t['total_dt']),0).' h','var(--red)',   'Hours lost'],
-    ['Parts Spend',    '$'.number_format((float)($t['parts_spend']),0),'var(--purple)','Spare parts total'],
+    ['Parts Spend · '.$siteCurrency, wms_money($t['parts_spend'],$siteCurrency,0),'var(--purple)','Configured site currency · existing WO cost basis'],
   ];
   foreach ($cards as $i=>$c): ?>
   <div class="kpi" style="animation-delay:<?=$i*.03?>s">
@@ -95,7 +99,7 @@ $amberPct  = 70.0;   // "watch" band, not a target
         <th style="text-align:center;">AVAIL%</th>
         <th style="text-align:center;">MTTR (h)</th>
         <th style="text-align:center;">MTBF (h)</th>
-        <th style="text-align:center;">LUBE (L)</th>
+        <th style="text-align:center;">LUBRICANT BY UNIT</th>
       </tr>
     </thead>
     <tbody>
@@ -111,9 +115,14 @@ $amberPct  = 70.0;   // "watch" band, not a target
       <td style="text-align:center;"><?=$m['completed']?></td>
       <td class="mono" style="text-align:center;color:<?=$m['downtime']>500?'var(--red)':'var(--t2)'?>;"><?=number_format((float)($m['downtime']),1)?></td>
       <td style="text-align:center;font-weight:700;color:<?=$avC?>;"><?=$av === null ? '—' : $av.'%'?></td>
-      <td class="mono" style="text-align:center;"><?=$m['mttr']?></td>
-      <td class="mono" style="text-align:center;"><?=number_format((float)($m['mtbf']),0)?></td>
-      <td class="mono" style="text-align:center;color:var(--t3);"><?=number_format((float)($m['lube_used']),1)?></td>
+      <td class="mono" style="text-align:center;color:<?=$m['mttr'] === null ? 'var(--t3)' : 'var(--t2)'?>;"><?=$m['mttr'] === null ? '—' : number_format((float)$m['mttr'],1)?></td>
+      <td class="mono" style="text-align:center;color:<?=$m['mtbf'] === null ? 'var(--t3)' : 'var(--t2)'?>;"><?=$m['mtbf'] === null ? '—' : number_format((float)$m['mtbf'],0)?></td>
+      <td class="mono" style="text-align:center;color:var(--t3);">
+        <?php if(empty($m['lube_by_unit'])): ?>—
+        <?php else: foreach($m['lube_by_unit'] as $unit => $qty): ?>
+          <div><?=number_format((float)$qty,1)?> <?=htmlspecialchars($unit)?></div>
+        <?php endforeach; endif; ?>
+      </td>
     </tr>
     <?php endforeach;?>
     </tbody>
@@ -125,8 +134,8 @@ $amberPct  = 70.0;   // "watch" band, not a target
         <td style="text-align:center;font-weight:700;color:var(--green);"><?=$t['pm_done']?></td>
         <td style="text-align:center;font-weight:700;"><?=$t['completed']?></td>
         <td class="mono" style="text-align:center;font-weight:700;"><?=number_format((float)($t['total_dt']),1)?></td>
-        <td style="text-align:center;font-weight:700;color:<?=$t['avg_avail'] === null ? 'var(--t3)' : ($t['avg_avail']>=$targetPct?'var(--green)':'var(--red)')?>;"><?=$t['avg_avail'] === null ? '—' : $t['avg_avail'].'%'?></td>
-        <td class="mono" style="text-align:center;font-weight:700;"><?=$t['avg_mttr']?></td>
+        <td style="text-align:center;font-weight:700;color:<?=$t['avg_avail'] === null ? 'var(--t3)' : ($t['avg_avail']>=$targetPct?'var(--green)':'var(--red)')?>;"><div style="font-size:9px;color:var(--t3);">Mean of measured months</div><?=$t['avg_avail'] === null ? '—' : $t['avg_avail'].'%'?></td>
+        <td class="mono" style="text-align:center;font-weight:700;color:<?=$t['avg_mttr'] === null ? 'var(--t3)' : 'var(--t1)'?>;"><?=$t['avg_mttr'] === null ? '—' : number_format((float)$t['avg_mttr'],1)?></td>
         <td colspan="2"></td>
       </tr>
     </tfoot>
@@ -144,16 +153,21 @@ $amberPct  = 70.0;   // "watch" band, not a target
     <table class="tbl">
       <thead><tr><th>MACHINE</th><th style="text-align:center;">AVAIL%</th><th style="text-align:center;">BDs</th><th style="text-align:center;">DOWN HRS</th></tr></thead>
       <tbody>
-      <?php foreach(array_slice($eq_reliability,0,8) as $eq):
-        $avC=$eq['availability'] === null ? 'var(--t3)' : ($eq['availability']>=$targetPct?'var(--green)':($eq['availability']>=$amberPct?'var(--amber)':'var(--red)'));
+      <?php $measuredEq = array_values(array_filter($eq_reliability, function ($eq) {
+          return $eq['availability'] !== null;
+      })); ?>
+      <?php if(empty($measuredEq)): ?>
+      <tr><td colspan="4" style="text-align:center;color:var(--t3);padding:20px;">No measured availability for <?=$selYear?>.</td></tr>
+      <?php else: foreach(array_slice($measuredEq,0,8) as $eq):
+        $avC=$eq['availability']>=$targetPct?'var(--green)':($eq['availability']>=$amberPct?'var(--amber)':'var(--red)');
       ?>
       <tr>
         <td><span class="mono" style="font-weight:600;color:var(--blue);"><?=htmlspecialchars((string)($eq['machine_id']))?></span><br><span style="font-size:9.5px;color:var(--t3);"><?=htmlspecialchars((string)(trim((string)($eq['model']))))?></span></td>
-        <td style="text-align:center;font-weight:700;color:<?=$avC?>;"><?=$eq['availability'] === null ? '—' : $eq['availability'].'%'?></td>
+        <td style="text-align:center;font-weight:700;color:<?=$avC?>;"><?=$eq['availability'].'%'?></td>
         <td style="text-align:center;color:var(--red);font-weight:600;"><?=$eq['breakdowns']?></td>
         <td class="mono" style="text-align:center;color:var(--t3);"><?=number_format((float)($eq['downtime']),1)?></td>
       </tr>
-      <?php endforeach;?>
+      <?php endforeach; endif;?>
       </tbody>
     </table>
   </div>

@@ -8,6 +8,7 @@ const root = path.join(__dirname, '..');
 const source = file => fs.readFileSync(path.join(root, file), 'utf8');
 
 const view       = source('application/views/reports/index.php');
+const sidebar    = source('application/views/layouts/sidebar.php');
 const controller = source('application/controllers/Reports.php');
 const w36model   = source('application/models/W36_report_model.php');
 const team       = source('application/controllers/Team.php');
@@ -126,6 +127,27 @@ assert.ok(index.includes("'available'           => false"), 'fallback is explici
 assert.ok(/function equipment_history\(\$id = null\)/.test(controller),
   'equipment history accepts the picker id from the query string');
 assert.ok(controller.includes("$id = $this->input->get('id', TRUE);"), 'picker id is read safely');
+
+/* ── One global Reports destination; the hub retains the report catalogue ─ */
+const navStart = sidebar.indexOf('<!-- ── 4. REPORTS — Supervisor, Manager ── -->');
+const navEnd = sidebar.indexOf('<!-- ── 5. TEAM ── -->', navStart);
+assert.ok(navStart >= 0 && navEnd > navStart, 'Reports navigation section is bounded');
+const reportNav = sidebar.slice(navStart, navEnd);
+const reportNavLinks = reportNav.match(/base_url\('reports(?:\/[^']*)?'\)/g) || [];
+assert.equal(reportNavLinks.length, 1, 'sidebar has one Reports entry instead of a flat report list');
+assert.ok(reportNav.includes('$is_supervisor || $is_manager'),
+  'the existing Supervisor/Manager visibility boundary is unchanged');
+assert.ok(reportNav.includes("ni_active('reports')") && reportNav.includes('aria-current="location"'),
+  'the Reports destination has a single active-location state');
+for (const route of [
+  'reports/workshop_daily', 'reports/workshop_weekly', 'reports/mttr_mtbf',
+  'reports/availability_forecast', 'reports/monthly_plan', 'reports/lube_compliance',
+  'reports/store_analytics', 'reports/issue_register', 'reports/receipt_register',
+  'reports/reorder', 'reports/asset_register', 'reports/annual_report',
+  'reports/annual_plan', 'reports/service_kits',
+]) {
+  assert.ok(view.includes(route), `Reports hub retains the ${route} destination`);
+}
 
 /* ── Every launcher resolves to a real controller method ─────────────── */
 const refs = [...view.matchAll(/'(reports\/[^']+)'/g)].map(m => m[1]);

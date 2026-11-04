@@ -214,80 +214,11 @@ $security_alert_label = $security_alert_count . ' security event' . ($security_a
     <?php if ($is_supervisor || $is_manager): ?>
     <div class="nav-sep"></div>
     <div class="nav-section-label">Reports</div>
-    <a href="<?= base_url('reports'); ?>" class="ni <?= (ni_active('reports') && !ni_active('reports/workshop_daily') && !ni_active('reports/workshop_weekly') && !ni_active('reports/weekly_w36') && !ni_active('reports/mttr_mtbf') && !ni_active('reports/availability_forecast') && !ni_active('reports/monthly_plan') && !ni_active('reports/asset_register') && !ni_active('reports/lube_compliance') && !ni_active('reports/store_analytics') && !ni_active('reports/issue_register') && !ni_active('reports/receipt_register') && !ni_active('reports/reorder')) ? 'on' : ''; ?>" title="Reports">
+    <a href="<?= base_url('reports'); ?>" class="ni <?= ni_active('reports'); ?>"
+       <?= ni_active('reports') ? 'aria-current="location"' : ''; ?> title="Reports">
       <div class="ni-icon"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
       <span class="ni-label">Reports</span>
       <span class="ni-tip">All Reports</span>
-    </a>
-    <a href="<?= base_url('reports/workshop_daily'); ?>" class="ni <?= ni_active('reports/workshop_daily'); ?>" title="Workshop Daily">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
-      <span class="ni-label">Daily Report</span>
-      <span class="ni-tip">Workshop Daily Report</span>
-    </a>
-    <a href="<?= base_url('reports/workshop_weekly'); ?>" class="ni <?= (ni_active('reports/workshop_weekly') || ni_active('reports/weekly_w36')) ? 'on' : ''; ?>" title="Workshop Weekly">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg></div>
-      <span class="ni-label">Weekly Report</span>
-      <span class="ni-tip">Workshop Weekly Report</span>
-    </a>
-    <a href="<?= base_url('reports/mttr_mtbf'); ?>" class="ni <?= ni_active('reports/mttr_mtbf'); ?>" title="MTTR / MTBF">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
-      <span class="ni-label">MTTR / MTBF</span>
-      <span class="ni-tip">Reliability Report</span>
-    </a>
-    <a href="<?= base_url('reports/availability_forecast'); ?>" class="ni <?= ni_active('reports/availability_forecast'); ?>" title="Availability Forecast">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-      <span class="ni-label">PM Due Forecast</span>
-      <span class="ni-tip">PM due within a horizon</span>
-    </a>
-    <a href="<?= base_url('reports/monthly_plan'); ?>" class="ni <?= ni_active('reports/monthly_plan'); ?>" title="Monthly Plan">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-      <span class="ni-label">Monthly Plan</span>
-      <span class="ni-tip">Monthly Maintenance Plan</span>
-    </a>
-    <a href="<?= base_url('reports/lube_compliance'); ?>" class="ni <?= ni_active('reports/lube_compliance'); ?>" title="Lube Compliance">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/><polyline points="9 12 11 14 15 10"/></svg></div>
-      <span class="ni-label">Lube Compliance</span>
-      <span class="ni-tip">Lubricant Usage vs PM Requirement</span>
-    </a>
-    <a href="<?= base_url('reports/store_analytics'); ?>" class="ni <?= ni_active('reports/store_analytics'); ?>" title="Store Analytics">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
-      <span class="ni-label">Store Analytics</span>
-      <span class="ni-tip">Supplier Spend &amp; Lead Times</span>
-    </a>
-    <a href="<?= base_url('reports/issue_register'); ?>" class="ni <?= ni_active('reports/issue_register'); ?>" title="Issue Register">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8"/><polyline points="7 21 12 17 17 21"/><line x1="12" y1="17" x2="12" y2="9"/></svg></div>
-      <span class="ni-label">Issue Register</span>
-      <span class="ni-tip">Stock Issued (Sortie)</span>
-    </a>
-    <a href="<?= base_url('reports/receipt_register'); ?>" class="ni <?= ni_active('reports/receipt_register'); ?>" title="Receipt Register">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16V8"/><polyline points="7 7 12 11 17 7"/><line x1="12" y1="11" x2="12" y2="3"/></svg></div>
-      <span class="ni-label">Receipt Register</span>
-      <span class="ni-tip">Goods Received (MRN)</span>
-    </a>
-    <a href="<?= base_url('reports/reorder'); ?>" class="ni <?= ni_active('reports/reorder'); ?>" title="Re-order Report">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
-      <span class="ni-label">Re-order Report</span>
-      <span class="ni-tip">Items at or below minimum stock</span>
-    </a>
-    <a href="<?= base_url('reports/asset_register'); ?>" class="ni <?= ni_active('reports/asset_register'); ?>" title="Asset Register">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8l4 1 3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
-      <span class="ni-label">Asset Register</span>
-      <span class="ni-tip">Fleet Asset Register</span>
-    </a>
-    <a href="<?= base_url('reports/annual_report'); ?>" class="ni <?= ni_active('reports/annual_report'); ?>" title="Annual Report">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><polyline points="4 20 20 20"/></svg></div>
-      <span class="ni-label">Annual Report</span>
-      <span class="ni-tip">Annual Performance Report</span>
-    </a>
-    <a href="<?= base_url('reports/annual_plan'); ?>" class="ni <?= ni_active('reports/annual_plan'); ?>" title="Annual Plan">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h8M8 18h5"/></svg></div>
-      <span class="ni-label">Annual Plan</span>
-      <span class="ni-tip">Annual Maintenance Plan</span>
-    </a>
-    <a href="<?= base_url('reports/service_kits'); ?>" class="ni <?= ni_active('reports/service_kits'); ?>" title="Service Kits">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></div>
-      <span class="ni-label">Service Kits</span>
-      <span class="ni-tip">Service Kit Recommendations</span>
     </a>
     <?php endif; ?>
 

@@ -142,12 +142,13 @@ See `docs/table-ux-audit.md`, `docs/forecast-table-ux-audit.md`, and
 node tests/reports_hub.js
 ```
 
-Dependency-free checks that `/reports` owns its single `h1`, works with
-JavaScript disabled (ordinary GET forms where every export inherits the chosen
-period through `formaction`), renders its one trend as an accessible SVG with a
-data table instead of a CDN-dependent canvas, escapes the user-controlled
-weekly report name, and shows honest unavailable / limited-data / all-clear
-states. It also checks the five-state W36 publication ladder: an open week is
+Dependency-free checks that `/reports` owns its single `h1`, the global sidebar
+has one role-scoped Reports entry while the hub retains the direct report
+catalogue, works with JavaScript disabled (ordinary GET forms where every export
+inherits the chosen period through `formaction`), renders its one trend as an
+accessible SVG with a data table instead of a CDN-dependent canvas, escapes the
+user-controlled weekly report name, and shows honest unavailable / limited-data /
+all-clear states. It also checks the five-state W36 publication ladder: an open week is
 `Draft — Week in progress` (Informational), its final day is `Draft —
 Publication due soon` (Warning), a missed deadline is `Unpublished — Action
 required` (High), an already published previous week is `Published` (No
@@ -159,6 +160,51 @@ Also verifies that every report launcher resolves to a real controller method
 and that the hub reads the KPI engine, store ledger, inventory catalogue and
 weekly-report model behind a `Throwable` guard. PHP/MySQL and
 authenticated-browser checks are still required.
+
+## Reports safety regressions (Node)
+
+```bash
+node tests/reporting_safety.js
+```
+
+Dependency-free source checks for the Phase 0 reporting-safety batches: the
+Issue Register uses the existing item-selected inventory workflow and hides
+write actions from read-only roles; Store rows, headline totals and allocation
+analytics share the complete filter contract (including reference, receiver,
+equipment and part-number search). Issue and Receipt screens use server-side
+10/25/50/100 pagination over the full filtered result, preserve filter state
+and stable date/ID ordering, and keep headline totals/date scope independent of
+the current page. XLSX exports ignore pagination, retain the existing 5,000-row
+cap, disclose a truncated scope and suppress overall footer totals when capped.
+Register quantities and values remain grouped by stock unit and transaction
+currency on screens and in XLSX, including the Receipt Currency column and its
+correct line-value/footer positions. Detailed and Annual MTTR/MTBF nulls remain
+undefined through models, views, summaries, rankings and exports; the Annual
+headline is identified as an unweighted mean of measured monthly availability
+rather than a year-wide required-time rollup, and XLSX colours use the screen's
+resolved site target/watch band. Annual lubricant quantities remain grouped by
+unit, and WO parts-spend labels use the configured site currency without
+conversion. The reliability inline JavaScript
+is parsed after its PHP data literals are substituted. These checks do not
+execute report SQL or replace PHP linting, PHP/MySQL integration,
+workbook-content or authenticated-browser verification.
+
+## Workshop Daily output-contract regressions (Node)
+
+```bash
+node tests/workshop_daily_ux.js
+```
+
+Dependency-free source checks for the C-02 Phase 0 alignment: reported-status
+readiness remains distinct from KPI-engine time-based fleet availability; screen,
+XLSX and print/PDF consume the shared summary; resolved equipment/type/fleet
+targets are visible (including dedicated workbook target columns) and drive
+availability colours; undefined values remain neutral and blank/gapped instead
+of becoming zero. It also verifies null-last availability
+sorting, removal of the XLSX group-percentage fleet average and fixed 90/70
+thresholds, Chart.js guarding, and JavaScript syntax after the chart-data literal
+is substituted. These structural checks do not execute PHP, report SQL, or
+inspect generated workbooks or authenticated browser output.
 
 ## Service Kit report audit regressions (Node)
 

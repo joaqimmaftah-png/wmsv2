@@ -322,8 +322,9 @@ class Dashboard_model extends CI_Model {
         foreach ($this->_engine()->monthly_fleet($months) as $m) {
             $result[] = [
                 'month'        => $m['month'],
-                'mttr'         => $m['mttr'] === null ? 0 : $m['mttr'],
-                'mtbf'         => $m['mtbf'] === null ? 0 : $m['mtbf'],
+                // No qualifying breakdowns is undefined, not a zero-hour KPI.
+                'mttr'         => $m['mttr'] === null ? null : round((float)$m['mttr'], 1),
+                'mtbf'         => $m['mtbf'] === null ? null : round((float)$m['mtbf'], 1),
                 'availability' => $m['availability'],
                 'breakdowns'   => $m['breakdowns'],
             ];
@@ -374,8 +375,8 @@ class Dashboard_model extends CI_Model {
                 'hours'       => (float)$eq->current_hours,          // the meter, not an operating-time basis
                 'breakdowns'  => (int)$k['breakdowns'],
                 'total_down'  => round((float)$k['downtime_hours'], 1),
-                'mttr'        => $k['mttr_hours'] === null ? 0 : round($k['mttr_hours'], 1),
-                'mtbf'        => $k['mtbf_hours'] === null ? 0 : round($k['mtbf_hours'], 1),
+                'mttr'        => $k['mttr_hours'] === null ? null : round($k['mttr_hours'], 1),
+                'mtbf'        => $k['mtbf_hours'] === null ? null : round($k['mtbf_hours'], 1),
                 'availability'=> $k['availability_pct'],
                 'max_down'    => round($max_down, 1),
                 'target'      => round($engine->target_for($eq->id, $to_date) * 100, 1),
@@ -397,8 +398,8 @@ class Dashboard_model extends CI_Model {
                 'total_eq'    => $eq_cnt,
                 'total_bd'    => $all_bd,
                 'total_down'  => round($all_down, 1),
-                'avg_mttr'    => $fleet['mttr_hours'] === null ? 0 : round($fleet['mttr_hours'], 1),
-                'avg_mtbf'    => $fleet['mtbf_hours'] === null ? 0 : round($fleet['mtbf_hours'], 1),
+                'avg_mttr'    => $fleet['mttr_hours'] === null ? null : round($fleet['mttr_hours'], 1),
+                'avg_mtbf'    => $fleet['mtbf_hours'] === null ? null : round($fleet['mtbf_hours'], 1),
                 'avg_avail'   => $fleet['availability_pct'],
             ],
             'months'     => $months,
@@ -623,10 +624,23 @@ class Dashboard_model extends CI_Model {
 
             $kpi = $engine->fleet($mFrom, $mTo);
 
-            $lube = $this->db->select_sum('quantity_used','total')
-                ->where('consumption_date >=', $mFrom)
-                ->where('consumption_date <=', $mTo)
-                ->get('lube_consumption')->row();
+            $lubeRows = $this->db->select("COALESCE(NULLIF(TRIM(lt.unit), ''), '(unit not set)') AS unit,
+                                           SUM(lc.quantity_used) AS total", FALSE)
+                ->from('lube_consumption lc')
+                ->join('lube_types lt', 'lt.id = lc.lube_type_id', 'left')
+                ->where('lc.consumption_date >=', $mFrom)
+                ->where('lc.consumption_date <=', $mTo)
+                ->group_by('lt.unit')
+                ->order_by('lt.unit', 'ASC')
+                ->get()->result();
+            $lubeByUnit = array();
+            foreach ($lubeRows as $lubeRow) {
+                $unit = (string)$lubeRow->unit;
+                if (!isset($lubeByUnit[$unit])) $lubeByUnit[$unit] = 0.0;
+                // NULL and empty raw units share the explicit fallback label.
+                if ($lubeRow->total !== null) $lubeByUnit[$unit] += (float)$lubeRow->total;
+            }
+            foreach ($lubeByUnit as $unit => $qty) $lubeByUnit[$unit] = round($qty, 1);
 
             $monthly[] = [
                 'month'      => sprintf('%04d-%02d', $year, $m),
@@ -636,9 +650,10 @@ class Dashboard_model extends CI_Model {
                 'completed'  => (int)($wo->done ?? 0),
                 'downtime'   => round((float)$kpi['fleet']['downtime_hours'], 1),
                 'availability'=> $kpi['fleet']['availability_pct'],
-                'mttr'       => $kpi['fleet']['mttr_hours'] === null ? 0 : round($kpi['fleet']['mttr_hours'], 1),
-                'mtbf'       => $kpi['fleet']['mtbf_hours'] === null ? 0 : round($kpi['fleet']['mtbf_hours'], 1),
-                'lube_used'  => round((float)($lube->total ?? 0), 1),
+                'mttr'       => $kpi['fleet']['mttr_hours'] === null ? null : round($kpi['fleet']['mttr_hours'], 1),
+                'mtbf'       => $kpi['fleet']['mtbf_hours'] === null ? null : round($kpi['fleet']['mtbf_hours'], 1),
+                'lube_used'  => count($lubeByUnit) === 1 ? reset($lubeByUnit) : null,
+                'lube_by_unit' => $lubeByUnit,
             ];
         }
 
@@ -675,12 +690,19 @@ class Dashboard_model extends CI_Model {
                 'location'    => $eq->location,
                 'breakdowns'  => (int)$k['breakdowns'],
                 'downtime'    => round((float)$k['downtime_hours'], 1),
-                'mttr'        => $k['mttr_hours'] === null ? 0 : round($k['mttr_hours'], 1),
-                'mtbf'        => $k['mtbf_hours'] === null ? 0 : round($k['mtbf_hours'], 1),
+                'mttr'        => $k['mttr_hours'] === null ? null : round($k['mttr_hours'], 1),
+                'mtbf'        => $k['mtbf_hours'] === null ? null : round($k['mtbf_hours'], 1),
                 'availability'=> $k['availability_pct'],
             ];
         }
-        usort($eq_reliability, fn($a,$b) => $a['availability'] <=> $b['availability']);
+        // Unknown availability is not evidence of a poor performer. Keep those
+        // machines after defined rankings rather than sorting null as zero.
+        usort($eq_reliability, function ($a, $b) {
+            if ($a['availability'] === null && $b['availability'] === null) return 0;
+            if ($a['availability'] === null) return 1;
+            if ($b['availability'] === null) return -1;
+            return $a['availability'] <=> $b['availability'];
+        });
 
         // ── Top recurring faults
         $faults = $this->db->select('symptoms, COUNT(*) as cnt')
@@ -722,6 +744,8 @@ class Dashboard_model extends CI_Model {
             ->get()->row();
 
         $eq_cnt = $this->db->where('status !=','Retired')->count_all_results('equipment');
+        // Preserve the established Annual figure: an unweighted arithmetic mean
+        // of months with a defined fleet availability, not a year-wide required-time rollup.
         $defined_availability = array_values(array_filter(array_column($monthly, 'availability'), function ($v) { return $v !== null; }));
         $avg_avail = count($defined_availability) > 0
             ? round(array_sum($defined_availability) / count($defined_availability), 1) : null;
@@ -742,7 +766,7 @@ class Dashboard_model extends CI_Model {
                 'completed'   => (int)($totals_wo->done ?? 0),
                 'critical'    => (int)($totals_wo->critical ?? 0),
                 'total_dt'    => round($total_dt, 1),
-                'avg_mttr'    => $total_bd>0 ? round($total_dt/$total_bd,1) : 0,
+                'avg_mttr'    => $total_bd>0 ? round($total_dt/$total_bd,1) : null,
                 'avg_avail'   => $avg_avail,
                 'fleet_size'  => $eq_cnt,
                 'parts_spend' => round((float)($parts_spend->total ?? 0), 2),

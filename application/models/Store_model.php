@@ -30,22 +30,12 @@ class Store_model extends CI_Model {
         return 'COALESCE(mt.txn_date, DATE(mt.created_at))';
     }
 
-    private function _base($filter) {
-        $d = $this->_date_expr();
-        $this->db
-            ->select('mt.id, mt.type, mt.qty, mt.qty_approved, mt.reference_no,
-                      mt.allocation_type, mt.allocation_label, mt.person,
-                      mt.supplier_name, mt.unit_price, mt.currency, mt.source,
-                      mt.notes, mt.created_at', FALSE)
-            ->select($d.' AS txn_date', FALSE)
-            ->select('m.item_code, m.description, m.part_number_size, m.unit, m.category', FALSE)
-            ->select('e.registration_no AS equipment_code', FALSE)
-            ->select('CONCAT(COALESCE(u.first_name,"")," ",COALESCE(u.last_name,"")) AS user_name', FALSE)
-            ->from('material_transactions mt')
-            ->join('materials m',  'm.id = mt.material_id', 'left')
-            ->join('equipment e',  'e.id = mt.equipment_id', 'left')
-            ->join('users u',      'u.id = mt.created_by',  'left');
-
+    /**
+     * Apply the complete register filter to every consumer of the dataset.
+     * Callers must join `materials m`; equipment/person/reference filters use
+     * columns on material_transactions and need no additional joins.
+     */
+    private function _apply_filter($filter, $d) {
         if (!empty($filter['date_from'])) $this->db->where($d.' >=', $filter['date_from']);
         if (!empty($filter['date_to']))   $this->db->where($d.' <=', $filter['date_to']);
         if (!empty($filter['category']))  $this->db->where('m.category', $filter['category']);
@@ -72,70 +62,117 @@ class Store_model extends CI_Model {
             $this->db->where("(m.item_code LIKE '%{$s}%' OR m.description LIKE '%{$s}%'
                                OR m.part_number_size LIKE '%{$s}%')");
         }
+    }
+
+    private function _base($filter) {
+        $d = $this->_date_expr();
+        $this->db
+            ->select('mt.id, mt.type, mt.qty, mt.qty_approved, mt.reference_no,
+                      mt.allocation_type, mt.allocation_label, mt.person,
+                      mt.supplier_name, mt.unit_price, mt.currency, mt.source,
+                      mt.notes, mt.created_at', FALSE)
+            ->select($d.' AS txn_date', FALSE)
+            ->select('m.item_code, m.description, m.part_number_size, m.unit, m.category', FALSE)
+            ->select('e.registration_no AS equipment_code', FALSE)
+            ->select('CONCAT(COALESCE(u.first_name,"")," ",COALESCE(u.last_name,"")) AS user_name', FALSE)
+            ->from('material_transactions mt')
+            ->join('materials m',  'm.id = mt.material_id', 'left')
+            ->join('equipment e',  'e.id = mt.equipment_id', 'left')
+            ->join('users u',      'u.id = mt.created_by',  'left');
+
+        $this->_apply_filter($filter, $d);
         return $d;
     }
 
-    /** Issues — the "Sortie" register. */
-    public function issue_register($filter = array(), $limit = self::MAX_ROWS) {
+    /** Issues — the "Sortie" register. Limit + offset support screen paging; exports keep the default cap. */
+    public function issue_register($filter = array(), $limit = self::MAX_ROWS, $offset = 0) {
         if (!$this->available()) return array();
         $d = $this->_base($filter);
         $this->db->where('mt.type', 'ISSUE');
         $this->db->order_by($d, 'DESC', FALSE)->order_by('mt.id', 'DESC');
-        if ($limit > 0) $this->db->limit((int)$limit);
+        if ($limit > 0) $this->db->limit((int)$limit, max(0, (int)$offset));
         $r = $this->db->get()->result();
         return $r ? $r : array();
     }
 
-    /** Receipts — the "Receipts" register. */
-    public function receipt_register($filter = array(), $limit = self::MAX_ROWS) {
+    /** Receipts — the "Receipts" register. Limit + offset support screen paging; exports keep the default cap. */
+    public function receipt_register($filter = array(), $limit = self::MAX_ROWS, $offset = 0) {
         if (!$this->available()) return array();
         $d = $this->_base($filter);
         $this->db->where('mt.type', 'RECEIVE');
         $this->db->order_by($d, 'DESC', FALSE)->order_by('mt.id', 'DESC');
-        if ($limit > 0) $this->db->limit((int)$limit);
+        if ($limit > 0) $this->db->limit((int)$limit, max(0, (int)$offset));
         $r = $this->db->get()->result();
         return $r ? $r : array();
     }
 
     /** Headline figures for a register (computed over the WHOLE filter, not the page). */
     public function register_totals($type, $filter = array()) {
-        $empty = array('lines' => 0, 'qty' => 0.0, 'value' => 0.0, 'items' => 0,
-                       'first' => null, 'last' => null);
+        $empty = array('lines' => 0, 'qty' => null, 'value' => null, 'items' => 0,
+                       'first' => null, 'last' => null, 'qty_by_unit' => array(),
+                       'qty_approved_by_unit' => array(), 'value_by_currency' => array());
         if (!$this->available()) return $empty;
         $d2 = $this->_date_expr();
-        $this->db->select('COUNT(*) AS `lines`, COALESCE(SUM(mt.qty),0) AS qty,
-                           COALESCE(SUM(mt.qty * COALESCE(mt.unit_price,0)),0) AS value,
-                           COUNT(DISTINCT mt.material_id) AS items,
+        $this->db->select('COUNT(*) AS `lines`, COUNT(DISTINCT mt.material_id) AS items,
                            MIN('.$d2.') AS first_date, MAX('.$d2.') AS last_date', FALSE)
                  ->from('material_transactions mt')
                  ->join('materials m', 'm.id = mt.material_id', 'left')
                  ->where('mt.type', $type);
-        if (!empty($filter['date_from'])) $this->db->where($d2.' >=', $filter['date_from']);
-        if (!empty($filter['date_to']))   $this->db->where($d2.' <=', $filter['date_to']);
-        if (!empty($filter['category']))  $this->db->where('m.category', $filter['category']);
-        if (!empty($filter['item_code'])) $this->db->where('m.item_code', $filter['item_code']);
-        if (!empty($filter['equipment_id'])) $this->db->where('mt.equipment_id', (int)$filter['equipment_id']);
-        if (!empty($filter['allocation'])) {
-            $s = $this->db->escape_like_str($filter['allocation']);
-            $this->db->where("mt.allocation_label LIKE '%{$s}%'");
-        }
-        if (!empty($filter['supplier'])) {
-            $s = $this->db->escape_like_str($filter['supplier']);
-            $this->db->where("mt.supplier_name LIKE '%{$s}%'");
-        }
-        if (!empty($filter['search'])) {
-            $s = $this->db->escape_like_str($filter['search']);
-            $this->db->where("(m.item_code LIKE '%{$s}%' OR m.description LIKE '%{$s}%')");
-        }
+        $this->_apply_filter($filter, $d2);
         $row = $this->db->get()->row();
         if (!$row) return $empty;
+
+        // Quantities are meaningful only within one stock unit. Keep separate
+        // delivered/approved totals per unit rather than adding pcs to litres.
+        $this->db->select('m.unit, SUM(mt.qty) AS qty, SUM(mt.qty_approved) AS qty_approved', FALSE)
+                 ->from('material_transactions mt')
+                 ->join('materials m', 'm.id = mt.material_id', 'left')
+                 ->where('mt.type', $type);
+        $this->_apply_filter($filter, $d2);
+        $unitRows = $this->db->group_by('m.unit')->order_by('m.unit', 'ASC')->get()->result();
+        $qtyByUnit = $approvedByUnit = array();
+        foreach ($unitRows as $unitRow) {
+            $unit = trim((string)$unitRow->unit);
+            if ($unit === '') $unit = '(unit not set)';
+            if (!array_key_exists($unit, $qtyByUnit)) $qtyByUnit[$unit] = null;
+            if (!array_key_exists($unit, $approvedByUnit)) $approvedByUnit[$unit] = null;
+            // MySQL groups NULL and an empty unit separately. Merge those raw
+            // groups after normalisation instead of overwriting one of them.
+            if ($unitRow->qty !== null) {
+                $qtyByUnit[$unit] = (float)$qtyByUnit[$unit] + (float)$unitRow->qty;
+            }
+            if ($unitRow->qty_approved !== null) {
+                $approvedByUnit[$unit] = (float)$approvedByUnit[$unit] + (float)$unitRow->qty_approved;
+            }
+        }
+
+        // A transaction's value belongs to its recorded currency. Never create
+        // a cross-currency sum and never invent an exchange-rate conversion.
+        $this->db->select('mt.currency, SUM(mt.qty * COALESCE(mt.unit_price,0)) AS value', FALSE)
+                 ->from('material_transactions mt')
+                 ->join('materials m', 'm.id = mt.material_id', 'left')
+                 ->where('mt.type', $type);
+        $this->_apply_filter($filter, $d2);
+        $currencyRows = $this->db->group_by('mt.currency')->order_by('mt.currency', 'ASC')->get()->result();
+        $valueByCurrency = array();
+        foreach ($currencyRows as $currencyRow) {
+            $currency = wms_currency_code($currencyRow->currency);
+            if (!isset($valueByCurrency[$currency])) $valueByCurrency[$currency] = 0.0;
+            $valueByCurrency[$currency] += (float)$currencyRow->value;
+        }
+        ksort($valueByCurrency);
+
         return array(
             'lines' => (int)$row->lines,
-            'qty'   => (float)$row->qty,
-            'value' => (float)$row->value,
+            // Legacy scalar consumers receive a value only when it is valid.
+            'qty'   => count($qtyByUnit) === 1 ? reset($qtyByUnit) : null,
+            'value' => count($valueByCurrency) === 1 ? reset($valueByCurrency) : null,
             'items' => (int)$row->items,
             'first' => $row->first_date,
             'last'  => $row->last_date,
+            'qty_by_unit' => $qtyByUnit,
+            'qty_approved_by_unit' => $approvedByUnit,
+            'value_by_currency' => $valueByCurrency,
         );
     }
 
@@ -147,17 +184,16 @@ class Store_model extends CI_Model {
         if (!$this->available()) return array();
         $d = $this->_date_expr();
         $this->db->select('COALESCE(e.registration_no, mt.allocation_label, "(unallocated)") AS allocation,
-                           mt.allocation_type,
-                           COUNT(*) AS `lines`,
-                           COALESCE(SUM(mt.qty),0) AS qty,
-                           COALESCE(SUM(mt.qty * COALESCE(mt.unit_price,0)),0) AS value', FALSE)
+                           mt.allocation_type, m.unit,
+                           COUNT(*) AS `lines`, COALESCE(SUM(mt.qty),0) AS qty', FALSE)
                  ->from('material_transactions mt')
+                 ->join('materials m', 'm.id = mt.material_id', 'left')
                  ->join('equipment e', 'e.id = mt.equipment_id', 'left')
                  ->where('mt.type', 'ISSUE');
-        if (!empty($filter['date_from'])) $this->db->where($d.' >=', $filter['date_from']);
-        if (!empty($filter['date_to']))   $this->db->where($d.' <=', $filter['date_to']);
-        $r = $this->db->group_by('allocation, mt.allocation_type')
-                      ->order_by('qty', 'DESC')->limit((int)$limit)->get()->result();
+        $this->_apply_filter($filter, $d);
+        $r = $this->db->group_by('allocation, mt.allocation_type, m.unit')
+                      ->order_by('lines', 'DESC')->order_by('allocation', 'ASC')
+                      ->order_by('m.unit', 'ASC')->limit((int)$limit)->get()->result();
         return $r ? $r : array();
     }
 
