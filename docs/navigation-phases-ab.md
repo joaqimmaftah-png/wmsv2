@@ -21,6 +21,10 @@ database schema, role IDs, or the authorization boundary.
   overflow horizontally at 1440px. Expansion is one explicit click, a stored
   choice always overrides the width default, and mobile is always the labelled
   drawer.
+- **Built-in-server asset guard:** `index.php` now returns `false` for existing
+  files under `/assets/` when running under `php -S … index.php`, so the shell
+  JavaScript is served in local development and CI instead of being routed to a
+  404. The guard resolves paths with `realpath()` and confines them to `assets/`.
 - **Page-local suites:** Planning (`forecast/_nav.php`) and Attendance
   (`attendance/_nav.php`) use `shared/_module_nav.php`. Specialist/setup
   functions are no longer promoted as global sidebar leaves.

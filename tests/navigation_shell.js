@@ -40,6 +40,14 @@ assert.ok(js.includes('matchMedia') && js.includes('760px'), 'drawer behaviour i
 assert.ok(js.includes('max-width: 1599px') && js.includes('function defaultCollapsed'), 'laptop widths auto-compact to the rail');
 assert.ok(js.includes('function storedChoice') && js.includes('choice === null ? defaultCollapsed() : choice'), 'an explicit collapse choice overrides the width default');
 
+// `php -S host:port index.php` routes every request through the front
+// controller. Without this guard the shell JS 404s in CI/local dev and the
+// laptop compact default never runs, overflowing dense registers.
+const front = src('index.php');
+assert.ok(front.includes("PHP_SAPI === 'cli-server'") && front.includes("'/assets/'") && front.includes('return false;'), 'built-in server serves public shell assets');
+assert.ok(front.includes('realpath') && front.includes('DIRECTORY_SEPARATOR'), 'asset guard confines resolved paths to assets/');
+assert.ok(src('.github/workflows/tests.yml').includes('assets/js/navigation.js'), 'CI asserts the navigation asset is actually served');
+
 // Accessibility and motion contracts in the shared stylesheet.
 assert.ok(header.includes('class="skip-link" href="#main-content"'), 'skip link targets main content');
 assert.ok(/#sidebar a:focus-visible/.test(header) && /summary:focus-visible/.test(header), 'navigation has visible keyboard focus');
