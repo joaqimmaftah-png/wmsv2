@@ -21,6 +21,8 @@ $editing = isset($editing) ? $editing : NULL;
 $has_saved_point = $editing && $editing->latitude !== NULL && $editing->longitude !== NULL;
 ?>
 
+<?php $attendance_nav_active = 'attendance_sites'; include __DIR__ . '/_nav.php'; ?>
+
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
     <h1 class="ct" style="font-size:16px;">Attendance sites &amp; policy</h1>
@@ -28,7 +30,7 @@ $has_saved_point = $editing && $editing->latitude !== NULL && $editing->longitud
   </div>
   <div class="flex ai-c gap-10" style="flex-wrap:wrap;">
     <a href="<?= base_url('attendance/board') ?>" class="btn btn-ghost btn-sm">Site screen</a>
-    <a href="<?= base_url('attendance/log') ?>" class="btn btn-ghost btn-sm">Punch log</a>
+    <a href="<?= base_url('attendance/log') ?>" class="btn btn-ghost btn-sm">Check-in Log</a>
     <a href="<?= base_url('attendance') ?>" class="btn btn-ghost btn-sm">← Attendance</a>
   </div>
 </div>

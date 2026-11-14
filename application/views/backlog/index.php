@@ -576,7 +576,7 @@ if ($q !== '') {
   <!-- Header Command Bar -->
   <div class="bl-header">
     <div>
-      <h1 class="bl-title">Backlog &amp; Defect Register</h1>
+      <h1 class="bl-title">Defect Backlog</h1>
       <div class="bl-sub">Defects raised by inspections, checklists and job cards — with closure evidence where recorded.</div>
     </div>
 
@@ -592,7 +592,7 @@ if ($q !== '') {
   <?php if (!$available): ?>
     <div style="padding:18px;border-radius:12px;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;">
       <strong>The backlog table is not installed yet.</strong><br>
-      Import <code>database/schema.sql</code> to enable the Defect / Backlog Register.
+      Import <code>database/schema.sql</code> to enable the Defect Backlog.
     </div>
   <?php else: ?>
 

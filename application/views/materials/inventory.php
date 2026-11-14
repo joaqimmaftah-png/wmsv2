@@ -410,7 +410,7 @@ $n = function ($k) use ($import_result) {
   <!-- Enterprise Page Header -->
   <div class="inv-head">
     <div>
-      <h1 class="inv-title">Inventory Catalogue</h1>
+      <h1 class="inv-title">Stock Items</h1>
       <div class="inv-subtitle">
         Warehouse stock master, min/max reorder governance, and audited movement ledger across <?= number_format((int)$kpi['total_items']) ?> SKU(s).
       </div>

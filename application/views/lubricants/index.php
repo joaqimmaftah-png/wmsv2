@@ -552,10 +552,10 @@ if ($can_write) {
               </td>
               <td class="lub-col-wo">
                 <?php if (!empty($c->wo_number)): ?>
-                <a href="<?= base_url('workorders/view/' . (int)$c->work_order_id) ?>"
+                <?php if (wms_nav_link_allowed('workorders', $role_id)): ?><a href="<?= base_url('workorders/view/' . (int)$c->work_order_id) ?>"
                    class="lub-mono" style="font-size:11.5px;color:var(--blue);font-weight:600;text-decoration:none;">
                   <?= $lub_esc($c->wo_number) ?>
-                </a>
+                </a><?php else: ?><span class="lub-mono"><?= $lub_esc($c->wo_number) ?></span><?php endif; ?>
                 <?php else: ?>
                 <span class="lub-muted-zero" style="font-size:11.5px;">—</span>
                 <?php endif; ?>
@@ -564,7 +564,7 @@ if ($can_write) {
               <td class="lub-col-act">
                 <div class="lub-row-actions">
                   <button type="button" class="lub-act-btn is-primary" data-lub-open="<?= (int)$c->id ?>" title="Inspect fluid issue dossier">Inspect</button>
-                  <a href="<?= base_url('equipment/view/' . (int)$c->equipment_id) ?>" class="lub-act-btn" title="Open machine history">Machine</a>
+                  <?php if (wms_nav_link_allowed('equipment', $role_id)): ?><a href="<?= base_url('equipment/view/' . (int)$c->equipment_id) ?>" class="lub-act-btn" title="Open machine history">Machine</a><?php endif; ?>
                 </div>
               </td>
             </tr>
@@ -646,7 +646,7 @@ if ($can_write) {
               </span>
               <div style="display:flex;gap:6px;flex-shrink:0;">
                 <button type="button" class="lub-act-btn is-primary" data-lub-open="<?= (int)$cc->id ?>">Inspect</button>
-                <a href="<?= base_url('equipment/view/' . (int)$cc->equipment_id) ?>" class="lub-act-btn">Machine</a>
+                <?php if (wms_nav_link_allowed('equipment', $role_id)): ?><a href="<?= base_url('equipment/view/' . (int)$cc->equipment_id) ?>" class="lub-act-btn">Machine</a><?php endif; ?>
               </div>
             </div>
           </div>
@@ -736,6 +736,8 @@ if ($can_write) {
   var summaryBase    = <?= json_encode(rtrim(base_url('lubricants/summary_json'), '/') . '/') ?>;
   var woViewBase     = <?= json_encode(rtrim(base_url('workorders/view'), '/') . '/') ?>;
   var eqViewBase     = <?= json_encode(rtrim(base_url('equipment/view'), '/') . '/') ?>;
+  var canViewWo      = <?= wms_nav_link_allowed('workorders', $role_id) ? 'true' : 'false' ?>;
+  var canViewEq      = <?= wms_nav_link_allowed('equipment', $role_id) ? 'true' : 'false' ?>;
   var exportCsvBase  = <?= json_encode(base_url('lubricants/export_csv')) ?>;
   var exportXlsxBase = <?= json_encode(base_url('lubricants/export_xlsx')) ?>;
   var currentMonth   = <?= json_encode($month_str) ?>;
@@ -892,11 +894,11 @@ if ($can_write) {
       + '<div class="lub-kv"><div class="lub-kv-k">Line Cost</div><div class="lub-kv-v">' + esc(rec.currency) + ' ' + rec.line_cost.toFixed(2) + '</div></div>'
       + '<div class="lub-kv" style="grid-column:1 / -1;"><div class="lub-kv-k">Variance Reason</div><div class="lub-kv-v">' + esc(rec.variance_reason) + '</div></div>'
       + '<div class="lub-kv" style="grid-column:1 / -1;"><div class="lub-kv-k">Work Order &amp; Recorded By</div><div class="lub-kv-v">'
-      + (rec.wo_number ? ('<a href="' + woViewBase + encodeURIComponent(rec.work_order_id) + '" style="color:var(--blue);">' + esc(rec.wo_number) + '</a> · ') : '')
+      + (rec.wo_number ? ((canViewWo ? '<a href="' + woViewBase + encodeURIComponent(rec.work_order_id) + '" style="color:var(--blue);">' + esc(rec.wo_number) + '</a>' : esc(rec.wo_number)) + ' · ') : '')
       + esc(rec.recorded_by_name) + '</div></div>'
       + '</div>';
 
-    var ctas = '<a href="' + eqViewBase + encodeURIComponent(rec.equipment_id) + '" class="btn btn-ghost btn-sm">Machine History</a>';
+    var ctas = canViewEq ? '<a href="' + eqViewBase + encodeURIComponent(rec.equipment_id) + '" class="btn btn-ghost btn-sm">Machine History</a>' : '';
 <?php if ($can_write): ?>
     ctas = '<a href="' + recordUrl + '" class="btn btn-primary btn-sm">+ Record Consumption</a>' + ctas;
 <?php endif; ?>

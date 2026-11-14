@@ -1,0 +1,82 @@
+# Navigation implementation — Phases A and B
+
+This implements the approved sidebar/navigation review without changing the
+database schema, role IDs, or the authorization boundary.
+
+## What changed
+
+- **Canonical navigation model:** `application/helpers/navigation_helper.php`
+  owns the role-filtered tree, longest-prefix active leaf, presentation-only
+  link filter, and inline SVG icons. `MY_Controller::render()` loads it.
+- **Explicit shell:** `layouts/sidebar.php` is data-driven. Groups are native
+  `<details>` disclosures with `aria-expanded`/`aria-controls`; the current leaf
+  has `aria-current="page"`. `assets/js/navigation.js` adds persisted desktop
+  collapse and a labelled mobile drawer with Escape/Tab containment and inert
+  canvas. The old hover rail, duplicate sidebar identity block, and duplicate
+  account-menu Users/Settings links are gone.
+- **Page-local suites:** Planning (`forecast/_nav.php`) and Attendance
+  (`attendance/_nav.php`) use `shared/_module_nav.php`. Specialist/setup
+  functions are no longer promoted as global sidebar leaves.
+- **Canonical names:** Inventory Overview, Stock Items, Stock Movements,
+  Purchase Orders, Work Order Parts, Defect Backlog, Preventive Maintenance,
+  PM Parts Forecast, Planning Allowances, 3-Week Plan, Shift Roster, Check-in
+  Log, User Accounts, System Settings, Downtime Register.
+- **Report library:** the hub no longer duplicates the fleet local nav. Fleet
+  Availability and Downtime Register are library rows; section numbers and
+  quick-export counts are derived from the catalogue.
+- **Contextual links:** dashboard, parts board, orders, stock movements,
+  lubricants, PM parts pills, equipment profile, and Downtime Register
+  cross-links are authorized or de-linked. Lube Budget fails closed without an
+  explicit write flag. Personal attendance/timesheet and on-site status are
+  scoped for Technician/Store Keeper in the rendered UI.
+- **Role help:** `users/form.php` now describes the current five roles,
+  including CEO Executive-Summary-only, without promising pending Phase C
+  policy changes.
+
+## Role trees
+
+Expanded leaf counts are asserted in `tests/run.php` and Chromium:
+
+| Role | Leaves | Notes |
+|---|---:|---|
+| Supervisor | 31 | Full approved tree |
+| Technician | 16 | Maintenance + personal work; no planning/reports/admin |
+| Store Keeper | 13 | Inventory/purchasing + personal work; no maintenance WO destinations |
+| Manager | 25 | Read-only tree with existing publication/order-status exceptions |
+| CEO | 1 | Executive Summary only |
+
+## Verification
+
+- PHP 8.3 WASM lint: **191 PHP files OK**.
+- `php tests/run.php` equivalent: **471 passed, 0 failed**.
+- Node loop: **20 passed, 1 pre-existing failure** (the browser suite skips
+  without Chrome/PHP; structural navigation coverage still runs).
+  The sole failure is `tests/lubricant_masters_ux.js:31`
+  (`No active lubricant types found` vs current empty-state wording), reproduced
+  on the untouched baseline.
+- Chromium DOM: **5 role trees passed** (forbidden destinations, one current
+  leaf, keyboard disclosure, desktop collapse, mobile drawer labelling/touch
+  targets, Escape/Tab containment, reduced motion).
+
+Commands:
+
+```bash
+php tests/run.php
+node tests/navigation_shell.js
+CHROME_PATH=/path/to/chrome node tests/navigation_browser.js
+```
+
+`navigation_browser.js` skips without Chrome/PHP; set
+`WMS_NAV_BROWSER_REQUIRED=1` to require it. Pre-rendered fixtures can be supplied
+with `WMS_NAV_FIXTURE_DIR`.
+
+## Not implemented — Phase C requires separate approval
+
+- Technician work-order browse scope.
+- Workforce-wide Daily Attendance read/write policy.
+- Technician stock-write responsibility.
+- Any CEO/Store report-access expansion.
+
+The existing controller guards and `MY_Controller` matrix remain the
+authorization boundary. The navigation helper only decides which links to
+offer.

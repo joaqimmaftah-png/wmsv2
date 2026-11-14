@@ -351,7 +351,7 @@ if ($g('shipping_method') !== '') $chips[] = array('Freight: ' . $g('shipping_me
   <!-- Page Header & RBAC Action Bar -->
   <div class="ord-head">
     <div>
-      <h1 class="ord-title">Spare Parts Purchase Orders</h1>
+      <h1 class="ord-title">Purchase Orders</h1>
       <div class="ord-subtitle">
         Procurement pipeline, international freight &amp; customs tracking, GRN fulfillment &amp; fleet work-order linkage
       </div>
@@ -582,9 +582,9 @@ if ($g('shipping_method') !== '') $chips[] = array('Freight: ' . $g('shipping_me
                 </td>
                 <td>
                   <?php if (!empty($o->linked_wo_id) && !empty($o->wo_number)): ?>
-                    <a class="ord-mono" style="font-weight:700;color:#1D4ED8;" href="<?= $h(base_url('workorders/view/' . (int)$o->linked_wo_id)) ?>">
+                    <?php if (wms_nav_link_allowed('workorders', $role_id)): ?><a class="ord-mono" style="font-weight:700;color:#1D4ED8;" href="<?= $h(base_url('workorders/view/' . (int)$o->linked_wo_id)) ?>">
                       <?= $h($o->wo_number) ?>
-                    </a>
+                    </a><?php else: ?><span class="ord-mono"><?= $h($o->wo_number) ?></span><?php endif; ?>
                     <div class="ord-cell-sub"><?= $h(!empty($o->equipment_code) ? $o->equipment_code : 'Fleet WO') ?></div>
                   <?php else: ?>
                     <span style="color:#94A3B8;font-size:11.5px;">Stock Replenish</span>
@@ -741,6 +741,7 @@ if ($g('shipping_method') !== '') $chips[] = array('Freight: ' . $g('shipping_me
   var receiveBase = <?= json_encode(rtrim(base_url('orders/receive'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
   var grnBase     = <?= json_encode(rtrim(base_url('orders/grn'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
   var woBase      = <?= json_encode(rtrim(base_url('workorders/view'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
+  var canViewWo   = <?= wms_nav_link_allowed('workorders', $role_id) ? 'true' : 'false' ?>;
   var baseExport  = <?= json_encode($csvExportUrl, JSON_UNESCAPED_SLASHES) ?>;
   var baseXlsx    = <?= json_encode($xlsxExportUrl, JSON_UNESCAPED_SLASHES) ?>;
 
@@ -846,7 +847,7 @@ if ($g('shipping_method') !== '') $chips[] = array('Freight: ' . $g('shipping_me
         drawerTit.textContent = o.order_no + ' · ' + o.supplier_name;
 
         var woTxt = o.linked_wo
-          ? ('<a href="' + esc(woBase + o.linked_wo.id) + '">' + esc(o.linked_wo.wo_number) + '</a>'
+          ? ((canViewWo ? '<a href="' + esc(woBase + o.linked_wo.id) + '">' + esc(o.linked_wo.wo_number) + '</a>' : esc(o.linked_wo.wo_number))
              + (o.linked_wo.registration_no ? ' · ' + esc(o.linked_wo.registration_no) : ''))
           : 'Stock Replenishment';
 

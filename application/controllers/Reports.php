@@ -3177,7 +3177,7 @@ td{font-size:6.5pt;padding:2px 3px;border:1px solid #ccc;vertical-align:top;}
             return strcmp((string)$b['start'], (string)$a['start']);
         });
         $data = array(
-            'page_title' => 'Log Downtime',
+            'page_title' => 'Downtime Register',
             'report' => $report,
             'events' => $events,
             'notice' => $notice,

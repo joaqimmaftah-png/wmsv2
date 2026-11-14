@@ -12,10 +12,10 @@ $live_query = empty($snapshot) && !empty($published) ? '&live=1' : '';
 <div class="fd-wrap">
   <?php $this->load->view('reports/_fleet_nav', array('fleet_nav_active' => $fleet_nav_active, 'week_start' => $week_start)); ?>
   <header class="fd-head">
-    <div><p class="fd-eyebrow">WMS event records · <?= $esc($week_label) ?></p><h1>Log downtime</h1><p>Breakdown events are grouped from existing work orders and merged by the shared W36 event logic.</p></div>
+    <div><p class="fd-eyebrow">WMS event records · <?= $esc($week_label) ?></p><h1>Downtime Register</h1><p>Breakdown events are grouped from existing work orders and merged by the shared W36 event logic.</p></div>
     <div class="fd-actions">
-      <a class="fd-btn fd-primary" href="<?= base_url('workorders/create?fleet_availability=1&fleet_kind=breakdown&week_start=' . rawurlencode($week_start)) ?>">Log a breakdown</a>
-      <a class="fd-btn" href="<?= base_url('workorders/create?fleet_availability=1&fleet_kind=planned&week_start=' . rawurlencode($week_start)) ?>">Create preventive WO</a>
+      <?php if (wms_nav_link_allowed('workorders/create', $role_id)): ?><a class="fd-btn fd-primary" href="<?= base_url('workorders/create?fleet_availability=1&fleet_kind=breakdown&week_start=' . rawurlencode($week_start)) ?>">Log a breakdown</a><?php endif; ?>
+      <?php if (wms_nav_link_allowed('workorders/create', $role_id)): ?><a class="fd-btn" href="<?= base_url('workorders/create?fleet_availability=1&fleet_kind=planned&week_start=' . rawurlencode($week_start)) ?>">Create preventive WO</a><?php endif; ?>
     </div>
   </header>
   <?php if (!empty($notice)): ?><div class="fd-note warn"><?= $esc($notice) ?></div><?php endif; ?>

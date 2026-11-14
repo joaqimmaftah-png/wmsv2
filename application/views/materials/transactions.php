@@ -336,7 +336,7 @@ if ($g('date_to') !== '')       $chips[] = array('To: ' . $g('date_to'), array('
   <!-- Page Header & Export Toolbar -->
   <div class="txn-head">
     <div>
-      <h1 class="txn-title">Stock Transaction Ledger</h1>
+      <h1 class="txn-title">Stock Movements</h1>
       <div class="txn-subtitle">
         Audit register of goods receipts (MRN), workshop requisitions (R.non), fleet machine allocations &amp; stock balances
       </div>
@@ -344,7 +344,7 @@ if ($g('date_to') !== '')       $chips[] = array('To: ' . $g('date_to'), array('
     <div class="txn-actions">
       <a class="txn-btn" href="<?= $h($csvExportUrl) ?>">↓ Export CSV</a>
       <a class="txn-btn" href="<?= $h($xlsxExportUrl) ?>">↓ Export Excel</a>
-      <a class="txn-btn txn-btn-primary" href="<?= $h(base_url('materials/inventory')) ?>">← Inventory Catalogue</a>
+      <a class="txn-btn txn-btn-primary" href="<?= $h(base_url('materials/inventory')) ?>">← Stock Items</a>
     </div>
   </div>
 
@@ -566,9 +566,9 @@ if ($g('date_to') !== '')       $chips[] = array('To: ' . $g('date_to'), array('
                 </td>
                 <td>
                   <?php if ($eqId > 0 && !empty($t->equipment_code)): ?>
-                    <a class="txn-badge txn-badge-eq txn-mono" href="<?= $h(base_url('equipment/view/' . $eqId)) ?>">
+                    <?php if (wms_nav_link_allowed('equipment', $role_id)): ?><a class="txn-badge txn-badge-eq txn-mono" href="<?= $h(base_url('equipment/view/' . $eqId)) ?>">
                       <?= $h($t->equipment_code) ?>
-                    </a>
+                    </a><?php else: ?><span class="txn-badge txn-badge-eq txn-mono"><?= $h($t->equipment_code) ?></span><?php endif; ?>
                     <div class="txn-cell-sub">Fleet Equipment</div>
                   <?php elseif (!empty($t->counterparty)): ?>
                     <div class="txn-cell-main" title="<?= $h($t->counterparty) ?>"><?= $h($t->counterparty) ?></div>
@@ -726,6 +726,7 @@ if ($g('date_to') !== '')       $chips[] = array('To: ' . $g('date_to'), array('
   var detailBase  = <?= json_encode(rtrim(base_url('materials/transaction_json'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
   var invBase     = <?= json_encode(base_url('materials/inventory'), JSON_UNESCAPED_SLASHES) ?>;
   var eqBase      = <?= json_encode(rtrim(base_url('equipment/view'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
+  var canViewEq   = <?= wms_nav_link_allowed('equipment', $role_id) ? 'true' : 'false' ?>;
   var receiveBase = <?= json_encode(rtrim(base_url('materials/receive'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
   var issueBase   = <?= json_encode(rtrim(base_url('materials/issue'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
   var baseExport  = <?= json_encode($csvExportUrl, JSON_UNESCAPED_SLASHES) ?>;
@@ -853,7 +854,7 @@ if ($g('date_to') !== '')       $chips[] = array('To: ' . $g('date_to'), array('
           + '<div class="txn-kv-box"><div class="txn-kv-lbl">Quantity Moved</div><div class="txn-kv-val">' + (isRec ? '+' : '−') + esc(t.qty) + ' ' + esc(t.unit) + '</div></div>'
           + '<div class="txn-kv-box"><div class="txn-kv-lbl">Stock Before → After</div><div class="txn-kv-val">' + esc(balTxt) + '</div></div>'
           + '<div class="txn-kv-box"><div class="txn-kv-lbl">' + (isRec ? 'Supplier' : 'Charged To / Asset') + '</div><div class="txn-kv-val">'
-          + (t.equipment_id ? '<a href="' + esc(eqBase + t.equipment_id) + '">' + esc(t.equipment_code) + '</a>' : esc(t.counterparty))
+          + (t.equipment_id ? (canViewEq ? '<a href="' + esc(eqBase + t.equipment_id) + '">' + esc(t.equipment_code) + '</a>' : esc(t.equipment_code)) : esc(t.counterparty))
           + '</div></div>'
           + '<div class="txn-kv-box"><div class="txn-kv-lbl">Unit Valuation</div><div class="txn-kv-val">' + esc(priceTxt) + '</div></div>'
           + '<div class="txn-kv-box"><div class="txn-kv-lbl">Operator / Collector</div><div class="txn-kv-val">' + esc(t.operator_display) + '</div></div>'

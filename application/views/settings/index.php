@@ -141,7 +141,7 @@
       );
       if ($fk): ?>
       <div class="ch" style="margin-top:26px;"><div><div class="ct">Forecast Planning</div>
-        <div class="cs">Planned downtime allowances — see <em>Forecast &rsaquo; Planned Allowances</em> for their effect on a week</div></div></div>
+        <div class="cs">Planned downtime allowances — see <em>Planning &rsaquo; Planning Allowances</em> for their effect on a week</div></div></div>
       <div class="form-grid cols-1" style="gap:16px;margin-bottom:24px;">
         <div class="form-grid cols-2">
           <div>

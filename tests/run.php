@@ -79,9 +79,23 @@ if (!function_exists('get_instance')) {
 
 $GLOBALS['wms_test_app'] = new WmsTestApp();
 
+// The navigation presentation model reads the real controller policy constants.
+// CI's core controller is not needed to read those constants, but the class must exist.
+if (!class_exists('CI_Controller', FALSE)) {
+    class CI_Controller {}
+}
+require_once __DIR__ . '/../application/core/MY_Controller.php';
+if (!function_exists('base_url')) {
+    function base_url($uri = '') { return 'http://wms.test/' . ltrim((string)$uri, '/'); }
+}
+if (!function_exists('site_url')) {
+    function site_url($uri = '') { return 'http://wms.test/' . ltrim((string)$uri, '/'); }
+}
 require_once __DIR__ . '/../application/helpers/user_helper.php';
 require_once __DIR__ . '/../application/helpers/currency_helper.php';
 require_once __DIR__ . '/../application/helpers/attendance_helper.php';
+require_once __DIR__ . '/../application/helpers/navigation_helper.php';
+$mutPattern = MY_Controller::MUTATION_PATTERN;
 
 /* ─────────────────────────────────────────────────────────────────────────
    K-18 — the session payload
@@ -483,8 +497,78 @@ check('Attendance gate: Workorders::start_session enforces on-site & eligibility
 check('Attendance punch: Attendance::record verifies active eligible user row live from database',
     strpos($attControllerSrc, 'punchable_user($this->user_id)') !== FALSE
     && strpos($attControllerSrc, 'Settings_model->save(') === FALSE);
-check('Attendance navigation: sidebar exposes Punch Log to both Supervisors and Managers',
-    strpos($sidebarSrc, '$is_supervisor || $is_manager') !== FALSE);
+check('Attendance navigation: Check-in Log is offered to Supervisors and Managers, not personal roles',
+    wms_nav_link_allowed('attendance/log', 1) === TRUE
+    && wms_nav_link_allowed('attendance/log', 4) === TRUE
+    && wms_nav_link_allowed('attendance/log', 2) === FALSE
+    && wms_nav_link_allowed('attendance/log', 3) === FALSE
+    && strpos(file_get_contents(__DIR__ . '/../application/views/attendance/_nav.php'), 'Check-in Log') !== FALSE);
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Navigation shell — canonical role trees, active leaf and link policy
+   ───────────────────────────────────────────────────────────────────────── */
+
+$nav_counts = array();
+foreach (range(1, 5) as $nav_role) {
+    $nav = wms_nav_tree($nav_role);
+    $count = count($nav['pinned']);
+    foreach ($nav['groups'] as $nav_group) {
+        $count += count($nav_group['items']);
+        foreach ($nav_group['items'] as $nav_item) {
+            check("NAV role {$nav_role}: {$nav_item['key']} is an authorized destination",
+                wms_nav_link_allowed($nav_item['path'], $nav_role) === TRUE);
+        }
+    }
+    foreach ($nav['pinned'] as $nav_item) {
+        check("NAV role {$nav_role}: pinned {$nav_item['key']} is an authorized destination",
+            wms_nav_link_allowed($nav_item['path'], $nav_role) === TRUE);
+    }
+    $nav_counts[$nav_role] = $count;
+}
+is_same('NAV Supervisor expanded leaf count', 31, $nav_counts[1]);
+is_same('NAV Technician expanded leaf count', 16, $nav_counts[2]);
+is_same('NAV Store Keeper expanded leaf count', 13, $nav_counts[3]);
+is_same('NAV Manager expanded leaf count', 25, $nav_counts[4]);
+is_same('NAV CEO expanded leaf count', 1, $nav_counts[5]);
+$ceo_nav = wms_nav_tree(5);
+check('NAV CEO stays Executive-Summary-only', count($ceo_nav['groups']) === 0
+    && $ceo_nav['pinned'][0]['path'] === 'dashboard'
+    && $ceo_nav['pinned'][0]['label'] === 'Executive Summary');
+
+$nav_active_cases = array(
+    array('settings/security', 1, 'security', 'administration'),
+    array('settings', 1, 'settings', 'administration'),
+    array('materials/inventory', 3, 'stock_items', 'inventory'),
+    array('materials', 3, 'inventory_overview', 'inventory'),
+    array('reports/weekly_w36', 4, 'workshop_weekly', 'reports'),
+    array('reports/workshop_weekly', 4, 'workshop_weekly', 'reports'),
+    array('reports/monthly', 4, 'report_library', 'reports'),
+    array('forecast/parts/5', 1, 'pm_parts', 'planning'),
+    array('team/report', 2, 'my_attendance', 'my_work'),
+    array('team/report', 4, 'attendance_report', 'workforce'),
+    array('attendance/punch', 2, 'punch', ''),
+);
+foreach ($nav_active_cases as $case) {
+    $active = wms_nav_active($case[0], $case[1]);
+    check("NAV active {$case[0]} role {$case[1]} selects {$case[2]}",
+        $active['key'] === $case[2] && $active['group'] === $case[3]);
+}
+
+$nav_link_cases = array(
+    array('users/profile', 1, TRUE), array('users/profile', 4, TRUE), array('users/profile', 5, FALSE),
+    array('attendance/log', 1, TRUE), array('attendance/log', 4, TRUE),
+    array('attendance/log', 2, FALSE), array('attendance/log', 3, FALSE),
+    array('lubricants/budget', 1, TRUE), array('lubricants/budget', 3, TRUE), array('lubricants/budget', 2, FALSE),
+    array('orders/update_status', 4, TRUE), array('orders/create', 4, FALSE),
+    array('spareparts/mark_read', 4, TRUE), array('spareparts/allocate', 4, FALSE),
+    array('reports/publish_weekly_w36', 4, TRUE), array('reports/weekly_targets_save', 4, FALSE),
+    array('inspections/records', 4, TRUE), array('reports/asset_template_xlsx', 4, TRUE),
+    array('team/roster_csv', 4, TRUE), array('team/roster_csv', 2, FALSE),
+    array('workorders', 3, FALSE), array('forecast', 2, FALSE), array('reports', 3, FALSE),
+);
+foreach ($nav_link_cases as $case) {
+    is_same("NAV link {$case[0]} role {$case[1]}", $case[2], wms_nav_link_allowed($case[0], $case[1]));
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    10. AML Individual Attendance Sheet — Dynamic Calendar, PDF & XLSX Exports
@@ -843,6 +927,7 @@ $viewVars = array(
     ),
     'can_batch'       => TRUE,
     'is_supervisor'   => TRUE,
+    'role_id'         => 1,
     'current_user_id' => 1,
     'page_title'      => 'Attendance Report & Individual Timesheets',
 );
@@ -1475,7 +1560,8 @@ check('EQ-02 Stored XSS & Manager RBAC Hardening in maintenance/equipment_view.p
     && strpos($eqDetSrc, '<?= $wo->wo_number ?>') === FALSE
     && strpos($eqDetSrc, '<?= $wo->type ?>') === FALSE
     && strpos($eqDetSrc, '<?= $wo->status ?>') === FALSE
-    && substr_count($eqDetSrc, '(int)$role_id !== 4') >= 2);
+    && strpos($eqDetSrc, "wms_nav_link_allowed('workorders/create', " . '$role_id)') !== FALSE
+    && strpos($eqDetSrc, "wms_nav_link_allowed('pm/create', " . '$role_id)') !== FALSE);
 
 // EQ-01 .. EQ-08 Full PHP Render Audit of application/views/maintenance/equipment.php (Supervisor & Non-Supervisor)
 $eqVars = array(
@@ -1687,6 +1773,7 @@ $pmVars = array(
     'offset'         => 0,
     'can_manage_pm'  => TRUE,
     'can_complete_pm'=> TRUE,
+    'role_id'        => 1,
 );
 
 $pmWarnings = array();
@@ -1698,7 +1785,7 @@ ob_start();
 (function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/maintenance/pm_planner.php'; })($pmVars);
 $pmSupHtml = ob_get_clean();
 
-$pmVarsMgr = array_merge($pmVars, array('can_manage_pm' => FALSE, 'can_complete_pm' => FALSE));
+$pmVarsMgr = array_merge($pmVars, array('can_manage_pm' => FALSE, 'can_complete_pm' => FALSE, 'role_id' => 4));
 ob_start();
 (function (array $v) { extract($v, EXTR_SKIP); include APPPATH . 'views/maintenance/pm_planner.php'; })($pmVarsMgr);
 $pmMgrHtml = ob_get_clean();
@@ -2259,6 +2346,7 @@ $renderTxnView = function ($canWrite) use ($txnLedger, &$txnWarnings) {
     $offset          = 0;
     $filtered_totals = $txnLedger['filtered_totals'];
     $can_write       = $canWrite;
+    $role_id         = $canWrite ? 1 : 4;
 
     set_error_handler(function ($severity, $message, $file, $line) use (&$txnWarnings) {
         $txnWarnings[] = "$message ($file:$line)";
@@ -2430,6 +2518,7 @@ $renderOrdIndex = function ($canWrite) use ($ordOv, &$ordWarnings) {
         'by_currency'  => array('USD' => 100.00, 'TZS' => 250000.00),
     );
     $can_write       = $canWrite;
+    $role_id         = $canWrite ? 1 : 4;
 
     set_error_handler(function ($severity, $message, $file, $line) use (&$ordWarnings) {
         $ordWarnings[] = "$message ($file:$line)";
@@ -2646,6 +2735,7 @@ $renderSpIndex = function ($canWrite, $canOrder, $canViewOrders) use ($spOvTech,
     $can_write       = $canWrite;
     $can_order       = $canOrder;
     $can_view_orders = $canViewOrders;
+    $role_id         = $canOrder ? 3 : ($canWrite ? 2 : 4);
 
     set_error_handler(function ($severity, $message, $file, $line) use (&$spWarnings) {
         $spWarnings[] = "$message ($file:$line)";
@@ -3027,6 +3117,7 @@ $renderLubSuite = function ($canWrite, $canTypes, $canRpts) use ($ledgOv, $bgtOv
     $can_write        = $canWrite;
     $can_manage_types = $canTypes;
     $can_view_reports = $canRpts;
+    $role_id          = $canTypes ? 1 : ($canWrite ? 3 : 2);
     $currency_code    = 'TZS';
 
     $lines       = $bgtOv['lines'];

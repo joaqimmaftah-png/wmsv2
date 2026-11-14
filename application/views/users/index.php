@@ -93,7 +93,7 @@ $last_login_of = function ($u) {
 ?>
 <style>
 /* ════════════════════════════════════════════════════════════════════════════════════════════
-   WMSv2 Enterprise Data Table — User Access Management
+   WMSv2 Enterprise Data Table — User Accounts
    Mirrors /team/report design system; native Apple-HIG tokens from layouts/header.php
    plus local tokens not defined there.
 ═════════════════════════════════════════════════════════════════════════════════════════════ */
@@ -479,7 +479,7 @@ $last_login_of = function ($u) {
       <span aria-hidden="true">/</span>
       <a href="<?= site_url('users') ?>">Users</a>
       <span aria-hidden="true">/</span>
-      <span>User Access Management</span>
+      <span>User Accounts</span>
     </nav>
     <div class="us-head-title">
       <h1><?= htmlspecialchars((string)$page_title, ENT_QUOTES, 'UTF-8') ?></h1>

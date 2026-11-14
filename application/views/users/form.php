@@ -137,10 +137,11 @@ $v = function($field, $default='') use ($u, $fd) {
     <div style="font-family:inherit;font-size:12px;font-weight:700;color:var(--t3);text-transform:none;letter-spacing:0;margin-bottom:16px;">Role Permissions</div>
     <?php
     $role_info = array(
-      1 => array('name'=>'Supervisor','color'=>'var(--red)','perms'=>array('All modules — full read/write','User management & settings','Delete & override capabilities','Reports & KPI access','PM schedule management')),
-      2 => array('name'=>'Technician','color'=>'var(--blue)','perms'=>array('Own work orders (create/update)','Equipment view','PM completion recording','Own attendance management','Lubricant consumption entry')),
-      3 => array('name'=>'Store','color'=>'var(--amber)','perms'=>array('Lubricants module (full)','Spare parts management','Stock entries & consumption','Budget tracking','View-only other modules')),
-      4 => array('name'=>'Manager','color'=>'var(--cyan)','perms'=>array('Dashboard & KPI view','All reports (read-only)','Equipment status view','Work order view (no edit)','Attendance reports')),
+      1 => array('name'=>'Supervisor','color'=>'var(--red)','perms'=>array('Full operational modules','Planning, reports & workforce administration','User accounts & system settings','Attendance sites, corrections & sign-in security')),
+      2 => array('name'=>'Technician','color'=>'var(--blue)','perms'=>array('Maintenance execution & defect reporting','Inventory & work-order parts visibility','Personal attendance, timesheet & certifications','Lubricant consumption viewing')),
+      3 => array('name'=>'Store Keeper','color'=>'var(--amber)','perms'=>array('Inventory, stock movements & work-order parts','Purchase orders & suppliers','Lubricant consumption & budgets','Personal attendance, timesheet & certifications')),
+      4 => array('name'=>'Manager','color'=>'var(--cyan)','perms'=>array('Operational dashboards, planning & reports','Read-only maintenance and inventory review','Workforce attendance & timesheets','Weekly publication and order-status exceptions')),
+      5 => array('name'=>'CEO','color'=>'var(--purple)','perms'=>array('Executive Summary only')),
     );
     foreach ($role_info as $rid => $ri):
     ?>

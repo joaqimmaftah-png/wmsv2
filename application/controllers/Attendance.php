@@ -503,7 +503,7 @@ class Attendance extends MY_Controller {
         $data['correction_workers'] = $data['ready'] ? $this->Attendance_model->workers_for_correction() : array();
         $data['sites']              = $this->Attendance_model->get_sites();
         $data['is_supervisor']      = $this->is_supervisor();
-        $data['page_title']         = 'Attendance log';
+        $data['page_title']         = 'Check-in Log';
 
         // Punch-events table: tabs/search/sort/pagination over the same day.
         $ctx = $this->_build_log_dataset($all_punches);

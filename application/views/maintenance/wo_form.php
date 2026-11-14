@@ -444,8 +444,8 @@ function _v($is_edit, $wo, $field, $default = '') {
         <?php if (empty($technicians)): ?>
           <div style="padding:10px 12px;font-size:12px;color:var(--amber);line-height:1.5;">
             No technicians are currently checked in on site and free of unfinished work orders.
-            Have the technician scan the site QR code (or record a supervisor check-in on
-            <a href="<?= base_url('attendance/log'); ?>" style="color:var(--blue);text-decoration:underline;">Punch Log</a>).
+            Have the technician scan the site QR code<?php if (wms_nav_link_allowed('attendance/log', $role_id)): ?> (or record a supervisor check-in in the
+            <a href="<?= base_url('attendance/log'); ?>" style="color:var(--blue);text-decoration:underline;">Check-in Log</a>)<?php else: ?> or ask a supervisor to record the check-in<?php endif; ?>.
           </div>
         <?php else: foreach ($technicians as $tech):
           $checked  = in_array((string)$tech->id, $assigned_ids);

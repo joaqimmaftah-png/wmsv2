@@ -13,7 +13,7 @@
     <?php if ($role_id == 1): ?>
     <a href="<?= base_url('equipment/edit/' . $equipment->id) ?>" class="btn btn-outline-secondary btn-sm">Edit</a>
     <?php endif; ?>
-    <?php if ((int)$role_id !== 4): ?>
+    <?php if (wms_nav_link_allowed('workorders/create', $role_id)): ?>
     <a href="<?= base_url('workorders/create') ?>" class="btn btn-success btn-sm">New WO</a>
     <?php endif; ?>
     <a href="<?= base_url('equipment') ?>" class="btn btn-outline-primary btn-sm">&larr; Back</a>
@@ -157,7 +157,7 @@
     <div class="wms-card">
       <div class="card-head">
         PM Schedules
-        <?php if ((int)$role_id !== 4): ?>
+        <?php if (wms_nav_link_allowed('pm/create', $role_id)): ?>
         <a href="<?= base_url('pm/create') ?>" class="btn btn-sm btn-outline-primary ms-auto" style="font-size:11px;">+ Add PM</a>
         <?php endif; ?>
       </div>

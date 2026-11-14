@@ -604,7 +604,7 @@ try:
     m_txn_html = m_txn_b.decode('utf-8', 'replace')
     assert (
         st_m_txn == 200
-        and 'Stock Transaction Ledger' in m_txn_html
+        and 'Stock Movements' in m_txn_html
         and 'Export CSV' in m_txn_html
         and 'Export Excel' in m_txn_html
         and 'Feb 2026' in m_txn_html

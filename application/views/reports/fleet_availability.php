@@ -104,7 +104,7 @@ $fleet_nav_active = 'dashboard';
   <?php endif; ?>
 
   <section class="fa-panel fa-equipment-panel">
-    <div class="fa-panel-head"><div><h2>Equipment performance</h2><p>Availability, downtime and distinct failures for each reportable asset.</p></div><a class="fa-text-link" href="<?= base_url('reports/downtime_log?week=' . rawurlencode($week_label)) ?>">View downtime log →</a></div>
+    <div class="fa-panel-head"><div><h2>Equipment performance</h2><p>Availability, downtime and distinct failures for each reportable asset.</p></div><a class="fa-text-link" href="<?= base_url('reports/downtime_log?week=' . rawurlencode($week_label)) ?>">View Downtime Register →</a></div>
     <div class="fa-filters">
       <label>Search equipment<input id="fa-search" type="search" placeholder="Asset, model or location" autocomplete="off"></label>
       <label>Group<select id="fa-group"><option value="">All groups</option><?php foreach ($groups as $g): if (empty($g['row_count'])) continue; ?><option><?= $esc(isset($g['label']) ? $g['label'] : $g['code']) ?></option><?php endforeach; ?></select></label>

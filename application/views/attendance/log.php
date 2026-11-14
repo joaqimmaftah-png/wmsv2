@@ -125,9 +125,11 @@ $w_url = function ($overrides = array()) use ($w_base) {
 </style>
 <div class="al-print-banner"><strong>Attendance punch log — <?= date('l, d F Y', strtotime($date)) ?></strong> (printed <?= date('d M Y H:i') ?>)</div>
 
+<?php $attendance_nav_active = 'checkin_log'; include __DIR__ . '/_nav.php'; ?>
+
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <h1 class="ct" style="font-size:16px;">Punch log — <?= date('l, d F Y', strtotime($date)) ?></h1>
+    <h1 class="ct" style="font-size:16px;">Check-in Log — <?= date('l, d F Y', strtotime($date)) ?></h1>
     <div class="cs"><?= count($punches) ?> punch(es) · <?= count($on_site) ?> on site</div>
   </div>
   <form method="get" action="<?= base_url('attendance/log') ?>" class="flex ai-c gap-10">

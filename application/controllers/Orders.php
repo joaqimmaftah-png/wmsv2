@@ -191,7 +191,7 @@ class Orders extends MY_Controller {
     /* ── DASHBOARD / LIST ───────────────────────────────── */
     public function index() {
         $data = $this->_build_orders_dataset(TRUE);
-        $data['page_title'] = 'Spare Parts Orders';
+        $data['page_title'] = 'Purchase Orders';
         $this->render('orders/index', $data);
     }
 

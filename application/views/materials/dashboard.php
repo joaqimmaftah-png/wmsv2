@@ -2,7 +2,7 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 /**
- * Inventory Dashboard (/materials).
+ * Inventory Overview (/materials).
  *
  * Layout follows the workflow, not the field order:
  *   context → KPIs → exceptions → analysis → records.
@@ -204,12 +204,12 @@ $inv_url = function ($params = array(), $endpoint = 'materials/inventory') {
   <!-- ── Page identity ───────────────────────────────────── -->
   <div class="inv-head">
     <div>
-      <h1 class="inv-title">Inventory Dashboard</h1>
+      <h1 class="inv-title">Inventory Overview</h1>
       <div class="inv-subtitle">All-time cumulative · <?= number_format($catalogue_rows) ?> catalogue items · warehouse-wide</div>
     </div>
     <div class="inv-actions">
-      <a href="<?= $h($inv_url(array(), 'materials/inventory')) ?>" class="inv-btn">View Inventory</a>
-      <a href="<?= $h($inv_url(array(), 'materials/transactions')) ?>" class="inv-btn">Transactions</a>
+      <a href="<?= $h($inv_url(array(), 'materials/inventory')) ?>" class="inv-btn">Stock Items</a>
+      <a href="<?= $h($inv_url(array(), 'materials/transactions')) ?>" class="inv-btn">Stock Movements</a>
       <a href="<?= $h($inv_url(array(), 'materials/export_xlsx')) ?>" class="inv-btn">Export Excel</a>
       <a href="<?= $h($inv_url(array(), 'materials/template_xlsx')) ?>" class="inv-btn">Template</a>
       <?php if ($can_write): ?>

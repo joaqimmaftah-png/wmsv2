@@ -58,6 +58,8 @@ foreach ((array)$groups as $g) {
   }
 </style>
 
+<?php $planning_nav_active = 'plan_vs_actual'; include __DIR__ . '/_nav.php'; ?>
+
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
     <h1 class="page-heading" style="font-size:16px;">Plan vs Actual — <?=$h($iso_label)?></h1>

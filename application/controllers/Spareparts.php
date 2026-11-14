@@ -238,7 +238,7 @@ class Spareparts extends MY_Controller {
     /* ── PENDING SPARE PARTS BOARD ─────────────────────── */
     public function index() {
         $data = $this->_build_board_dataset(TRUE);
-        $data['page_title'] = 'Pending Spare Parts';
+        $data['page_title'] = 'Work Order Parts';
         $this->render('spareparts/index', $data);
     }
 

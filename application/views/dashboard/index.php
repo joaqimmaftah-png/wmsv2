@@ -250,35 +250,40 @@ $avail_meta = $availability === null
 <!-- ═══ KPI STRIP ═══ -->
 <div class="dsh-kpis">
 
-  <a class="dsh-kpi-card" href="<?= $h(base_url('equipment')) ?>">
+  <?php $kpi_tag = wms_nav_link_allowed('equipment', $role_id) ? 'a' : 'div'; ?>
+  <<?= $kpi_tag ?> class="dsh-kpi-card"<?php if ($kpi_tag === 'a'): ?> href="<?= $h(base_url('equipment')) ?>"<?php endif; ?>>
     <span class="dsh-kpi-lbl">Availability</span>
     <span class="dsh-kpi-val <?= $avail_status ?>"><?php if ($availability === null): ?>—<?php else: ?><span class="cu" data-to="<?= $availability ?>" data-decimals="1"><?= $availability ?></span><sup>%</sup><?php endif; ?></span>
     <span class="dsh-kpi-meta"><?= $avail_meta ?></span>
-  </a>
+  </<?= $kpi_tag ?>>
 
-  <a class="dsh-kpi-card" href="<?= $h(base_url('workorders')) ?>">
+  <?php $kpi_tag = wms_nav_link_allowed('workorders', $role_id) ? 'a' : 'div'; ?>
+  <<?= $kpi_tag ?> class="dsh-kpi-card"<?php if ($kpi_tag === 'a'): ?> href="<?= $h(base_url('workorders')) ?>"<?php endif; ?>>
     <span class="dsh-kpi-lbl">Open Work Orders</span>
     <span class="dsh-kpi-val"><span class="cu" data-to="<?= $open_wo ?>"><?= $open_wo ?></span></span>
     <span class="dsh-kpi-meta">Active work orders</span>
-  </a>
+  </<?= $kpi_tag ?>>
 
-  <a class="dsh-kpi-card" href="<?= $h(base_url('pm')) ?>">
+  <?php $kpi_tag = wms_nav_link_allowed('pm', $role_id) ? 'a' : 'div'; ?>
+  <<?= $kpi_tag ?> class="dsh-kpi-card"<?php if ($kpi_tag === 'a'): ?> href="<?= $h(base_url('pm')) ?>"<?php endif; ?>>
     <span class="dsh-kpi-lbl">Overdue PM</span>
     <span class="dsh-kpi-val <?= $overdue_pm > 0 ? 'is-crit' : '' ?>"><span class="cu" data-to="<?= $overdue_pm ?>"><?= $overdue_pm ?></span></span>
     <span class="dsh-kpi-meta"><?= $overdue_pm > 0 ? 'Needs attention' : 'On schedule' ?></span>
-  </a>
+  </<?= $kpi_tag ?>>
 
-  <a class="dsh-kpi-card" href="<?= $h(base_url('team')) ?>">
+  <?php $kpi_tag = wms_nav_link_allowed('team', $role_id) ? 'a' : 'div'; ?>
+  <<?= $kpi_tag ?> class="dsh-kpi-card"<?php if ($kpi_tag === 'a'): ?> href="<?= $h(base_url('team')) ?>"<?php endif; ?>>
     <span class="dsh-kpi-lbl">Manpower</span>
     <span class="dsh-kpi-val"><span class="cu" data-to="<?= $manpower ?>"><?= $manpower ?></span><sup>/<?= $total_workers ?></sup></span>
     <span class="dsh-kpi-meta">Present today</span>
-  </a>
+  </<?= $kpi_tag ?>>
 
-  <a class="dsh-kpi-card" href="<?= $h(base_url('equipment')) ?>">
+  <?php $kpi_tag = wms_nav_link_allowed('equipment', $role_id) ? 'a' : 'div'; ?>
+  <<?= $kpi_tag ?> class="dsh-kpi-card"<?php if ($kpi_tag === 'a'): ?> href="<?= $h(base_url('equipment')) ?>"<?php endif; ?>>
     <span class="dsh-kpi-lbl">Machines Down</span>
     <span class="dsh-kpi-val <?= $machines_down > 0 ? 'is-warn' : '' ?>"><span class="cu" data-to="<?= $machines_down ?>"><?= $machines_down ?></span></span>
     <span class="dsh-kpi-meta">Out of service now</span>
-  </a>
+  </<?= $kpi_tag ?>>
 
 </div>
 
@@ -291,7 +296,7 @@ $avail_meta = $availability === null
         <div class="ct">Fleet Availability</div>
         <div class="cs">Last 30 days · target <?= $avail_target ?>%</div>
       </div>
-      <a class="ca" href="<?= $h(base_url('reports/availability_forecast')) ?>">Report →</a>
+      <?php if (wms_nav_link_allowed('reports/availability_forecast', $role_id)): ?><a class="ca" href="<?= $h(base_url('reports/availability_forecast')) ?>">Report →</a><?php endif; ?>
     </div>
     <div class="card-body" style="padding-top:14px;">
       <?php if (!empty($avail_vals) && count(array_filter($avail_vals, function ($v) { return $v !== null; })) > 0): ?>
@@ -313,7 +318,7 @@ $avail_meta = $availability === null
         <div class="ct">Fleet Status</div>
         <div class="cs"><?= $fleet_total ?> machines · <?= $machines_down ?> down</div>
       </div>
-      <a class="ca" href="<?= $h(base_url('equipment')) ?>">Equipment →</a>
+      <?php if (wms_nav_link_allowed('equipment', $role_id)): ?><a class="ca" href="<?= $h(base_url('equipment')) ?>">Equipment →</a><?php endif; ?>
     </div>
     <div class="card-body">
       <div class="dsh-fleet">
@@ -353,7 +358,7 @@ $avail_meta = $availability === null
         <div class="ct">Reliability</div>
         <div class="cs">Last 30 days</div>
       </div>
-      <a class="ca" href="<?= $h(base_url('reports/mttr_mtbf')) ?>">Report →</a>
+      <?php if (wms_nav_link_allowed('reports/mttr_mtbf', $role_id)): ?><a class="ca" href="<?= $h(base_url('reports/mttr_mtbf')) ?>">Report →</a><?php endif; ?>
     </div>
     <div class="card-body">
       <div class="dsh-stats">
@@ -385,13 +390,13 @@ $avail_meta = $availability === null
 // Rank exceptions by severity so the one thing to act on is obvious, then
 // pull the top item out as a highlighted priority.
 $exceptions = array();
-if ($critical_incidents > 0)
+if ($critical_incidents > 0 && wms_nav_link_allowed('workorders', $role_id))
     $exceptions[] = array('label' => 'Critical incidents', 'count' => $critical_incidents, 'sub' => $critical_incidents . ' uncontrolled this month', 'href' => base_url('workorders'), 'act' => 'Review', 'sev' => 'crit');
-if ($overdue_pm > 0)
+if ($overdue_pm > 0 && wms_nav_link_allowed('pm', $role_id))
     $exceptions[] = array('label' => 'Overdue PM', 'count' => $overdue_pm, 'sub' => $overdue_pm . ' maintenance jobs past due', 'href' => base_url('pm'), 'act' => 'Planner', 'sev' => 'warn');
 if (isset($spares_summary['lines']) && (int)$spares_summary['lines'] > 0)
-    $exceptions[] = array('label' => 'Pending spare parts', 'count' => (int)$spares_summary['lines'], 'sub' => (int)$spares_summary['lines'] . ' demand lines · ' . (int)($spares_summary['available_lines'] ?? 0) . ' covered', 'href' => base_url('spareparts'), 'act' => 'Board', 'sev' => 'warn');
-if (!empty($absent_today))
+    $exceptions[] = array('label' => 'Work order parts', 'count' => (int)$spares_summary['lines'], 'sub' => (int)$spares_summary['lines'] . ' demand lines · ' . (int)($spares_summary['available_lines'] ?? 0) . ' covered', 'href' => base_url('spareparts'), 'act' => 'Board', 'sev' => 'warn');
+if (!empty($absent_today) && wms_nav_link_allowed('team', $role_id))
     $exceptions[] = array('label' => 'Absent today', 'count' => count($absent_today), 'sub' => count($absent_today) . ' staff not on site', 'href' => base_url('team'), 'act' => 'Team', 'sev' => 'info');
 $sev_rank = array('crit' => 0, 'warn' => 1, 'info' => 2);
 usort($exceptions, function ($a, $b) use ($sev_rank) { return $sev_rank[$a['sev']] - $sev_rank[$b['sev']]; });
@@ -444,7 +449,7 @@ $top_exception = array_shift($exceptions);
         <div class="ct">Live Work Orders</div>
         <div class="cs">Newest first</div>
       </div>
-      <a class="ca" href="<?= $h(base_url('workorders')) ?>">All →</a>
+      <?php if (wms_nav_link_allowed('workorders', $role_id)): ?><a class="ca" href="<?= $h(base_url('workorders')) ?>">All →</a><?php endif; ?>
     </div>
     <div class="card-body p-0">
       <?php if (!empty($recent_wo)): ?>
@@ -453,7 +458,7 @@ $top_exception = array_shift($exceptions);
           <tbody>
           <?php foreach ($recent_wo as $wo): ?>
             <tr>
-              <td><a href="<?= $h(base_url('workorders/view/' . (int)$wo->id)) ?>" style="color:var(--blue);font-weight:600;text-decoration:none;" class="mono"><?= $h($wo->wo_number) ?></a></td>
+              <td><?php if (wms_nav_link_allowed('workorders', $role_id)): ?><a href="<?= $h(base_url('workorders/view/' . (int)$wo->id)) ?>" style="color:var(--blue);font-weight:600;text-decoration:none;" class="mono"><?= $h($wo->wo_number) ?></a><?php else: ?><span class="mono"><?= $h($wo->wo_number) ?></span><?php endif; ?></td>
               <td><?= $h($wo->registration_no) ?></td>
               <td><span class="badge <?= isset($wo_badge[$wo->status]) ? $wo_badge[$wo->status] : 'b-open' ?>"><?= $h($wo->status) ?></span></td>
               <td class="mono" style="color:var(--t3);"><?= $h(date('d M', strtotime($wo->created_at))) ?></td>
@@ -473,7 +478,7 @@ $top_exception = array_shift($exceptions);
         <div class="ct">Upcoming PM</div>
         <div class="cs">Due within 14 days</div>
       </div>
-      <a class="ca" href="<?= $h(base_url('pm')) ?>">Planner →</a>
+      <?php if (wms_nav_link_allowed('pm', $role_id)): ?><a class="ca" href="<?= $h(base_url('pm')) ?>">Planner →</a><?php endif; ?>
     </div>
     <div class="card-body p-0">
       <?php if (!empty($due_pm)): ?>
@@ -529,7 +534,7 @@ $top_exception = array_shift($exceptions);
         <div class="ct">Work Orders Closed</div>
         <div class="cs">Last 12 months</div>
       </div>
-      <a class="ca" href="<?= $h(base_url('reports/monthly')) ?>">Report →</a>
+      <?php if (wms_nav_link_allowed('reports/monthly', $role_id)): ?><a class="ca" href="<?= $h(base_url('reports/monthly')) ?>">Report →</a><?php endif; ?>
     </div>
     <div class="card-body" style="padding-top:14px;">
       <?php if (!empty($wo_vals)): ?>
@@ -558,7 +563,7 @@ $top_exception = array_shift($exceptions);
         <div class="ct">Attendance</div>
         <div class="cs">Last 14 days · present vs absent</div>
       </div>
-      <a class="ca" href="<?= $h(base_url('team')) ?>">Team →</a>
+      <?php if (wms_nav_link_allowed('team', $role_id)): ?><a class="ca" href="<?= $h(base_url('team')) ?>">Team →</a><?php endif; ?>
     </div>
     <div class="card-body" style="padding-top:14px;">
       <?php if (!empty($att_present)): ?>

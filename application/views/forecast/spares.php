@@ -160,9 +160,11 @@ $inventory_url = function ($row) {
   }
 </style>
 
+<?php $planning_nav_active = 'pm_parts'; include __DIR__ . '/_nav.php'; ?>
+
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <h1 class="page-heading" style="font-size:16px;">PM Spare-Parts Forecast</h1>
+    <h1 class="page-heading" style="font-size:16px;">PM Parts Forecast</h1>
     <div class="cs">Demand from active PM schedules with recorded next due dates in the selected window.</div>
   </div>
   <form method="get" action="<?= $h(base_url('forecast/spares')) ?>" class="flex ai-c gap-10" style="flex-wrap:wrap;">

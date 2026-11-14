@@ -72,6 +72,7 @@ $src_short = array(
 </style>
 
 <div class="tgt-wrap">
+<?php $planning_nav_active = 'availability_targets'; include __DIR__ . '/../forecast/_nav.php'; ?>
 
   <div class="card">
     <div class="ch">

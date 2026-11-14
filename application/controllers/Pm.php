@@ -247,7 +247,7 @@ class Pm extends MY_Controller {
             ->join('equipment e', 'e.id = w.equipment_id', 'left')
             ->where_in('w.status', array('Open', 'In Progress', 'Waiting Parts', 'Waiting Tools'))
             ->order_by('w.created_at', 'DESC')->limit(300)->get()->result();
-        $data['page_title'] = 'PM Planner';
+        $data['page_title'] = 'Preventive Maintenance';
         $this->render('maintenance/pm_planner', $data);
     }
 
