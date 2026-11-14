@@ -119,7 +119,8 @@ async function main() {
       await evalJs(`(() => { try { localStorage.clear(); } catch (e) {} })()`);
       await cdp('Page.reload');
       await settled();
-      await sleep(350); // let the margin-left transition finish before measuring
+      // Measure immediately: dense registers assert table width during load, so
+      // the first viewport sync must already be settled (no 240px→68px animation).
 
       // Laptop widths auto-compact to the rail so dense registers keep the
       // canvas width they were designed for (the /team/report overflow guard).

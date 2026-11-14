@@ -39,6 +39,10 @@ assert.ok(js.includes('matchMedia') && js.includes('760px'), 'drawer behaviour i
 // not silently lose 172px of table width to an always-expanded sidebar.
 assert.ok(js.includes('max-width: 1599px') && js.includes('function defaultCollapsed'), 'laptop widths auto-compact to the rail');
 assert.ok(js.includes('function storedChoice') && js.includes('choice === null ? defaultCollapsed() : choice'), 'an explicit collapse choice overrides the width default');
+// The first sync must be instant: ui_e2e measures dense tables during load, and
+// a 240px→68px margin transition overflows them before the rail settles.
+assert.ok(header.includes('<body class="nav-boot">') && /body\.nav-boot #sidebar,body\.nav-boot #canvas \{ transition:none; \}/.test(header), 'boot geometry is not animated');
+assert.ok(js.includes("classList.remove('nav-boot')") && js.includes('requestAnimationFrame'), 'user-driven motion resumes after the first paint');
 
 // `php -S host:port index.php` routes every request through the front
 // controller. Without this guard the shell JS 404s in CI/local dev and the

@@ -20,7 +20,9 @@ database schema, role IDs, or the authorization boundary.
   designed against that canvas width and an always-expanded sidebar made them
   overflow horizontally at 1440px. Expansion is one explicit click, a stored
   choice always overrides the width default, and mobile is always the labelled
-  drawer.
+  drawer. The first viewport sync is instant (`nav-boot` disables the canvas
+  transition until after first paint), because dense registers measure table
+  width during load and a 240px→68px animation overflows them mid-transition.
 - **Built-in-server asset guard:** `index.php` now returns `false` for existing
   files under `/assets/` when running under `php -S … index.php`, so the shell
   JavaScript is served in local development and CI instead of being routed to a

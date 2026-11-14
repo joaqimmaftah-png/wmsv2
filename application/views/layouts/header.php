@@ -91,6 +91,9 @@ html,body {
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
   overflow:hidden;
 }
+/* The first viewport sync must not animate the canvas: dense registers measure
+   their table width during load, and a 240px→68px transition overflows them. */
+body.nav-boot #sidebar,body.nav-boot #canvas { transition:none; }
 
 /* ─────────────────────────────────────────────────────
    SIDEBAR — explicit, labelled, collapsible navigation
@@ -716,7 +719,7 @@ textarea.form-control { resize:vertical;min-height:80px; }
 .bi-table::before{content:'📊';font-size:11px;}.bi-arrow-left::before{content:'←';}.bi-send::before{content:'→';}
 </style>
 </head>
-<body>
+<body class="nav-boot">
 <a class="skip-link" href="#main-content">Skip to main content</a>
 <div class="orb orb-1"></div>
 <div class="orb orb-2"></div>

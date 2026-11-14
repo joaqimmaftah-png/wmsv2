@@ -144,4 +144,14 @@
     compact.addListener(syncViewport);
   }
   syncViewport();
+  // Keep the first viewport sync instant. Dense registers measure their table
+  // width during load; animating 240px→68px overflows them before the rail settles.
+  // Two frames let the initial geometry paint before user-driven motion is enabled.
+  if (window.requestAnimationFrame) {
+    window.requestAnimationFrame(function () {
+      window.requestAnimationFrame(function () { document.body.classList.remove('nav-boot'); });
+    });
+  } else {
+    document.body.classList.remove('nav-boot');
+  }
 })();
