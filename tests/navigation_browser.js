@@ -105,12 +105,38 @@ async function main() {
     for (const c of cases) {
       const file = path.join(dir, `role-${c.role}.html`);
       assert.ok(fs.existsSync(file), `missing fixture ${file}`);
+      const settled = async () => {
+        for (let i = 0; i < 60; i++) {
+          if (await evalJs(`Boolean(document.getElementById('sidebar')) && document.getElementById('main-content').getAttribute('tabindex') === '-1'`)) return;
+          await sleep(100);
+        }
+        throw new Error(`role ${c.role} shell script did not settle`);
+      };
       await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
       await cdp('Page.navigate', { url: 'file://' + file });
-      for (let i = 0; i < 60; i++) {
-        if (await evalJs(`Boolean(document.getElementById('sidebar')) && document.getElementById('main-content').getAttribute('tabindex') === '-1'`)) break;
-        await sleep(100);
-      }
+      await settled();
+      // Each role starts from a fresh preference, as a first-time visitor would.
+      await evalJs(`(() => { try { localStorage.clear(); } catch (e) {} })()`);
+      await cdp('Page.reload');
+      await settled();
+      await sleep(350); // let the margin-left transition finish before measuring
+
+      // Laptop widths auto-compact to the rail so dense registers keep the
+      // canvas width they were designed for (the /team/report overflow guard).
+      const laptop = await evalJs(`(() => ({
+        collapsed: document.body.classList.contains('nav-collapsed'),
+        margin: getComputedStyle(document.getElementById('canvas')).marginLeft,
+        expanded: document.getElementById('nav-toggle').getAttribute('aria-expanded'),
+      }))()`);
+      assert.equal(laptop.collapsed, true, `role ${c.role} auto-compacts at 1440px`);
+      assert.equal(laptop.margin, '68px', `role ${c.role} keeps the 68px rail canvas at 1440px`);
+      assert.equal(laptop.expanded, 'false', `role ${c.role} compact toggle state`);
+
+      // Wide desktops get the labelled rail by default.
+      await cdp('Emulation.setDeviceMetricsOverride', { width: 1700, height: 900, deviceScaleFactor: 1, mobile: false });
+      await sleep(350);
+      assert.equal(await evalJs(`document.body.classList.contains('nav-collapsed')`), false, `role ${c.role} expands on wide desktop`);
+      assert.equal(await evalJs(`getComputedStyle(document.getElementById('canvas')).marginLeft`), '240px', `role ${c.role} labelled rail canvas`);
 
       const desktop = await evalJs(`(() => {
         const sidebar = document.getElementById('sidebar');

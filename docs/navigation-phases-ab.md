@@ -14,6 +14,13 @@ database schema, role IDs, or the authorization boundary.
   collapse and a labelled mobile drawer with Escape/Tab containment and inert
   canvas. The old hover rail, duplicate sidebar identity block, and duplicate
   account-menu Users/Settings links are gone.
+- **Width-aware default:** the labelled 240px rail is the default on wide
+  desktops (≥1600px). Between 761px and 1599px the shell starts on the 68px icon
+  rail, because the dense registers (attendance, work orders, inventory) were
+  designed against that canvas width and an always-expanded sidebar made them
+  overflow horizontally at 1440px. Expansion is one explicit click, a stored
+  choice always overrides the width default, and mobile is always the labelled
+  drawer.
 - **Page-local suites:** Planning (`forecast/_nav.php`) and Attendance
   (`attendance/_nav.php`) use `shared/_module_nav.php`. Specialist/setup
   functions are no longer promoted as global sidebar leaves.
@@ -55,8 +62,12 @@ Expanded leaf counts are asserted in `tests/run.php` and Chromium:
   (`No active lubricant types found` vs current empty-state wording), reproduced
   on the untouched baseline.
 - Chromium DOM: **5 role trees passed** (forbidden destinations, one current
-  leaf, keyboard disclosure, desktop collapse, mobile drawer labelling/touch
-  targets, Escape/Tab containment, reduced motion).
+  leaf, keyboard disclosure, laptop auto-compact to the 68px canvas, wide-desktop
+  labelled rail, desktop collapse, mobile drawer labelling/touch targets,
+  Escape/Tab containment, reduced motion).
+- GitHub CI on the PR: PHP 8.2 / 8.3 / 8.4 lint + unit suites and both database
+  E2E jobs (MySQL 8.0, MariaDB 10.4), which include the authenticated
+  `tests/ui_e2e.js` browser pass.
 
 Commands:
 

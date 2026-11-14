@@ -9,6 +9,11 @@
   if (!sidebar || !toggle || !canvas) return;
 
   var mobile = window.matchMedia('(max-width: 760px)');
+  // Dense registers (attendance, work orders, inventory) need the full canvas at
+  // laptop widths. Below 1600px the shell therefore starts on the icon rail —
+  // exactly the width those tables were designed for — and the labelled rail is
+  // one explicit click away. An explicit choice always wins and persists.
+  var compact = window.matchMedia('(min-width: 761px) and (max-width: 1599px)');
   var main = document.getElementById('main-content');
   if (main) main.setAttribute('tabindex', '-1');
   var storageKey = 'wms.nav.collapsed';
@@ -23,6 +28,11 @@
     try { window.localStorage.setItem(key, value); } catch (error) { /* Private browsing remains usable. */ }
   }
   function isMobile() { return mobile.matches; }
+  function storedChoice() {
+    var value = read(storageKey, null);
+    return value === null ? null : value === '1';
+  }
+  function defaultCollapsed() { return compact.matches; }
   function setCollapsed(collapsed, persist) {
     document.body.classList.toggle('nav-collapsed', collapsed);
     if (!isMobile()) {
@@ -64,7 +74,8 @@
       document.body.classList.remove('nav-collapsed');
     } else {
       if (document.body.classList.contains('nav-open')) closeDrawer(false);
-      setCollapsed(read(storageKey, '0') === '1', false);
+      var choice = storedChoice();
+      setCollapsed(choice === null ? defaultCollapsed() : choice, false);
     }
   }
 
@@ -125,7 +136,12 @@
     var link = event.target.closest ? event.target.closest('a[href]') : null;
     if (link && isMobile()) closeDrawer(false);
   });
-  if (mobile.addEventListener) mobile.addEventListener('change', syncViewport);
-  else mobile.addListener(syncViewport);
+  if (mobile.addEventListener) {
+    mobile.addEventListener('change', syncViewport);
+    compact.addEventListener('change', syncViewport);
+  } else {
+    mobile.addListener(syncViewport);
+    compact.addListener(syncViewport);
+  }
   syncViewport();
 })();

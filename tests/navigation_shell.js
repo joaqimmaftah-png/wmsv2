@@ -35,6 +35,10 @@ assert.ok(js.includes('wms.nav.collapsed') && js.includes('wms.nav.groups.'), 'c
 assert.ok(js.includes("event.key === 'Escape'") && js.includes("event.key !== 'Tab'"), 'drawer supports Escape and focus containment');
 assert.ok(js.includes("setAttribute('inert', '')"), 'canvas is inert while the drawer is open');
 assert.ok(js.includes('matchMedia') && js.includes('760px'), 'drawer behaviour is viewport-aware');
+// Dense registers were designed against the 68px rail canvas: laptop widths must
+// not silently lose 172px of table width to an always-expanded sidebar.
+assert.ok(js.includes('max-width: 1599px') && js.includes('function defaultCollapsed'), 'laptop widths auto-compact to the rail');
+assert.ok(js.includes('function storedChoice') && js.includes('choice === null ? defaultCollapsed() : choice'), 'an explicit collapse choice overrides the width default');
 
 // Accessibility and motion contracts in the shared stylesheet.
 assert.ok(header.includes('class="skip-link" href="#main-content"'), 'skip link targets main content');
