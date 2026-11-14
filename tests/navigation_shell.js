@@ -22,7 +22,16 @@ assert.ok(controller.includes("$this->load->view('layouts/header',") && !control
 assert.ok(sidebar.includes('wms_nav_tree(') && sidebar.includes('wms_nav_active('), 'sidebar is data-driven');
 assert.ok(!sidebar.includes('function ni_active'), 'legacy active matcher is gone');
 assert.ok(!sidebar.includes('sb-user') && !sidebar.includes('sb-pin'), 'duplicate sidebar identity/pin block is gone');
-assert.ok(!/mouseenter|mouseleave|hover\s*\(/.test(js), 'navigation never depends on hover expansion');
+// Hover-to-expand is an additive pointer enhancement, never the only path:
+// it must exclude touch, and click/keyboard must still work.
+assert.ok(js.includes("sidebar.addEventListener('pointerenter'") && js.includes("sidebar.addEventListener('pointerleave'"), 'rail expands on pointer hover');
+assert.ok(js.includes("event.pointerType === 'touch'"), 'hover expansion excludes touch pointers');
+assert.ok(js.includes('nav-hover-expanded'), 'hover expansion is a distinct overlay state');
+assert.ok(js.includes('hoverGroupSnapshot') && js.includes('group.open = true'), 'hover opens every group like the old flat rail');
+assert.ok(js.includes('if (hoverGroupSnapshot) return;'), 'hover-open state is never persisted');
+assert.ok(js.includes('restoreHoverGroups'), 'leaving the rail restores prior group open-states');
+assert.ok(js.includes('toggle.addEventListener') && js.includes("event.key === 'ArrowDown'"), 'click and keyboard paths remain');
+assert.ok(!/cv\.style\.marginLeft|canvas\.style\.marginLeft/.test(js), 'hover overlays the rail instead of pushing the canvas');
 
 // Explicit disclosures and a labelled mobile drawer.
 assert.ok(sidebar.includes('<details class="nav-group') && sidebar.includes('<summary class="nav-group-toggle"'), 'groups use native disclosures');
@@ -59,6 +68,10 @@ assert.ok(/@media \(max-width:760px\)/.test(header) && /body\.nav-open #sidebar/
 assert.ok(/@media \(prefers-reduced-motion:reduce\)/.test(header) && /#sidebar,#canvas/.test(header), 'reduced motion disables shell transitions');
 assert.ok(/@media print/.test(header) && /#sidebar/.test(header), 'print hides the shell');
 assert.ok(header.includes('.module-nav a[aria-current="page"]'), 'page-local navigation identifies its current leaf');
+// Hover overlay reveals labels/panels but must not move the canvas margin.
+assert.ok(/body\.nav-hover-expanded #sidebar \{ width:var\(--sb-x\)/.test(header), 'hover expands the rail to full width');
+assert.ok(header.includes('body.nav-hover-expanded .nav-group-panel { display:flex; }'), 'hover reveals group panels');
+assert.ok(!/body\.nav-hover-expanded #canvas/.test(header), 'hover never shifts the canvas');
 
 // Page-local suites replace specialist global entries.
 assert.ok(moduleNav.includes('wms_nav_link_allowed('), 'module links are presentation-filtered');

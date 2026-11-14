@@ -163,6 +163,17 @@ body.nav-collapsed .ni,body.nav-collapsed .nav-group-toggle { justify-content:ce
 }
 body.nav-collapsed .ni:hover .ni-tip,body.nav-collapsed .ni:focus-visible .ni-tip,
 body.nav-collapsed .nav-group-toggle:hover .ni-tip,body.nav-collapsed .nav-group-toggle:focus-visible .ni-tip { opacity:1; }
+/* Hover-to-expand: the rail overlays the page instead of pushing the canvas, so
+   dense registers never reflow. JS adds this class only for non-touch pointer hover. */
+body.nav-hover-expanded #sidebar { width:var(--sb-x);box-shadow:var(--shadow-float); }
+body.nav-hover-expanded .sb-logo-text { display:block; }
+body.nav-hover-expanded .ni-label,body.nav-hover-expanded .nav-group-label { display:block; }
+body.nav-hover-expanded .nav-group-chevron { display:flex; }
+body.nav-hover-expanded .nav-group-panel { display:flex; }
+body.nav-hover-expanded .ni,body.nav-hover-expanded .nav-group-toggle { justify-content:flex-start;padding:8px 10px; }
+body.nav-hover-expanded .nav-group-panel .ni { padding-left:14px; }
+body.nav-hover-expanded .nav-badge { position:static;min-width:18px;height:18px;font-size:10px;padding:0 5px; }
+body.nav-hover-expanded .ni-tip { display:none; }
 #sidebar a:focus-visible,#sidebar button:focus-visible,#sidebar summary:focus-visible { outline:2px solid var(--blue);outline-offset:-2px; }
 .nav-close { display:none;position:absolute;top:12px;right:10px;width:44px;height:44px;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;color:var(--t2);cursor:pointer; }
 .nav-close svg { width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8; }

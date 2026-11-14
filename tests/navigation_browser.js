@@ -133,6 +133,50 @@ async function main() {
       assert.equal(laptop.margin, '68px', `role ${c.role} keeps the 68px rail canvas at 1440px`);
       assert.equal(laptop.expanded, 'false', `role ${c.role} compact toggle state`);
 
+      // Hover-to-expand: moving the pointer onto the collapsed rail reveals the
+      // whole tree as an overlay (canvas margin must NOT move), opening every group
+      // like the old flat rail. Leaving restores the rail and the group states,
+      // and nothing about the hover is persisted.
+      const moveMouse = (x, y) => cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, buttons: 0 });
+      const groupState = `(() => {
+        var gs = [...document.querySelectorAll('#sidebar [data-nav-group]')];
+        return { total: gs.length, open: gs.filter(g => g.open).length,
+          visiblePanels: gs.filter(g => { var a = g.querySelector('.nav-group-panel a'); return a && a.checkVisibility(); }).length };
+      })()`;
+      const storedGroupsExpr = `(() => { try { return localStorage.getItem('wms.nav.groups.' + (document.getElementById('sidebar').getAttribute('data-role') || 'user')); } catch (e) { return 'err'; } })()`;
+      const before = await evalJs(groupState);
+      const beforeStored = await evalJs(storedGroupsExpr);
+      await moveMouse(900, 300);
+      await moveMouse(30, 300);
+      await sleep(300); // let the width transition finish
+      const hovered = await evalJs(`(() => ({
+        hover: document.body.classList.contains('nav-hover-expanded'),
+        width: getComputedStyle(document.getElementById('sidebar')).width,
+        margin: getComputedStyle(document.getElementById('canvas')).marginLeft,
+        label: getComputedStyle(document.querySelector('#sidebar .ni-label')).display,
+        stored: (() => { try { return localStorage.getItem('wms.nav.collapsed'); } catch (e) { return 'err'; } })(),
+        groups: ${groupState},
+      }))()`);
+      assert.equal(hovered.hover, true, `role ${c.role} hover expands the rail`);
+      assert.equal(hovered.width, '240px', `role ${c.role} hover rail is full width`);
+      assert.equal(hovered.margin, '68px', `role ${c.role} hover overlays without moving the canvas`);
+      assert.notEqual(hovered.label, 'none', `role ${c.role} hover reveals labels`);
+      assert.equal(hovered.stored, null, `role ${c.role} hover does not persist a rail preference`);
+      assert.equal(hovered.groups.open, hovered.groups.total, `role ${c.role} hover opens every group`);
+      assert.equal(hovered.groups.visiblePanels, hovered.groups.total, `role ${c.role} hover reveals every panel`);
+      await moveMouse(900, 300);
+      await sleep(350); // include the next-frame snapshot drop
+      const left = await evalJs(`(() => ({
+        hover: document.body.classList.contains('nav-hover-expanded'),
+        width: getComputedStyle(document.getElementById('sidebar')).width,
+        groups: ${groupState},
+        storedGroups: ${storedGroupsExpr},
+      }))()`);
+      assert.equal(left.hover, false, `role ${c.role} leaving the rail clears hover`);
+      assert.equal(left.width, '68px', `role ${c.role} rail returns to compact width`);
+      assert.equal(left.groups.open, before.open, `role ${c.role} leaving restores prior group open-states`);
+      assert.equal(left.storedGroups, beforeStored, `role ${c.role} hover never changes persisted group state`);
+
       // Wide desktops get the labelled rail by default.
       await cdp('Emulation.setDeviceMetricsOverride', { width: 1700, height: 900, deviceScaleFactor: 1, mobile: false });
       await sleep(350);

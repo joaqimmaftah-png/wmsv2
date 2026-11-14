@@ -1,4 +1,5 @@
-/* Shared navigation shell. No hover-only expansion; native details work without JS. */
+/* Shared navigation shell. Hover expands the rail as a pointer enhancement;
+   click/keyboard remain the primary controls and native details work without JS. */
 (function () {
   'use strict';
   var sidebar = document.getElementById('sidebar');
@@ -14,6 +15,15 @@
   // exactly the width those tables were designed for — and the labelled rail is
   // one explicit click away. An explicit choice always wins and persists.
   var compact = window.matchMedia('(min-width: 761px) and (max-width: 1599px)');
+  // Hover-to-expand is a pointer enhancement only. We gate on the event's own
+  // pointerType (mouse/trackpad/pen hover) rather than a (hover:hover) media
+  // query, because the media query reports the *primary* input and misfires on
+  // touchscreen laptops. Touch never expands the rail here — it keeps the drawer.
+  var hoverExpanded = false;
+  // Open-state of every group captured the instant before hover opened them all.
+  // While it is non-null, saveGroups() ignores toggle events so the temporary
+  // hover-open state is never written to storage.
+  var hoverGroupSnapshot = null;
   var main = document.getElementById('main-content');
   if (main) main.setAttribute('tabindex', '-1');
   var storageKey = 'wms.nav.collapsed';
@@ -42,9 +52,46 @@
     groups.forEach(syncGroup);
     if (persist) write(storageKey, collapsed ? '1' : '0');
   }
+  function railVisible() {
+    return isMobile() || !document.body.classList.contains('nav-collapsed') || document.body.classList.contains('nav-hover-expanded');
+  }
   function syncGroup(group) {
     var summary = group.querySelector('summary');
-    if (summary) summary.setAttribute('aria-expanded', (group.open && (!document.body.classList.contains('nav-collapsed') || isMobile())) ? 'true' : 'false');
+    if (summary) summary.setAttribute('aria-expanded', (group.open && railVisible()) ? 'true' : 'false');
+  }
+  // Hover expands the collapsed rail as a temporary overlay and opens every group
+  // so the whole tree is visible at once — exactly like the pre-redesign flat rail.
+  // It never moves the canvas (dense tables never reflow) and never saves a
+  // preference. Leaving the rail restores the persisted/default geometry and the
+  // group open-states captured before hover.
+  function clearHover() {
+    hoverExpanded = false;
+    document.body.classList.remove('nav-hover-expanded');
+  }
+  function restoreHoverGroups() {
+    if (!hoverGroupSnapshot) return;
+    groups.forEach(function (group, i) { group.open = hoverGroupSnapshot[i]; });
+  }
+  function expandOnHover(event) {
+    if (event && event.pointerType === 'touch') return;
+    if (isMobile() || hoverExpanded) return;
+    if (!document.body.classList.contains('nav-collapsed')) return;
+    hoverGroupSnapshot = groups.map(function (group) { return group.open; });
+    hoverExpanded = true;
+    document.body.classList.add('nav-hover-expanded');
+    groups.forEach(function (group) { group.open = true; });
+    groups.forEach(syncGroup);
+  }
+  function collapseOnLeave(event) {
+    if (event && event.pointerType === 'touch') return;
+    if (!hoverExpanded) return;
+    restoreHoverGroups();
+    clearHover();
+    groups.forEach(syncGroup);
+    // The restore fires async toggle events; drop the snapshot next frame so those
+    // are swallowed too and a passive hover never writes storage.
+    if (window.requestAnimationFrame) window.requestAnimationFrame(function () { hoverGroupSnapshot = null; });
+    else hoverGroupSnapshot = null;
   }
   function openDrawer() {
     document.body.classList.remove('nav-collapsed');
@@ -69,6 +116,9 @@
     if (restoreFocus) toggle.focus();
   }
   function syncViewport() {
+    restoreHoverGroups();
+    hoverGroupSnapshot = null;
+    clearHover();
     if (isMobile()) {
       closeDrawer(false);
       document.body.classList.remove('nav-collapsed');
@@ -90,8 +140,13 @@
     group.addEventListener('toggle', function () { syncGroup(group); });
     var summary = group.querySelector('summary');
     summary.addEventListener('click', function (event) {
-      if (!isMobile() && document.body.classList.contains('nav-collapsed')) {
+      if (!isMobile() && (document.body.classList.contains('nav-collapsed') || hoverExpanded)) {
         event.preventDefault();
+        // An explicit click pins the rail open so it survives mouse-leave. Restore
+        // the other groups to their pre-hover state, then persist this outcome.
+        restoreHoverGroups();
+        hoverGroupSnapshot = null;
+        clearHover();
         setCollapsed(false, true);
         group.open = true;
         syncGroup(group);
@@ -105,6 +160,7 @@
     });
   });
   function saveGroups() {
+    if (hoverGroupSnapshot) return; // never persist the temporary hover-open state
     var state = {};
     groups.forEach(function (group) { state[group.getAttribute('data-nav-group')] = group.open; });
     write(groupKey, JSON.stringify(state));
@@ -115,9 +171,24 @@
     if (isMobile()) {
       if (document.body.classList.contains('nav-open')) closeDrawer(true); else openDrawer();
     } else {
-      setCollapsed(!document.body.classList.contains('nav-collapsed'), true);
+      // While hover-expanded the rail is visually open; an explicit click pins
+      // that open state rather than collapsing it out from under the cursor.
+      var collapse = !hoverExpanded && !document.body.classList.contains('nav-collapsed');
+      restoreHoverGroups();
+      hoverGroupSnapshot = null;
+      clearHover();
+      setCollapsed(collapse, true);
     }
   });
+  if (window.PointerEvent) {
+    sidebar.addEventListener('pointerenter', expandOnHover);
+    sidebar.addEventListener('pointerleave', collapseOnLeave);
+  } else {
+    // Legacy fallback: no Pointer Events, so no touch pointerType to filter —
+    // mobile widths are already excluded by isMobile() inside the handlers.
+    sidebar.addEventListener('mouseenter', expandOnHover);
+    sidebar.addEventListener('mouseleave', collapseOnLeave);
+  }
   if (close) close.addEventListener('click', function () { closeDrawer(true); });
   if (backdrop) backdrop.addEventListener('click', function () { closeDrawer(true); });
   document.addEventListener('keydown', function (event) {
