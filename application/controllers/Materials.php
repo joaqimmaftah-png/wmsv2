@@ -427,7 +427,7 @@ class Materials extends MY_Controller {
             'recent'         => $recent,
             'catalogue_rows' => count($rows),
             'available'      => (bool)$ov['available'],
-            'page_title'     => 'Inventory Dashboard',
+            'page_title'     => 'Inventory Overview',
             'can_write'      => $this->can_write(),
             'role_id'        => $this->role_id,
         );
@@ -439,7 +439,7 @@ class Materials extends MY_Controller {
         $data = $this->_build_inventory_dataset(TRUE);
         $data['import_result']  = $this->_load_import_summary();
         $data['import_history'] = $this->Materials_model->get_import_history(3);
-        $data['page_title']     = 'Inventory';
+        $data['page_title']     = 'Stock Items';
         $this->render('materials/inventory', $data);
     }
 
@@ -860,7 +860,7 @@ class Materials extends MY_Controller {
 
     public function transactions() {
         $data = $this->_build_transactions_dataset(TRUE);
-        $data['page_title'] = 'Stock Transaction Ledger';
+        $data['page_title'] = 'Stock Movements';
         $this->render('materials/transactions', $data);
     }
 

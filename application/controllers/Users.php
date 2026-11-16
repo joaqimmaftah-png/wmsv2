@@ -108,7 +108,7 @@ class Users extends MY_Controller {
         $data['showing_from']  = $showing_from;
         $data['showing_to']    = $showing_to;
         $data['current_user_id'] = (int)$this->user_id;
-        $data['page_title']    = 'User Access Management';
+        $data['page_title']    = 'User Accounts';
         $this->render('users/index', $data);
     }
 

@@ -184,7 +184,7 @@ $show_to   = min($offset + $per_page, $total_filtered);
   <!-- 1. Header & Primary Toolbar -->
   <div class="pm-head">
     <div class="pm-title-grp">
-      <h1 class="pm-title">PM Planner</h1>
+      <h1 class="pm-title">Preventive Maintenance</h1>
       <span class="pm-sub"><?= number_format($total_filtered) ?> matching of <?= number_format($kpi['active_total']) ?> active schedules</span>
     </div>
     <div class="pm-actions">
@@ -386,11 +386,11 @@ $show_to   = min($offset + $per_page, $total_filtered);
         <div class="d-flex justify-content-between align-items-center pt-1" onclick="event.stopPropagation()">
           <div>
             <?php if ((int)$pm->shortage_count > 0): ?>
-              <a href="<?= base_url('forecast/parts/' . (int)$pm->id) ?>" class="pm-pill pm-pill-short"><?= (int)$pm->shortage_count ?> Short</a>
+              <?php if (wms_nav_link_allowed('forecast/parts', $role_id)): ?><a href="<?= base_url('forecast/parts/' . (int)$pm->id) ?>" class="pm-pill pm-pill-short"><?= (int)$pm->shortage_count ?> Short</a><?php else: ?><span class="pm-pill pm-pill-short"><?= (int)$pm->shortage_count ?> Short</span><?php endif; ?>
             <?php elseif ((int)$pm->parts_count > 0): ?>
-              <a href="<?= base_url('forecast/parts/' . (int)$pm->id) ?>" class="pm-pill pm-pill-ok"><?= (int)$pm->parts_count ?> Parts Ready</a>
+              <?php if (wms_nav_link_allowed('forecast/parts', $role_id)): ?><a href="<?= base_url('forecast/parts/' . (int)$pm->id) ?>" class="pm-pill pm-pill-ok"><?= (int)$pm->parts_count ?> Parts Ready</a><?php else: ?><span class="pm-pill pm-pill-ok"><?= (int)$pm->parts_count ?> Parts Ready</span><?php endif; ?>
             <?php else: ?>
-              <a href="<?= base_url('forecast/parts/' . (int)$pm->id) ?>" class="pm-pill pm-pill-muted">No BOM</a>
+              <?php if (wms_nav_link_allowed('forecast/parts', $role_id)): ?><a href="<?= base_url('forecast/parts/' . (int)$pm->id) ?>" class="pm-pill pm-pill-muted">No BOM</a><?php else: ?><span class="pm-pill pm-pill-muted">No BOM</span><?php endif; ?>
             <?php endif; ?>
           </div>
           <div class="pm-row-acts">
@@ -496,11 +496,11 @@ $show_to   = min($offset + $per_page, $total_filtered);
             </td>
             <td style="white-space:nowrap;" onclick="event.stopPropagation()">
               <?php if ((int)$pm->shortage_count > 0): ?>
-                <a href="<?= base_url('forecast/parts/' . (int)$pm->id) ?>" class="pm-pill pm-pill-short"><?= (int)$pm->shortage_count ?> Short</a>
+                <?php if (wms_nav_link_allowed('forecast/parts', $role_id)): ?><a href="<?= base_url('forecast/parts/' . (int)$pm->id) ?>" class="pm-pill pm-pill-short"><?= (int)$pm->shortage_count ?> Short</a><?php else: ?><span class="pm-pill pm-pill-short"><?= (int)$pm->shortage_count ?> Short</span><?php endif; ?>
               <?php elseif ((int)$pm->parts_count > 0): ?>
-                <a href="<?= base_url('forecast/parts/' . (int)$pm->id) ?>" class="pm-pill pm-pill-ok"><?= (int)$pm->parts_count ?> Ready</a>
+                <?php if (wms_nav_link_allowed('forecast/parts', $role_id)): ?><a href="<?= base_url('forecast/parts/' . (int)$pm->id) ?>" class="pm-pill pm-pill-ok"><?= (int)$pm->parts_count ?> Ready</a><?php else: ?><span class="pm-pill pm-pill-ok"><?= (int)$pm->parts_count ?> Ready</span><?php endif; ?>
               <?php else: ?>
-                <a href="<?= base_url('forecast/parts/' . (int)$pm->id) ?>" class="pm-pill pm-pill-muted">Set BOM</a>
+                <?php if (wms_nav_link_allowed('forecast/parts', $role_id)): ?><a href="<?= base_url('forecast/parts/' . (int)$pm->id) ?>" class="pm-pill pm-pill-muted">Set BOM</a><?php else: ?><span class="pm-pill pm-pill-muted">Set BOM</span><?php endif; ?>
               <?php endif; ?>
             </td>
             <td style="white-space:nowrap;">

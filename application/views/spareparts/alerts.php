@@ -56,7 +56,7 @@ $cur_status = isset($filter['status']) && $filter['status'] !== '' ? $filter['st
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-        <a href="<?= base_url('workorders/view/'.$al->work_order_id) ?>" class="btn btn-ghost btn-sm mono"><?= htmlspecialchars((string)($al->wo_number ?: 'WO')) ?></a>
+        <?php if (wms_nav_link_allowed('workorders', $role_id)): ?><a href="<?= base_url('workorders/view/'.$al->work_order_id) ?>" class="btn btn-ghost btn-sm mono"><?= htmlspecialchars((string)($al->wo_number ?: 'WO')) ?></a><?php else: ?><span class="mono"><?= htmlspecialchars((string)($al->wo_number ?: 'WO')) ?></span><?php endif; ?>
         <?php if ($al->status === 'New'): ?>
         <?= form_open('spareparts/mark_read/'.$al->id, array('style' => 'display:inline;margin:0;')) ?>
           <button type="submit" class="btn btn-primary btn-sm">Mark read</button>

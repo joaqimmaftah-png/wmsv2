@@ -11,7 +11,14 @@ $h = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 $is_supervisor = (isset($role_id) && (int)$role_id === 1);
 $is_manager    = (isset($role_id) && (int)$role_id === 4);
 $can_punch     = !$is_manager;   // Manager is view-only (MY_Controller guard)
+$personal_scope = in_array((int)(isset($role_id) ? $role_id : 0), array(2, 3), TRUE);
+if ($personal_scope && isset($on_site) && is_array($on_site)) {
+    $my_uid = (int)$this->session->userdata('user_id');
+    $on_site = isset($on_site[$my_uid]) ? array($my_uid => $on_site[$my_uid]) : array();
+}
 ?>
+
+<?php $attendance_nav_active = 'on_site'; include __DIR__ . '/_nav.php'; ?>
 
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
@@ -27,12 +34,12 @@ $can_punch     = !$is_manager;   // Manager is view-only (MY_Controller guard)
       <a href="<?= base_url('attendance/sites') ?>" class="btn btn-ghost btn-sm">Sites &amp; policy</a>
     <?php endif; ?>
     <?php if ($is_supervisor || $is_manager): ?>
-      <a href="<?= base_url('attendance/log') ?>" class="btn btn-ghost btn-sm">Punch log</a>
+      <a href="<?= base_url('attendance/log') ?>" class="btn btn-ghost btn-sm">Check-in Log</a>
       <a href="<?= base_url('team/report') ?>" class="btn btn-ghost btn-sm">AML Timesheets</a>
     <?php else: ?>
-      <a href="<?= base_url('team/view/' . (int)$this->session->userdata('user_id')) ?>" class="btn btn-ghost btn-sm">My AML Timesheet</a>
+      <a href="<?= base_url('team/report') ?>" class="btn btn-ghost btn-sm">My Attendance &amp; Timesheet</a>
     <?php endif; ?>
-    <a href="<?= base_url('team/attendance') ?>" class="btn btn-ghost btn-sm">Daily attendance →</a>
+    <?php if ($is_supervisor): ?><a href="<?= base_url('team/attendance') ?>" class="btn btn-ghost btn-sm">Daily attendance →</a><?php endif; ?>
   </div>
 </div>
 
@@ -99,13 +106,13 @@ $can_punch     = !$is_manager;   // Manager is view-only (MY_Controller guard)
     <!-- on site now -->
     <div class="card">
       <div class="ch" style="padding:14px 18px 8px;">
-        <div><div class="ct">On site now</div>
-          <div class="cs">Latest punch of the day is a check-in</div></div>
+        <div><div class="ct"><?= $personal_scope ? 'My on-site status' : 'On site now' ?></div>
+          <div class="cs"><?= $personal_scope ? 'Your latest accepted punch today' : 'Latest punch of the day is a check-in' ?></div></div>
       </div>
       <div style="padding:6px 18px 16px;">
         <?php if (empty($on_site)): ?>
           <p style="font-size:12.5px;color:var(--t3);padding:10px 0;">
-            Nobody is checked in at the moment. A technician must check in before being assigned a new work order<?= !empty($gate_enabled) ? ' (the assignment gate is on)' : '' ?>.
+            <?= $personal_scope ? 'You are not checked in at the moment.' : 'Nobody is checked in at the moment.' ?><?= !$personal_scope ? ' A technician must check in before being assigned a new work order' : '' ?><?= !empty($gate_enabled) ? ' (the assignment gate is on)' : '' ?>.
           </p>
         <?php else: ?>
           <table class="tbl">

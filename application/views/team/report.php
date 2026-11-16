@@ -683,13 +683,15 @@ $clean_reset_url = site_url('team/report') . '?month=' . rawurlencode($period['m
   </p>
 </div>
 
+<?php $attendance_nav_active = in_array((int)$role_id, array(2,3), TRUE) ? 'my_attendance' : 'attendance_report'; include __DIR__ . '/../attendance/_nav.php'; ?>
+
 <!-- Page Header -->
 <div class="ts-head no-print">
   <div>
     <nav class="ts-crumb" aria-label="Breadcrumb">
-      <a href="<?= site_url('team') ?>">Team</a>
+      <?php if ($can_batch): ?><a href="<?= site_url('team') ?>">Workforce</a><?php else: ?><a href="<?= site_url('dashboard') ?>">Dashboard</a><?php endif; ?>
       <span aria-hidden="true">/</span>
-      <span>Attendance &amp; Timesheets</span>
+      <span><?= $can_batch ? 'Attendance &amp; Timesheets' : 'My Attendance &amp; Timesheet' ?></span>
     </nav>
     <div class="ts-head-title">
       <h1><?= htmlspecialchars($page_title, ENT_QUOTES, 'UTF-8') ?></h1>
@@ -844,6 +846,7 @@ $clean_reset_url = site_url('team/report') . '?month=' . rawurlencode($period['m
       </div>
     </div>
 
+    <?php if ($can_batch): ?>
     <div class="ts-field">
       <label for="tsSite">Site</label>
       <select name="site" id="tsSite" class="ts-select ts-autosubmit">
@@ -857,6 +860,7 @@ $clean_reset_url = site_url('team/report') . '?month=' . rawurlencode($period['m
         <?php endforeach; ?>
       </select>
     </div>
+    <?php endif; ?>
 
     <?php if ($can_batch): ?>
       <div class="ts-field">

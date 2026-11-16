@@ -96,7 +96,7 @@ $monthHasData = array_filter($months, fn($m) => !empty($m['pm']));
 <!-- Month-by-month PM tables -->
 <?php if(empty($monthHasData)): ?>
 <div class="card" style="padding:52px;text-align:center;color:var(--t3);">
-  No PM schedules found for <?= $selYear ?>. Set up PM schedules in the PM Planner module.
+  No PM schedules found for <?= $selYear ?>. Set up PM schedules in the Preventive Maintenance module.
 </div>
 <?php else: ?>
 

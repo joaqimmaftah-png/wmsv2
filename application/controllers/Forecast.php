@@ -458,7 +458,7 @@ class Forecast extends MY_Controller {
             'tables_ready' => $tables_ready,
             'base_label'   => $this->Forecast_model->iso_label($base),
             'week_input'  => $this->input->get('week'),
-            'page_title'  => 'Rolling Maintenance Plan — 3 weeks from ' . $this->Forecast_model->iso_label($base),
+            'page_title'  => '3-Week Plan — 3 weeks from ' . $this->Forecast_model->iso_label($base),
         ));
     }
 
@@ -664,7 +664,7 @@ class Forecast extends MY_Controller {
         $data['horizon']    = $horizon;
         $data['week_input'] = $this->input->get('week');
         $data['iso_label']  = $this->Forecast_model->iso_label($week_start);
-        $data['page_title'] = 'PM Spare-Parts Forecast — ' . $horizon . ' weeks from ' . $data['iso_label'];
+        $data['page_title'] = 'PM Parts Forecast — ' . $horizon . ' weeks from ' . $data['iso_label'];
         $this->render('forecast/spares', $data);
     }
 
@@ -725,7 +725,7 @@ class Forecast extends MY_Controller {
             'iso_label'            => $this->Forecast_model->iso_label($week_start),
             'week_input'           => $this->input->get('week'),
             'can_edit_settings'    => $this->is_supervisor(),
-            'page_title'           => 'Planned Allowances — ' . $this->Forecast_model->iso_label($week_start),
+            'page_title'           => 'Planning Allowances — ' . $this->Forecast_model->iso_label($week_start),
         ));
     }
 }

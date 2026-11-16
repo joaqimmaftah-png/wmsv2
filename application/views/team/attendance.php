@@ -1,3 +1,5 @@
+<?php $attendance_nav_active = 'daily_attendance'; include __DIR__ . '/../attendance/_nav.php'; ?>
+
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <form method="get" class="flex ai-c gap-10">
     <input type="date" name="date" class="form-control" style="width:auto;" value="<?= $date ?>" max="<?= date('Y-m-d') ?>">
@@ -6,7 +8,7 @@
   </form>
   <div class="flex ai-c gap-10">
     <?php if (!empty($punching)): ?>
-      <a href="<?= base_url('attendance/log?date='.rawurlencode((string)$date)) ?>" class="btn btn-ghost btn-sm">Punch log →</a>
+      <a href="<?= base_url('attendance/log?date='.rawurlencode((string)$date)) ?>" class="btn btn-ghost btn-sm">Check-in Log →</a>
     <?php endif; ?>
     <a href="<?= base_url('team/report?month=' . rawurlencode(substr((string)$date, 0, 7))) ?>" class="btn btn-primary btn-sm">AML Timesheets &amp; Report →</a>
   </div>

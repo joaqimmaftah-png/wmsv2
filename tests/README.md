@@ -104,6 +104,30 @@ and filtered-queue destinations, dialog semantics, keyboard behavior and the
 inventory drawer deep-link. Authenticated database and browser/assistive-
 technology checks remain necessary.
 
+## Navigation shell checks (Node + Chromium)
+
+```bash
+node tests/navigation_shell.js
+CHROME_PATH=/path/to/chrome node tests/navigation_browser.js
+```
+
+`navigation_shell.js` is a dependency-free source regression for the canonical
+role tree, explicit disclosures, mobile drawer, focus/reduced-motion/print
+contracts, page-local Planning/Attendance suites, canonical labels, report
+library consolidation and role-filtered contextual links. The PHP runner also
+checks the real helper against `MY_Controller` policy constants (role leaf
+counts, longest-prefix active leaf, Manager write/read exceptions and
+self-service actions).
+
+`navigation_browser.js` renders the real shell through
+`tests/navigation_fixture.php` (no database) and drives Chromium over the
+built-in WebSocket/CDP client. It checks all five role trees, forbidden
+destinations, exactly one current leaf, keyboard disclosure, desktop collapse,
+mobile drawer labelling/touch targets, Escape/Tab containment and reduced
+motion. Without Chrome/PHP it skips; set `WMS_NAV_BROWSER_REQUIRED=1` to make
+that a failure. Pre-rendered fixtures can be supplied with
+`WMS_NAV_FIXTURE_DIR=/path/to/fixtures` (`role-1.html` … `role-5.html`).
+
 ## Table UX regression checks (Node)
 
 ```bash

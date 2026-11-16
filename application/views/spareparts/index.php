@@ -340,7 +340,7 @@ if ($g('wo_status') !== '') $chips[] = array('WO State: ' . $g('wo_status'), arr
   <!-- Page Header & RBAC Action Bar -->
   <div class="sp-head">
     <div>
-      <h1 class="sp-title">Pending Spare Parts &amp; Demand Board</h1>
+      <h1 class="sp-title">Work Order Parts</h1>
       <div class="sp-subtitle">
         Live work-order spare part demand, stock reservations, direct workshop hand-out &amp; inbound PO coverage
       </div>
@@ -394,10 +394,10 @@ if ($g('wo_status') !== '') $chips[] = array('WO State: ' . $g('wo_status'), arr
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="font-size:12.5px;font-weight:700;color:#15803D;">✓ Ready to Proceed Now:</span>
         <?php foreach ($ready_wos as $rw): ?>
-          <a class="sp-badge sp-badge-ok" style="text-decoration:none;font-size:11.5px;padding:4px 9px;"
+          <?php if (wms_nav_link_allowed('workorders', $role_id)): ?><a class="sp-badge sp-badge-ok" style="text-decoration:none;font-size:11.5px;padding:4px 9px;"
              href="<?= $h(base_url('workorders/view/' . (int)$rw['work_order_id'])) ?>">
             <?= $h($rw['wo_number']) ?> · <?= $h($rw['registration_no'] ?: 'Fleet') ?> · <?= (int)$rw['parts'] ?> part(s)
-          </a>
+          </a><?php else: ?><span class="sp-badge sp-badge-ok" style="font-size:11.5px;padding:4px 9px;"><?= $h($rw['wo_number']) ?> · <?= $h($rw['registration_no'] ?: 'Fleet') ?> · <?= (int)$rw['parts'] ?> part(s)</span><?php endif; ?>
         <?php endforeach; ?>
       </div>
     </div>
@@ -588,9 +588,9 @@ if ($g('wo_status') !== '') $chips[] = array('WO State: ' . $g('wo_status'), arr
                          aria-label="Select demand line <?= $h($l->wo_number . ' ' . $l->part_name) ?>">
                 </td>
                 <td>
-                  <a class="sp-mono" style="font-weight:700;color:#1D4ED8;" href="<?= $h(base_url('workorders/view/' . (int)$l->work_order_id)) ?>">
+                  <?php if (wms_nav_link_allowed('workorders', $role_id)): ?><a class="sp-mono" style="font-weight:700;color:#1D4ED8;" href="<?= $h(base_url('workorders/view/' . (int)$l->work_order_id)) ?>">
                     <?= $h($l->wo_number) ?>
-                  </a>
+                  </a><?php else: ?><span class="sp-mono"><?= $h($l->wo_number) ?></span><?php endif; ?>
                   <div class="sp-cell-sub"><?= $h($l->priority) ?> · <?= $h($l->wo_status) ?></div>
                 </td>
                 <td>
@@ -683,7 +683,7 @@ if ($g('wo_status') !== '') $chips[] = array('WO State: ' . $g('wo_status'), arr
             <?php foreach ($grp['lines'] as $gl): ?>
               <div style="padding:9px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;border-top:1px solid #F1F5F9;">
                 <div>
-                  <a class="sp-mono" style="font-weight:700;color:#1D4ED8;" href="<?= $h(base_url('workorders/view/' . (int)$gl->work_order_id)) ?>"><?= $h($gl->wo_number) ?></a>
+                  <?php if (wms_nav_link_allowed('workorders', $role_id)): ?><a class="sp-mono" style="font-weight:700;color:#1D4ED8;" href="<?= $h(base_url('workorders/view/' . (int)$gl->work_order_id)) ?>"><?= $h($gl->wo_number) ?></a><?php else: ?><span class="sp-mono"><?= $h($gl->wo_number) ?></span><?php endif; ?>
                   · <strong><?= $h($gl->registration_no ?: '—') ?></strong>
                   · Req: <span class="sp-mono"><?= $h($fmtQty($gl->qty_required)) ?> <?= $h($gl->item_unit) ?></span>
                 </div>
@@ -716,9 +716,9 @@ if ($g('wo_status') !== '') $chips[] = array('WO State: ' . $g('wo_status'), arr
           ?>
             <div class="sp-card">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-                <a class="sp-mono" style="font-weight:700;color:#1D4ED8;" href="<?= $h(base_url('workorders/view/' . (int)$l->work_order_id)) ?>">
+                <?php if (wms_nav_link_allowed('workorders', $role_id)): ?><a class="sp-mono" style="font-weight:700;color:#1D4ED8;" href="<?= $h(base_url('workorders/view/' . (int)$l->work_order_id)) ?>">
                   <?= $h($l->wo_number) ?>
-                </a>
+                </a><?php else: ?><span class="sp-mono"><?= $h($l->wo_number) ?></span><?php endif; ?>
                 <span class="sp-badge <?= $badgeCls($l->avail_status) ?>"><?= $h($l->avail_status) ?></span>
               </div>
               <div>
@@ -806,6 +806,7 @@ if ($g('wo_status') !== '') $chips[] = array('WO State: ' . $g('wo_status'), arr
   var issueBase   = <?= json_encode(rtrim(base_url('spareparts/issue'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
   var releaseBase = <?= json_encode(rtrim(base_url('spareparts/release'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
   var woBase      = <?= json_encode(rtrim(base_url('workorders/view'), '/') . '/', JSON_UNESCAPED_SLASHES) ?>;
+  var canViewWo   = <?= wms_nav_link_allowed('workorders', $role_id) ? 'true' : 'false' ?>;
   var orderCreate = <?= json_encode(base_url('orders/create'), JSON_UNESCAPED_SLASHES) ?>;
   var baseExport  = <?= json_encode($csvExportUrl, JSON_UNESCAPED_SLASHES) ?>;
   var baseXlsx    = <?= json_encode($xlsxExportUrl, JSON_UNESCAPED_SLASHES) ?>;
@@ -923,7 +924,7 @@ if ($g('wo_status') !== '') $chips[] = array('WO State: ' . $g('wo_status'), arr
           + '</div>';
 
         html += '<div class="sp-kv-grid">'
-          + '<div class="sp-kv-box"><div class="sp-kv-lbl">Work Order &amp; Fleet Asset</div><div class="sp-kv-val"><a href="' + esc(woBase + l.work_order_id) + '">' + esc(l.wo_number) + '</a> · ' + esc(l.registration_no) + '</div></div>'
+          + '<div class="sp-kv-box"><div class="sp-kv-lbl">Work Order &amp; Fleet Asset</div><div class="sp-kv-val">' + (canViewWo ? '<a href="' + esc(woBase + l.work_order_id) + '">' + esc(l.wo_number) + '</a>' : esc(l.wo_number)) + ' · ' + esc(l.registration_no) + '</div></div>'
           + '<div class="sp-kv-box"><div class="sp-kv-lbl">Catalog Item &amp; Bin</div><div class="sp-kv-val">' + esc(l.item_code) + ' · Bin ' + esc(l.bin_location) + '</div></div>'
           + '<div class="sp-kv-box"><div class="sp-kv-lbl">Required / Reserved / Issued</div><div class="sp-kv-val">' + esc(l.qty_required) + ' / ' + esc(l.qty_allocated) + ' / ' + esc(l.qty_issued) + ' ' + esc(l.unit) + '</div></div>'
           + '<div class="sp-kv-box"><div class="sp-kv-lbl">Stock On Hand / Free / On PO</div><div class="sp-kv-val">' + esc(l.stock_qty) + ' / ' + esc(l.free_qty) + ' / +' + esc(l.on_order_qty) + '</div></div>'
@@ -965,7 +966,7 @@ if ($g('wo_status') !== '') $chips[] = array('WO State: ' . $g('wo_status'), arr
         drawerBody.innerHTML = html;
 
         var foot = '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
-          + '<a class="sp-btn sp-btn-primary sp-btn-sm" href="' + esc(woBase + l.work_order_id) + '">Open Work Order</a>'
+          + (canViewWo ? '<a class="sp-btn sp-btn-primary sp-btn-sm" href="' + esc(woBase + l.work_order_id) + '">Open Work Order</a>' : '')
           + (l.can_order && l.qty_shortfall > 0 ? '<a class="sp-btn sp-btn-sm" href="' + esc(orderCreate) + '">+ Order Part</a>' : '')
           + '</div>'
           + '<button type="button" class="sp-btn sp-btn-sm" id="spDrawerDoneBtn">Close</button>';

@@ -282,7 +282,7 @@ class Backlog extends MY_Controller {
     /* ── LIST ──────────────────────────────────────────── */
     public function index() {
         $data = $this->_build_register_dataset(TRUE);
-        $data['page_title'] = 'Backlog Register';
+        $data['page_title'] = 'Defect Backlog';
         $this->render('backlog/index', $data);
     }
 

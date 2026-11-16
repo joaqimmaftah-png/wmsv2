@@ -198,9 +198,11 @@ $rolling_clear_url = base_url('forecast/rolling?' . http_build_query(array(
   }
 </style>
 
+<?php $planning_nav_active = 'rolling_plan'; include __DIR__ . '/_nav.php'; ?>
+
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <h1 class="page-heading" style="font-size:16px;">Rolling Maintenance Plan</h1>
+    <h1 class="page-heading" style="font-size:16px;">3-Week Plan</h1>
     <div class="cs">Three weeks from <?= $rolling_h($base_label) ?> — one row per machine, status and plan metrics by week</div>
   </div>
   <?php if (!empty($tables_ready)): ?>

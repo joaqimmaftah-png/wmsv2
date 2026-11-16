@@ -322,6 +322,8 @@ class MY_Controller extends CI_Controller {
     }
 
     protected function render($view, $data = []) {
+        // Presentation-only link model; authorization stays in _enforce_access().
+        $this->load->helper('navigation');
         $data['current_user'] = $this->user_data;
         $data['role_id']      = $this->role_id;
         // Pending-spares availability alerts (bell in the top bar).  The query

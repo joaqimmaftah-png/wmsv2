@@ -1,16 +1,10 @@
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
 
-if (!function_exists('ni_active')) {
-    function ni_active($path) {
-        $uri = uri_string();
-        return (strpos($uri, $path) === 0) ? 'on' : '';
-    }
-}
-
 $uri       = uri_string();
+$active_nav = wms_nav_active($uri, isset($role_id) ? (int)$role_id : 4);
+$nav_tree  = wms_nav_tree(isset($role_id) ? (int)$role_id : 4);
 $role_id   = isset($role_id) ? (int)$role_id : 4;
-$sidebar_lang = isset($lang) && $lang === 'fr' ? 'fr' : 'en';
 
 $fn = $ln = '';
 if (isset($current_user)) {
@@ -56,7 +50,7 @@ $attention_label = $attention_count > 0
 $security_alert_label = $security_alert_count . ' security event' . ($security_alert_count === 1 ? '' : 's') . ' to review';
 ?>
 <!-- ═══ SIDEBAR ═══ -->
-<nav id="sidebar" aria-label="Primary navigation">
+<nav id="sidebar" aria-label="Primary navigation" data-role="<?= (int)$role_id ?>">
   <a href="<?= base_url('dashboard'); ?>" class="sb-logo">
     <div class="sb-logo-mark" style="background:transparent;box-shadow:none;overflow:hidden;padding:2px;">
       <img src="<?= base_url('uploads/logoam.png') ?>" alt="Logo"
@@ -67,386 +61,65 @@ $security_alert_label = $security_alert_count . ' security event' . ($security_a
       <div class="sb-logo-sub">Control Center</div>
     </div>
   </a>
+  <button type="button" class="nav-close" id="nav-close" aria-label="Close navigation">
+    <?= wms_nav_icon('close') ?>
+  </button>
   <div class="nav-wrap">
+    <?php foreach ($nav_tree['pinned'] as $item):
+      $is_current = ($active_nav['key'] === $item['key']); ?>
+    <a href="<?= base_url($item['path']) ?>" class="ni ni-pinned<?= $is_current ? ' on' : '' ?>"
+       title="<?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?>"<?= $is_current ? ' aria-current="page"' : '' ?>>
+      <span class="ni-icon"><?= wms_nav_icon($item['icon']) ?></span>
+      <span class="ni-label"><?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?></span>
+      <span class="ni-tip" aria-hidden="true"><?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?></span>
+    </a>
+    <?php endforeach; ?>
 
-    <!-- ── 1. DASHBOARD — all roles ── -->
-    <a href="<?= base_url('dashboard'); ?>" class="ni <?= ni_active('dashboard'); ?>" title="<?= $is_ceo ? 'Executive Summary' : 'Dashboard' ?>">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
-      <span class="ni-label"><?= $is_ceo ? 'Executive Summary' : 'Dashboard' ?></span>
-      <span class="ni-tip"><?= $is_ceo ? 'Key Company KPIs' : 'Dashboard' ?></span>
-    </a>
-
-    <?php if (!$is_ceo): // CEO gets the Executive Summary only — everything below is operational detail ?>
-
-    <!-- ── 2. MAINTENANCE — Supervisor, Technician, Manager ── -->
-    <?php if ($is_supervisor || $is_technician || $is_manager): ?>
-    <div class="nav-sep"></div>
-    <div class="nav-section-label">Maintenance</div>
-
-    <?php if ($is_supervisor || $is_technician): ?>
-    <a href="<?= base_url('workorders/create'); ?>" class="ni <?= ni_active('workorders/create'); ?>" title="New Work Order">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></div>
-      <span class="ni-label">New Work Order</span>
-      <span class="ni-tip">New Work Order</span>
-    </a>
-    <?php endif; ?>
-
-    <a href="<?= base_url('workorders'); ?>" class="ni <?= (ni_active('workorders') && !ni_active('workorders/create')) ? 'on' : ''; ?>" title="Work Orders">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg></div>
-      <span class="ni-label"><?= $is_technician ? 'My Work Orders' : 'All Work Orders'; ?></span>
-      <span class="ni-tip"><?= $is_technician ? 'My Assigned Work Orders' : 'Work Orders List'; ?></span>
-    </a>
-
-    <a href="<?= base_url('equipment'); ?>" class="ni <?= ni_active('equipment'); ?>" title="Equipment">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8l4 1 3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
-      <span class="ni-label">Equipment</span>
-      <span class="ni-tip">Equipment Fleet</span>
-    </a>
-
-    <a href="<?= base_url('pm'); ?>" class="ni <?= ni_active('pm'); ?>" title="PM Planner">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg></div>
-      <span class="ni-label">PM Planner</span>
-      <span class="ni-tip">Preventive Maintenance</span>
-    </a>
-
-    <a href="<?= base_url('inspections'); ?>" class="ni <?= ni_active('inspections'); ?>" title="<?= $sidebar_lang === 'fr' ? 'Formulaires d’inspection' : 'Inspection Forms'; ?>">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
-      <span class="ni-label">Inspections</span>
-      <span class="ni-tip"><?= $sidebar_lang === 'fr' ? 'Formulaires d’inspection' : 'Inspection Forms'; ?></span>
-    </a>
-
-    <a href="<?= base_url('backlog'); ?>" class="ni <?= ni_active('backlog'); ?>" title="Backlog Register">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6h11M10 12h11M10 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg></div>
-      <span class="ni-label">Backlog</span>
-      <span class="ni-tip">Defect / Backlog Register</span>
-    </a>
-    <?php endif; ?>
-
-    <!-- ── 3. INVENTORY — all roles ── -->
-    <div class="nav-sep"></div>
-    <div class="nav-section-label">Inventory</div>
-    <a href="<?= base_url('materials'); ?>" class="ni <?= (ni_active('materials') && !ni_active('materials/inventory') && !ni_active('materials/transactions')) ? 'on' : ''; ?>" title="Inv. Dashboard">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
-      <span class="ni-label">Inv. Dashboard</span>
-      <span class="ni-tip">Inventory Overview</span>
-    </a>
-    <a href="<?= base_url('materials/inventory'); ?>" class="ni <?= ni_active('materials/inventory'); ?>" title="Inventory">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>
-      <span class="ni-label">Inventory List</span>
-      <span class="ni-tip">View & Manage Inventory</span>
-    </a>
-    <a href="<?= base_url('materials/transactions'); ?>" class="ni <?= ni_active('materials/transactions'); ?>" title="Transactions">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></div>
-      <span class="ni-label">Transactions</span>
-      <span class="ni-tip">Stock In / Out History</span>
-    </a>
-    <a href="<?= base_url('orders'); ?>" class="ni <?= ni_active('orders'); ?>" title="Spare Orders">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
-      <span class="ni-label">Spare Orders</span>
-      <span class="ni-tip">Spare Parts Order Tracking</span>
-    </a>
-    <a href="<?= base_url('spareparts'); ?>" class="ni <?= ni_active('spareparts'); ?>" title="Pending Spares">
-      <div class="ni-icon" style="position:relative;"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-        <?php if (!empty($new_spares_alerts)): ?><span style="position:absolute;top:2px;right:2px;min-width:14px;height:14px;border-radius:7px;background:var(--red);color:#fff;font-size:8.5px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 3px;"><?= (int)$new_spares_alerts ?></span><?php endif; ?>
+    <?php foreach ($nav_tree['groups'] as $group):
+      $group_active = ($active_nav['group'] === $group['key']);
+      $group_count = 0;
+      if ($group['key'] === 'inventory') $group_count = $spare_alert_count;
+      if ($group['key'] === 'administration') $group_count = $security_alert_count;
+      $panel_id = 'nav-group-' . $group['key']; ?>
+    <details class="nav-group<?= $group_active ? ' is-current' : '' ?>" data-nav-group="<?= $group['key'] ?>" open>
+      <summary class="nav-group-toggle" aria-expanded="true" aria-controls="<?= $panel_id ?>"
+               title="<?= htmlspecialchars($group['label'], ENT_QUOTES, 'UTF-8') ?>">
+        <span class="ni-icon"><?= wms_nav_icon($group['icon']) ?></span>
+        <span class="nav-group-label"><?= htmlspecialchars($group['label'], ENT_QUOTES, 'UTF-8') ?></span>
+        <?php if ($group_count > 0):
+          $group_badge_text = $group['key'] === 'inventory' ? 'new parts-availability alerts' : 'security events to review'; ?>
+        <span class="nav-badge" aria-hidden="true"><?= (int)$group_count ?></span><span class="sr-only"><?= (int)$group_count ?> <?= $group_badge_text ?></span><?php endif; ?>
+        <span class="nav-group-chevron"><?= wms_nav_icon('chevron') ?></span>
+        <span class="ni-tip" aria-hidden="true"><?= htmlspecialchars($group['label'], ENT_QUOTES, 'UTF-8') ?></span>
+      </summary>
+      <div class="nav-group-panel" id="<?= $panel_id ?>">
+        <?php foreach ($group['items'] as $item):
+          $is_current = ($active_nav['key'] === $item['key']);
+          $badge = ($item['key'] === 'workorder_parts') ? $spare_alert_count : (($item['key'] === 'security') ? $security_alert_count : 0);
+          $badge_text = $item['key'] === 'workorder_parts' ? 'new parts-availability alerts' : 'security events to review'; ?>
+        <a href="<?= base_url($item['path']) ?>" class="ni<?= $is_current ? ' on' : '' ?>"
+           title="<?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?>"<?= $is_current ? ' aria-current="page"' : '' ?>>
+          <span class="ni-icon"><?= wms_nav_icon($item['icon']) ?></span>
+          <span class="ni-label"><?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?></span>
+          <?php if ($badge > 0): ?><span class="nav-badge" aria-hidden="true"><?= (int)$badge ?></span><span class="sr-only"><?= (int)$badge ?> <?= $badge_text ?></span><?php endif; ?>
+          <span class="ni-tip" aria-hidden="true"><?= htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') ?></span>
+        </a>
+        <?php endforeach; ?>
       </div>
-      <span class="ni-label">Pending Spares<?= !empty($new_spares_alerts) ? ' ('.(int)$new_spares_alerts.')' : '' ?></span>
-      <span class="ni-tip">Pending Spare Parts &amp; Availability Alerts</span>
-    </a>
-    <a href="<?= base_url('suppliers'); ?>" class="ni <?= ni_active('suppliers'); ?>" title="Suppliers">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l8-4 8 4v14M9 9h1m4 0h1m-6 4h1m4 0h1m-6 4h1m4 0h1"/></svg></div>
-      <span class="ni-label">Suppliers</span>
-      <span class="ni-tip">Supplier Database</span>
-    </a>
-
-    <!-- Lubricants — Supervisor, Technician, Store (not Manager) -->
-    <?php if ($is_supervisor || $is_technician || $is_store): ?>
-    <a href="<?= base_url('lubricants'); ?>" class="ni <?= ($uri==='lubricants')?'on':''; ?>" title="Lubricants">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg></div>
-      <span class="ni-label">Lubricants</span>
-      <span class="ni-tip">Lubricant Records</span>
-    </a>
-    <?php endif; ?>
-
-    <!-- Lube Budget — Supervisor, Store only -->
-    <?php if ($is_supervisor || $is_store): ?>
-    <a href="<?= base_url('lubricants/budget'); ?>" class="ni <?= ni_active('lubricants/budget'); ?>" title="Lube Budget">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
-      <span class="ni-label">Lube Budget</span>
-      <span class="ni-tip">Lubricant Budget</span>
-    </a>
-    <?php endif; ?>
-
-    <!-- ── 3b. PLANNING — Supervisor, Manager ─────────────────────────
-         The planned-availability forecast (tasks F5-F7, F10, F11).
-         Kept in its own section because it is a *forward-looking plan*, not a
-         report about the past. -->
-    <?php if ($is_supervisor || $is_manager): ?>
-    <div class="nav-sep"></div>
-    <div class="nav-section-label">Planning</div>
-    <a href="<?= base_url('forecast'); ?>" class="ni <?= (ni_active('forecast') && !ni_active('forecast/plan_vs_actual') && !ni_active('forecast/rolling') && !ni_active('forecast/spares') && !ni_active('forecast/allowances')) ? 'on' : ''; ?>" title="Planned Availability">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
-      <span class="ni-label">Planned Availability</span>
-      <span class="ni-tip">Forecast the week ahead</span>
-    </a>
-    <a href="<?= base_url('forecast/plan_vs_actual'); ?>" class="ni <?= ni_active('forecast/plan_vs_actual'); ?>" title="Plan vs Actual">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="8" x2="22" y2="8" stroke-dasharray="3 2"/></svg></div>
-      <span class="ni-label">Plan vs Actual</span>
-      <span class="ni-tip">Variance and its cause</span>
-    </a>
-    <a href="<?= base_url('forecast/rolling'); ?>" class="ni <?= ni_active('forecast/rolling'); ?>" title="Rolling Plan">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="6" height="16" rx="1"/><rect x="9" y="4" width="6" height="16" rx="1"/><rect x="16" y="4" width="6" height="16" rx="1"/></svg></div>
-      <span class="ni-label">Rolling 3-Week Plan</span>
-      <span class="ni-tip">Weeks +1, +2, +3</span>
-    </a>
-    <a href="<?= base_url('forecast/spares'); ?>" class="ni <?= ni_active('forecast/spares'); ?>" title="PM Spare Parts">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
-      <span class="ni-label">PM Spare Parts</span>
-      <span class="ni-tip">What the plan needs to buy</span>
-    </a>
-    <a href="<?= base_url('forecast/allowances'); ?>" class="ni <?= ni_active('forecast/allowances'); ?>" title="Planned Allowances">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9"/></svg></div>
-      <span class="ni-label">Planned Allowances</span>
-      <span class="ni-tip">Standing and unplanned hours</span>
-    </a>
-    <?php endif; ?>
-
-    <!-- ── 4. REPORTS — Supervisor, Manager ── -->
-    <?php if ($is_supervisor || $is_manager): ?>
-    <div class="nav-sep"></div>
-    <div class="nav-section-label">Reports</div>
-    <a href="<?= base_url('reports'); ?>" class="ni <?= (ni_active('reports') && !ni_active('reports/workshop_daily') && !ni_active('reports/workshop_weekly') && !ni_active('reports/weekly_w36') && !ni_active('reports/mttr_mtbf') && !ni_active('reports/availability_forecast') && !ni_active('reports/monthly_plan') && !ni_active('reports/asset_register') && !ni_active('reports/lube_compliance') && !ni_active('reports/store_analytics') && !ni_active('reports/issue_register') && !ni_active('reports/receipt_register') && !ni_active('reports/reorder')) ? 'on' : ''; ?>" title="Reports">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
-      <span class="ni-label">Reports</span>
-      <span class="ni-tip">All Reports</span>
-    </a>
-    <a href="<?= base_url('reports/workshop_daily'); ?>" class="ni <?= ni_active('reports/workshop_daily'); ?>" title="Workshop Daily">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
-      <span class="ni-label">Daily Report</span>
-      <span class="ni-tip">Workshop Daily Report</span>
-    </a>
-    <a href="<?= base_url('reports/workshop_weekly'); ?>" class="ni <?= (ni_active('reports/workshop_weekly') || ni_active('reports/weekly_w36')) ? 'on' : ''; ?>" title="Workshop Weekly">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg></div>
-      <span class="ni-label">Weekly Report</span>
-      <span class="ni-tip">Workshop Weekly Report</span>
-    </a>
-    <a href="<?= base_url('reports/mttr_mtbf'); ?>" class="ni <?= ni_active('reports/mttr_mtbf'); ?>" title="MTTR / MTBF">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
-      <span class="ni-label">MTTR / MTBF</span>
-      <span class="ni-tip">Reliability Report</span>
-    </a>
-    <a href="<?= base_url('reports/availability_forecast'); ?>" class="ni <?= ni_active('reports/availability_forecast'); ?>" title="Availability Forecast">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-      <span class="ni-label">PM Due Forecast</span>
-      <span class="ni-tip">PM due within a horizon</span>
-    </a>
-    <a href="<?= base_url('reports/monthly_plan'); ?>" class="ni <?= ni_active('reports/monthly_plan'); ?>" title="Monthly Plan">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-      <span class="ni-label">Monthly Plan</span>
-      <span class="ni-tip">Monthly Maintenance Plan</span>
-    </a>
-    <a href="<?= base_url('reports/lube_compliance'); ?>" class="ni <?= ni_active('reports/lube_compliance'); ?>" title="Lube Compliance">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/><polyline points="9 12 11 14 15 10"/></svg></div>
-      <span class="ni-label">Lube Compliance</span>
-      <span class="ni-tip">Lubricant Usage vs PM Requirement</span>
-    </a>
-    <a href="<?= base_url('reports/store_analytics'); ?>" class="ni <?= ni_active('reports/store_analytics'); ?>" title="Store Analytics">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
-      <span class="ni-label">Store Analytics</span>
-      <span class="ni-tip">Supplier Spend &amp; Lead Times</span>
-    </a>
-    <a href="<?= base_url('reports/issue_register'); ?>" class="ni <?= ni_active('reports/issue_register'); ?>" title="Issue Register">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8"/><polyline points="7 21 12 17 17 21"/><line x1="12" y1="17" x2="12" y2="9"/></svg></div>
-      <span class="ni-label">Issue Register</span>
-      <span class="ni-tip">Stock Issued (Sortie)</span>
-    </a>
-    <a href="<?= base_url('reports/receipt_register'); ?>" class="ni <?= ni_active('reports/receipt_register'); ?>" title="Receipt Register">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16V8"/><polyline points="7 7 12 11 17 7"/><line x1="12" y1="11" x2="12" y2="3"/></svg></div>
-      <span class="ni-label">Receipt Register</span>
-      <span class="ni-tip">Goods Received (MRN)</span>
-    </a>
-    <a href="<?= base_url('reports/reorder'); ?>" class="ni <?= ni_active('reports/reorder'); ?>" title="Re-order Report">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
-      <span class="ni-label">Re-order Report</span>
-      <span class="ni-tip">Items at or below minimum stock</span>
-    </a>
-    <a href="<?= base_url('reports/asset_register'); ?>" class="ni <?= ni_active('reports/asset_register'); ?>" title="Asset Register">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8l4 1 3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
-      <span class="ni-label">Asset Register</span>
-      <span class="ni-tip">Fleet Asset Register</span>
-    </a>
-    <a href="<?= base_url('reports/annual_report'); ?>" class="ni <?= ni_active('reports/annual_report'); ?>" title="Annual Report">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><polyline points="4 20 20 20"/></svg></div>
-      <span class="ni-label">Annual Report</span>
-      <span class="ni-tip">Annual Performance Report</span>
-    </a>
-    <a href="<?= base_url('reports/annual_plan'); ?>" class="ni <?= ni_active('reports/annual_plan'); ?>" title="Annual Plan">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h8M8 18h5"/></svg></div>
-      <span class="ni-label">Annual Plan</span>
-      <span class="ni-tip">Annual Maintenance Plan</span>
-    </a>
-    <a href="<?= base_url('reports/service_kits'); ?>" class="ni <?= ni_active('reports/service_kits'); ?>" title="Service Kits">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></div>
-      <span class="ni-label">Service Kits</span>
-      <span class="ni-tip">Service Kit Recommendations</span>
-    </a>
-    <?php endif; ?>
-
-    <!-- ── 5. TEAM ── -->
-    <?php if ($is_supervisor || $is_technician || $is_manager): ?>
-    <div class="nav-sep"></div>
-    <div class="nav-section-label">Team</div>
-
-    <!-- Team list — Supervisor & Manager only -->
-    <?php if ($is_supervisor || $is_manager): ?>
-    <a href="<?= base_url('team'); ?>" class="ni <?= ($uri==='team'||$uri==='team/index')?'on':''; ?>" title="Team">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
-      <span class="ni-label">Team</span>
-      <span class="ni-tip">Team Members</span>
-    </a>
-    <?php endif; ?>
-
-    <!-- Attendance — Supervisor, Technician (own), Manager -->
-    <a href="<?= base_url('team/attendance'); ?>" class="ni <?= ni_active('team/attendance'); ?>" title="Attendance">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg></div>
-      <span class="ni-label"><?= $is_technician ? 'My Attendance' : 'Attendance'; ?></span>
-      <span class="ni-tip"><?= $is_technician ? 'My Attendance Records' : 'Attendance Records'; ?></span>
-    </a>
-
-    <!-- AML Individual Attendance Sheets & Monthly Summary -->
-    <a href="<?= base_url($is_technician ? ('team/view/' . (int)$this->session->userdata('user_id')) : 'team/report'); ?>" class="ni <?= ni_active('team/report'); ?>" title="<?= $is_technician ? 'My Timesheet' : 'Timesheets & Report'; ?>">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
-      <span class="ni-label"><?= $is_technician ? 'My Timesheet' : 'Timesheets'; ?></span>
-      <span class="ni-tip"><?= $is_technician ? 'Download AML Individual Attendance Sheet' : 'AML Individual Attendance Sheets & Monthly Summary'; ?></span>
-    </a>
-
-    <!-- On-Site Overview — Supervisor, Technician, Manager -->
-    <a href="<?= base_url('attendance'); ?>" class="ni <?= ($uri==='attendance'||$uri==='attendance/index')?'on':''; ?>" title="On-Site Status">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
-      <span class="ni-label">On-Site Status</span>
-      <span class="ni-tip">Live QR/GPS check-in status &amp; who is on site</span>
-    </a>
-
-    <!-- Check in / out — the QR + GPS punch page (ATTENDANCE_WORKFLOW.md).
-         The manager is view-only, so the link is not offered there. -->
-    <?php if (!$is_manager): ?>
-    <a href="<?= base_url('attendance/punch'); ?>" class="ni <?= ni_active('attendance/punch'); ?>" title="Check In / Out">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
-      <span class="ni-label">Check In / Out</span>
-      <span class="ni-tip">Scan the site code to check in or out</span>
-    </a>
-    <?php endif; ?>
-    <?php if ($is_supervisor): ?>
-    <a href="<?= base_url('attendance/board'); ?>" class="ni <?= ni_active('attendance/board'); ?>" title="Site Screen">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM19 19h2v2h-2z"/></svg></div>
-      <span class="ni-label">Site Screen</span>
-      <span class="ni-tip">Rotating check-in QR for the site entrance</span>
-    </a>
-    <?php endif; ?>
-    <?php if ($is_supervisor || $is_manager): ?>
-    <a href="<?= base_url('attendance/log'); ?>" class="ni <?= ni_active('attendance/log'); ?>" title="Punch Log">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/><path d="M3 15h6"/></svg></div>
-      <span class="ni-label">Punch Log</span>
-      <span class="ni-tip">Who is on site, and supervisor corrections</span>
-    </a>
-    <?php endif; ?>
-
-    <!-- Shifts — Supervisor, Technician (view), Manager -->
-    <a href="<?= base_url('team/shift_roster'); ?>" class="ni <?= ni_active('team/shift'); ?>" title="Shift Roster">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-      <span class="ni-label">Shifts</span>
-      <span class="ni-tip">Shift Roster</span>
-    </a>
-
-    <!-- Certifications — Supervisor, Technician (own), Manager -->
-    <a href="<?= base_url('team/certifications'); ?>" class="ni <?= ni_active('team/certifications'); ?>" title="Certifications">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg></div>
-      <span class="ni-label"><?= $is_technician ? 'My Certifications' : 'Certifications'; ?></span>
-      <span class="ni-tip"><?= $is_technician ? 'My Certifications' : 'Team Certifications'; ?></span>
-    </a>
-    <?php endif; ?>
-
-    <!-- Store keeper: show their own attendance link -->
-    <?php if ($is_store): ?>
-    <div class="nav-sep"></div>
-    <div class="nav-section-label">My Record</div>
-    <a href="<?= base_url('team/attendance'); ?>" class="ni <?= ni_active('team/attendance'); ?>" title="My Attendance">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg></div>
-      <span class="ni-label">My Attendance</span>
-      <span class="ni-tip">My Attendance Records</span>
-    </a>
-    <a href="<?= base_url('team/view/' . (int)$this->session->userdata('user_id')); ?>" class="ni" title="My Timesheet">
-      <div class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
-      <span class="ni-label">My Timesheet</span>
-      <span class="ni-tip">Download AML Individual Attendance Sheet</span>
-    </a>
-    <a href="<?= base_url('attendance'); ?>" class="ni <?= ($uri==='attendance'||$uri==='attendance/index')?'on':''; ?>" title="On-Site Status">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
-      <span class="ni-label">On-Site Status</span>
-      <span class="ni-tip">Live QR/GPS check-in status &amp; who is on site</span>
-    </a>
-    <a href="<?= base_url('attendance/punch'); ?>" class="ni <?= ni_active('attendance/punch'); ?>" title="Check In / Out">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
-      <span class="ni-label">Check In / Out</span>
-      <span class="ni-tip">Scan the site code to check in or out</span>
-    </a>
-    <?php endif; ?>
-
-    <!-- ── 6. ADMIN — Supervisor only ── -->
-    <?php if ($is_supervisor): ?>
-    <div class="nav-sep"></div>
-    <div class="nav-section-label">Admin</div>
-    <a href="<?= base_url('users'); ?>" class="ni <?= ni_active('users'); ?>" title="User Management">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></div>
-      <span class="ni-label">User Management</span>
-      <span class="ni-tip">Manage Users</span>
-    </a>
-    <a href="<?= base_url('attendance/sites'); ?>" class="ni <?= ni_active('attendance/sites'); ?>" title="Attendance Sites">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
-      <span class="ni-label">Attendance Sites</span>
-      <span class="ni-tip">Geofence, site code and the assignment gate</span>
-    </a>
-    <a href="<?= base_url('settings'); ?>" class="ni <?= ni_active('settings'); ?>" title="Settings">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M5.34 18.66l-1.41 1.41M21 12h-2M5 12H3M18.66 5.34l1.41-1.41M4.93 19.07l1.41-1.41"/></svg></div>
-      <span class="ni-label">Settings</span>
-      <span class="ni-tip">System Settings</span>
-    </a>
-    <?php
-      // F-19: a throttle that fires silently is a throttle nobody acts on.
-      $seo = isset($security_events_open) ? (int)$security_events_open : 0;
-    ?>
-    <a href="<?= base_url('settings/security'); ?>" class="ni <?= ni_active('settings/security'); ?>" title="Sign-in Security"
-       style="position:relative;">
-      <div class="ni-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div>
-      <span class="ni-label">Sign-in Security<?= $seo > 0 ? ' ('.$seo.')' : '' ?></span>
-      <span class="ni-tip">Lockouts &amp; password spraying</span>
-      <?php if ($seo > 0): ?><span style="position:absolute;top:2px;right:2px;min-width:14px;height:14px;border-radius:7px;background:var(--red);color:#fff;font-size:8.5px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 3px;"><?= $seo ?></span><?php endif; ?>
-    </a>
-    <?php endif; ?>
-
-    <?php endif; // end !$is_ceo ?>
-
+    </details>
+    <?php endforeach; ?>
   </div><!-- /nav-wrap -->
-  <div class="sb-user">
-    <div class="sb-user-card">
-      <div class="sb-avatar"><?= $initials; ?></div>
-      <div class="sb-user-info">
-        <div class="sb-user-name"><?= htmlspecialchars((string)($full_name)); ?></div>
-        <div class="sb-user-role"><?= $role_lbl; ?></div>
-      </div>
-      <?= form_open('logout', array('style' => 'display:inline-flex;margin:0;')) ?>
-        <button type="submit" class="sb-logout" title="Sign out" style="border:0;background:none;padding:0;cursor:pointer;color:inherit;">
-          <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        </button>
-      <?= form_close() ?>
-    </div>
-  </div>
 </nav><!-- /#sidebar -->
 
 <!-- ═══ CANVAS ═══ -->
+<div class="nav-backdrop" id="nav-backdrop" hidden></div>
 <div id="canvas">
   <header class="topbar">
     <div class="topbar-row">
       <div class="topbar-actions">
+        <button type="button" class="nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="true" aria-label="Collapse navigation">
+          <?= wms_nav_icon('menu') ?><span class="nav-toggle-label">Menu</span>
+        </button>
         <?php if (!$is_ceo): ?>
         <button type="button" class="global-find-trigger" id="global-find-trigger"
                 data-search-url="<?= htmlspecialchars((string)base_url('search'), ENT_QUOTES, 'UTF-8'); ?>"
@@ -530,15 +203,6 @@ $security_alert_label = $security_alert_count . ' security event' . ($security_a
               <div class="tbd-name"><?= htmlspecialchars((string)($full_name)); ?></div>
               <div class="tbd-email"><?= htmlspecialchars((string)($email)); ?></div>
             </div>
-            <?php if ($is_supervisor): ?>
-            <a href="<?= base_url('users'); ?>" class="tbd-item">
-              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg> Manage Users
-            </a>
-            <a href="<?= base_url('settings'); ?>" class="tbd-item">
-              <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M5.34 18.66l-1.41 1.41M21 12h-2M5 12H3"/></svg> Settings
-            </a>
-            <div class="tbd-sep"></div>
-            <?php endif; ?>
             <?php if (!$is_ceo): ?>
             <a href="<?= base_url('users/profile'); ?>" class="tbd-item">
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -560,6 +224,7 @@ $security_alert_label = $security_alert_count . ' security event' . ($security_a
     </div>
   </header><!-- /.topbar -->
 
+<script src="<?= base_url('assets/js/navigation.js') ?>" defer></script>
 <?php if (!$is_ceo): ?>
 <script src="<?= base_url('assets/js/global-find.js') ?>" defer></script>
 <?php endif; ?>
@@ -648,20 +313,6 @@ $security_alert_label = $security_alert_count . ' security event' . ($security_a
   pill.addEventListener('focusout',function(e){
     if(!pill.contains(e.relatedTarget)) closeDropdown(false);
   });
-})();
-(function(){
-  var sb=document.getElementById('sidebar');
-  var cv=document.getElementById('canvas');
-  if(!sb||!cv) return;
-  function collapseSidebar(){ sb.classList.remove('expanded'); cv.style.marginLeft=''; }
-  sb.addEventListener('mouseenter',function(){
-    // At narrow widths expanding the navigation squeezed the page down to a
-    // few pixels (including when zoomed). Keep the icon rail usable instead.
-    if(window.matchMedia('(max-width: 760px)').matches) return;
-    sb.classList.add('expanded'); cv.style.marginLeft='224px';
-  });
-  sb.addEventListener('mouseleave',collapseSidebar);
-  window.addEventListener('resize',function(){ if(window.matchMedia('(max-width: 760px)').matches) collapseSidebar(); });
 })();
 (function(){
   var cv=document.getElementById('canvas');

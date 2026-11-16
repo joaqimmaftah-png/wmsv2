@@ -159,9 +159,11 @@ $clear_url = base_url('forecast/allowances?' . http_build_query(array(
   }
 </style>
 
+<?php $planning_nav_active = 'allowances'; include __DIR__ . '/_nav.php'; ?>
+
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
-    <h1 class="page-heading" style="font-size:16px;">Planned Allowances</h1>
+    <h1 class="page-heading" style="font-size:16px;">Planning Allowances</h1>
     <div class="cs">Per-day rates for target week <strong><?= $h($iso_label) ?></strong>. <?= $mode === 'derived' ? 'The history window ends before this week.' : 'Flat mode is active; no history-derived rate is applied.' ?></div>
   </div>
   <div class="flex ai-c gap-10 allowance-week-tools" style="flex-wrap:wrap;">

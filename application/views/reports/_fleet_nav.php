@@ -6,7 +6,7 @@ $nav_query = '?week_start=' . rawurlencode($nav_week) . (!empty($is_live) && !em
 <nav class="fleet-report-nav" aria-label="Fleet availability reports">
   <a class="<?= $nav_active === 'dashboard' ? 'is-active' : '' ?>" <?= $nav_active === 'dashboard' ? 'aria-current="page"' : '' ?> href="<?= base_url('reports/fleet_availability' . $nav_query) ?>">Availability</a>
   <a class="<?= $nav_active === 'weekly' ? 'is-active' : '' ?>" <?= $nav_active === 'weekly' ? 'aria-current="page"' : '' ?> href="<?= base_url('reports/workshop_weekly' . $nav_query) ?>">Weekly report</a>
-  <a class="<?= $nav_active === 'downtime' ? 'is-active' : '' ?>" <?= $nav_active === 'downtime' ? 'aria-current="page"' : '' ?> href="<?= base_url('reports/downtime_log' . $nav_query) ?>">Log downtime</a>
+  <a class="<?= $nav_active === 'downtime' ? 'is-active' : '' ?>" <?= $nav_active === 'downtime' ? 'aria-current="page"' : '' ?> href="<?= base_url('reports/downtime_log' . $nav_query) ?>">Downtime Register</a>
 </nav>
 <style>
 .fleet-report-nav{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px;padding:5px;border:1px solid var(--sep,#e5e7eb);border-radius:12px;background:var(--g1,#f8fafc);width:max-content;max-width:100%}

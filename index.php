@@ -4,6 +4,26 @@
  * cPanel compatible version
  */
 
+// The PHP built-in web server (`php -S host:port index.php`) routes every
+// request through this file, unlike Apache/.htaccess which serves real files
+// directly. Mirror that behaviour for public assets so the shell JavaScript
+// loads in local development and CI. Return false lets the built-in server
+// serve the requested static file; confine it to assets/ and never follow a
+// path outside that directory.
+if (PHP_SAPI === 'cli-server' && isset($_SERVER['REQUEST_URI'])) {
+    $wms_asset_path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    if (is_string($wms_asset_path) && strpos($wms_asset_path, '/assets/') === 0) {
+        $wms_asset_path = rawurldecode($wms_asset_path);
+        $wms_assets_dir = realpath(__DIR__ . '/assets');
+        $wms_asset_file = realpath(__DIR__ . $wms_asset_path);
+        if ($wms_assets_dir !== FALSE && $wms_asset_file !== FALSE
+            && strpos($wms_asset_file, $wms_assets_dir . DIRECTORY_SEPARATOR) === 0
+            && is_file($wms_asset_file)) {
+            return false;
+        }
+    }
+}
+
 // Prevent double output buffering issues on some cPanel PHP handlers
 if (ob_get_level() === 0) {
     ob_start();

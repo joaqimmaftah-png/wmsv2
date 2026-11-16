@@ -36,6 +36,11 @@ jobs:
       - name: Run shared-layout & page-title regression checks
         run: node tests/page_titles.js
 
+      - name: Run navigation shell structural checks
+        run: |
+          node --check assets/js/navigation.js
+          node tests/navigation_shell.js
+
       - name: Run table and report UX structural checks
         run: |
           node tests/table_ux.js
@@ -155,6 +160,11 @@ jobs:
           trap 'echo "::error title=Step8Bash::Failed at line $LINENO (server log tail: $(tail -n 5 /tmp/php-server.log 2>/dev/null | tr "\n" " "))"; kill $SERVER_PID 2>/dev/null || true' ERR
           trap "kill $SERVER_PID 2>/dev/null || true" EXIT
           sleep 2
+
+          # The built-in server must serve the shell assets through index.php's
+          # cli-server guard; a 404 here silently disables navigation collapse.
+          curl -fsS http://127.0.0.1:8000/assets/js/navigation.js | grep -q 'wms.nav.collapsed'
+          curl -fsS http://127.0.0.1:8000/assets/js/global-find.js | grep -q 'global-find'
 
           # Authenticate via CSRF-protected POST /login (omit -X POST so -L follows 302 as GET!)
           COOKIES=/tmp/cookies.txt

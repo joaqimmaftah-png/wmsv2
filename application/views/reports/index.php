@@ -397,6 +397,26 @@ $sections = array(
                 ),
             ),
             array(
+                'title' => 'Fleet Availability',
+                'desc' => 'Time-based fleet availability for the reporting week, with the daily target and machine breakdown.',
+                'meta' => 'Weekly · Screen, Excel, print',
+                'form' => array(
+                    'action' => 'reports/fleet_availability',
+                    'control' => array('type' => 'date', 'name' => 'week_start', 'label' => 'Week from', 'value' => $week_start),
+                    'buttons' => array(),
+                ),
+            ),
+            array(
+                'title' => 'Downtime Register',
+                'desc' => 'Breakdown and planned-downtime events grouped from work orders for the selected reporting week.',
+                'meta' => 'Weekly · Screen',
+                'form' => array(
+                    'action' => 'reports/downtime_log',
+                    'control' => array('type' => 'date', 'name' => 'week_start', 'label' => 'Week from', 'value' => $week_start),
+                    'buttons' => array(),
+                ),
+            ),
+            array(
                 'title' => 'Availability Targets',
                 'desc' => 'The daily target KPI per machine and per group, with single-day overrides.',
                 'meta' => 'Weekly · Screen' . ($t['targets_ready'] ? '' : ' · targets table not installed'),
@@ -652,6 +672,17 @@ $sections = array(
         ),
     ),
 );
+foreach ($sections as $section_index => &$section) {
+    $section['num'] = str_pad((string)($section_index + 1), 2, '0', STR_PAD_LEFT);
+}
+unset($section);
+$quick_exports = array(
+    array('label' => 'Work orders', 'action' => 'reports/export_excel/workorders'),
+    array('label' => 'Attendance', 'action' => 'reports/export_excel/attendance'),
+    array('label' => 'Lubricants', 'action' => 'reports/export_excel/lubricants'),
+);
+$quick_export_count = count($quick_exports);
+$quick_export_num = str_pad((string)(count($sections) + 1), 2, '0', STR_PAD_LEFT);
 ?>
 
 <style>
@@ -909,12 +940,6 @@ $sections = array(
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
     </a>
   </div>
-
-  <nav aria-label="Fleet availability reports" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px;">
-    <a class="rpt-btn" href="<?= $h($bu('reports/fleet_availability?week_start=' . $week_start)) ?>">Fleet availability</a>
-    <a class="rpt-btn" href="<?= $h($bu('reports/workshop_weekly?week_start=' . $week_start)) ?>">Workshop weekly report</a>
-    <a class="rpt-btn" href="<?= $h($bu('reports/downtime_log?week_start=' . $week_start)) ?>">Log downtime</a>
-  </nav>
 
   <?php if (!$live): ?>
   <div class="rpt-panel" style="border-color:var(--rpt-warn-bd);background:var(--rpt-warn-bg);margin-bottom:20px;">
@@ -1193,21 +1218,21 @@ $sections = array(
     <!-- Quick exports -->
     <section class="rpt-section" id="quick-exports" aria-labelledby="rpt-quick-h" style="scroll-margin-top:86px;">
       <div class="rpt-section-head">
-        <span class="rpt-section-num" aria-hidden="true">06</span>
+        <span class="rpt-section-num" aria-hidden="true"><?= $h($quick_export_num) ?></span>
         <h3 class="rpt-section-title" id="rpt-quick-h">Quick exports</h3>
-        <span class="rpt-section-count">3</span>
+        <span class="rpt-section-count"><?= (int)$quick_export_count ?></span>
         <span class="rpt-section-desc">Raw CSV extracts for a chosen month</span>
       </div>
-      <form method="get" action="<?= $h($bu('reports/export_excel/workorders')) ?>" class="rpt-quick">
+      <form method="get" action="<?= $h($bu($quick_exports[0]['action'])) ?>" class="rpt-quick">
         <span class="rpt-quick-label">Download</span>
         <span class="rpt-period">
           <label class="rpt-period-label" for="rpt-quick-month">Month</label>
           <input class="rpt-input" type="month" id="rpt-quick-month" name="month" value="<?= $h($this_month) ?>">
         </span>
-        <button type="submit" class="rpt-btn">Work orders</button>
-        <button type="submit" class="rpt-btn" formaction="<?= $h($bu('reports/export_excel/attendance')) ?>">Attendance</button>
-        <button type="submit" class="rpt-btn" formaction="<?= $h($bu('reports/export_excel/lubricants')) ?>">Lubricants</button>
-        <span class="rpt-quick-note">These three endpoints return CSV files, despite their historical “excel” URL.</span>
+        <?php foreach ($quick_exports as $quick_export): ?>
+        <button type="submit" class="rpt-btn" formaction="<?= $h($bu($quick_export['action'])) ?>"><?= $h($quick_export['label']) ?></button>
+        <?php endforeach; ?>
+        <span class="rpt-quick-note">These <?= (int)$quick_export_count ?> endpoints return CSV files, despite their historical “excel” URL.</span>
       </form>
     </section>
   </section>

@@ -17,7 +17,7 @@ $year_i     = max(2000, min(2100, (int)($year ?? date('Y'))));
 $month_i    = max(1, min(12, (int)($month ?? date('m'))));
 $month_name = date('F', mktime(0, 0, 0, $month_i, 1, $year_i)) . ' ' . $year_i;
 $ccy        = isset($currency_code) && $currency_code !== '' ? (string)$currency_code : 'TZS';
-$can_write  = isset($can_write) ? (bool)$can_write : TRUE;
+$can_write  = isset($can_write) ? (bool)$can_write : FALSE;
 
 if (!isset($lines) || !is_array($lines)) {
     $lines = array();

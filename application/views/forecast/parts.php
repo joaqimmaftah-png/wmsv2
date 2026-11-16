@@ -43,6 +43,8 @@ $inventory_url = function ($row) {
   }
 </style>
 
+<?php $planning_nav_active = 'pm_parts'; include __DIR__ . '/_nav.php'; ?>
+
 <div class="flex ai-c jb mb-4" style="flex-wrap:wrap;gap:10px;">
   <div>
     <h1 class="page-heading" style="font-size:16px;">Parts — <?=$parts_h($schedule->schedule_name)?></h1>
@@ -234,7 +236,7 @@ $inventory_url = function ($row) {
 
 <div class="cs mt-4" style="font-size:11px;line-height:1.8;">
   These rows feed <a href="<?=base_url('forecast/spares')?>" style="color:var(--blue);">Forecast &rsaquo;
-  PM Spare-Parts Forecast</a>, which turns them into
+  PM Parts Forecast</a>, which turns them into
   <em>required − on hand − on order = shortage</em> for active PM schedules whose recorded next due dates fall in the selected window.
   A service with no parts list is counted and shown as a gap there, so an incomplete bill is never
   mistaken for a complete one.
