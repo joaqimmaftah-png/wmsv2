@@ -51,9 +51,9 @@ foreach ($attendance as $a) {
     <!-- Profile Card -->
     <div class="wms-card mb-3">
       <div class="card-body text-center py-4">
-        <div style="width:80px;height:80px;border-radius:50%;background:#1a3c5e;color:#fff;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;margin:0 auto 16px;">
+        <div style="width:200px;height:240px;border-radius:10px;overflow:hidden;background:#f1f5f9;border:1px solid var(--sep);color:#1a3c5e;display:flex;align-items:center;justify-content:center;font-size:56px;font-weight:700;margin:0 auto 16px;">
           <?php if ($worker->photo): ?>
-            <img src="<?= base_url('uploads/photos/' . rawurlencode(basename((string)$worker->photo))) ?>" alt="<?= htmlspecialchars($worker->first_name . ' ' . $worker->last_name, ENT_QUOTES, 'UTF-8') ?>" style="width:80px;height:80px;border-radius:50%;object-fit:cover;">
+            <img src="<?= base_url('uploads/photos/' . rawurlencode(basename((string)$worker->photo))) ?>" alt="<?= htmlspecialchars($worker->first_name . ' ' . $worker->last_name, ENT_QUOTES, 'UTF-8') ?>" style="width:100%;height:100%;object-fit:contain;display:block;">
           <?php else: ?>
             <?= htmlspecialchars(strtoupper((string)(substr($worker->first_name,0,1) . substr($worker->last_name,0,1))), ENT_QUOTES, 'UTF-8') ?>
           <?php endif; ?>
