@@ -84,10 +84,11 @@ class Users extends MY_Controller {
 
         $on_leave = (int)$this->db->where('status', 'On Leave')->count_all_results('users');
         $tab_counts = array(
-            'all'      => $stats['total'],
-            'active'   => $stats['active'],
-            'inactive' => $stats['inactive'],
-            'on_leave' => $on_leave,
+            'all'        => $stats['total'],
+            'active'     => $stats['active'],
+            'inactive'   => $stats['inactive'],
+            'on_leave'   => $on_leave,
+            'blacklisted' => $stats['blacklisted'],
         );
 
         $data['users']         = $data['users'];
@@ -95,7 +96,7 @@ class Users extends MY_Controller {
         $data['filter']        = $filter;
         $data['stats']         = $stats;
         $data['tab_counts']    = $tab_counts;
-        $status_to_tab = array('Active' => 'active', 'Inactive' => 'inactive', 'On Leave' => 'on_leave');
+        $status_to_tab = array('Active' => 'active', 'Inactive' => 'inactive', 'On Leave' => 'on_leave', 'Blacklisted' => 'blacklisted');
         $data['active_tab'] = (isset($filter['status']) && isset($status_to_tab[$filter['status']]))
             ? $status_to_tab[$filter['status']] : 'all';
         $data['sort_by']       = $sort_by;
@@ -176,6 +177,12 @@ class Users extends MY_Controller {
                     redirect("users/edit/{$id}");
                 }
 
+                $new_status = $this->input->post('status', TRUE);
+                if (!in_array($new_status, array('Active', 'Inactive', 'On Leave', 'Blacklisted'), TRUE)) {
+                    $this->session->set_flashdata('error', 'Invalid account status.');
+                    redirect("users/edit/{$id}");
+                }
+
                 $update = array(
                     'role_id'     => $this->input->post('role_id', TRUE),
                     'first_name'  => $this->input->post('first_name', TRUE),
@@ -184,8 +191,24 @@ class Users extends MY_Controller {
                     'phone'       => $this->input->post('phone', TRUE),
                     'position'    => $this->input->post('position', TRUE),
                     'skill_level' => $this->input->post('skill_level', TRUE) ?: 'Junior',
-                    'status'      => $this->input->post('status', TRUE),
+                    'status'      => $new_status,
                 );
+
+                // Keep the blacklist audit trail consistent with the status:
+                // entering Blacklisted stamps who/when; leaving it clears them.
+                // (The dedicated blacklist() action also records a reason.)
+                // Guarded by field_exists() like `site` above, so an
+                // un-migrated database (pre-0017) degrades instead of 500ing.
+                if ($this->db->field_exists('blacklisted_by', 'users')) {
+                    if ($new_status === 'Blacklisted' && $user->status !== 'Blacklisted') {
+                        $update['blacklisted_by'] = (int)$this->user_id;
+                        $update['blacklisted_at'] = date('Y-m-d H:i:s');
+                    } elseif ($new_status !== 'Blacklisted' && $user->status === 'Blacklisted') {
+                        $update['blacklisted_by'] = NULL;
+                        $update['blacklisted_at'] = NULL;
+                        $update['blacklist_reason'] = NULL;
+                    }
+                }
                 if ($this->db->field_exists('site', 'users')) {
                     $site_in = trim((string)$this->input->post('site', TRUE));
                     $update['site'] = $site_in !== '' ? substr($site_in, 0, 100) : NULL;
@@ -231,6 +254,14 @@ class Users extends MY_Controller {
         }
         $user = $this->db->where('id', $id)->get('users')->row();
         if (!$user) show_404();
+
+        // A blacklist is a deliberate security decision, not a toggle: it can
+        // only be lifted via unblacklist() (which lands on Inactive, so the
+        // account still needs an explicit Activate afterwards).
+        if ($user->status === 'Blacklisted') {
+            $this->session->set_flashdata('error', $user->first_name . ' ' . $user->last_name . ' is blacklisted. Use Unblacklist to lift it first.');
+            redirect('users');
+        }
 
         $new_status = ($user->status === 'Active') ? 'Inactive' : 'Active';
         $this->db->update('users', array('status' => $new_status), array('id' => $id));
@@ -365,11 +396,83 @@ class Users extends MY_Controller {
         $this->render('users/change_password', $data);
     }
 
-    // ── Delete user ─────────────────────────────────────────────
+    // ── Blacklist user ──────────────────────────────────────────
+    // Blacklisted is stronger than Inactive: the account cannot sign in
+    // (Auth::login), any live session is ended on its next request
+    // (MY_Controller::_check_auth), and the person is excluded from every
+    // "Active only" picker (technicians, roster). The decision is audited
+    // (who / when / why) in users.blacklisted_by / _at / _reason.
+    public function blacklist($id) {
+        if (!$this->require_post()) return;
+
+        if ($id == $this->user_id) {
+            $this->session->set_flashdata('error', 'You cannot blacklist your own account.');
+            redirect('users');
+        }
+
+        $user = $this->db->where('id', $id)->get('users')->row();
+        if (!$user) show_404();
+
+        if ($user->status === 'Blacklisted') {
+            $this->session->set_flashdata('error', $user->first_name . ' ' . $user->last_name . ' is already blacklisted.');
+            redirect('users');
+        }
+
+        // Never leave the system without an active supervisor.
+        if ((int)$user->role_id === 1 && $user->status === 'Active' && $this->_active_supervisor_count() <= 1) {
+            $this->session->set_flashdata('error', 'Cannot blacklist the last active Supervisor account.');
+            redirect('users');
+        }
+
+        $reason = trim((string)$this->input->post('blacklist_reason', TRUE));
+        $reason = $reason !== '' ? substr($reason, 0, 255) : NULL;
+
+        $this->db->update('users', array(
+            'status'           => 'Blacklisted',
+            'blacklisted_by'   => (int)$this->user_id,
+            'blacklisted_at'   => date('Y-m-d H:i:s'),
+            'blacklist_reason' => $reason,
+        ), array('id' => $id));
+
+        $this->session->set_flashdata('success', $user->first_name . ' ' . $user->last_name . ' has been blacklisted. Their access is blocked immediately.');
+        redirect('users');
+    }
+
+    // ── Lift a blacklist ────────────────────────────────────────
+    // Lands on Inactive, not Active: un-blacklisting must not silently
+    // restore full access — the supervisor still has to Activate explicitly.
+    public function unblacklist($id) {
+        if (!$this->require_post()) return;
+
+        $user = $this->db->where('id', $id)->get('users')->row();
+        if (!$user) show_404();
+
+        if ($user->status !== 'Blacklisted') {
+            $this->session->set_flashdata('error', $user->first_name . ' ' . $user->last_name . ' is not blacklisted.');
+            redirect('users');
+        }
+
+        $this->db->update('users', array(
+            'status'           => 'Inactive',
+            'blacklisted_by'   => NULL,
+            'blacklisted_at'   => NULL,
+            'blacklist_reason' => NULL,
+        ), array('id' => $id));
+
+        $this->session->set_flashdata('success', $user->first_name . ' ' . $user->last_name . ' has been un-blacklisted and set to Inactive. Activate the account to restore access.');
+        redirect('users');
+    }
+
+    // ── Delete user (hard delete, zero-history accounts only) ───
+    // Most FKs to `users` are RESTRICT, so a raw DELETE on a person with
+    // work-order / attendance / leave history would fail with an opaque
+    // SQL error — and destroying that history would break the audit trail
+    // anyway. So: hard delete is allowed only when NOTHING references the
+    // account (test accounts, duplicates, never-used logins). Anyone with
+    // history gets a clear refusal pointing at Blacklist / Deactivate,
+    // exactly like Suppliers::delete() does for linked purchase orders.
     public function delete($id) {
         // F-04: same class of endpoint as toggle_status — a write, so POST only.
-        // (Nothing in the interface links here; it survives as an endpoint and
-        // now refuses a GET.)
         if (!$this->require_post()) return;
 
         if ($id == $this->user_id) {
@@ -380,17 +483,96 @@ class Users extends MY_Controller {
         $user = $this->db->where('id', $id)->get('users')->row();
         if (!$user) show_404();
 
-        // Safety: deactivate instead of hard delete (preserves WO history)
-        $this->db->update('users', array('status' => 'Inactive'), array('id' => $id));
-        $this->session->set_flashdata('success', $user->first_name . ' ' . $user->last_name . ' has been deactivated (records preserved).');
+        // Never leave the system without an active supervisor.
+        if ((int)$user->role_id === 1 && $user->status === 'Active' && $this->_active_supervisor_count() <= 1) {
+            $this->session->set_flashdata('error', 'Cannot delete the last active Supervisor account.');
+            redirect('users');
+        }
+
+        $refs = $this->_reference_counts((int)$id);
+        $total_refs = array_sum($refs);
+        if ($total_refs > 0) {
+            $bits = array();
+            foreach ($refs as $label => $n) {
+                if ($n > 0) $bits[] = $n . ' ' . $label;
+            }
+            $this->session->set_flashdata(
+                'error',
+                'Cannot delete ' . $user->first_name . ' ' . $user->last_name . ': the account is referenced by '
+                . implode(', ', $bits) . '. Blacklist or Deactivate instead to preserve the record.'
+            );
+            redirect('users');
+        }
+
+        // Zero references: safe to hard-delete. Remove uploaded files first
+        // so we do not orphan blobs in uploads/photos and uploads/signatures.
+        foreach (array('photo', 'signature') as $col) {
+            $rel = isset($user->$col) ? (string)$user->$col : '';
+            if ($rel !== '') {
+                $path = ($col === 'photo')
+                    ? './uploads/photos/' . basename($rel)
+                    : './' . ltrim($rel, '/');
+                if (is_file($path)) @unlink($path);
+            }
+        }
+
+        $this->db->delete('users', array('id' => $id));
+        $this->session->set_flashdata('success', $user->first_name . ' ' . $user->last_name . ' has been deleted.');
         redirect('users');
+    }
+
+    // ── How many rows point at this user, per referencing table ──
+    // Only tables that actually exist are counted, so a partially-migrated
+    // database degrades to "fewer checks" instead of a 500. Column names
+    // match database/schema.sql FK definitions. Both RESTRICT FKs (which
+    // would make a raw DELETE fail) and SET NULL FKs (which would silently
+    // erase attribution) count as history: either way the account must be
+    // blacklisted/deactivated, not deleted.
+    private function _reference_counts($user_id) {
+        $checks = array(
+            'work order(s)'       => array('work_orders', 'created_by'),
+            'supervised work order(s)' => array('work_orders', 'supervisor_id'),
+            'completed work order(s)' => array('work_orders', 'completed_by'),
+            'verified work order(s)' => array('work_orders', 'verified_by'),
+            'operated work order(s)' => array('work_orders', 'operator_id'),
+            'labour session(s)'  => array('wo_sessions', 'technician_id'),
+            'attendance record(s)' => array('attendance', 'user_id'),
+            'attendance record(s) created' => array('attendance', 'created_by'),
+            'attendance punch(es)' => array('attendance_punches', 'user_id'),
+            'leave request(s)'   => array('leave_requests', 'user_id'),
+            'approved leave request(s)' => array('leave_requests', 'approved_by'),
+            'certification(s)'   => array('certifications', 'user_id'),
+            'shift assignment(s)' => array('shift_assignments', 'user_id'),
+            'lube consumption record(s)' => array('lube_consumption', 'recorded_by'),
+            'stock transaction(s)' => array('material_transactions', 'created_by'),
+            'inspection record(s)' => array('inspection_records', 'created_by'),
+            'backlog item(s)'    => array('backlogs', 'created_by'),
+            'spare order(s)'     => array('spare_orders', 'requested_by'),
+            'goods receipt(s)'   => array('goods_receipts', 'received_by'),
+            'blacklisted account(s)' => array('users', 'blacklisted_by'),
+        );
+
+        $counts = array();
+        foreach ($checks as $label => $pair) {
+            list($table, $column) = $pair;
+            if (!$this->db->table_exists($table) || !$this->db->field_exists($column, $table)) {
+                continue;
+            }
+            $counts[$label] = (int)$this->db->where($column, $user_id)->count_all_results($table);
+        }
+        return $counts;
+    }
+
+    private function _active_supervisor_count() {
+        return (int)$this->db->where('role_id', 1)->where('status', 'Active')->count_all_results('users');
     }
 
     // ── Stats helper ────────────────────────────────────────────
     private function _get_stats() {
-        $total    = $this->db->count_all('users');
-        $active   = $this->db->where('status', 'Active')->count_all_results('users');
-        $inactive = $this->db->where('status', 'Inactive')->count_all_results('users');
+        $total       = $this->db->count_all('users');
+        $active      = $this->db->where('status', 'Active')->count_all_results('users');
+        $inactive    = $this->db->where('status', 'Inactive')->count_all_results('users');
+        $blacklisted = $this->db->where('status', 'Blacklisted')->count_all_results('users');
         $by_role  = $this->db->select('r.name, COUNT(u.id) as cnt')
             ->from('users u')->join('roles r', 'r.id = u.role_id')
             ->group_by('u.role_id, r.name')->get()->result();
@@ -414,12 +596,13 @@ class Users extends MY_Controller {
         }
 
         return array(
-            'total'      => $total,
-            'active'     => $active,
-            'inactive'   => $inactive,
-            'by_role'    => $by_role,
-            'legacy'     => count($legacy_ids),
-            'legacy_ids' => $legacy_ids,
+            'total'       => $total,
+            'active'      => $active,
+            'inactive'    => $inactive,
+            'blacklisted' => $blacklisted,
+            'by_role'     => $by_role,
+            'legacy'      => count($legacy_ids),
+            'legacy_ids'  => $legacy_ids,
         );
     }
 }

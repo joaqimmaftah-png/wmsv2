@@ -95,7 +95,7 @@ $v = function($field, $default='') use ($u, $fd) {
       <div>
         <label class="form-label">Account Status</label>
         <select name="status" class="form-select">
-          <?php foreach (array('Active','Inactive','On Leave') as $st): ?>
+          <?php foreach (array('Active','Inactive','On Leave','Blacklisted') as $st): ?>
           <option value="<?= $st ?>" <?= $v('status') === $st ? 'selected' : '' ?>><?= $st ?></option>
           <?php endforeach; ?>
         </select>

@@ -388,7 +388,7 @@ check('Schema: seeds all 630 inspection_items', strpos($schemaSql, 'INSERT IGNOR
 
 $migFiles = glob(__DIR__ . '/../database/migrations/[0-9][0-9][0-9][0-9]_*.sql');
 sort($migFiles, SORT_STRING);
-is_same('Migrations: all 16 ordered SQL migrations present (0001..0016)', 16, count($migFiles));
+is_same('Migrations: all 17 ordered SQL migrations present (0001..0017)', 17, count($migFiles));
 foreach ($migFiles as $mf) {
     $bn  = basename($mf);
     $sum = hash_file('sha256', $mf);
@@ -404,6 +404,21 @@ check('Schema: users table defines optional `site` column and timesheet signator
     && strpos($schemaSql, "'timesheet_prepared_by'") !== FALSE
     && stripos($schemaSql, '16/Jul/26') === FALSE
     && stripos($schemaSql, 'MONTH OF JULY 2026') === FALSE);
+check('Schema: users.status includes Blacklisted with blacklist audit columns (0017)',
+    strpos($schemaSql, "`status` enum('Active','Inactive','On Leave','Blacklisted')") !== FALSE
+    && strpos($schemaSql, '`blacklist_reason` varchar(255) DEFAULT NULL') !== FALSE
+    && strpos($schemaSql, '`blacklisted_by` int(11) DEFAULT NULL') !== FALSE
+    && strpos($schemaSql, '`blacklisted_at` datetime DEFAULT NULL') !== FALSE
+    && strpos($schemaSql, 'fk_users_blacklisted_by') !== FALSE);
+$usersCtl = file_get_contents(__DIR__ . '/../application/controllers/Users.php');
+check('Users: blacklist/unblacklist actions exist and delete() guards on reference counts',
+    strpos($usersCtl, 'function blacklist(') !== FALSE
+    && strpos($usersCtl, 'function unblacklist(') !== FALSE
+    && strpos($usersCtl, '_reference_counts') !== FALSE
+    && strpos($usersCtl, 'last active Supervisor') !== FALSE);
+$authCtl = file_get_contents(__DIR__ . '/../application/controllers/Auth.php');
+check('Auth: sign-in only allows Active / On Leave (Blacklisted refused)',
+    strpos($authCtl, "where_in('status', array('Active', 'On Leave'))") !== FALSE);
 check('Schema: seeds all 116 fleet rows into equipment', strpos($schemaSql, 'INSERT INTO `equipment`') !== FALSE);
 check('Schema: preserves verbatim Asset Register Machine IDs (EX 006, C-HEADT 007, C-HEADT 008)',
     strpos($schemaSql, "'EX 006', 'EX 006'") !== FALSE
