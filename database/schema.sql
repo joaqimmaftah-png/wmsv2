@@ -812,7 +812,10 @@ CREATE TABLE `users` (
   `skill_level` enum('Junior','Senior','Expert','Specialist') DEFAULT 'Junior',
   `photo` varchar(255) DEFAULT NULL,
   `join_date` date DEFAULT NULL,
-  `status` enum('Active','Inactive','On Leave') DEFAULT 'Active',
+  `status` enum('Active','Inactive','On Leave','Blacklisted') DEFAULT 'Active',
+  `blacklist_reason` varchar(255) DEFAULT NULL COMMENT 'Why the account was blacklisted (0017)',
+  `blacklisted_by` int(11) DEFAULT NULL COMMENT 'users.id of the supervisor who blacklisted (0017)',
+  `blacklisted_at` datetime DEFAULT NULL COMMENT 'When the account was blacklisted (0017)',
   `last_login` datetime DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -1633,7 +1636,8 @@ ALTER TABLE `shift_assignments`
   ADD CONSTRAINT `shift_assignments_ibfk_2` FOREIGN KEY (`shift_id`) REFERENCES `shifts` (`id`);
 
 ALTER TABLE `users`
-  ADD CONSTRAINT `users_ibfk_1` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`);
+  ADD CONSTRAINT `users_ibfk_1` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`),
+  ADD CONSTRAINT `fk_users_blacklisted_by` FOREIGN KEY (`blacklisted_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
 
 ALTER TABLE `work_orders`
   ADD CONSTRAINT `fk_wo_supervisor` FOREIGN KEY (`supervisor_id`) REFERENCES `users` (`id`),
@@ -17889,7 +17893,8 @@ INSERT INTO `schema_migrations` (`version`, `filename`, `checksum`, `applied_at`
   ('0013', '0013_reconcile_stale_equipment_duplicates.sql', '2f18908982a107d08a5e16ffb307fa3da4d963dc9a4121c9d2a863ab430471ce', NOW()),
   ('0014', '0014_worker_site_and_timesheet_settings.sql', 'cd8b51e3741f792ed864d5b911fa89b0af2f57b0c513e0520a439e9833dffe28', NOW()),
   ('0015', '0015_backlog_workflow_safety.sql', '44d53529a058ba2f8797cff130d2e257ec0a7dbbb152b7f6876f9418ff15ca17', NOW()),
-  ('0016', '0016_forecast_write_lock.sql', '8c83c1e80c7751a560e868ba8a2fc03dee668284adcbaa6dcdcbeccf9bbf13c4', NOW())
+  ('0016', '0016_forecast_write_lock.sql', '8c83c1e80c7751a560e868ba8a2fc03dee668284adcbaa6dcdcbeccf9bbf13c4', NOW()),
+  ('0017', '0017_user_blacklist_and_delete.sql', '62b26d5ca0985b7a0edfbdf2a13bbfe8199d971cfa14c7c0d340a9d24b304659', NOW())
 ON DUPLICATE KEY UPDATE `filename` = VALUES(`filename`), `checksum` = VALUES(`checksum`);
 
 COMMIT;

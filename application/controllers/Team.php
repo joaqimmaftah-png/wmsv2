@@ -784,7 +784,7 @@ class Team extends MY_Controller {
                     'position'    => $field('position') !== '' ? $field('position') : NULL,
                     'skill_level' => in_array($field('skill_level'), array('Junior','Senior','Expert','Specialist'), TRUE)
                                         ? $field('skill_level') : $worker->skill_level,
-                    'status'      => in_array($field('status'), array('Active','Inactive','On Leave'), TRUE)
+                    'status'      => in_array($field('status'), array('Active','Inactive','On Leave','Blacklisted'), TRUE)
                                         ? $field('status') : $worker->status,
                     'join_date'   => $field('join_date') !== '' ? $field('join_date') : NULL,
                 );
@@ -905,7 +905,7 @@ class Team extends MY_Controller {
             if ($pw !== '' && strlen((string)($pw)) < 8) {
                 $errors[] = 'A new password must be at least 8 characters, or left blank to keep the current one.';
             }
-            if (isset($post['status']) && !in_array($post['status'], array('Active', 'Inactive', 'On Leave'), TRUE)) {
+            if (isset($post['status']) && !in_array($post['status'], array('Active', 'Inactive', 'On Leave', 'Blacklisted'), TRUE)) {
                 $errors[] = 'Choose a valid status.';
             }
         }

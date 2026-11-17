@@ -104,8 +104,14 @@ class Auth extends CI_Controller {
                     // ->row() on FALSE is an Error, so an unusable database used
                     // to produce a blank HTTP 500 here — with the password form
                     // still looking healthy. Say what is actually wrong instead.
+                    //
+                    // Only Active / On Leave may sign in. Inactive (access
+                    // disabled) and Blacklisted (misconduct / security risk)
+                    // are both refused here with the same generic message as a
+                    // wrong password, so the response never reveals which
+                    // accounts exist or why they were refused.
                     $query = $this->db->where('email', $email)
-                                      ->where('status !=', 'Inactive')
+                                      ->where_in('status', array('Active', 'On Leave'))
                                       ->get('users');
 
                     if ($query === FALSE) {

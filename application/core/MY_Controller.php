@@ -275,6 +275,28 @@ class MY_Controller extends CI_Controller {
         $this->user_data = $this->session->userdata('user_data');
 
         /*
+         * Re-validate the account on every request. Sign-in checks status
+         * once (Auth::login), but a supervisor may deactivate, blacklist or
+         * delete the account afterwards — without this check the old session
+         * would keep working until it expired, which defeats the purpose of
+         * a blacklist. One indexed lookup per request; any problem (missing
+         * row, Inactive/Blacklisted) ends the session. A database hiccup
+         * must not 500 every page, so failures fail open with a log line —
+         * the same defensive posture as _load_settings().
+         */
+        try {
+            $me = $this->db->select('id, status')
+                           ->where('id', (int)$this->user_id)
+                           ->get('users')->row();
+            if (!$me || !in_array((string)$me->status, array('Active', 'On Leave'), TRUE)) {
+                $this->session->sess_destroy();
+                redirect('login');
+            }
+        } catch (Throwable $e) {
+            log_message('error', 'WMS: account status re-validation failed — '.$e->getMessage());
+        }
+
+        /*
          * Sessions written before K-18 carry the entire `users` row, password
          * hash included, in `ci_sessions`. Rewrite one the first time it is
          * seen so existing rows stop holding it; new sign-ins are trimmed at

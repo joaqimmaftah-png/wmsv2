@@ -5,13 +5,14 @@ $current_user_id = (int)$this->session->userdata('user_id');
 $is_me           = function ($id) use ($current_user_id) { return (int)$id === $current_user_id; };
 
 $role_colors  = array('Supervisor'=>'b-critical','Technician'=>'b-primary','Store'=>'b-warning','Store Keeper'=>'b-warning','Manager'=>'b-info','CEO'=>'b-success');
-$status_colors= array('Active'=>'b-available','Inactive'=>'b-danger','On Leave'=>'b-warning');
+$status_colors= array('Active'=>'b-available','Inactive'=>'b-danger','On Leave'=>'b-warning','Blacklisted'=>'b-critical');
 
 $tab_defs = array(
-    'all'      => array('label' => 'All Users',     'count' => (int)($tab_counts['all'] ?? $stats['total'] ?? 0)),
-    'active'   => array('label' => 'Active',        'count' => (int)($tab_counts['active'] ?? $stats['active'] ?? 0)),
-    'inactive' => array('label' => 'Inactive',      'count' => (int)($tab_counts['inactive'] ?? $stats['inactive'] ?? 0)),
-    'on_leave' => array('label' => 'On Leave',      'count' => (int)($tab_counts['on_leave'] ?? 0)),
+    'all'        => array('label' => 'All Users',     'count' => (int)($tab_counts['all'] ?? $stats['total'] ?? 0)),
+    'active'     => array('label' => 'Active',        'count' => (int)($tab_counts['active'] ?? $stats['active'] ?? 0)),
+    'inactive'   => array('label' => 'Inactive',      'count' => (int)($tab_counts['inactive'] ?? $stats['inactive'] ?? 0)),
+    'on_leave'   => array('label' => 'On Leave',      'count' => (int)($tab_counts['on_leave'] ?? 0)),
+    'blacklisted' => array('label' => 'Blacklisted',  'count' => (int)($tab_counts['blacklisted'] ?? $stats['blacklisted'] ?? 0)),
 );
 $active_tab = isset($active_tab) ? (string)$active_tab : 'all';
 
@@ -131,7 +132,7 @@ $last_login_of = function ($u) {
 
 /* ── KPI strip ── */
 .us-kpis {
-  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px; margin-bottom: 18px;
 }
 .us-kpi {
@@ -512,6 +513,11 @@ $last_login_of = function ($u) {
     <div class="us-kpi-meta">Access disabled</div>
   </div>
   <div class="us-kpi">
+    <div class="us-kpi-label">Blacklisted</div>
+    <div class="us-kpi-val" style="color:var(--red);"><?= (int)($stats['blacklisted'] ?? 0) ?></div>
+    <div class="us-kpi-meta">Access blocked (security)</div>
+  </div>
+  <div class="us-kpi">
     <div class="us-kpi-label">Roles</div>
     <div class="us-kpi-val"><?= count($roles ?? array()) ?></div>
     <div class="us-kpi-meta">Defined in system</div>
@@ -554,6 +560,7 @@ $last_login_of = function ($u) {
         <option value="Active"   <?= ((isset($filter['status']) && $filter['status'] === 'Active')   ? 'selected' : '') ?>>Active</option>
         <option value="Inactive" <?= ((isset($filter['status']) && $filter['status'] === 'Inactive') ? 'selected' : '') ?>>Inactive</option>
         <option value="On Leave" <?= ((isset($filter['status']) && $filter['status'] === 'On Leave') ? 'selected' : '') ?>>On Leave</option>
+        <option value="Blacklisted" <?= ((isset($filter['status']) && $filter['status'] === 'Blacklisted') ? 'selected' : '') ?>>Blacklisted</option>
       </select>
     </div>
 
@@ -566,10 +573,11 @@ $last_login_of = function ($u) {
     <div class="us-tabs" role="tablist" aria-label="User status filter">
       <?php
       $tab_status_overrides = array(
-          'all'      => array('status' => ''),
-          'active'   => array('status' => 'Active'),
-          'inactive' => array('status' => 'Inactive'),
-          'on_leave' => array('status' => 'On Leave'),
+          'all'        => array('status' => ''),
+          'active'     => array('status' => 'Active'),
+          'inactive'   => array('status' => 'Inactive'),
+          'on_leave'   => array('status' => 'On Leave'),
+          'blacklisted' => array('status' => 'Blacklisted'),
       );
       foreach ($tab_defs as $t_key => $t_info):
           $is_on = ($active_tab === $t_key);
@@ -682,6 +690,9 @@ $last_login_of = function ($u) {
               $edit_url    = base_url('users/edit/' . $u->id);
               $reset_url   = base_url('users/reset_password/' . $u->id);
               $toggle_url  = base_url('users/toggle_status/' . $u->id);
+              $blacklist_url = base_url('users/blacklist/' . $u->id);
+              $unblacklist_url = base_url('users/unblacklist/' . $u->id);
+              $delete_url  = base_url('users/delete/' . $u->id);
               $role_change = base_url('users/change_role/' . $u->id);
           ?>
           <tr>
@@ -740,15 +751,37 @@ $last_login_of = function ($u) {
                 <a href="<?= htmlspecialchars($edit_url, ENT_QUOTES, 'UTF-8') ?>" class="us-act-btn is-primary" title="Edit user">Edit</a>
                 <a href="<?= htmlspecialchars($reset_url, ENT_QUOTES, 'UTF-8') ?>" class="us-act-btn" title="Reset password">Reset password</a>
                 <?php if (!$me): ?>
-                  <?php
-                    $verb = ($u->status === 'Active') ? 'Deactivate' : 'Activate';
-                    $btn_cls = ($u->status === 'Active') ? 'is-danger' : 'is-success';
-                  ?>
-                  <?= form_open($toggle_url, array(
+                  <?php if ($u->status !== 'Blacklisted'): ?>
+                    <?php
+                      $verb = ($u->status === 'Active') ? 'Deactivate' : 'Activate';
+                      $btn_cls = ($u->status === 'Active') ? 'is-danger' : 'is-success';
+                    ?>
+                    <?= form_open($toggle_url, array(
+                          'style'   => 'display:inline;margin:0;',
+                          'onsubmit' => "return confirm('" . $verb . " " . htmlspecialchars((string)($u->first_name), ENT_QUOTES, 'UTF-8') . "?')",
+                        )) ?>
+                    <button type="submit" class="us-act-btn <?= $btn_cls ?>" title="<?= $verb ?>"><?= $verb ?></button>
+                    <?= form_close() ?>
+                    <?= form_open($blacklist_url, array(
+                          'style'   => 'display:inline;margin:0;',
+                          'onsubmit' => "var r = prompt('Reason for blacklisting " . htmlspecialchars((string)($u->first_name . ' ' . $u->last_name), ENT_QUOTES, 'UTF-8') . " (optional, kept in the audit trail):', ''); if (r === null) return false; this.blacklist_reason.value = r; return confirm('Blacklist " . htmlspecialchars((string)($u->first_name), ENT_QUOTES, 'UTF-8') . "? Their access will be blocked immediately.');",
+                        )) ?>
+                    <input type="hidden" name="blacklist_reason" value="">
+                    <button type="submit" class="us-act-btn is-danger" title="Blacklist (block access for misconduct / security risk)">Blacklist</button>
+                    <?= form_close() ?>
+                  <?php else: ?>
+                    <?= form_open($unblacklist_url, array(
+                          'style'   => 'display:inline;margin:0;',
+                          'onsubmit' => "return confirm('Un-blacklist " . htmlspecialchars((string)($u->first_name), ENT_QUOTES, 'UTF-8') . "? The account will be set to Inactive and must be Activated separately.')",
+                        )) ?>
+                    <button type="submit" class="us-act-btn is-success" title="Lift the blacklist (sets account to Inactive)">Unblacklist</button>
+                    <?= form_close() ?>
+                  <?php endif; ?>
+                  <?= form_open($delete_url, array(
                         'style'   => 'display:inline;margin:0;',
-                        'onsubmit' => "return confirm('" . $verb . " " . htmlspecialchars((string)($u->first_name), ENT_QUOTES, 'UTF-8') . "?')",
+                        'onsubmit' => "return confirm('Permanently delete " . htmlspecialchars((string)($u->first_name . ' ' . $u->last_name), ENT_QUOTES, 'UTF-8') . "? This only works if the account has no work-order, attendance or leave history. Otherwise use Blacklist / Deactivate.')",
                       )) ?>
-                  <button type="submit" class="us-act-btn <?= $btn_cls ?>" title="<?= $verb ?>"><?= $verb ?></button>
+                  <button type="submit" class="us-act-btn is-danger" title="Permanently delete (zero-history accounts only)">Delete</button>
                   <?= form_close() ?>
                 <?php endif; ?>
               </div>
@@ -810,6 +843,46 @@ $last_login_of = function ($u) {
               <div class="us-row-actions">
                 <a href="<?= htmlspecialchars($edit_url, ENT_QUOTES, 'UTF-8') ?>" class="us-act-btn is-primary">Edit</a>
                 <a href="<?= htmlspecialchars($reset_url, ENT_QUOTES, 'UTF-8') ?>" class="us-act-btn">Reset password</a>
+                <?php if (!$me): ?>
+                  <?php
+                    $toggle_url_c = base_url('users/toggle_status/' . $u->id);
+                    $blacklist_url_c = base_url('users/blacklist/' . $u->id);
+                    $unblacklist_url_c = base_url('users/unblacklist/' . $u->id);
+                    $delete_url_c = base_url('users/delete/' . $u->id);
+                  ?>
+                  <?php if ($u->status !== 'Blacklisted'): ?>
+                    <?php
+                      $verb_c = ($u->status === 'Active') ? 'Deactivate' : 'Activate';
+                      $btn_cls_c = ($u->status === 'Active') ? 'is-danger' : 'is-success';
+                    ?>
+                    <?= form_open($toggle_url_c, array(
+                          'style'   => 'display:inline;margin:0;',
+                          'onsubmit' => "return confirm('" . $verb_c . " " . htmlspecialchars((string)($u->first_name), ENT_QUOTES, 'UTF-8') . "?')",
+                        )) ?>
+                    <button type="submit" class="us-act-btn <?= $btn_cls_c ?>"><?= $verb_c ?></button>
+                    <?= form_close() ?>
+                    <?= form_open($blacklist_url_c, array(
+                          'style'   => 'display:inline;margin:0;',
+                          'onsubmit' => "var r = prompt('Reason for blacklisting " . htmlspecialchars((string)($u->first_name . ' ' . $u->last_name), ENT_QUOTES, 'UTF-8') . " (optional, kept in the audit trail):', ''); if (r === null) return false; this.blacklist_reason.value = r; return confirm('Blacklist " . htmlspecialchars((string)($u->first_name), ENT_QUOTES, 'UTF-8') . "? Their access will be blocked immediately.');",
+                        )) ?>
+                    <input type="hidden" name="blacklist_reason" value="">
+                    <button type="submit" class="us-act-btn is-danger">Blacklist</button>
+                    <?= form_close() ?>
+                  <?php else: ?>
+                    <?= form_open($unblacklist_url_c, array(
+                          'style'   => 'display:inline;margin:0;',
+                          'onsubmit' => "return confirm('Un-blacklist " . htmlspecialchars((string)($u->first_name), ENT_QUOTES, 'UTF-8') . "? The account will be set to Inactive and must be Activated separately.')",
+                        )) ?>
+                    <button type="submit" class="us-act-btn is-success">Unblacklist</button>
+                    <?= form_close() ?>
+                  <?php endif; ?>
+                  <?= form_open($delete_url_c, array(
+                        'style'   => 'display:inline;margin:0;',
+                        'onsubmit' => "return confirm('Permanently delete " . htmlspecialchars((string)($u->first_name . ' ' . $u->last_name), ENT_QUOTES, 'UTF-8') . "? This only works if the account has no work-order, attendance or leave history. Otherwise use Blacklist / Deactivate.')",
+                      )) ?>
+                  <button type="submit" class="us-act-btn is-danger">Delete</button>
+                  <?= form_close() ?>
+                <?php endif; ?>
               </div>
             </div>
           </article>
