@@ -103,6 +103,22 @@ jobs:
         run: |
           php scripts/migrate.php --schema --verify
 
+      - name: Verify 0019 can upgrade an existing annual plan without resetting it
+        env:
+          WMS_DB_HOST: 127.0.0.1
+          WMS_DB_PORT: 3306
+          WMS_DB_USER: root
+          WMS_DB_PASS: ${{ matrix.root_pass }}
+          WMS_DB_NAME: wms_fresh
+        run: |
+          # Disposable fresh schema: simulate an installation that applied 0018
+          # before 0019 was released, then run the real incremental migrator.
+          mysql -h 127.0.0.1 -uroot -p"${{ matrix.root_pass }}" wms_fresh -e "
+            DROP TABLE workforce_plan_cover;
+            DELETE FROM schema_migrations WHERE version='0019';
+          "
+          php scripts/migrate.php --verify
+
       - name: Verify standalone `migrate.php --verify` applies pending migrations & merges stale duplicates
         env:
           WMS_DB_HOST: 127.0.0.1
@@ -236,6 +252,10 @@ jobs:
           # publication, cross-year leave, reminders and Off-day settlement.
           php scripts/create-admin.php roster@ci.local "AdminPass123!" "CI" "Roster" 2
           php scripts/create-admin.php rosterpay@ci.local "AdminPass123!" "CI" "Payroll" 2
+          php scripts/create-admin.php rosterbackup@ci.local "AdminPass123!" "CI" "Backup" 2
+          php scripts/create-admin.php rostersecond@ci.local "AdminPass123!" "CI" "Second" 2
+          php scripts/create-admin.php rosterremote@ci.local "AdminPass123!" "CI" "Remote" 2
           WMS_TEST_DESTRUCTIVE=1 python3 tests/annual_plan_live.py
+          WMS_TEST_DESTRUCTIVE=1 python3 tests/sick_cover_live.py
 
 

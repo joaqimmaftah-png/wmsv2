@@ -18,6 +18,7 @@ if ($attendance_nav_personal) {
         $module_nav_items[] = array('key' => 'daily_attendance', 'label' => 'Daily Attendance', 'path' => 'team/attendance?date=' . rawurlencode($attendance_nav_date));
     }
     $module_nav_items[] = array('key' => 'annual_roster', 'label' => 'Annual Workforce Plan', 'path' => 'team/annual_roster');
+    $module_nav_items[] = array('key' => 'sick_shift_cover', 'label' => 'Sick Shift Cover', 'path' => 'team/roster_cover');
     $module_nav_items[] = array('key' => 'attendance_report', 'label' => 'Attendance & Timesheets', 'path' => 'team/report?month=' . rawurlencode($attendance_nav_month));
     $module_nav_items[] = array('key' => 'on_site', 'label' => 'On-Site Status', 'path' => 'attendance');
     $module_nav_items[] = array('key' => 'checkin_log', 'label' => 'Check-in Log', 'path' => 'attendance/log?date=' . rawurlencode($attendance_nav_date));

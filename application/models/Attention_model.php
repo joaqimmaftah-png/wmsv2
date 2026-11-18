@@ -41,6 +41,15 @@ class Attention_model extends CI_Model {
             foreach ($this->_planned_leave_reminders((int)$user_id, $role) as $leave_group) {
                 $groups[] = $leave_group;
             }
+            $cover_duty = $this->_upcoming_cover_duties((int)$user_id);
+            if ($cover_duty) $groups[] = $cover_duty;
+        }
+
+        // Actionable gaps only: do not notify every employee of a colleague's
+        // medical absence. A supervisor/manager can inspect the next week.
+        if (in_array($role, array(1, 4), TRUE)) {
+            $sick_cover = $this->_uncovered_sick_shifts();
+            if ($sick_cover) $groups[] = $sick_cover;
         }
 
         // Verification is a supervisor action, not a read-only manager alert.
@@ -58,6 +67,57 @@ class Attention_model extends CI_Model {
         foreach ($groups as $group) $count += (int)$group['count'];
 
         return array('groups' => $groups, 'count' => $count);
+    }
+
+    private function _upcoming_cover_duties($user_id) {
+        if (!$this->db->table_exists('workforce_plan_cover')) return NULL;
+        $today = date('Y-m-d');
+        $query = function () use ($user_id, $today) {
+            return $this->db->from('workforce_plan_cover c')
+                ->join('shifts s', 's.id = c.shift_id')
+                ->where('c.cover_user_id', (int)$user_id)->where('c.status', 'Assigned')
+                ->where('c.work_date >=', $today)
+                ->where('c.work_date <=', date('Y-m-d', strtotime($today . ' +7 days')));
+        };
+        $rows = $query()->select('c.work_date, c.cover_mode, s.name AS shift_name')
+            ->order_by('c.work_date')->limit(self::PREVIEW_LIMIT + 1)->get()->result();
+        if (!$rows) return NULL;
+        $count = count($rows);
+        if ($count > self::PREVIEW_LIMIT) $count = (int)$query()->count_all_results();
+        $items = array();
+        foreach (array_slice($rows, 0, self::PREVIEW_LIMIT) as $row) $items[] = array(
+            'label' => (string)$row->shift_name,
+            'detail' => $row->cover_mode === 'OffCallIn' ? 'Authorised Off-day call-in' : 'Cover duties on your existing Shift',
+            'meta' => 'Cover duty · ' . date('d M', strtotime($row->work_date)),
+            // Never disclose the sick worker's name or medical details here.
+            'url' => base_url('team/annual_roster?year=' . substr($row->work_date, 0, 4)
+                . '&user=' . (int)$user_id . '&view=month&month=' . (int)substr($row->work_date, 5, 2)
+                . '#day-' . $row->work_date),
+        );
+        return array('key' => 'cover_duty', 'label' => 'Upcoming cover duties',
+            'count' => $count, 'tone' => 'info', 'url' => $items[0]['url'],
+            'action' => 'My schedule', 'items' => $items);
+    }
+
+    private function _uncovered_sick_shifts() {
+        if (!$this->db->table_exists('workforce_plan_cover')) return NULL;
+        $ci =& get_instance();
+        $ci->load->model(array('Workforce_plan_model', 'Workforce_cover_model'));
+        if (!$ci->Workforce_cover_model->ready()) return NULL;
+        $today = date('Y-m-d');
+        $queue = $ci->Workforce_cover_model->queue($today, date('Y-m-d', strtotime($today . ' +7 days')),
+            1, self::PREVIEW_LIMIT, TRUE);
+        if (!$queue['total']) return NULL;
+        $items = array();
+        foreach ($queue['rows'] as $row) $items[] = array(
+            'label' => (string)$row->first_name . ' ' . (string)$row->last_name,
+            'detail' => (string)$row->shift_name . ' · ' . (string)$row->employee_id,
+            'meta' => 'Needs cover · ' . date('d M', strtotime($row->work_date)),
+            'url' => base_url('team/roster_cover?user=' . (int)$row->absent_user_id . '&date=' . $row->work_date),
+        );
+        return array('key' => 'sick_shift_cover', 'label' => 'Sick shifts need cover',
+            'count' => (int)$queue['total'], 'tone' => 'warning',
+            'url' => base_url('team/roster_cover'), 'action' => 'Find cover', 'items' => $items);
     }
 
     private function _uncontrolled_incidents($user_id, $role_id) {

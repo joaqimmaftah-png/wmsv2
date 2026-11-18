@@ -179,6 +179,8 @@ class Team_model extends CI_Model {
                 } else {
                     $shift_names[$uid] = $kind === 'Off' && $cell['extra'] ? 'Off · authorised extra work' : $plan_label;
                 }
+                if (!empty($cell['covering'])) $plan_label .= ' · Cover duty';
+                if (!empty($cell['covered_by'])) $plan_label .= ' · Cover arranged';
                 if ($kind === 'Leave') $leave_today[$uid] = $cell['leave_type'];
             }
             $eff_status = $raw_status;

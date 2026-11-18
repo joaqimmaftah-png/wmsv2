@@ -127,6 +127,7 @@ $all_days = $summary['worker_days'];
     <a class="btn btn-ghost btn-sm" href="<?= $mk_url(array('week' => date('Y-m-d', strtotime($week_start . ' +7 days')))) ?>" aria-label="Next week">Next ›</a>
     <a class="btn btn-ghost btn-sm" href="<?= site_url('team/shift_roster') ?>">Today</a>
     <a class="btn btn-primary btn-sm" href="<?= site_url('team/annual_roster?year=' . (int)substr($week_start, 0, 4)) ?>"><?= $can_export ? 'Annual plan →' : 'My annual schedule →' ?></a>
+    <?php if ($can_export): ?><a class="btn btn-ghost btn-sm" href="<?= site_url('team/roster_cover?month=' . substr($week_start,0,7)) ?>">Sick Shift Cover →</a><?php endif; ?>
   </div>
 </header>
 <?php if (!$plan_ready): ?>
@@ -192,6 +193,9 @@ $all_days = $summary['worker_days'];
           <?php if ($sh): ?><span class="sr-micro" style="margin:0"><?= substr($sh->start_time,0,5) ?> – <?= substr($sh->end_time,0,5) ?></span><?php endif; ?>
           <?php if ($extra_shift): ?><span class="sr-micro" style="margin:0"><?= $esc($extra_shift->name) ?> · <?= substr($extra_shift->start_time,0,5) ?>–<?= substr($extra_shift->end_time,0,5) ?></span><?php endif; ?>
           <?php if ($cell['replacement']): ?><span class="sr-micro" style="margin:0">For work on <?= $esc($cell['replacement']->work_date) ?></span><?php endif; ?>
+          <?php if (!empty($cell['covering'])): ?><span class="sr-micro" style="margin:0;font-weight:700">Covering team Shift · <?= $cell['covering']->cover_mode === 'OffCallIn' ? 'authorised call-in' : 'on-shift duties' ?></span><?php endif; ?>
+          <?php if (!empty($cell['covered_by'])): ?><span class="sr-micro" style="margin:0;font-weight:700">Cover arranged</span><?php endif; ?>
+          <?php if ($can_export && $d >= $today && $cell['kind'] === 'Leave' && $cell['leave_type'] === 'Sick Leave' && isset($cell['base_kind']) && $cell['base_kind'] === 'Shift' && $cell['plan_status'] === 'Published'): ?><a class="sr-edit" href="<?= site_url('team/roster_cover?user=' . (int)$w->id . '&date=' . $d) ?>"><?= !empty($cell['covered_by']) ? 'Review cover' : 'Find cover' ?></a><?php endif; ?>
           <?php if ($can_edit && $plan_ready && $d >= $today && $cell['kind'] !== 'Leave' && $cell['kind'] !== 'BeforeStart' && !$ex && !$cell['replacement']): ?>
           <a class="sr-edit" href="<?= site_url('team/roster_day_edit?user=' . (int)$w->id . '&date=' . $d) ?>" data-user="<?= (int)$w->id ?>" data-worker="<?= $esc($w->full_name_roster) ?>" data-date="<?= $d ?>" data-value="<?= $esc($day_state($cell)) ?>" data-plan="<?= $esc($cell['plan_status']) ?>">Edit day</a>
           <?php elseif ($can_edit && $plan_ready && ($cell['kind'] === 'Leave' || $ex || $cell['replacement'])): ?>

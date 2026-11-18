@@ -377,14 +377,14 @@ if ($opts['verify']) {
         }
     }
 
-    // Annual roster writes acquire a year row FOR UPDATE, then change days,
-    // leave, extra-work and audit rows in that transaction. All five tables
-    // must be InnoDB and carry the expected unique worker/date boundaries.
+    // Annual roster and sick-cover writes acquire a year row FOR UPDATE,
+    // then change days, leave, extra-work and audit rows in that transaction.
+    // Every planning table must be InnoDB for that serialization to work.
     $annualTables = array('workforce_plan_years', 'workforce_plan_days', 'workforce_plan_leaves',
-        'workforce_plan_extra_days', 'workforce_plan_events');
+        'workforce_plan_extra_days', 'workforce_plan_events', 'workforce_plan_cover');
     foreach ($annualTables as $table) {
         if (!isset($planEngines[$table]) || strcasecmp((string)$planEngines[$table], 'InnoDB') !== 0) {
-            $errors[] = "Expected an InnoDB `{$table}` from migration 0018.";
+            $errors[] = "Expected an InnoDB `{$table}` from annual-plan/sick-cover migrations 0018–0019.";
         }
     }
     $uniqueAnnual = array();
@@ -392,7 +392,7 @@ if ($opts['verify']) {
         GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS columns_in_order,
         MAX(CASE WHEN SUB_PART IS NOT NULL THEN 1 ELSE 0 END) AS has_prefix
         FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME IN ('workforce_plan_years', 'workforce_plan_days', 'workforce_plan_extra_days')
+        AND TABLE_NAME IN ('workforce_plan_years', 'workforce_plan_days', 'workforce_plan_extra_days', 'workforce_plan_cover')
         GROUP BY TABLE_NAME, INDEX_NAME, NON_UNIQUE");
     if ($res) while ($idx = $res->fetch_assoc()) {
         if ((int)$idx['NON_UNIQUE'] === 0 && (int)$idx['has_prefix'] === 0) {
@@ -404,6 +404,7 @@ if ($opts['verify']) {
         'workforce_plan_days.uq_wpd_worker_date' => 'user_id,work_date',
         'workforce_plan_extra_days.uq_wpe_worker_date' => 'user_id,work_date',
         'workforce_plan_extra_days.uq_wpe_replacement' => 'user_id,replacement_date',
+        'workforce_plan_cover.uq_wpc_absent_date' => 'absent_user_id,work_date',
     ) as $index => $columns) {
         if (!isset($uniqueAnnual[$index]) || $uniqueAnnual[$index] !== $columns)
             $errors[] = "Expected full-length unique index {$index} ({$columns}) for annual planning.";
@@ -431,6 +432,28 @@ if ($opts['verify']) {
     $noticeKeys = array();
     if ($res) while ($setting = $res->fetch_assoc()) $noticeKeys[$setting['setting_key']] = TRUE;
     if (count($noticeKeys) !== 2) $errors[] = 'Expected both published-leave reminder settings from migration 0018.';
+
+    // 0019 is additive, but an absent/date UNIQUE and live candidate/date
+    // lookup are required to prevent hidden double-assignment under year lock.
+    $res = $mysqli->query("SELECT COUNT(*) AS c FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workforce_plan_cover'
+        AND INDEX_NAME = 'idx_wpc_cover_date' AND SUB_PART IS NULL");
+    if (!$res || (int)$res->fetch_assoc()['c'] !== 3)
+        $errors[] = 'Expected indexed candidate/date/status lookup for approved sick cover.';
+    $res = $mysqli->query("SELECT COUNT(*) AS c FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workforce_plan_cover'
+        AND COLUMN_NAME = 'availability_confirmed_at'");
+    if (!$res || (int)$res->fetch_assoc()['c'] !== 1)
+        $errors[] = 'Expected supervisor Off-day availability attestation on sick cover.';
+    $res = $mysqli->query("SELECT COUNT(*) AS c FROM information_schema.TABLE_CONSTRAINTS
+        WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'workforce_plan_cover'
+        AND CONSTRAINT_TYPE = 'FOREIGN KEY'");
+    if (!$res || (int)$res->fetch_assoc()['c'] !== 6)
+        $errors[] = 'Expected six sick-cover foreign keys (both workers, shift, call-in and actors).';
+    $res = $mysqli->query("SELECT `checksum` FROM `schema_migrations` WHERE `version` = '0019'");
+    $coverLedger = $res ? $res->fetch_assoc() : NULL;
+    if (!$coverLedger || $coverLedger['checksum'] !== hash_file('sha256', $migDir . '/0019_sick_shift_cover.sql'))
+        $errors[] = 'Migration 0019 is not applied or its ledger checksum does not match the SQL file.';
 
     $res = $mysqli->query("SELECT COUNT(*) AS c FROM `settings`");
     $settingsCount = $res ? (int)$res->fetch_assoc()['c'] : 0;
