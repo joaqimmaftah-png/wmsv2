@@ -121,8 +121,12 @@ try:
     assert '/team/annual_roster' in url and db(f'SELECT status FROM workforce_plan_years WHERE plan_year={FUTURE}')[0][0] == 'Draft'
     assert count(f'SELECT COUNT(*) FROM workforce_plan_days WHERE user_id={worker_id} AND YEAR(work_date)={FUTURE}') in (365, 366)
     assert count(f"SELECT COUNT(*) FROM workforce_plan_days WHERE user_id={worker_id} AND YEAR(work_date)={FUTURE} AND day_type='Off'") > 45
-    assert 'Draft preview' in text(manager, future_url)
-    assert 'name="user_ids[]"' not in text(manager, future_url)
+    manager_preview = text(manager, future_url)
+    assert 'Draft preview' in manager_preview
+    # The shared JavaScript contains this field name even in a read-only
+    # preview; verify that no editable form control was actually rendered.
+    assert not re.search(r'<input[^>]+name="user_ids\[\]"', manager_preview)
+    assert not re.search(r'<form[^>]+action="[^"]*/team/roster_publish"', manager_preview)
     assert 'There is no published plan' in text(worker, future_url)
     status, _, _ = page(worker, f'/team/annual_roster_csv?year={FUTURE}')
     assert status == 404, 'A worker must not export a draft year'
