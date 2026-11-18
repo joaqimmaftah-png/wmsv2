@@ -116,7 +116,7 @@ try:
     board = f'/team/roster_cover?month={month}'
     url1 = f'/team/roster_cover?user={absent}&date={D1}'
     url2 = f'/team/roster_cover?user={absent}&date={D2}'
-    roster = f'/team/annual_roster?year={FUTURE}&user={absent}'
+    roster = f'/team/annual_roster?year={FUTURE}&user={absent}&view=month&month={int(D1[5:7])}'
     submit(admin, '/team/roster_day_save', {
         'user_id': off, 'date': D2, 'day_type': 'Off', 'reason': 'Standby for urgent cover',
     }, roster)
@@ -156,7 +156,7 @@ try:
     assert cover(absent, D1) == c1, 'Repeated POST must not create another cover'
     assert count(f"SELECT COUNT(*) FROM attendance WHERE user_id={on_shift} AND date='{D1}'") == 0
     assert 'Cover arranged' in text(worker, roster)
-    pay_calendar = f'/team/annual_roster?year={FUTURE}&user={on_shift}'
+    pay_calendar = f'/team/annual_roster?year={FUTURE}&user={on_shift}&view=month&month={int(D1[5:7])}'
     assert 'Covering team Shift' in text(pay_worker, pay_calendar)
     assert 'Find cover' not in text(pay_worker, pay_calendar)
 
@@ -202,7 +202,7 @@ try:
     assert count(f'SELECT COUNT(*) FROM workforce_plan_cover WHERE id={c2[0]} AND availability_confirmed_at IS NOT NULL') == 1
     assert db(f"SELECT day_type FROM workforce_plan_days WHERE user_id={off} AND work_date='{D2}'")[0][0] == 'Off'
     assert db(f"SELECT status, compensation FROM workforce_plan_extra_days WHERE id={c2[4]}")[0] == ['Planned', 'TimeOff']
-    backup_calendar = f'/team/annual_roster?year={FUTURE}&user={off}'
+    backup_calendar = f'/team/annual_roster?year={FUTURE}&user={off}&view=month&month={int(D2[5:7])}'
     assert 'Covering team Shift' in text(admin, backup_calendar)
     status, _, data = page(admin, f'/team/annual_roster_csv?year={FUTURE}&user={off}')
     assert status == 200 and b'Off call-in cover' in data
