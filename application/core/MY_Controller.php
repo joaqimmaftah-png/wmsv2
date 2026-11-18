@@ -53,6 +53,7 @@ class MY_Controller extends CI_Controller {
     public $Auth_throttle_model;
     public $Attendance_model;
     public $Timesheet_model;
+    public $Workforce_plan_model;
     public $Search_model;
     public $Attention_model;
 

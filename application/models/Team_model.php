@@ -139,6 +139,19 @@ class Team_model extends CI_Model {
             }
         }
 
+        // Plan availability is a forecast, never a replacement for the actual
+        // on_site_map above. Drafts are intentionally invisible here.
+        $plan_today = array();
+        $shifts_by_id = array();
+        if ($this->db->table_exists('workforce_plan_years')) {
+            $ci->load->model('Workforce_plan_model');
+            if ($ci->Workforce_plan_model->ready()) {
+                $ids = array(); foreach ($workers as $person) $ids[] = (int)$person->id;
+                $plan_today = $ci->Workforce_plan_model->days($today, $today, $ids, FALSE);
+                foreach ($this->get_shifts() as $shift) $shifts_by_id[(int)$shift->id] = $shift;
+            }
+        }
+
         $skill_rank = array('Junior' => 1, 'Senior' => 2, 'Expert' => 3, 'Specialist' => 4);
         $out = array();
 
@@ -153,10 +166,23 @@ class Team_model extends CI_Model {
                 : array('Valid' => 0, 'Expiring Soon' => 0, 'Expired' => 0);
 
             $raw_status = isset($w->status) && $w->status !== '' ? (string)$w->status : 'Active';
-            $eff_status = $raw_status;
-            if ($raw_status === 'Active' && isset($leave_today[$uid])) {
-                $eff_status = 'On Leave';
+            $cell = isset($plan_today[$uid][$today]) ? $plan_today[$uid][$today] : NULL;
+            $plan_label = '';
+            $expected = NULL;
+            if ($cell && $cell['plan_status'] === 'Published') {
+                $kind = $cell['kind'];
+                $plan_label = $kind === 'Leave' ? $cell['leave_type'] : ($kind === 'Unplanned' ? 'Needs plan' : $kind);
+                $expected = $kind === 'Unplanned' ? NULL : ($kind === 'Shift' || ($kind === 'Off' && (bool)$cell['extra']));
+                if ($kind === 'Shift' && isset($shifts_by_id[$cell['shift_id']])) {
+                    $sh = $shifts_by_id[$cell['shift_id']];
+                    $shift_names[$uid] = $sh->name . ' (' . substr($sh->start_time, 0, 5) . '–' . substr($sh->end_time, 0, 5) . ')';
+                } else {
+                    $shift_names[$uid] = $kind === 'Off' && $cell['extra'] ? 'Off · authorised extra work' : $plan_label;
+                }
+                if ($kind === 'Leave') $leave_today[$uid] = $cell['leave_type'];
             }
+            $eff_status = $raw_status;
+            if ($raw_status === 'Active' && isset($leave_today[$uid])) $eff_status = 'On Leave';
 
             $skill = isset($w->skill_level) && $w->skill_level !== '' ? (string)$w->skill_level : 'Junior';
 
@@ -181,6 +207,8 @@ class Team_model extends CI_Model {
                 'status'            => $raw_status,
                 'effective_status'  => $eff_status,
                 'active_leave_type' => isset($leave_today[$uid]) ? $leave_today[$uid] : '',
+                'planned_today'     => $plan_label,
+                'expected_on_site'  => $expected,
                 'on_site_today'     => isset($on_site_map[$uid]),
                 'current_shift'     => isset($shift_names[$uid]) ? $shift_names[$uid] : '',
                 'active_wo_count'   => isset($wo_counts[$uid]) ? (int)$wo_counts[$uid] : 0,
@@ -239,6 +267,13 @@ class Team_model extends CI_Model {
         return $this->db->select('u.*, r.name as role_name')->from('users u')
             ->join('roles r', 'r.id = u.role_id')->where('u.status', 'Active')
             ->order_by('u.first_name')->get()->result();
+    }
+
+    /** Staff with a future schedule, including accounts temporarily marked On Leave. */
+    public function get_plannable_staff() {
+        return $this->db->select('u.*, r.name as role_name')->from('users u')
+            ->join('roles r', 'r.id = u.role_id')->where_in('u.status', array('Active', 'On Leave'))
+            ->order_by('u.first_name')->order_by('u.last_name')->get()->result();
     }
 
     public function get_technicians() {
@@ -499,7 +534,7 @@ class Team_model extends CI_Model {
             ->get()->result();
     }
 
-    /** Does this user already have a pending/approved request overlapping the range? */
+    /** A request cannot overlap either another request or supervisor-planned leave. */
     public function has_overlapping_leave($user_id, $start, $end, $exclude_id = NULL) {
         $this->db->where('user_id', (int)$user_id)
             ->where_in('status', array('Pending', 'Approved'))
@@ -508,7 +543,11 @@ class Team_model extends CI_Model {
         if ($exclude_id !== NULL) {
             $this->db->where('id !=', (int)$exclude_id);
         }
-        return $this->db->count_all_results('leave_requests') > 0;
+        if ($this->db->count_all_results('leave_requests') > 0) return TRUE;
+        return $this->db->table_exists('workforce_plan_leaves')
+            && $this->db->where('user_id', (int)$user_id)->where('status', 'Scheduled')
+                ->where('start_date <=', $end)->where('end_date >=', $start)
+                ->count_all_results('workforce_plan_leaves') > 0;
     }
 
     /**
@@ -539,30 +578,50 @@ class Team_model extends CI_Model {
     }
 
     /**
-     * Approved / pending / rejected days per leave type for one year.
-     * `days_count` is the value stored on the request (calendar days).
+     * Approved / pending / rejected calendar days per year. Legacy requests
+     * store an inclusive days_count, but a cross-year block must be charged
+     * only for the dates inside this year (not wholly to its start year).
      *
-     * @return array type => array(approved, pending, rejected)
+     * @param bool $include_draft Only planners may see unpublished reservations.
+     * @return array type => array(approved, pending, rejected, planned)
      */
-    public function get_leave_usage($user_id, $year = NULL) {
+    public function get_leave_usage($user_id, $year = NULL, $include_draft = FALSE) {
         $year = $year ? (int)$year : (int)date('Y');
+        $first = $year . '-01-01';
+        $last = $year . '-12-31';
 
-        $rows = $this->db
-            ->select('leave_type, status, SUM(COALESCE(days_count,0)) AS days')
+        $rows = $this->db->select('leave_type, status, start_date, end_date, days_count')
             ->where('user_id', (int)$user_id)
-            ->where('start_date >=', $year . '-01-01')
-            ->where('start_date <=', $year . '-12-31')
-            ->group_by(array('leave_type', 'status'))
+            ->where('start_date <=', $last)->where('end_date >=', $first)
             ->get('leave_requests')->result();
 
         $out = array();
         foreach ($rows as $r) {
-            if (!isset($out[$r->leave_type])) {
-                $out[$r->leave_type] = array('approved' => 0.0, 'pending' => 0.0, 'rejected' => 0.0);
-            }
             $key = strtolower((string)$r->status);
-            if (isset($out[$r->leave_type][$key])) {
-                $out[$r->leave_type][$key] = (float)$r->days;
+            if (!in_array($key, array('approved', 'pending', 'rejected'), TRUE)) continue;
+            if (!isset($out[$r->leave_type])) {
+                $out[$r->leave_type] = array('approved' => 0.0, 'pending' => 0.0, 'rejected' => 0.0, 'planned' => 0.0);
+            }
+            $overlap_start = max($first, $r->start_date);
+            $overlap_end = min($last, $r->end_date);
+            if ($overlap_start > $overlap_end) continue;
+            $calendar_days = (new DateTimeImmutable($overlap_start))->diff(new DateTimeImmutable($overlap_end))->days + 1;
+            // Preserve adjusted historical counts for a request fully inside
+            // the year; for a crossing request, allocate by its actual dates.
+            $days = $r->start_date >= $first && $r->end_date <= $last && $r->days_count !== NULL
+                ? (float)$r->days_count : (float)$calendar_days;
+            $out[$r->leave_type][$key] += $days;
+        }
+        // Scheduled leave reserves underlying Shift days only, not Off or
+        // Holiday. Staff must not infer a Draft plan from a changed balance.
+        if ($this->db->table_exists('workforce_plan_leaves') && $this->db->table_exists('workforce_plan_days')) {
+            $ci = get_instance();
+            $ci->load->model('Workforce_plan_model');
+            if ($include_draft || $ci->Workforce_plan_model->is_published($year . '-12-31')) {
+                foreach ($ci->Workforce_plan_model->leave_usage($user_id, $year) as $type => $days) {
+                    if (!isset($out[$type])) $out[$type] = array('approved' => 0.0, 'pending' => 0.0, 'rejected' => 0.0, 'planned' => 0.0);
+                    $out[$type]['planned'] = (float)$days;
+                }
             }
         }
         return $out;
@@ -570,15 +629,16 @@ class Team_model extends CI_Model {
 
     /**
      * Balance rows for one user and year: every type the form offers, with
-     * entitled / approved / pending / remaining. `entitled` is NULL for a
-     * type that has no entitlement on file.
+     * entitled / approved / planned / pending / remaining. `entitled` is NULL
+     * for a type that has no entitlement on file. Drafts are excluded by
+     * default; a supervisor or manager can explicitly preview them.
      *
-     * @return array<int,array{type:string,entitled:float|null,approved:float,pending:float,remaining:float|null}>
+     * @return array<int,array{type:string,entitled:float|null,approved:float,planned:float,pending:float,remaining:float|null}>
      */
-    public function get_leave_balance($user_id, $year = NULL) {
+    public function get_leave_balance($user_id, $year = NULL, $include_draft = FALSE) {
         $year   = $year ? (int)$year : (int)date('Y');
         $ent    = $this->leave_entitlements();
-        $usage  = $this->get_leave_usage($user_id, $year);
+        $usage  = $this->get_leave_usage($user_id, $year, $include_draft);
         $types  = self::LEAVE_TYPES;
 
         // A configured type that is not in the enum is still shown last, so a
@@ -595,8 +655,9 @@ class Team_model extends CI_Model {
                 'type'      => $type,
                 'entitled'  => $entitled,
                 'approved'  => (float)$u['approved'],
+                'planned'   => (float)(isset($u['planned']) ? $u['planned'] : 0),
                 'pending'   => (float)(isset($u['pending']) ? $u['pending'] : 0),
-                'remaining' => $entitled === NULL ? NULL : ($entitled - (float)$u['approved'] - (float)(isset($u['pending']) ? $u['pending'] : 0)),
+                'remaining' => $entitled === NULL ? NULL : ($entitled - (float)$u['approved'] - (float)(isset($u['planned']) ? $u['planned'] : 0) - (float)(isset($u['pending']) ? $u['pending'] : 0)),
             );
         }
         return $rows;
@@ -688,36 +749,46 @@ class Team_model extends CI_Model {
         return $this->db->where('id', (int)$id)->get('shifts')->row();
     }
 
-    /** Create or update a shift type; the new/updated id on success, 0 on failure. */
+    /** A used shift is a time definition in published history; create a new
+     * type rather than silently changing every scheduled day's hours. */
     public function save_shift($data, $id = NULL) {
         if ($id) {
+            if ($this->count_shift_assignments($id)) return 0;
             return $this->db->where('id', (int)$id)->update('shifts', $data) ? (int)$id : 0;
         }
         $this->db->insert('shifts', $data);
         return (int)$this->db->insert_id();
     }
 
-    /** A shift type that is still assigned somewhere cannot be deleted. */
     public function delete_shift($id) {
-        if ($this->db->where('shift_id', (int)$id)->count_all_results('shift_assignments') > 0) {
-            return FALSE;
-        }
+        if ($this->count_shift_assignments($id)) return FALSE;
         $this->db->where('id', (int)$id)->delete('shifts');
-        // A failed DELETE used to return TRUE as long as nobody was assigned,
-        // so the screen said "Shift deleted." for a row that still existed.
         return $this->db->affected_rows() > 0;
     }
 
     public function count_shift_assignments($shift_id) {
-        return (int)$this->db->where('shift_id', (int)$shift_id)->count_all_results('shift_assignments');
+        $counts = $this->get_shift_assignment_counts();
+        return isset($counts[(int)$shift_id]) ? $counts[(int)$shift_id] : 0;
     }
 
-    /** @return array shift_id => number of roster rows using it */
+    /** @return array shift_id => references in weekly and annual schedule */
     public function get_shift_assignment_counts() {
-        $rows = $this->db->select('shift_id, COUNT(*) AS cnt')
-            ->group_by('shift_id')->get('shift_assignments')->result();
         $out = array();
-        foreach ($rows as $r) { $out[(int)$r->shift_id] = (int)$r->cnt; }
+        $sources = array('shift_assignments' => 'shift_id');
+        if ($this->db->table_exists('workforce_plan_days')) $sources['workforce_plan_days'] = 'shift_id';
+        if ($this->db->table_exists('workforce_plan_extra_days')) {
+            $sources['workforce_plan_extra_days'] = 'shift_id';
+            $sources['workforce_plan_extra_days:replacement'] = 'replaced_shift_id';
+        }
+        foreach ($sources as $key => $column) {
+            $table = explode(':', $key)[0];
+            foreach ($this->db->select($column . ' AS shift_id, COUNT(*) AS cnt', FALSE)
+                         ->where($column . ' IS NOT NULL', NULL, FALSE)
+                         ->group_by($column)->get($table)->result() as $row) {
+                $sid = (int)$row->shift_id;
+                $out[$sid] = isset($out[$sid]) ? $out[$sid] + (int)$row->cnt : (int)$row->cnt;
+            }
+        }
         return $out;
     }
 

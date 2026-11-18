@@ -10,36 +10,46 @@
     <?php if (!empty($punching)): ?>
       <a href="<?= base_url('attendance/log?date='.rawurlencode((string)$date)) ?>" class="btn btn-ghost btn-sm">Check-in Log →</a>
     <?php endif; ?>
+    <a href="<?= site_url('team/shift_roster?week=' . rawurlencode((string)$date)) ?>" class="btn btn-ghost btn-sm">Weekly plan →</a>
     <a href="<?= base_url('team/report?month=' . rawurlencode(substr((string)$date, 0, 7))) ?>" class="btn btn-primary btn-sm">AML Timesheets &amp; Report →</a>
   </div>
 </div>
 
 <div class="card">
   <div class="ch">
-    <div><h1 class="ct">Attendance — <?= date('l, d F Y',strtotime($date)) ?></h1><div class="cs"><?= isset($workers)?count($workers):0 ?> workers</div></div>
+    <div><h1 class="ct">Attendance — <?= date('l, d F Y',strtotime($date)) ?></h1><div class="cs"><?= isset($workers)?count($workers):0 ?> workers · planned expectation is shown for reference only; choose an actual outcome to save it. Unrecorded rows remain unrecorded.</div></div>
   </div>
   <?= form_open('team/attendance') ?>
   <input type="hidden" name="date" value="<?= htmlspecialchars((string)($date), ENT_QUOTES, 'UTF-8') ?>">
   <div style="overflow-x:auto;">
     <table class="tbl" style="margin-top:12px;">
       <thead>
-        <tr><th>Employee ID</th><th>Name</th><th>Position</th><th>Status</th><th>Check In</th><th>Check Out</th><th>On site</th></tr>
+        <tr><th>Employee ID</th><th>Name</th><th>Position</th><th>Published plan</th><th>Actual status</th><th>Check In</th><th>Check Out</th><th>On site now</th></tr>
       </thead>
       <tbody>
         <?php if (isset($workers) && count($workers) > 0): foreach ($workers as $w):
-          $att = null;
-          if (isset($attendance) && is_array($attendance)) {
-            foreach ($attendance as $a) { if ($a->user_id == $w->id) { $att = $a; break; } }
-          }
+          // get_attendance_by_date() returns rows as arrays keyed by user ID.
+          // Cast the existing row once for this template; do not silently
+          // default recorded attendance to Present (or to an empty state).
+          $att = isset($attendance[(int)$w->id]) ? (object)$attendance[(int)$w->id] : NULL;
+          $cell = isset($plan_days[(int)$w->id][$date]) ? $plan_days[(int)$w->id][$date] : NULL;
+          $expected = $cell ? ($cell['kind'] === 'Leave' ? $cell['leave_type'] : $cell['kind']) : 'No published plan';
+          if ($cell && $cell['plan_status'] === 'Legacy' && $cell['kind'] === 'Unplanned') $expected = 'No published plan';
+          elseif ($cell && $cell['plan_status'] === 'Legacy') $expected .= ' · legacy';
         ?>
         <tr>
-          <td class="mono" style="font-size:11px;color:var(--t3);"><?= $w->employee_id ?></td>
-          <td class="fw-600" style="font-size:12.5px;"><?= $w->first_name.' '.$w->last_name ?></td>
+          <td class="mono" style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)$w->employee_id, ENT_QUOTES, 'UTF-8') ?></td>
+          <td class="fw-600" style="font-size:12.5px;"><?= htmlspecialchars($w->first_name.' '.$w->last_name, ENT_QUOTES, 'UTF-8') ?></td>
           <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars((string)$w->position, ENT_QUOTES, 'UTF-8') ?></td>
+          <td><span class="badge <?= $cell && in_array($cell['kind'], array('Off','Leave','Holiday'), TRUE) ? 'b-warning' : 'b-secondary' ?>" title="Scheduled expectation, not actual attendance"><?= htmlspecialchars((string)$expected, ENT_QUOTES, 'UTF-8') ?></span>
+            <?php if ($cell && $cell['kind'] === 'Off' && $cell['extra']): ?><small style="display:block;color:var(--blue);">Authorised extra work · <?= htmlspecialchars((string)$cell['extra']->status, ENT_QUOTES, 'UTF-8') ?></small><?php endif; ?>
+          </td>
           <td>
-            <select name="attendance[<?= $w->id ?>][status]" class="form-select" style="width:130px;">
+            <label class="sr-only" for="attStatus<?= (int)$w->id ?>">Actual status for <?= htmlspecialchars($w->first_name.' '.$w->last_name, ENT_QUOTES, 'UTF-8') ?></label>
+            <select id="attStatus<?= (int)$w->id ?>" name="attendance[<?= (int)$w->id ?>][status]" class="form-select" style="width:148px;">
+              <option value="" <?= !$att ? 'selected' : 'disabled' ?>>Not recorded</option>
               <?php foreach (['Present','Absent','Leave','Rest','Holiday'] as $s): ?>
-              <option value="<?= $s ?>" <?= ($att&&$att->status==$s)?'selected':($s==='Present'?'selected':'') ?>><?= $s ?></option>
+              <option value="<?= $s ?>" <?= ($att && $att->status === $s) ? 'selected' : '' ?>><?= $s ?></option>
               <?php endforeach; ?>
             </select>
           </td>
@@ -54,7 +64,7 @@
           </td>
         </tr>
         <?php endforeach; else: ?>
-        <tr><td colspan="7" style="text-align:center;padding:48px;color:var(--t3);">No workers found</td></tr>
+        <tr><td colspan="8" style="text-align:center;padding:48px;color:var(--t3);">No workers found</td></tr>
         <?php endif; ?>
       </tbody>
     </table>

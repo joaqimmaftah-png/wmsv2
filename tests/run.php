@@ -388,7 +388,7 @@ check('Schema: seeds all 630 inspection_items', strpos($schemaSql, 'INSERT IGNOR
 
 $migFiles = glob(__DIR__ . '/../database/migrations/[0-9][0-9][0-9][0-9]_*.sql');
 sort($migFiles, SORT_STRING);
-is_same('Migrations: all 17 ordered SQL migrations present (0001..0017)', 17, count($migFiles));
+is_same('Migrations: all 18 ordered SQL migrations present (0001..0018)', 18, count($migFiles));
 foreach ($migFiles as $mf) {
     $bn  = basename($mf);
     $sum = hash_file('sha256', $mf);
@@ -399,6 +399,16 @@ foreach ($migFiles as $mf) {
     check("Data hygiene: {$bn} never imports sample timesheet dates (July 2026)",
         stripos($mSql, '16/Jul/26') === FALSE && stripos($mSql, 'MONTH OF JULY 2026') === FALSE);
 }
+$annualSql = file_get_contents(__DIR__ . '/../database/migrations/0018_annual_workforce_plan.sql');
+check('Annual plan: baseline includes the exact additive 0018 DDL and settings before its ledger entry',
+    strpos($schemaSql, trim($annualSql)) !== FALSE
+    && strpos($schemaSql, 'CREATE TABLE IF NOT EXISTS `workforce_plan_days`')
+        < strpos($schemaSql, "'0018', '0018_annual_workforce_plan.sql'"));
+check('Annual plan: distinct Off, Shift and Holiday states, Scheduled replacement with original shift and audited changes',
+    strpos($annualSql, "enum('Shift','Off','Holiday')") !== FALSE
+    && strpos($annualSql, "enum('Open','Scheduled','Taken','Paid')") !== FALSE
+    && strpos($annualSql, '`replaced_shift_id` int(11) DEFAULT NULL') !== FALSE
+    && strpos($annualSql, 'CREATE TABLE IF NOT EXISTS `workforce_plan_events`') !== FALSE);
 check('Schema: users table defines optional `site` column and timesheet signatory settings without sample dates',
     strpos($schemaSql, '`site` varchar(100) DEFAULT NULL') !== FALSE
     && strpos($schemaSql, "'timesheet_prepared_by'") !== FALSE
@@ -540,10 +550,10 @@ foreach (range(1, 5) as $nav_role) {
     }
     $nav_counts[$nav_role] = $count;
 }
-is_same('NAV Supervisor expanded leaf count', 31, $nav_counts[1]);
-is_same('NAV Technician expanded leaf count', 16, $nav_counts[2]);
-is_same('NAV Store Keeper expanded leaf count', 13, $nav_counts[3]);
-is_same('NAV Manager expanded leaf count', 25, $nav_counts[4]);
+is_same('NAV Supervisor expanded leaf count', 32, $nav_counts[1]);
+is_same('NAV Technician expanded leaf count', 17, $nav_counts[2]);
+is_same('NAV Store Keeper expanded leaf count', 14, $nav_counts[3]);
+is_same('NAV Manager expanded leaf count', 26, $nav_counts[4]);
 is_same('NAV CEO expanded leaf count', 1, $nav_counts[5]);
 $ceo_nav = wms_nav_tree(5);
 check('NAV CEO stays Executive-Summary-only', count($ceo_nav['groups']) === 0
@@ -718,6 +728,23 @@ if (!class_exists('CI_Model')) {
     }
 }
 
+require_once APPPATH . 'models/Workforce_plan_model.php';
+$weekly = array('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Off', 'Off');
+is_same('Annual rotation: a 7-day cycle starts on Monday even when Jan 1 is Friday',
+    'Fri', Workforce_plan_model::pattern_day('2027-01-01', 2027, $weekly));
+is_same('Annual rotation: weekly cycle returns to Monday after Jan 1 boundary',
+    'Mon', Workforce_plan_model::pattern_day('2027-01-04', 2027, $weekly));
+$fourFour = array('S', 'S', 'S', 'S', 'Off', 'Off', 'Off', 'Off');
+is_same('Annual rotation: 4-on/4-off begins on Jan 1 and wraps after eight days',
+    'S', Workforce_plan_model::pattern_day('2026-01-09', 2026, $fourFour));
+is_same('Annual rotation: 4-on/4-off marks day eight explicitly Off',
+    'Off', Workforce_plan_model::pattern_day('2026-01-08', 2026, $fourFour));
+$planSource = file_get_contents(APPPATH . 'models/Workforce_plan_model.php');
+check('Annual rotation: published days need reasons and planning never inserts actual attendance',
+    strpos($planSource, "status === 'Published' && strlen(trim(\$reason)) < 5") !== FALSE
+    && strpos($planSource, "->insert('attendance'") === FALSE
+    && strpos($planSource, "->update('attendance'") === FALSE);
+
 class WmsQueryResultStub {
     private $rows;
     public function __construct(array $rows) { $this->rows = $rows; }
@@ -737,6 +764,121 @@ class WmsQueryResultStub {
         return is_object($first) ? $first : (object)$first;
     }
 }
+
+/* Exercise the real annual day projection without a MySQL service. This fake
+ * implements only the query-builder reads used by days(), and rejects unknown
+ * tables/filters instead of manufacturing a passing result. */
+class WmsAnnualReadDb {
+    public $rows = array();
+    public $queries = 0;
+    private $filters = array();
+    private $in = array();
+
+    public function table_exists($table) { return array_key_exists($table, $this->rows); }
+    public function where($key, $value = NULL) { $this->filters[$key] = $value; return $this; }
+    public function where_in($key, $values) { $this->in[$key] = $values; return $this; }
+    public function order_by($key, $direction = 'ASC') { return $this; }
+    public function get($table) {
+        $filters = $this->filters; $in = $this->in;
+        $this->filters = $this->in = array();
+        if (!isset($this->rows[$table])) throw new RuntimeException('Unexpected annual table ' . $table);
+        $this->queries++;
+        $out = array();
+        foreach ($this->rows[$table] as $row) {
+            $match = TRUE;
+            foreach ($filters as $key => $value) {
+                if (!preg_match('/^([a-z_]+)(?: (>=|<=|!=))?$/', $key, $m))
+                    throw new RuntimeException('Unexpected annual filter ' . $key);
+                $left = (string)$row->{$m[1]}; $right = (string)$value;
+                $operator = isset($m[2]) ? $m[2] : '=';
+                if ($operator === '>=' && $left < $right) $match = FALSE;
+                elseif ($operator === '<=' && $left > $right) $match = FALSE;
+                elseif ($operator === '!=' && $left === $right) $match = FALSE;
+                elseif ($operator === '=' && $left !== $right) $match = FALSE;
+            }
+            foreach ($in as $field => $values) {
+                if (!in_array($row->$field, $values, FALSE)) $match = FALSE;
+            }
+            if ($match) $out[] = clone $row; // a DB SELECT hydrates fresh objects
+        }
+        return new WmsQueryResultStub($out);
+    }
+}
+
+$annualRead = new WmsAnnualReadDb();
+$annualRead->rows = array(
+    'workforce_plan_years' => array(
+        (object)array('plan_year' => 2026, 'status' => 'Published', 'published_at' => '2026-01-01 08:00:00'),
+        (object)array('plan_year' => 2027, 'status' => 'Draft', 'published_at' => NULL),
+    ),
+    'workforce_plan_days' => array(
+        (object)array('user_id' => 11, 'work_date' => '2026-12-31', 'day_type' => 'Shift', 'shift_id' => 5, 'source' => 'Pattern'),
+        (object)array('user_id' => 11, 'work_date' => '2027-01-01', 'day_type' => 'Off', 'shift_id' => NULL, 'source' => 'Pattern'),
+        (object)array('user_id' => 12, 'work_date' => '2026-12-30', 'day_type' => 'Off', 'shift_id' => NULL, 'source' => 'Manual'),
+        (object)array('user_id' => 12, 'work_date' => '2026-12-31', 'day_type' => 'Off', 'shift_id' => NULL, 'source' => 'Manual'),
+    ),
+    'workforce_plan_leaves' => array(
+        (object)array('id' => 17, 'user_id' => 11, 'start_date' => '2026-12-31', 'end_date' => '2027-01-02', 'status' => 'Scheduled', 'leave_type' => 'Annual Leave'),
+    ),
+    'workforce_plan_events' => array(),
+    'leave_requests' => array(
+        (object)array('id' => 9, 'user_id' => 11, 'start_date' => '2026-12-31', 'end_date' => '2026-12-31', 'status' => 'Approved', 'leave_type' => 'Sick Leave'),
+    ),
+    'workforce_plan_extra_days' => array(
+        (object)array('id' => 25, 'user_id' => 12, 'work_date' => '2026-12-30', 'replacement_date' => '2026-12-31',
+            'status' => 'Confirmed', 'settlement' => 'Scheduled', 'shift_id' => 5, 'compensation' => 'TimeOff'),
+    ),
+    'shift_assignments' => array(
+        (object)array('id' => 3, 'user_id' => 13, 'week_start' => '2026-12-28', 'shift_id' => 5),
+    ),
+);
+get_instance()->db = $annualRead;
+$annualPlan = new Workforce_plan_model();
+$staffDays = $annualPlan->days('2026-12-30', '2027-01-02', array(11, 12, 13));
+is_same('Annual projection: approved historical leave overrides the same published base shift',
+    'Sick Leave', $staffDays[11]['2026-12-31']['leave_type']);
+is_same('Annual projection: a worker never sees next-year draft leave or base dates',
+    'Unplanned', $staffDays[11]['2027-01-01']['kind']);
+check('Annual projection: authorised Off work stays an Off day with its own confirmed exception',
+    $staffDays[12]['2026-12-30']['kind'] === 'Off'
+    && $staffDays[12]['2026-12-30']['extra']->status === 'Confirmed');
+check('Annual projection: compensatory Off day retains the worked date',
+    $staffDays[12]['2026-12-31']['kind'] === 'Off'
+    && $staffDays[12]['2026-12-31']['replacement']->work_date === '2026-12-30');
+is_same('Annual projection: a legacy week remains readable when not overwritten',
+    'Legacy', $staffDays[13]['2027-01-01']['plan_status']);
+$plannerDays = $annualPlan->days('2026-12-30', '2027-01-02', array(11, 12, 13), TRUE);
+is_same('Annual projection: planner sees the scheduled leave in the next-year draft',
+    'Annual Leave', $plannerDays[11]['2027-01-01']['leave_type']);
+is_same('Annual projection: planner sees an unfilled draft date as a gap, not a legacy shift',
+    'Unplanned', $plannerDays[13]['2027-01-01']['kind']);
+check('Annual projection: seven bulk reads regardless of headcount (no per-day N+1)', $annualRead->queries === 14,
+    'queries for two projections: ' . $annualRead->queries);
+$clipped = $annualPlan->leaves(2026, 11, TRUE);
+check('Annual projection: staff leave listing does not expose an unpublished next-year draft period',
+    count($clipped) === 1 && $clipped[0]->end_date === '2026-12-31' && $clipped[0]->partial === TRUE);
+$annualRead->rows['workforce_plan_years'][1]->status = 'Published';
+$annualRead->rows['workforce_plan_years'][1]->published_at = date('Y-m-d H:i:s', strtotime('-1 day'));
+$liveDays = $annualPlan->days('2027-01-01', '2027-01-02', array(11));
+is_same('Annual projection: published cross-year leave becomes visible to staff on its dates',
+    'Leave', $liveDays[11]['2027-01-01']['kind']);
+$annualRead->rows['workforce_plan_days'][] = (object)array('user_id' => 12, 'work_date' => '2026-03-02',
+    'day_type' => 'Off', 'shift_id' => NULL, 'source' => 'Manual');
+$annualRead->rows['shift_assignments'][] = (object)array('id' => 4, 'user_id' => 13,
+    'week_start' => '2026-03-02', 'shift_id' => 5);
+$annualRead->rows['workforce_plan_years'][0]->published_at = '2026-10-01 08:00:00';
+$historicDays = $annualPlan->days('2026-03-02', '2026-03-02', array(12, 13));
+check('Annual projection: a materialised date before publication belongs to the published year',
+    $historicDays[12]['2026-03-02']['kind'] === 'Off'
+    && $historicDays[12]['2026-03-02']['plan_status'] === 'Published'
+    && $annualPlan->is_published('2026-03-02'));
+check('Annual projection: a missing pre-publication date retains its weekly history',
+    $historicDays[13]['2026-03-02']['kind'] === 'Shift'
+    && $historicDays[13]['2026-03-02']['plan_status'] === 'Legacy');
+$annualRead->rows['workforce_plan_years'][0]->published_at = date('Y-m-d H:i:s', strtotime('+1 day'));
+check('Annual projection: a publication timestamp in the future never exposes base dates',
+    !$annualPlan->is_published('2026-03-02')
+    && $annualPlan->days('2026-03-02', '2026-03-02', array(12))[12]['2026-03-02']['kind'] === 'Unplanned');
 
 class WmsSpyDb {
     public $queries = 0;
@@ -801,6 +943,46 @@ class WmsSpyDb {
 
 require_once APPPATH . 'models/Team_model.php';
 require_once APPPATH . 'models/Timesheet_model.php';
+
+// Legacy requests stored calendar days as one count. A block crossing New
+// Year must reserve its own dates in each year's balance, without pulling a
+// draft annual plan into the employee's balance.
+class WmsLeaveClipDb {
+    public $requests = array();
+    private $filters = array();
+    public function select($columns) { return $this; }
+    public function where($key, $value) { $this->filters[$key] = $value; return $this; }
+    public function table_exists($table) { return FALSE; }
+    public function get($table) {
+        if ($table !== 'leave_requests') throw new RuntimeException('Unexpected leave table ' . $table);
+        $f = $this->filters; $this->filters = array();
+        $rows = array_filter($this->requests, function ($r) use ($f) {
+            return $r->user_id === $f['user_id'] && $r->start_date <= $f['start_date <=']
+                && $r->end_date >= $f['end_date >='];
+        });
+        return new WmsQueryResultStub(array_values($rows));
+    }
+}
+$leaveDb = new WmsLeaveClipDb();
+$leaveDb->requests = array(
+    (object)array('user_id' => 11, 'leave_type' => 'Annual Leave', 'status' => 'Approved',
+        'start_date' => '2026-12-30', 'end_date' => '2027-01-02', 'days_count' => 4),
+    (object)array('user_id' => 11, 'leave_type' => 'Annual Leave', 'status' => 'Approved',
+        'start_date' => '2026-06-10', 'end_date' => '2026-06-11', 'days_count' => 2),
+    (object)array('user_id' => 11, 'leave_type' => 'Sick Leave', 'status' => 'Pending',
+        'start_date' => '2027-01-01', 'end_date' => '2027-01-03', 'days_count' => 3),
+    (object)array('user_id' => 12, 'leave_type' => 'Annual Leave', 'status' => 'Approved',
+        'start_date' => '2027-01-01', 'end_date' => '2027-01-07', 'days_count' => 7),
+);
+$leaveModel = new Team_model(); $leaveModel->db = $leaveDb;
+$usage2026 = $leaveModel->get_leave_usage(11, 2026);
+$usage2027 = $leaveModel->get_leave_usage(11, 2027);
+is_same('Leave balance: cross-year request charges only 2026 dates plus in-year request',
+    4.0, $usage2026['Annual Leave']['approved']);
+is_same('Leave balance: cross-year request charges only 2027 dates',
+    2.0, $usage2027['Annual Leave']['approved']);
+is_same('Leave balance: other workers and types remain isolated',
+    3.0, $usage2027['Sick Leave']['pending']);
 
 $spyDb = new WmsSpyDb();
 // Build 50 active workers covering profile site, period QR punch, historical QR punch, and unassigned

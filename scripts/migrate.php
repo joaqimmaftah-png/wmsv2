@@ -304,7 +304,12 @@ if (!$opts['status']) {
         $ver = strtok($bn, '_');
         $sum = hash_file('sha256', $f);
 
-        if (!$opts['force'] && isset($applied[$ver])) {
+        // 0017 adds an FK unconditionally (and uses MariaDB-only column IF
+        // NOT EXISTS syntax). It was shipped as a ledger-only migration, not
+        // a re-runnable repair script. The baseline already records it, so a
+        // --force rehearsal must not reapply it on either supported engine.
+        if (isset($applied[$ver]) && (!$opts['force'] || $ver === '0017')) {
+            if ($opts['force'] && $ver === '0017') echo "Skipping {$bn} (ledgered, non-repeatable FK).\n";
             $skipCount++;
             continue;
         }
@@ -371,6 +376,61 @@ if ($opts['verify']) {
             $errors[] = "Expected InnoDB transaction support on `{$table}` for forecast/defect changes.";
         }
     }
+
+    // Annual roster writes acquire a year row FOR UPDATE, then change days,
+    // leave, extra-work and audit rows in that transaction. All five tables
+    // must be InnoDB and carry the expected unique worker/date boundaries.
+    $annualTables = array('workforce_plan_years', 'workforce_plan_days', 'workforce_plan_leaves',
+        'workforce_plan_extra_days', 'workforce_plan_events');
+    foreach ($annualTables as $table) {
+        if (!isset($planEngines[$table]) || strcasecmp((string)$planEngines[$table], 'InnoDB') !== 0) {
+            $errors[] = "Expected an InnoDB `{$table}` from migration 0018.";
+        }
+    }
+    $uniqueAnnual = array();
+    $res = $mysqli->query("SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE,
+        GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS columns_in_order,
+        MAX(CASE WHEN SUB_PART IS NOT NULL THEN 1 ELSE 0 END) AS has_prefix
+        FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME IN ('workforce_plan_years', 'workforce_plan_days', 'workforce_plan_extra_days')
+        GROUP BY TABLE_NAME, INDEX_NAME, NON_UNIQUE");
+    if ($res) while ($idx = $res->fetch_assoc()) {
+        if ((int)$idx['NON_UNIQUE'] === 0 && (int)$idx['has_prefix'] === 0) {
+            $uniqueAnnual[$idx['TABLE_NAME'] . '.' . $idx['INDEX_NAME']] = $idx['columns_in_order'];
+        }
+    }
+    foreach (array(
+        'workforce_plan_years.PRIMARY' => 'plan_year',
+        'workforce_plan_days.uq_wpd_worker_date' => 'user_id,work_date',
+        'workforce_plan_extra_days.uq_wpe_worker_date' => 'user_id,work_date',
+        'workforce_plan_extra_days.uq_wpe_replacement' => 'user_id,replacement_date',
+    ) as $index => $columns) {
+        if (!isset($uniqueAnnual[$index]) || $uniqueAnnual[$index] !== $columns)
+            $errors[] = "Expected full-length unique index {$index} ({$columns}) for annual planning.";
+    }
+    $res = $mysqli->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'workforce_plan_extra_days'
+        AND COLUMN_NAME IN ('confirmed_hours','payroll_reference','replaced_shift_id')");
+    $extraColumns = array();
+    if ($res) while ($column = $res->fetch_assoc()) $extraColumns[$column['COLUMN_NAME']] = TRUE;
+    foreach (array('confirmed_hours','payroll_reference','replaced_shift_id') as $column) {
+        if (!isset($extraColumns[$column])) $errors[] = "Expected workforce_plan_extra_days.{$column} from migration 0018.";
+    }
+    $res = $mysqli->query("SELECT COUNT(*) AS c FROM information_schema.TABLE_CONSTRAINTS
+        WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME IN
+        ('workforce_plan_years','workforce_plan_days','workforce_plan_leaves','workforce_plan_extra_days','workforce_plan_events')
+        AND CONSTRAINT_TYPE = 'FOREIGN KEY'");
+    if (!$res || (int)$res->fetch_assoc()['c'] < 17)
+        $errors[] = 'Expected the 17 annual-planning foreign keys (worker, shift and actor integrity).';
+    $res = $mysqli->query("SELECT `checksum` FROM `schema_migrations` WHERE `version` = '0018'");
+    $ledger = $res ? $res->fetch_assoc() : NULL;
+    if (!$ledger || $ledger['checksum'] !== hash_file('sha256', $migDir . '/0018_annual_workforce_plan.sql'))
+        $errors[] = 'Migration 0018 is not applied or its ledger checksum does not match the SQL file.';
+    $res = $mysqli->query("SELECT `setting_key` FROM `settings` WHERE `setting_key` IN
+        ('roster_leave_notice_days','roster_return_notice_days')");
+    $noticeKeys = array();
+    if ($res) while ($setting = $res->fetch_assoc()) $noticeKeys[$setting['setting_key']] = TRUE;
+    if (count($noticeKeys) !== 2) $errors[] = 'Expected both published-leave reminder settings from migration 0018.';
 
     $res = $mysqli->query("SELECT COUNT(*) AS c FROM `settings`");
     $settingsCount = $res ? (int)$res->fetch_assoc()['c'] : 0;

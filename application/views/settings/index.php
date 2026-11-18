@@ -210,6 +210,18 @@
                     style="font-family:ui-monospace,monospace;font-size:12px;"><?= htmlspecialchars((string)($rval('leave_entitlements', $rdef['leave_entitlements']))) ?></textarea>
           <div class="cs" style="margin-top:4px;"><?= $rdesc['leave_entitlements'] ?></div>
         </div>
+        <div class="form-grid cols-2">
+          <div>
+            <label for="setLeaveNotice" class="form-label">Planned Leave Start Reminder (days)</label>
+            <input id="setLeaveNotice" type="number" min="1" max="30" name="settings[roster_leave_notice_days]" class="form-control" value="<?= htmlspecialchars((string)$rval('roster_leave_notice_days', $rdef['roster_leave_notice_days']), ENT_QUOTES, 'UTF-8') ?>">
+            <div class="cs" style="margin-top:4px;"><?= $rdesc['roster_leave_notice_days'] ?></div>
+          </div>
+          <div>
+            <label for="setReturnNotice" class="form-label">Planned Return Reminder (days)</label>
+            <input id="setReturnNotice" type="number" min="1" max="14" name="settings[roster_return_notice_days]" class="form-control" value="<?= htmlspecialchars((string)$rval('roster_return_notice_days', $rdef['roster_return_notice_days']), ENT_QUOTES, 'UTF-8') ?>">
+            <div class="cs" style="margin-top:4px;"><?= $rdesc['roster_return_notice_days'] ?></div>
+          </div>
+        </div>
       </div>
 
       <?php /* ── Individual Attendance Sheet (AML Signatories) ── */ ?>

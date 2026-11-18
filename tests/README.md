@@ -66,6 +66,12 @@ the system temp directory, so they exercise the deployed code (including
 `wms_base_url_from_host()`) and a developer's own `config.local.php` cannot
 change the result.
 
+## Annual workforce plan verification
+
+`php tests/run.php` covers the real annual date projection and year-boundary rotation with in-memory query fakes, including Draft/Published visibility, prior weekly history, cross-year leave accounting, Off-day work and replacement overlays. `node tests/shift_roster_ux.js` checks the scoped links and controls.
+
+On a **disposable** MySQL 8 or MariaDB 10.4 database migrated to 0018, the CI workflow also runs `tests/annual_plan_live.py` with a PHP HTTP server and test accounts created via `scripts/create-admin.php`. It exercises full-year generation and publication, manager/worker access, date overrides, cross-year leave clipping, the leave reminder bell, manual attendance, both Off-day compensation routes, payroll CSV safety and reversible replacement Off days. It requires `WMS_TEST_DESTRUCTIVE=1` and DB environment variables; **never run it on production**. CI runs it after the existing UI/end-to-end suite so its published test schedule cannot affect earlier checks.
+
 ## What the dependency-free unit runner does not cover
 
 - Database behavior, migrations and report SQL; use the separate real-database

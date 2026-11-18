@@ -48,6 +48,7 @@ database/*.tar.gz
 
 # --- Local exports / scratch outputs --------------------------------------
 exports/
+node_modules/
 
 # --- Editors / operating systems -------------------------------------------
 .DS_Store
