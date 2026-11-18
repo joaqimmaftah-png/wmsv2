@@ -41,6 +41,7 @@ foreach ($attendance as $a) {
 ?>
 <div class="d-flex mb-3" style="align-items:center;gap:10px;flex-wrap:wrap;">
   <a href="<?= base_url('team') ?>" class="btn btn-ghost btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+  <a href="<?= site_url('team/annual_roster?year=' . date('Y') . '&user=' . (int)$worker->id) ?>" class="btn btn-ghost btn-sm">Annual schedule</a>
   <?php if (!empty($is_supervisor)): ?>
   <a href="<?= base_url('team/edit/' . (int)$worker->id) ?>" class="btn btn-primary btn-sm ms-auto">Edit Profile</a>
   <?php endif; ?>
@@ -152,14 +153,15 @@ foreach ($attendance as $a) {
       </div>
       <div class="card-body p-0">
         <table class="table wms-table mb-0" style="font-size:12px;">
-          <thead><tr><th scope="col">Type</th><th scope="col" style="text-align:right;">Entitled</th><th scope="col" style="text-align:right;">Approved</th><th scope="col" style="text-align:right;">Pending</th><th scope="col" style="text-align:right;">Remaining</th></tr></thead>
+          <thead><tr><th scope="col">Type</th><th scope="col" style="text-align:right;">Entitled</th><th scope="col" style="text-align:right;">Approved</th><th scope="col" style="text-align:right;">Planned</th><th scope="col" style="text-align:right;">Pending</th><th scope="col" style="text-align:right;">Remaining</th></tr></thead>
           <tbody>
             <?php foreach ($leave_balance as $lb): ?>
-            <?php if ($lb['entitled'] === null && $lb['approved'] <= 0 && $lb['pending'] <= 0) continue; ?>
+            <?php if ($lb['entitled'] === null && $lb['approved'] <= 0 && $lb['planned'] <= 0 && $lb['pending'] <= 0) continue; ?>
             <tr>
               <td><?= htmlspecialchars((string)($lb['type'])) ?></td>
               <td class="mono" style="text-align:right;"><?= $lb['entitled'] === null ? '—' : rtrim(rtrim((string)(number_format((float)($lb['entitled']), 1)), '0'), '.') ?></td>
               <td class="mono" style="text-align:right;"><?= rtrim(rtrim((string)(number_format((float)($lb['approved']), 1)), '0'), '.') ?></td>
+              <td class="mono" style="text-align:right;color:var(--purple);"><?= rtrim(rtrim((string)(number_format((float)($lb['planned']), 1)), '0'), '.') ?></td>
               <td class="mono" style="text-align:right;color:#b45309;"><?= rtrim(rtrim((string)(number_format((float)($lb['pending']), 1)), '0'), '.') ?></td>
               <td class="mono fw-600" style="text-align:right;color:<?= ($lb['remaining'] !== null && $lb['remaining'] < 0) ? '#dc2626' : '#16a34a' ?>;">
                 <?= $lb['remaining'] === null ? '—' : rtrim(rtrim((string)(number_format((float)($lb['remaining']), 1)), '0'), '.') ?>
@@ -169,13 +171,19 @@ foreach ($attendance as $a) {
           </tbody>
         </table>
         <div style="font-size:10.5px;color:#94a3b8;padding:8px 12px;">
-          Entitlements are configured under Settings → <code>leave_entitlements</code>. A dash means the type is not tracked.
+          Planned leave reserves underlying Shift days only (not Off/Holiday); approved requests use their recorded calendar-day count. This is a planning balance, not an attendance total. A dash means the type is not tracked.
         </div>
       </div>
     </div>
     <?php endif; ?>
 
-    <!-- Leave History -->
+    <?php if (!empty($planned_leaves)): ?>
+    <section class="wms-card mb-3" aria-label="Supervisor-planned leave"><div class="card-head">Scheduled Leave <a class="btn btn-ghost btn-sm ms-auto" href="<?= site_url('team/annual_roster?year=' . date('Y') . '&user=' . (int)$worker->id) ?>#arLeave">View annual plan →</a></div>
+      <div class="card-body" style="font-size:12px"><p style="color:var(--t2);margin-bottom:8px">Assigned by a supervisor; no employee request was needed. Only published dates affect expected availability.</p>
+        <?php foreach ($planned_leaves as $pl): ?><div style="padding:6px 0;border-top:1px solid var(--sep)"><strong><?= htmlspecialchars((string)$pl->leave_type, ENT_QUOTES, 'UTF-8') ?></strong> · <?= date('d M Y', strtotime($pl->start_date)) ?> – <?= date('d M Y', strtotime($pl->end_date)) ?><?= !empty($pl->partial) ? ' (published portion of this year)' : '' ?></div><?php endforeach; ?></div>
+    </section>
+    <?php endif; ?>
+    <!-- Leave History (legacy employee requests, separate from planned leave) -->
     <div class="wms-card">
       <div class="card-head">
         <i class="bi bi-calendar-x text-primary me-1"></i>Leave History

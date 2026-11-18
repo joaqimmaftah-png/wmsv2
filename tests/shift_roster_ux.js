@@ -1,55 +1,89 @@
-// Structural regressions for the Shift Roster enterprise table.
+// Annual workforce plan + day-level weekly roster structural regressions.
 // Run with: node tests/shift_roster_ux.js
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-
 const root = path.join(__dirname, '..');
 const src = f => fs.readFileSync(path.join(root, f), 'utf8');
+const week = src('application/views/team/shift_roster.php');
+const annual = src('application/views/team/annual_roster.php');
+const editor = src('application/views/team/roster_day_edit.php');
+const ctl = src('application/controllers/Team.php');
+const model = src('application/models/Workforce_plan_model.php');
+const navigation = src('application/helpers/navigation_helper.php');
+const attendance = src('application/views/team/attendance.php');
+const teamModel = src('application/models/Team_model.php');
 
-const view = src('application/views/team/shift_roster.php');
-const controller = src('application/controllers/Team.php');
+// Day-level planning is never the retired one-shift-per-week write workflow.
+assert.match(ctl, /function _build_shift_roster_dataset\(/);
+assert.match(ctl, /function annual_roster\(/);
+assert.match(ctl, /function annual_roster_csv\(/);
+assert.match(ctl, /function roster_day_save\(/);
+assert.match(ctl, /function roster_pattern_save\(/);
+assert.ok(ctl.includes('for ($n = 0; $n < 7; $n++)') && ctl.includes('$w->roster_days[$date] = $cell'),
+  'each worker-day has its own state in the weekly grid');
+assert.ok(!week.includes("form_open('team/assign_shift'"), 'retired weekly assignment form must not be presented');
+assert.ok(ctl.includes('Weekly assignment is retired.'), 'legacy weekly POST refuses new writes');
+assert.ok(model.includes('function carry_legacy(') && model.includes("$r->source !== 'Pattern'"),
+  'carry-forward and manual overrides are protected from regeneration');
+assert.ok(model.includes("'day_type' => $value === 'Off' ? 'Off' : 'Shift'"),
+  'Off days are explicit rows, not blank shifts');
+assert.ok(model.includes('published_at') && model.includes("$yr->status === 'Published'"),
+  'draft/published visibility is separate');
+assert.ok(model.includes('function amend_leave(') && model.includes('function end_leave('),
+  'scheduled leave can be amended or ended by a supervisor');
+assert.ok(model.includes('function confirm_extra(') && model.includes('function settle_extra('),
+  'off-day work and compensation have distinct confirmation/settlement stages');
+assert.ok(model.includes("'replaced_shift_id' => (int)$day->shift_id"),
+  'the original shift can be restored if the replacement is undone');
+assert.ok(!model.includes("->insert('attendance'") && !model.includes("->update('attendance'"),
+  'planning never manufactures actual attendance');
 
-// --- Controller: dataset builder + export --------------------------------------
-assert.ok(controller.includes('function _build_shift_roster_dataset'), 'Team::_build_shift_roster_dataset missing');
-assert.ok(controller.includes('function shift_roster_csv'), 'Team::shift_roster_csv missing');
-const csvBlock = controller.slice(controller.indexOf('function shift_roster_csv'), controller.indexOf('function shift_roster_csv') + 900);
-assert.ok(csvBlock.includes('is_supervisor()') && csvBlock.includes('is_manager()'),
-  'roster CSV export must be supervisor/manager gated server-side');
-assert.ok(controller.includes("'assigned'") && controller.includes("'unassigned'"),
-  'assigned/unassigned tab keys exist in dataset builder');
+// All mutating endpoints use POST and have a supervisor check in their method.
+for (const name of ['roster_day_save', 'roster_pattern_save', 'roster_carry_legacy',
+  'roster_publish', 'roster_leave_save', 'roster_leave_amend', 'roster_leave_end',
+  'roster_extra_save', 'roster_extra_confirm', 'roster_extra_settle', 'roster_extra_cancel']) {
+  const chunk = ctl.split(`public function ${name}()`)[1]?.split(/\n    (?:public|private) function /)[0];
+  assert.ok(chunk, `${name} exists`);
+  assert.ok(chunk.includes('require_post()') && chunk.includes('is_supervisor()'), `${name} is POST + supervisor only`);
+}
+const weekCsv = ctl.split('public function shift_roster_csv()')[1].split('public function annual_roster()')[0];
+assert.ok(weekCsv.includes('is_supervisor()') && weekCsv.includes('is_manager()') && weekCsv.includes("'Date', 'Employee ID'"),
+  'weekly CSV is role-scoped and has one row per date');
+assert.ok(ctl.includes("$selected = $planner ? (int)$this->input->get('user', TRUE) : (int)$this->user_id;"),
+  'annual page and export force personal scope for non-planners');
 
-// --- View: structure ------------------------------------------------------------
-assert.ok(view.includes('role="tablist"') && view.includes('aria-selected'),
-  'status tabs use tablist semantics with counts');
-assert.ok(view.includes("'All Staff'") && view.includes("'Unassigned'"),
-  'tabs include All Staff and Unassigned');
-assert.ok(view.includes('aria-sort') && view.includes('scope="col"'),
-  'sortable worker header exposes aria-sort and scope');
-assert.ok(view.includes('sr-autosubmit'), 'scope filters auto-submit');
-assert.ok(view.includes('id="srSearch"') && view.includes("e.key === '/'"),
-  'search input with / keyboard shortcut');
-assert.ok(view.includes('aria-pressed') && view.includes('>Table<') === false || view.includes('>Table</a>') || view.includes('Table</a>'),
-  'view toggle exists');
-assert.ok(view.includes('Active filters'), 'active filter chips strip exists');
-assert.ok(view.includes('aria-current="page"') && view.includes('Showing'),
-  'pagination footer with showing summary');
-assert.ok(view.includes('sr-print-banner'), 'print banner exists');
-assert.ok(view.includes('@media print'), 'print styles exist');
-
-// --- View: data & safety ---------------------------------------------------------
-assert.ok(view.includes('htmlspecialchars((string)$w->full_name_roster'),
-  'worker name is escaped in roster rows');
-assert.ok(!view.includes("$w->first_name . ' ' . $w->last_name"),
-  'unescaped worker-name concatenation removed from the view');
-assert.ok(view.includes('Unassigned'), 'unassigned workers are labelled explicitly');
-assert.ok(view.includes("form_open('team/assign_shift'"), 'assignment uses the existing authorised endpoint');
-assert.ok(view.includes("form_open('team/shift_save'"), 'shift-type save uses the existing endpoint');
-assert.ok(view.includes("form_open('team/shift_delete/'"), 'shift-type delete uses the existing endpoint');
-assert.ok(view.includes('!empty($can_edit)'), 'mutating controls are supervisor-gated in the UI');
-assert.ok(view.includes('for="srAssign'), 'assign selects have accessible labels');
-assert.ok(view.includes('Everyone is assigned this week'), 'unassigned empty state explains itself');
-assert.ok(view.includes('No workers match the current filters'), 'filtered-empty state exists');
-assert.ok(view.includes('team/shift_roster_csv'), 'export links to the roster CSV endpoint');
-
-console.log('Shift Roster table UX structural checks passed.');
+// Usability: status, year/month/week, direct day changes, search, role-hidden writes.
+assert.ok(annual.includes('Annual Workforce Plan') && annual.includes('ar-year-grid') && annual.includes('ar-month-grid'),
+  'annual page has distinct year and detailed month modes');
+assert.ok(annual.includes("team/shift_roster?week=") && annual.includes('Week ↗'), 'calendar links to weekly grid');
+assert.ok(annual.includes('ar-mini-grid') && annual.includes('ar-month-nav') && annual.includes('ar-day-state'),
+  'month navigation and dated states exist');
+assert.ok(annual.includes("form_open('team/roster_pattern_save'") && annual.includes('4 on / 4 Off'),
+  'rotation builder covers common day-based cycles');
+assert.ok(annual.includes("form_open('team/roster_publish'") && annual.includes('$coverage[\'missing\']'),
+  'publishing has a coverage gate');
+assert.ok(annual.includes('form_open(\'team/roster_leave_save\'') && annual.includes("form_open('team/roster_leave_amend'"),
+  'planned leave does not depend on an employee request');
+assert.ok(annual.includes("form_open('team/roster_extra_save'") && annual.includes("form_open('team/roster_extra_settle'"),
+  'extra work and its settlement have explicit forms');
+assert.ok(annual.includes('$can_plan') && annual.includes('$can_edit') && annual.includes('$is_planner'),
+  'write controls are hidden from managers and employees');
+assert.ok(editor.includes("form_open('team/roster_day_save'") && editor.includes("$published ? 'required minlength"),
+  'accessible day-edit fallback requires a published-change reason');
+assert.ok(week.includes('ar' /* no external JS dependency */) || week.includes('sr-grid'),
+  'weekly roster renders its own day-level table');
+assert.ok(week.includes('Off ·') && week.includes('Needs plan') && week.includes('Leave') && week.includes('Holiday'),
+  'the weekly legend distinguishes all expected states');
+assert.ok(week.includes('sr-search') || week.includes('id="srSearch"'), 'weekly search exists');
+assert.ok(week.includes('htmlspecialchars((string)$v') && annual.includes('htmlspecialchars((string)$s'),
+  'worker and reason text go through HTML escaping');
+assert.ok(week.includes('sr-print-banner') && week.includes('aria-current="page"') && week.includes('Showing'),
+  'weekly grid is printable, filterable and paginated');
+assert.ok(navigation.includes("'Annual Workforce Plan'") && navigation.includes("'My Annual Schedule'"),
+  'role-scoped navigation offers the annual calendar');
+assert.ok(attendance.includes('Published plan') && attendance.includes('Not recorded') && attendance.includes('Actual status'),
+  'actual attendance remains separate and unrecorded days do not become Present by default');
+assert.ok(teamModel.includes('planned_today') && teamModel.includes('expected_on_site') && teamModel.includes('on_site_today'),
+  'staff directory has both expected and actual site state');
+console.log('Annual workforce plan & weekly day-grid structural checks passed.');

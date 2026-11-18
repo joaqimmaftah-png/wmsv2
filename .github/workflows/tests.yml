@@ -232,4 +232,10 @@ jobs:
 
           node tests/ui_e2e.js
 
+          # Disposable authenticated integration check of annual rotation,
+          # publication, cross-year leave, reminders and Off-day settlement.
+          php scripts/create-admin.php roster@ci.local "AdminPass123!" "CI" "Roster" 2
+          php scripts/create-admin.php rosterpay@ci.local "AdminPass123!" "CI" "Payroll" 2
+          WMS_TEST_DESTRUCTIVE=1 python3 tests/annual_plan_live.py
+
 

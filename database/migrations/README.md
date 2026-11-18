@@ -5,8 +5,8 @@
 `database/schema.sql` contains the complete, production-ready baseline schema:
 - Application tables plus the `schema_migrations` tracking ledger (including `backlog_events`)
 - Single-column `PRIMARY KEY (id)` on `ci_sessions` aligned with `$config['sess_match_ip'] = FALSE` (prevents IPv4/IPv6 `127.0.0.1` vs `::1` session/CSRF mismatches on Windows XAMPP)
-- All **93 InnoDB foreign-key constraints**, unique constraints, and reporting indexes
-- All **29 documented `settings` defaults** (`Settings_model::DEFAULTS`)
+- InnoDB foreign keys, unique constraints, and reporting indexes (including annual worker/date integrity)
+- Documented `settings` defaults (`Settings_model::DEFAULTS`), including leave reminders
 - All **14 bilingual (EN/FR) workshop `inspection_templates` + 630 `inspection_items`** (zero PII)
 
 ### Quick Setup on XAMPP (`C:\xampp\htdocs\wmsv2`)
@@ -23,9 +23,9 @@
 
 ---
 
-## 2. Upgrading an Existing Database (`0001` – `0016`)
+## 2. Upgrading an Existing Database (`0001` – `0018`)
 
-Every file in `database/migrations/` is **strictly idempotent** (safe on both **MySQL 8.0+** and **MariaDB 10.4+** without non-portable `IF NOT EXISTS` DDL syntax) and tracked in `schema_migrations`:
+Migrations are tracked in `schema_migrations`. Most additive migrations are re-runnable on MySQL 8.0+ and MariaDB 10.4+; **0017 is ledger-only** (it adds an FK without an existence guard and is skipped on `--force` once recorded). Do not delete its ledger row to rerun it on an existing database.
 
 | Version | File | Purpose |
 | :--- | :--- | :--- |
@@ -45,6 +45,16 @@ Every file in `database/migrations/` is **strictly idempotent** (safe on both **
 | `0014` | `0014_worker_site_and_timesheet_settings.sql` | Adds worker site and timesheet settings |
 | `0015` | `0015_backlog_workflow_safety.sql` | Adds defect proposals, closure evidence, activity and idempotency without rewriting existing defects |
 | `0016` | `0016_forecast_write_lock.sql` | Adds the InnoDB singleton used to serialize forecast publication with plan and ledger writes |
+| `0017` | `0017_user_blacklist_and_delete.sql` | Adds Blacklisted user status and attributable blacklist audit fields (ledger-only after first application) |
+| `0018` | `0018_annual_workforce_plan.sql` | Adds year Draft/Published status, worker/date Shift/Off/Holiday bases, supervisor-planned leave, Off-day extra-work settlement, audit events and in-app reminder defaults |
+
+### Annual workforce plan rollout (0018)
+
+1. **Back up**, deploy migration 0018 and the matching application version together, then run `php scripts/migrate.php --verify` before supervisors start scheduling. It is additive: weekly shifts, approved leave requests, attendance and punch events are not rewritten. Never plan on an instance still running the old weekly-assignment code; existing weekly shifts remain read-only until carried explicitly into a draft year.
+2. Open **Team → Annual Workforce Plan**, define any missing shift types in the week view, and generate a 2–56-day rotation for each active worker. Every generated date has a real Shift or explicit Off; override individual dates or mark Holidays. Optionally carry existing future weekly assignments into the draft, then review and correct their assumed seven workdays. Publish only after all remaining worker-days are covered. Staff see only published years; managers may preview but only supervisors can change or publish.
+3. Schedule leave directly on the year view (no worker request). Published leave changes expected availability, reserves underlying Shift days in the balance, and drives in-app start/return notices in the operational attention bell. The default notice windows are **7** days before leave and **2** days before return; supervisors can edit them in Settings. Both years must be published before a cross-year return reminder is shown. Legacy employee requests are retained separately for unscheduled exceptions and charged to the year(s) of their dates.
+4. For an authorised Off-day call-in, preserve the Off base and create a separate extra-work exception with a reason and a shift. After the date, record actual attendance and confirm worked hours from that record. Settle **Pay** using an external payroll reference (WMS does not calculate pay amounts), or schedule a future replacement Off over an existing published Shift, then record actual Rest before marking it Taken. Changes to published plans and compensation are audited. Attendance and QR punches remain independent evidence, never filled by roster generation.
+5. Test a full-year rotation, per-date override, cross-year leave and Off-day settlement on a staging MySQL/MariaDB copy before production. The live CI suite exercises these endpoints on both supported engines; the unit suite alone cannot validate migrations or SQL.
 
 ### Defect and forecast workflow rollout (0015–0016)
 
@@ -104,7 +114,7 @@ php scripts/migrate.php --verify
 
 1. **Continuous Integration (`.github/workflows/tests.yml`)** — runs automatically on every `push` and `pull_request`:
    - Lints all `.php` files and runs `php tests/backlog_workflow.php` and `php tests/run.php` across **PHP 8.2, 8.3, and 8.4**
-   - Tests fresh `schema.sql` load, double-idempotent execution of `0001`–`0016`, and live authenticated HTTP + `.xlsx` export verification against **both MySQL 8.0 and MariaDB 10.4 (XAMPP engine)**
+   - Tests fresh `schema.sql` load, repeatable migrations through `0018` (skipping the ledger-only `0017` on force), and live authenticated HTTP + `.xlsx` exports against **both MySQL 8.0 and MariaDB 10.4 (XAMPP engine)**
 2. **Continuous Deployment (`.github/workflows/deploy.yml` + XAMPP automation)**:
    - **Option A — Local / On-Premises Windows XAMPP (Zero Inbound Ports)**:
      - **Scheduled Auto-Pull + Migrate (Simplest — 1 command)**:

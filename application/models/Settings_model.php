@@ -73,6 +73,8 @@ class Settings_model extends CI_Model {
         // tracked (shown as "—"), which is how Maternity/Paternity/Training
         // behave until the business sets a figure.
         'leave_entitlements'               => '{"Annual Leave":21,"Sick Leave":10,"Emergency":3}',
+        'roster_leave_notice_days'         => '7',
+        'roster_return_notice_days'        => '2',
 
         /* ── attendance punches (ATTENDANCE_WORKFLOW.md) ─────────────
            Managed on Attendance → Sites & policy, not on the general
@@ -118,6 +120,8 @@ class Settings_model extends CI_Model {
 
         'cert_alert_days'                   => 'Days before a certification expiry at which it is flagged "Expiring Soon" (the tracker also lists already-expired certificates)',
         'leave_entitlements'                => 'Leave days per type per year, as JSON keyed by the leave type, e.g. {"Annual Leave":21,"Sick Leave":10,"Emergency":3}. A type not listed is not tracked (shown as "—")',
+        'roster_leave_notice_days'         => 'Days before published planned leave starts to show an in-app reminder (1–30)',
+        'roster_return_notice_days'        => 'Days before published planned leave ends/return to show an in-app reminder (1–14)',
 
         'attendance_gate_enabled'           => 'Attendance: 1 = only offer and accept technicians who are checked in on site and free of unfinished work orders; 0 = assignable as before (the default)',
         'attendance_open_session_policy'    => 'Attendance: warn = accept a check-out with an open work session and name it; block = refuse the check-out until the session is closed',
@@ -504,6 +508,14 @@ class Settings_model extends CI_Model {
             case 'cert_alert_days':
                 $v = (int)$value;
                 return (string)(($v > 0 && $v <= 365) ? $v : 30);
+
+            case 'roster_leave_notice_days':
+                $v = (int)$value;
+                return (string)(($v >= 1 && $v <= 30) ? $v : 7);
+
+            case 'roster_return_notice_days':
+                $v = (int)$value;
+                return (string)(($v >= 1 && $v <= 14) ? $v : 2);
 
             case 'leave_entitlements':
                 // must stay a JSON object of type => whole/half days; a

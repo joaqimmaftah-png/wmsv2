@@ -605,6 +605,7 @@ $clean_reset_url = site_url('team') . ($view_mode !== 'table' ? ('?view=' . rawu
       <svg class="tm-ico" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
       Shift Roster
     </a>
+    <a href="<?= site_url('team/annual_roster') ?>" class="btn btn-ghost btn-sm">Annual Workforce Plan</a>
     <a href="<?= site_url('team/certifications') ?>" class="btn btn-ghost btn-sm btn-icon">
       <svg class="tm-ico" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"/><polyline points="8.5 13 7 22 12 19 17 22 15.5 13"/></svg>
       Certifications
@@ -1030,6 +1031,11 @@ $clean_reset_url = site_url('team') . ($view_mode !== 'table' ? ('?view=' . rawu
               <?php endif; ?>
               <?php if ($w->current_shift !== ''): ?>
                 <div style="font-size:11px;color:var(--t3);margin-top:3px;"><?= htmlspecialchars($w->current_shift, ENT_QUOTES, 'UTF-8') ?></div>
+              <?php endif; ?>
+              <?php if ($w->planned_today !== '' && $w->expected_on_site === FALSE): ?>
+                <span class="badge b-secondary" style="margin-top:4px;font-size:10px;" title="Published plan; live on-site status is tracked separately">Not expected on site · <?= htmlspecialchars($w->planned_today, ENT_QUOTES, 'UTF-8') ?></span>
+              <?php elseif ($w->planned_today === 'Off' && $w->expected_on_site === TRUE): ?>
+                <span class="badge b-warning" style="margin-top:4px;font-size:10px;">Off · extra work approved</span>
               <?php endif; ?>
             </td>
 

@@ -34,6 +34,15 @@ class Attention_model extends CI_Model {
             }
         }
 
+        // Time-sensitive leave notices are derived from PUBLISHED plans, not
+        // stored messages. They appear to the worker and to planners in the
+        // same attention bell, then disappear automatically after return.
+        if (in_array($role, array(1, 2, 3, 4), TRUE)) {
+            foreach ($this->_planned_leave_reminders((int)$user_id, $role) as $leave_group) {
+                $groups[] = $leave_group;
+            }
+        }
+
         // Verification is a supervisor action, not a read-only manager alert.
         if ($role === 1) {
             $verification = $this->_awaiting_verification();
@@ -253,6 +262,103 @@ class Attention_model extends CI_Model {
        days for renewals with long lead times. Computed from expiry_date
        directly — the stored status column is never refreshed (written)
        here, because this model runs on every page render. */
+
+    /** In-app reminders evaluated on each page load, not a mail queue. The
+     * start and return windows are configured under Settings; each boundary
+     * must fall in a published year (especially for cross-year leave). */
+    private function _planned_leave_reminders($user_id, $role_id) {
+        if (!$this->db->table_exists('workforce_plan_leaves') || !$this->db->table_exists('workforce_plan_years')) return array();
+        $ci = get_instance();
+        $ci->load->model('Settings_model');
+        $begin = (int)$ci->Settings_model->get('roster_leave_notice_days', 7);
+        $return = (int)$ci->Settings_model->get('roster_return_notice_days', 2);
+        if ($begin < 1 || $begin > 30) $begin = 7;
+        if ($return < 1 || $return > 14) $return = 2;
+        $today = date('Y-m-d');
+        $starts = $this->_planned_leave_group($user_id, $role_id, 'start', $today,
+            date('Y-m-d', strtotime('+' . $begin . ' days')));
+        // Return date = the day AFTER the final planned leave date.
+        $ends = $this->_planned_leave_group($user_id, $role_id, 'return',
+            date('Y-m-d', strtotime($today . ' -1 day')),
+            date('Y-m-d', strtotime($today . ' +' . ($return - 1) . ' days')));
+        return array_values(array_filter(array($starts, $ends)));
+    }
+
+    private function _planned_leave_group($user_id, $role_id, $kind, $from, $to) {
+        $query = $this->_planned_leave_query($user_id, $role_id, $kind, $from, $to);
+        $date_field = $kind === 'start' ? 'l.start_date' : 'l.end_date';
+        $rows = $query->order_by($date_field, 'ASC')->order_by('l.id', 'ASC')
+            ->limit(self::PREVIEW_LIMIT + 1)->get()->result();
+        $total = count($rows);
+        if ($total > self::PREVIEW_LIMIT) {
+            $total = (int)$this->_planned_leave_query($user_id, $role_id, $kind, $from, $to)->count_all_results();
+        }
+        if (!$total) return NULL;
+        $own = in_array((int)$role_id, array(2, 3), TRUE);
+        $items = array();
+        foreach (array_slice($rows, 0, self::PREVIEW_LIMIT) as $r) {
+            $boundary = $kind === 'start' ? $r->start_date : date('Y-m-d', strtotime($r->end_date . ' +1 day'));
+            $days = (int)((strtotime($boundary) - strtotime(date('Y-m-d'))) / 86400);
+            $when = $days === 0 ? 'today' : 'in ' . $days . 'd';
+            $meta = $kind === 'start' ? 'Starts ' . $when . ' · ' . date('d M', strtotime($boundary))
+                : ($days === 0 ? 'Ended yesterday' : ($days === 1 ? 'Ends today' : 'Ends in ' . ($days - 1) . 'd'))
+                    . ' · review next shift';
+            // Show only the published boundary. A start on 31 Dec may extend
+            // into an unpublished next-year draft; its provisional end is not
+            // part of this reminder or the worker's published calendar yet.
+            $detail = $kind === 'start' ? 'First leave day ' . date('d M Y', strtotime($r->start_date))
+                : 'Final leave day ' . date('d M Y', strtotime($r->end_date));
+            $items[] = array(
+                'label' => $own ? (string)$r->leave_type : (string)$r->worker_name,
+                'detail' => $own ? $detail : $r->leave_type . ' · ' . $detail,
+                'meta' => $meta,
+                'url' => base_url('team/annual_roster?year=' . (int)substr($boundary, 0, 4)
+                    . ($own ? '' : '&user=' . (int)$r->user_id)),
+            );
+        }
+        $first_boundary = $kind === 'start' ? $rows[0]->start_date
+            : date('Y-m-d', strtotime($rows[0]->end_date . ' +1 day'));
+        return array(
+            'key' => $kind === 'start' ? 'leave_starts' : 'leave_returns',
+            'label' => $kind === 'start' ? 'Planned leave starting soon' : 'Return from planned leave',
+            'count' => $total, 'tone' => $kind === 'start' ? 'warning' : 'info',
+            'url' => base_url('team/annual_roster?year=' . (int)substr($first_boundary, 0, 4)),
+            'items' => $items,
+        );
+    }
+
+    private function _planned_leave_query($user_id, $role_id, $kind, $from, $to) {
+        $is_start = $kind === 'start';
+        $now = date('Y-m-d H:i:s');
+        // A return reminder requires BOTH the final leave date and the return
+        // date to belong to published years. Joining only on the return year
+        // exposed an unpublished prior-year draft at the New Year boundary.
+        $year_field = $is_start ? 'YEAR(l.start_date)' : 'YEAR(l.end_date)';
+        $this->db->select("l.id, l.user_id, l.leave_type, l.start_date, l.end_date, CONCAT(u.first_name, ' ', u.last_name) AS worker_name")
+            ->from('workforce_plan_leaves l')
+            ->join('users u', 'u.id = l.user_id', 'inner')
+            ->join('workforce_plan_years y', 'y.plan_year = ' . $year_field, 'inner', FALSE)
+            ->where('l.status', 'Scheduled')->where_in('u.status', array('Active', 'On Leave'))
+            ->where('y.status', 'Published')->where('y.published_at <=', $now)
+            ->where($is_start ? 'l.start_date >=' : 'l.end_date >=', $from)
+            ->where($is_start ? 'l.start_date <=' : 'l.end_date <=', $to);
+        if (!$is_start) {
+            $next_day = 'DATE_ADD(l.end_date, INTERVAL 1 DAY)';
+            $this->db->join('workforce_plan_years ry',
+                'ry.plan_year = YEAR(' . $next_day . ')', 'inner', FALSE)
+                ->where('ry.status', 'Published')->where('ry.published_at <=', $now)
+                // Adjacent leave is not a return, even if the first block ends.
+                ->where("NOT EXISTS (SELECT 1 FROM workforce_plan_leaves next_l
+                    WHERE next_l.user_id = l.user_id AND next_l.id != l.id
+                    AND next_l.status = 'Scheduled' AND next_l.start_date <= {$next_day}
+                    AND next_l.end_date >= {$next_day})", NULL, FALSE)
+                ->where("NOT EXISTS (SELECT 1 FROM leave_requests lr
+                    WHERE lr.user_id = l.user_id AND lr.status = 'Approved'
+                    AND lr.start_date <= {$next_day} AND lr.end_date >= {$next_day})", NULL, FALSE);
+        }
+        if (in_array((int)$role_id, array(2, 3), TRUE)) $this->db->where('l.user_id', (int)$user_id);
+        return $this->db;
+    }
 
     /** @return array[] attention groups, most urgent first */
     private function _certificate_alerts($user_id, $role_id) {

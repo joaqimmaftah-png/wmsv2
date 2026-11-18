@@ -8,7 +8,7 @@ class Team extends MY_Controller {
 
     public function __construct() {
         parent::__construct();
-        $this->load->model(array('Team_model', 'Attendance_model', 'Timesheet_model'));
+        $this->load->model(array('Team_model', 'Attendance_model', 'Timesheet_model', 'Workforce_plan_model'));
         $this->load->helper('attendance');
     }
 
@@ -115,7 +115,7 @@ class Team extends MY_Controller {
         fwrite($out, "\xEF\xBB\xBF");
         fputcsv($out, array(
             'Employee ID', 'Full Name', 'Role', 'Position', 'Skill Level', 'Site',
-            'Status', 'On Site Today', 'Current Shift', 'Active Work Orders',
+            'Status', 'On Site Today (Actual)', 'Plan Today (Expected)', 'Expected on Site', 'Current Shift', 'Active Work Orders',
             'Valid Certs', 'Expiring Certs', 'Expired Certs',
             'Email', 'Phone', 'Join Date',
         ), ',', '"', '\\');
@@ -130,6 +130,8 @@ class Team extends MY_Controller {
                 $safe_cell($r->site),
                 $safe_cell($r->effective_status),
                 $r->on_site_today ? 'Yes' : 'No',
+                $safe_cell($r->planned_today),
+                $r->expected_on_site === NULL ? 'Not published' : ($r->expected_on_site ? 'Yes' : 'No'),
                 $safe_cell($r->current_shift),
                 (int)$r->active_wo_count,
                 (int)$r->cert_valid,
@@ -221,7 +223,12 @@ class Team extends MY_Controller {
             );
         }
 
-        $balances_raw = $this->Team_model->get_leave_balance($uid);
+        $cell_map = $this->Workforce_plan_model->days($today, $today, array($uid));
+        $planned_cell = isset($cell_map[$uid][$today]) ? $cell_map[$uid][$today] : NULL;
+        $planned_today = $planned_cell && $planned_cell['plan_status'] === 'Published' ? $planned_cell['kind'] : '';
+        if ($eff_status === 'Active' && $planned_today === 'Leave') $eff_status = 'On Leave';
+
+        $balances_raw = $this->Team_model->get_leave_balance($uid, NULL, $this->is_supervisor() || $this->is_manager());
         $annual_rem   = NULL;
         foreach ($balances_raw as $b) {
             if ($b['type'] === 'Annual Leave' && $b['remaining'] !== NULL) {
@@ -244,6 +251,8 @@ class Team extends MY_Controller {
             'site'             => $s_info['site'],
             'site_source'      => $s_info['source'],
             'on_site_today'    => isset($on_site[$uid]),
+            'planned_today'    => $planned_today === 'Leave' ? $planned_cell['leave_type'] : ($planned_today === 'Unplanned' ? 'Needs plan' : $planned_today),
+            'expected_on_site' => $planned_today === '' || $planned_today === 'Unplanned' ? NULL : ($planned_today === 'Shift' || ($planned_today === 'Off' && (bool)$planned_cell['extra'])),
             'email'            => isset($worker->email) ? (string)$worker->email : '',
             'phone'            => isset($worker->phone) ? (string)$worker->phone : '',
             'join_date'        => !empty($worker->join_date) ? date('d M Y', strtotime($worker->join_date)) : '',
@@ -567,8 +576,12 @@ class Team extends MY_Controller {
         $data['ltotal_pages']   = $ltotal_pages;
         $data['lshowing_from']  = $ltotal > 0 ? ($loffset + 1) : 0;
         $data['lshowing_to']    = min($ltotal, $loffset + count($data['leave_history']));
-        $data['leave_balance']= $this->Team_model->get_leave_balance($id);
+        $data['leave_balance']= $this->Team_model->get_leave_balance($id, NULL, $this->is_supervisor() || $this->is_manager());
         $data['leave_year']   = (int)date('Y');
+        $live_year = $this->Workforce_plan_model->year($data['leave_year']);
+        $planner = $this->is_supervisor() || $this->is_manager();
+        $data['planned_leaves'] = $live_year && ($planner || $this->Workforce_plan_model->is_published($data['leave_year'] . '-12-31'))
+            ? $this->Workforce_plan_model->leaves($data['leave_year'], (int)$id, !$planner) : array();
         $data['cert_alert_days'] = $this->_cert_alert_days();
         $data['worker_site']  = $this->Timesheet_model->resolve_worker_site(
             $data['worker'], date('Y-m-01'), date('Y-m-t')
@@ -585,12 +598,20 @@ class Team extends MY_Controller {
     }
 
     public function attendance() {
+        // The Team controller is open for self-service schedules/reports, but
+        // the shared daily attendance ledger is a supervisor-only correction.
+        if (!$this->is_supervisor()) {
+            $this->session->set_flashdata('error', 'Only supervisors can record daily attendance.');
+            redirect('team/report');
+            return;
+        }
         if (strtolower((string)($this->input->method())) === 'post') {
             $posted_date = $this->input->post('date', TRUE);
             $date = is_string($posted_date) && $posted_date !== '' ? $posted_date : date('Y-m-d');
             if (!preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/D', $date)
-                || !checkdate((int)substr($date, 5, 2), (int)substr($date, 8, 2), (int)substr($date, 0, 4))) {
-                $this->session->set_flashdata('error', 'Attendance date is invalid.');
+                || !checkdate((int)substr($date, 5, 2), (int)substr($date, 8, 2), (int)substr($date, 0, 4))
+                || $date > date('Y-m-d')) {
+                $this->session->set_flashdata('error', 'Actual attendance cannot be recorded for a future date; use the workforce plan instead.');
                 redirect('team/attendance');
                 return;
             }
@@ -605,12 +626,13 @@ class Team extends MY_Controller {
             // The `attendance.status` enum also has Holiday; the form did not
             // offer it and the whitelist rejected it, so a public holiday
             // could never be recorded (and would arrive as an error if it was).
-            $allowed_statuses = array('Present', 'Absent', 'Leave', 'Rest', 'Holiday');
+            $allowed_statuses = array('', 'Present', 'Absent', 'Leave', 'Rest', 'Holiday');
             if (!$this->db->trans_begin()) {
                 $this->session->set_flashdata('error', 'Attendance could not be saved because the database transaction could not be started.');
                 redirect('team/attendance?date=' . rawurlencode($date));
                 return;
             }
+            $saved_count = 0;
             foreach ($records as $user_id => $record) {
                 $user_id = (string)$user_id;
                 if (!preg_match('/^[1-9][0-9]*$/D', $user_id) || !is_array($record)
@@ -620,6 +642,15 @@ class Team extends MY_Controller {
                     redirect('team/attendance?date=' . rawurlencode($date));
                     return;
                 }
+                if ($record['status'] === '') {
+                    if (!empty($record['check_in']) || !empty($record['check_out'])) {
+                        $this->db->trans_rollback();
+                        $this->session->set_flashdata('error', 'Choose an actual status for the row with recorded times.');
+                        redirect('team/attendance?date=' . rawurlencode($date)); return;
+                    }
+                    continue; // An unrecorded day stays unrecorded, regardless of its plan.
+                }
+                $saved_count++;
 
                 $check_in = isset($record['check_in']) && $record['check_in'] !== '' ? $record['check_in'] : NULL;
                 $check_out = isset($record['check_out']) && $record['check_out'] !== '' ? $record['check_out'] : NULL;
@@ -665,7 +696,10 @@ class Team extends MY_Controller {
                 }
             }
 
-            if ($this->db->trans_status() === FALSE) {
+            if (!$saved_count) {
+                $this->db->trans_rollback();
+                $this->session->set_flashdata('error', 'No actual attendance selected; nothing was recorded.');
+            } elseif ($this->db->trans_status() === FALSE) {
                 $this->db->trans_rollback();
                 $this->session->set_flashdata('error', 'Attendance could not be saved; no records were changed.');
             } elseif (!$this->db->trans_commit()) {
@@ -681,11 +715,16 @@ class Team extends MY_Controller {
         $requested_date = $this->input->get('date', TRUE);
         $date = is_string($requested_date) ? $requested_date : date('Y-m-d');
         if (!preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/D', $date)
-            || !checkdate((int)substr($date, 5, 2), (int)substr($date, 8, 2), (int)substr($date, 0, 4))) {
+            || !checkdate((int)substr($date, 5, 2), (int)substr($date, 8, 2), (int)substr($date, 0, 4))
+            || $date > date('Y-m-d')) {
             $date = date('Y-m-d');
         }
 
-        $data['workers']    = $this->Team_model->get_all_active();
+        // A worker temporarily marked On Leave still needs a real attendance
+        // outcome (and must be visible alongside their published expectation).
+        $data['workers']    = $this->Team_model->get_plannable_staff();
+        $ids = array(); foreach ($data['workers'] as $worker) $ids[] = (int)$worker->id;
+        $data['plan_days'] = $this->Workforce_plan_model->days($date, $date, $ids);
         $data['attendance'] = $this->Team_model->get_attendance_by_date($date);
         // Read-only cross-check: the punch-derived on-site state. The times in
         // the table below are the day row, which a punch keeps in sync, so the
@@ -722,7 +761,7 @@ class Team extends MY_Controller {
 
             if ($this->Team_model->has_overlapping_leave($this->user_id, $start, $end)) {
                 $this->session->set_flashdata('error',
-                    'You already have a pending or approved leave request covering part of '
+                    'This period is unavailable because it overlaps existing leave or a request. Ask your supervisor about '
                     .date('d M Y', strtotime($start)).' – '.date('d M Y', strtotime($end)).'.');
                 redirect('team/leave_request');
                 return;
@@ -1037,9 +1076,16 @@ class Team extends MY_Controller {
             redirect('team');
         }
 
-        // Deciding leave and writing the attendance days are one action: an
-        // approval that fails to reach attendance would leave the person
-        // looking absent for the whole period.
+        // Keep legacy employee-requested leave separate from the annual plan;
+        // approving a request over a scheduled block would double-book days.
+        if ($status === 'Approved' && $this->Team_model->has_overlapping_leave(
+                $leave->user_id, $leave->start_date, $leave->end_date, (int)$id)) {
+            $this->session->set_flashdata('error', 'This request overlaps another request or supervisor-planned leave. Resolve the overlap first.');
+            redirect('team'); return;
+        }
+
+        // Existing requests still reconcile to attendance as before; the new
+        // supervisor-planned leave never pre-fills future actual attendance.
         $this->db->trans_begin();
 
         $this->db->update('leave_requests', [
@@ -1611,193 +1657,499 @@ class Team extends MY_Controller {
     }
 
     /* ─────────────────────────────────────────────────────
-       SHIFT ROSTER — week view + shift types + assignments
+       ANNUAL WORKFORCE PLAN — week grid, year view and authorised changes
     ───────────────────────────────────────────────────── */
 
     public function shift_roster() {
         $ctx = $this->_build_shift_roster_dataset();
-
         $per_page_in = (int)$this->input->get('per_page', TRUE);
         $per_page = in_array($per_page_in, array(10, 25, 50, 100), TRUE) ? $per_page_in : 25;
-        $total_filtered = count($ctx['rows']);
-        $total_pages = max(1, (int)ceil($total_filtered / $per_page));
-        $page_in = (int)$this->input->get('page', TRUE);
-        $page = max(1, min($total_pages, $page_in > 0 ? $page_in : 1));
+        $total = count($ctx['rows']);
+        $pages = max(1, (int)ceil($total / $per_page));
+        $page = max(1, min($pages, (int)$this->input->get('page', TRUE)));
         $offset = ($page - 1) * $per_page;
-
-        $view_in = strtolower(trim((string)$this->input->get('view', TRUE)));
-        $view_mode = ($view_in === 'cards') ? 'cards' : 'table';
-
+        $mode = strtolower(trim((string)$this->input->get('view', TRUE)));
         $data = $ctx;
-        $data['workers']     = array_slice($ctx['rows'], $offset, $per_page);
-        $data['total_filtered'] = $total_filtered;
-        $data['per_page']    = $per_page;
-        $data['page']        = $page;
-        $data['total_pages'] = $total_pages;
-        $data['showing_from'] = $total_filtered > 0 ? ($offset + 1) : 0;
-        $data['showing_to']   = min($total_filtered, $offset + count($data['workers']));
-        $data['view_mode']   = $view_mode;
-        $data['can_edit']    = $this->is_supervisor();
-        $data['can_export']  = $this->is_supervisor() || $this->is_manager();
-        $data['page_title']  = 'Shift Roster';
+        $data['workers'] = array_slice($ctx['rows'], $offset, $per_page);
+        $data['total_filtered'] = $total;
+        $data['per_page'] = $per_page;
+        $data['page'] = $page;
+        $data['total_pages'] = $pages;
+        $data['showing_from'] = $total ? $offset + 1 : 0;
+        $data['showing_to'] = $offset + count($data['workers']);
+        $data['view_mode'] = $mode === 'cards' ? 'cards' : 'table';
+        $data['can_edit'] = $this->is_supervisor();
+        $data['can_export'] = $this->is_supervisor() || $this->is_manager();
+        $data['plan_ready'] = $this->Workforce_plan_model->ready();
+        $row = $data['plan_ready'] ? $this->Workforce_plan_model->year((int)substr($ctx['week_start'], 0, 4)) : NULL;
+        $data['year_row'] = $data['can_export'] || ($row && $row->status === 'Published') ? $row : NULL;
+        $data['page_title'] = 'Shift Roster';
         $this->render('team/shift_roster', $data);
     }
 
-    /**
-     * Build the Shift Roster dataset for one week: active workers joined to
-     * their (single, weekly) shift assignment, with search, shift filter,
-     * Assigned/Unassigned tabs, sorting and counts. Tab/KPI counts are
-     * computed after search + shift filter (the house counting rule), before
-     * the active tab narrows the rows.
-     */
+    /** Seven independent days per worker, not one weekly shift replicated in
+     * seven decorative cells. Coverage counts worker-days, not workers. */
     private function _build_shift_roster_dataset() {
         $week = $this->_roster_week($this->input->get('week'));
-
-        $workers     = $this->Team_model->get_all_active();
-        $shifts      = $this->Team_model->get_shifts();
-        $assignments = $this->Team_model->get_shift_assignments($week);
-
-        $shift_by_id = array();
-        foreach ($shifts as $sh) { $shift_by_id[(int)$sh->id] = $sh; }
-
-        $search_query = trim((string)$this->input->get('q', TRUE));
-        if (strlen($search_query) > 100) $search_query = substr($search_query, 0, 100);
-
-        $shift_in = trim((string)$this->input->get('shift', TRUE));
-        $shift_filter = '';
-        if ($shift_in === 'none') {
-            $shift_filter = 'none';
-        } elseif (ctype_digit($shift_in) && isset($shift_by_id[(int)$shift_in])) {
-            $shift_filter = (string)(int)$shift_in;
+        $end = date('Y-m-d', strtotime($week . ' +6 days'));
+        $workers = $this->Team_model->get_plannable_staff();
+        if (!$this->is_supervisor() && !$this->is_manager()) {
+            $workers = array_values(array_filter($workers, function ($w) { return (int)$w->id === (int)$this->user_id; }));
+            if (!$workers) {
+                $me = $this->Team_model->get_by_id($this->user_id);
+                if ($me && $me->status === 'On Leave') $workers = array($me);
+            }
         }
-
-        $tab_in = strtolower(trim((string)$this->input->get('tab', TRUE)));
-        $active_tab = in_array($tab_in, array('all', 'assigned', 'unassigned'), TRUE) ? $tab_in : 'all';
-
-        // Decorate + search + shift filter.
+        $shifts = $this->Team_model->get_shifts();
+        $by_id = array();
+        foreach ($shifts as $sh) $by_id[(int)$sh->id] = $sh;
+        $ids = array();
+        foreach ($workers as $w) $ids[] = (int)$w->id;
+        $ready = $this->Workforce_plan_model->ready();
+        $days = $ready ? $this->Workforce_plan_model->days($week, $end, $ids,
+                    $this->is_supervisor() || $this->is_manager()) : array();
+        // The weekly source remains readable on installations pending migration.
+        $old = !$ready ? $this->Team_model->get_shift_assignments($week) : array();
+        $q = trim((string)$this->input->get('q', TRUE));
+        if (strlen($q) > 100) $q = substr($q, 0, 100);
+        $f = trim((string)$this->input->get('shift', TRUE));
+        $filter = ($f === 'none') ? 'none' : (ctype_digit($f) && isset($by_id[(int)$f]) ? (string)(int)$f : '');
+        $tab = strtolower(trim((string)$this->input->get('tab', TRUE)));
+        if (!in_array($tab, array('all', 'assigned', 'unassigned', 'off', 'leave'), TRUE)) $tab = 'all';
+        $sort = strtolower(trim((string)$this->input->get('sort', TRUE)));
+        if (!in_array($sort, array('worker', 'position', 'shift'), TRUE)) $sort = 'worker';
+        $dir = strtolower(trim((string)$this->input->get('dir', TRUE))) === 'desc' ? 'desc' : 'asc';
+        $summary = array('total' => count($workers), 'shift_days' => 0, 'off_days' => 0,
+            'leave_days' => 0, 'unplanned_days' => 0, 'extra_days' => 0, 'before_start' => 0,
+            'shift_types' => count($shifts));
         $scoped = array();
-        foreach ($workers as $w) {
-            $sid = isset($assignments[$w->id]) ? (int)$assignments[$w->id] : 0;
-            $w->roster_shift_id = $sid;
-            $w->roster_shift = isset($shift_by_id[$sid]) ? $shift_by_id[$sid] : NULL;
-            $w->full_name_roster = trim($w->first_name . ' ' . $w->last_name);
-
-            if ($search_query !== '') {
-                $hay = strtolower($w->full_name_roster . ' ' .
-                    (isset($w->employee_id) ? (string)$w->employee_id : '') . ' ' .
-                    (isset($w->position) ? (string)$w->position : '') . ' ' .
-                    ($w->roster_shift ? (string)$w->roster_shift->name : ''));
-                if (strpos($hay, strtolower($search_query)) === FALSE) continue;
-            }
-            if ($shift_filter === 'none' && $sid !== 0) continue;
-            if ($shift_filter !== '' && $shift_filter !== 'none' && $sid !== (int)$shift_filter) continue;
-            $scoped[] = $w;
-        }
-
-        $tab_counts = array('all' => count($scoped), 'assigned' => 0, 'unassigned' => 0);
         $per_shift = array();
-        foreach ($scoped as $w) {
-            if ($w->roster_shift_id > 0) {
-                $tab_counts['assigned']++;
-                $per_shift[$w->roster_shift_id] = isset($per_shift[$w->roster_shift_id]) ? $per_shift[$w->roster_shift_id] + 1 : 1;
-            } else {
-                $tab_counts['unassigned']++;
+        foreach ($workers as $w) {
+            $uid = (int)$w->id;
+            $w->full_name_roster = trim($w->first_name . ' ' . $w->last_name);
+            $w->roster_days = array();
+            $w->week_unplanned = 0;
+            $w->week_off = 0;
+            $w->week_leave = 0;
+            $w->week_shifts = 0;
+            $w->first_shift_name = '';
+            $search = $w->full_name_roster . ' ' . (isset($w->employee_id) ? $w->employee_id : '') . ' '
+                    . (isset($w->position) ? $w->position : '');
+            $matched_shift = FALSE;
+            for ($n = 0; $n < 7; $n++) {
+                $date = date('Y-m-d', strtotime($week . ' +' . $n . ' days'));
+                $cell = isset($days[$uid][$date]) ? $days[$uid][$date] : array(
+                    'kind' => isset($old[$uid]) ? 'Shift' : 'Unplanned',
+                    'shift_id' => isset($old[$uid]) ? (int)$old[$uid] : 0,
+                    'source' => isset($old[$uid]) ? 'Legacy' : '', 'leave_type' => '',
+                    'extra' => NULL, 'replacement' => NULL, 'plan_status' => 'Legacy');
+                if (!empty($w->join_date) && $date < $w->join_date) $cell['kind'] = 'BeforeStart';
+                $w->roster_days[$date] = $cell;
+                $kind = $cell['kind'];
+                if ($kind === 'Shift') {
+                    $w->week_shifts++; $summary['shift_days']++;
+                    $sid = $cell['shift_id'];
+                    if (isset($by_id[$sid])) {
+                        $name = (string)$by_id[$sid]->name;
+                        $search .= ' ' . $name;
+                        if ($w->first_shift_name === '') $w->first_shift_name = $name;
+                    }
+                    if ($filter !== '' && $filter !== 'none' && $sid === (int)$filter) $matched_shift = TRUE;
+                } elseif ($kind === 'Off') {
+                    $w->week_off++; $summary['off_days']++;
+                    if ($cell['extra']) {
+                        $summary['extra_days']++;
+                        if ($filter !== '' && $filter !== 'none' && (int)$cell['extra']->shift_id === (int)$filter) $matched_shift = TRUE;
+                    }
+                } elseif ($kind === 'Leave') {
+                    $w->week_leave++; $summary['leave_days']++;
+                    $search .= ' ' . $cell['leave_type'];
+                } elseif ($kind === 'Holiday') {
+                    $summary['off_days']++;
+                } elseif ($kind === 'BeforeStart') {
+                    $summary['before_start']++;
+                } else {
+                    $w->week_unplanned++; $summary['unplanned_days']++;
+                }
+            }
+            if ($q !== '' && stripos($search, $q) === FALSE) continue;
+            if ($filter === 'none' && $w->week_unplanned === 0) continue;
+            if ($filter !== '' && $filter !== 'none' && !$matched_shift) continue;
+            $scoped[] = $w;
+            foreach ($w->roster_days as $day) {
+                if ($day['kind'] === 'Shift') {
+                    $sid = (int)$day['shift_id'];
+                    $per_shift[$sid] = isset($per_shift[$sid]) ? $per_shift[$sid] + 1 : 1;
+                }
             }
         }
-
+        $counts = array('all' => count($scoped), 'assigned' => 0, 'unassigned' => 0, 'off' => 0, 'leave' => 0);
         $rows = array();
         foreach ($scoped as $w) {
-            if ($active_tab === 'assigned' && $w->roster_shift_id === 0) continue;
-            if ($active_tab === 'unassigned' && $w->roster_shift_id !== 0) continue;
+            if ($w->week_unplanned === 0) $counts['assigned']++;
+            else $counts['unassigned']++;
+            if ($w->week_off) $counts['off']++;
+            if ($w->week_leave) $counts['leave']++;
+            if ($tab === 'assigned' && $w->week_unplanned) continue;
+            if ($tab === 'unassigned' && !$w->week_unplanned) continue;
+            if ($tab === 'off' && !$w->week_off) continue;
+            if ($tab === 'leave' && !$w->week_leave) continue;
             $rows[] = $w;
         }
-
-        $sort_in = strtolower(trim((string)$this->input->get('sort', TRUE)));
-        $sort_by = in_array($sort_in, array('worker', 'position', 'shift'), TRUE) ? $sort_in : 'worker';
-        $dir_in = strtolower(trim((string)$this->input->get('dir', TRUE)));
-        $sort_dir = ($dir_in === 'desc') ? 'desc' : 'asc';
-        $mul = ($sort_dir === 'desc') ? -1 : 1;
-        usort($rows, function ($a, $b) use ($sort_by, $mul) {
-            switch ($sort_by) {
-                case 'position':
-                    $cmp = strcasecmp((string)(isset($a->position) ? $a->position : ''), (string)(isset($b->position) ? $b->position : '')); break;
-                case 'shift':
-                    $cmp = strcasecmp((string)($a->roster_shift ? $a->roster_shift->name : ''), (string)($b->roster_shift ? $b->roster_shift->name : '')); break;
-                default:
-                    $cmp = strcasecmp((string)$a->full_name_roster, (string)$b->full_name_roster);
-            }
-            if ($cmp === 0) $cmp = strcasecmp((string)$a->full_name_roster, (string)$b->full_name_roster);
+        $mul = $dir === 'desc' ? -1 : 1;
+        usort($rows, function ($a, $b) use ($sort, $mul) {
+            $key = $sort === 'position' ? 'position' : ($sort === 'shift' ? 'first_shift_name' : 'full_name_roster');
+            $cmp = strcasecmp((string)$a->$key, (string)$b->$key);
+            if (!$cmp) $cmp = strcasecmp((string)$a->full_name_roster, (string)$b->full_name_roster);
             return $cmp * $mul;
         });
-
-        $total_staff = count($workers);
-        $assigned_total = 0;
-        foreach ($workers as $w) { if (!empty($assignments[$w->id])) $assigned_total++; }
-
-        return array(
-            'rows'          => $rows,
-            'all_workers'   => $workers,
-            'shifts'        => $shifts,
-            'shift_by_id'   => $shift_by_id,
-            'assignments'   => $assignments,
+        $summary['assigned'] = $counts['assigned'];
+        $summary['unassigned'] = $counts['unassigned'];
+        $total_days = $summary['total'] * 7 - $summary['before_start'];
+        $summary['worker_days'] = $total_days;
+        $summary['coverage'] = $total_days ? (int)round(($total_days - $summary['unplanned_days']) / $total_days * 100) : NULL;
+        return array('rows' => $rows, 'shifts' => $shifts, 'shift_by_id' => $by_id,
+            'week_start' => $week, 'tab_counts' => $counts, 'per_shift_counts' => $per_shift,
             'assignment_counts' => $this->Team_model->get_shift_assignment_counts(),
-            'week_start'    => $week,
-            'tab_counts'    => $tab_counts,
-            'per_shift_counts' => $per_shift,
-            'active_tab'    => $active_tab,
-            'search_query'  => $search_query,
-            'shift_filter'  => $shift_filter,
-            'sort_by'       => $sort_by,
-            'sort_dir'      => $sort_dir,
-            'summary'       => array(
-                'total'     => $total_staff,
-                'assigned'  => $assigned_total,
-                'unassigned'=> $total_staff - $assigned_total,
-                'coverage'  => $total_staff > 0 ? (int)round($assigned_total / $total_staff * 100) : NULL,
-                'shift_types' => count($shifts),
-            ),
-        );
+            'summary' => $summary, 'active_tab' => $tab, 'search_query' => $q,
+            'shift_filter' => $filter, 'sort_by' => $sort, 'sort_dir' => $dir);
     }
 
-    /** Export the filtered Shift Roster week as CSV (Supervisors & Managers). */
+    /** Week export is now one row per worker *day*, including Off/Leave and
+     * the underlying off-day-work exception; never claim a single shift/week. */
     public function shift_roster_csv() {
         if (!$this->is_supervisor() && !$this->is_manager()) {
             $this->session->set_flashdata('error', 'Access denied.');
-            redirect('team/shift_roster');
-            return;
+            redirect('team/shift_roster'); return;
         }
         $ctx = $this->_build_shift_roster_dataset();
         $week = $ctx['week_start'];
-        $week_end = date('Y-m-d', strtotime($week . ' +6 days'));
-
-        $safe_cell = function ($v) {
-            $s = (string)$v;
-            if ($s !== '' && in_array($s[0], array('=', '+', '-', '@', "\t", "\r"), TRUE)) return "'" . $s;
-            return $s;
-        };
-
-        $filename = 'WMS_Shift_Roster_' . $week . '.csv';
+        $safe = function ($v) { $s = (string)$v; return $s !== '' && in_array($s[0], array('=', '+', '-', '@', "\t", "\r"), TRUE) ? "'" . $s : $s; };
         if (ob_get_level()) @ob_end_clean();
         header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Cache-Control: private, max-age=0, must-revalidate');
+        header('Content-Disposition: attachment; filename="WMS_Shift_Roster_' . $week . '.csv"');
         $out = fopen('php://output', 'w');
         fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, array('Week Start', 'Week End', 'Employee ID', 'Worker', 'Position', 'Shift', 'Shift Start', 'Shift End'), ',', '"', '\\');
-        foreach ($ctx['rows'] as $w) {
-            $sh = $w->roster_shift;
-            fputcsv($out, array(
-                $week, $week_end,
-                $safe_cell(isset($w->employee_id) ? $w->employee_id : ''),
-                $safe_cell($w->full_name_roster),
-                $safe_cell(isset($w->position) ? $w->position : ''),
-                $safe_cell($sh ? $sh->name : 'Unassigned'),
-                $sh ? date('H:i', strtotime($sh->start_time)) : '',
-                $sh ? date('H:i', strtotime($sh->end_time)) : '',
-            ), ',', '"', '\\');
+        fputcsv($out, array('Date', 'Employee ID', 'Worker', 'Position', 'Plan', 'Shift', 'Start', 'End', 'Leave Type', 'Extra Work', 'Compensation', 'Worked Hours', 'Payroll Reference', 'Replacement For', 'Plan State'), ',', '"', '\\');
+        for ($i = 0; $i < 7; $i++) {
+            $d = date('Y-m-d', strtotime($week . ' +' . $i . ' days'));
+            foreach ($ctx['rows'] as $w) {
+                $cell = $w->roster_days[$d];
+                $sh = isset($ctx['shift_by_id'][(int)$cell['shift_id']]) ? $ctx['shift_by_id'][(int)$cell['shift_id']] : NULL;
+                $ex = $cell['extra'];
+                $extra_shift = $ex && isset($ctx['shift_by_id'][(int)$ex->shift_id]) ? $ctx['shift_by_id'][(int)$ex->shift_id] : NULL;
+                fputcsv($out, array($d, $safe($w->employee_id), $safe($w->full_name_roster), $safe($w->position),
+                    $cell['kind'], $safe($sh ? $sh->name : ($extra_shift ? $extra_shift->name : '')),
+                    $sh ? substr($sh->start_time, 0, 5) : ($extra_shift ? substr($extra_shift->start_time, 0, 5) : ''),
+                    $sh ? substr($sh->end_time, 0, 5) : ($extra_shift ? substr($extra_shift->end_time, 0, 5) : ''),
+                    $safe($cell['leave_type']), $ex ? $ex->status : '', $ex ? $ex->compensation : '',
+                    $ex ? $ex->confirmed_hours : '', $safe($ex ? $ex->payroll_reference : ''),
+                    $cell['replacement'] ? $cell['replacement']->work_date : '', $cell['plan_status']), ',', '"', '\\');
+            }
         }
-        fclose($out);
-        exit;
+        fclose($out); exit;
+    }
+
+    /** Annual plan overview and one worker's full-year calendar. */
+    public function annual_roster() {
+        $planner = $this->is_supervisor() || $this->is_manager();
+        $year = $this->_plan_year($this->input->get('year', TRUE));
+        $ready = $this->Workforce_plan_model->ready();
+        $all = $planner ? $this->Team_model->get_plannable_staff() : array($this->Team_model->get_by_id($this->user_id));
+        $all = array_values(array_filter($all));
+        $selected = $planner ? (int)$this->input->get('user', TRUE) : (int)$this->user_id;
+        $chosen = NULL;
+        foreach ($all as $w) if ((int)$w->id === $selected) { $chosen = $w; break; }
+        $search = trim((string)$this->input->get('q', TRUE));
+        if (strlen($search) > 100) $search = substr($search, 0, 100);
+        $filtered = array();
+        foreach ($all as $w) {
+            if ($search !== '' && stripos($w->first_name . ' ' . $w->last_name . ' ' . $w->employee_id . ' ' . $w->position, $search) === FALSE) continue;
+            $filtered[] = $w;
+        }
+        $per_page = 25;
+        $pages = max(1, (int)ceil(count($filtered) / $per_page));
+        $page = max(1, min($pages, (int)$this->input->get('page', TRUE)));
+        $staff = array_slice($filtered, ($page - 1) * $per_page, $per_page);
+        $ids = array(); foreach ($staff as $w) $ids[] = (int)$w->id;
+        $year_row = $ready ? $this->Workforce_plan_model->year($year) : NULL;
+        $may_see_year = $planner || ($year_row && $this->Workforce_plan_model->is_published($year . '-12-31'));
+        $month = (int)$this->input->get('month', TRUE);
+        if ($month < 1 || $month > 12) $month = (int)date('n');
+        $mode = (string)$this->input->get('view', TRUE) === 'month' ? 'month' : 'year';
+        $data = array(
+            'year' => $year, 'year_row' => $may_see_year ? $year_row : NULL,
+            'ready' => $ready, 'coverage' => $planner && $ready ? $this->Workforce_plan_model->coverage($year) : array(),
+            'totals' => $planner && $ready ? $this->Workforce_plan_model->year_totals($year) : array(),
+            'staff_totals' => $planner && $ready ? $this->Workforce_plan_model->staff_totals($year, $ids) : array(),
+            'staff' => $staff, 'total_staff' => count($filtered), 'page' => $page, 'total_pages' => $pages,
+            'search_query' => $search, 'all_workers' => $all, 'chosen' => $chosen,
+            'shifts' => $this->Team_model->get_shifts(), 'calendar_view' => $mode, 'month' => $month,
+            'leave_types' => Team_model::LEAVE_TYPES,
+            'leaves' => $may_see_year && $ready && $chosen ? $this->Workforce_plan_model->leaves($year, $selected, !$planner) : array(),
+            'extras' => $may_see_year && $ready && $chosen ? $this->Workforce_plan_model->extras($year, $selected) : array(),
+            'events' => $planner && $ready ? $this->Workforce_plan_model->events($year, $chosen ? $selected : NULL) : array(),
+            'year_days' => $may_see_year && $ready && $chosen ? $this->Workforce_plan_model->days($year . '-01-01', $year . '-12-31', array($selected), $planner) : array(),
+            'leave_balance' => $may_see_year && $chosen ? $this->Team_model->get_leave_balance($selected, $year, $planner) : array(),
+            'can_edit' => $this->is_supervisor(), 'is_planner' => $planner,
+            'page_title' => $planner ? 'Annual Workforce Plan' : 'My Annual Schedule',
+        );
+        $this->render('team/annual_roster', $data);
+    }
+
+    public function annual_roster_csv() {
+        $planner = $this->is_supervisor() || $this->is_manager();
+        $year = $this->_plan_year($this->input->get('year', TRUE));
+        if (!$this->Workforce_plan_model->ready()) { show_404(); return; }
+        if (!$planner && !$this->Workforce_plan_model->is_published($year . '-12-31')) { show_404(); return; }
+        $workers = $planner ? $this->Team_model->get_plannable_staff() : array($this->Team_model->get_by_id($this->user_id));
+        $workers = array_values(array_filter($workers));
+        $selected = $planner ? (int)$this->input->get('user', TRUE) : (int)$this->user_id;
+        if ($selected) $workers = array_values(array_filter($workers, function ($w) use ($selected) { return (int)$w->id === $selected; }));
+        if (!$workers) { show_404(); return; }
+        $ids = array(); foreach ($workers as $w) $ids[] = (int)$w->id;
+        $shifts = array(); foreach ($this->Team_model->get_shifts() as $sh) $shifts[(int)$sh->id] = $sh;
+        $safe = function ($v) { $s = (string)$v; return $s !== '' && in_array($s[0], array('=', '+', '-', '@', "\t", "\r"), TRUE) ? "'" . $s : $s; };
+        if (ob_get_level()) @ob_end_clean();
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="WMS_Annual_Workforce_Plan_' . $year . ($selected ? '_worker_' . $selected : '') . '.csv"');
+        $out = fopen('php://output', 'w'); fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, array('Date','Employee ID','Worker','Plan','Shift','Start','End','Leave Type','Extra Work','Compensation','Settlement','Worked Hours','Payroll Reference','Replacement For','Plan State'), ',', '"', '\\');
+        for ($month = 1; $month <= 12; $month++) {
+            $from = sprintf('%04d-%02d-01', $year, $month);
+            $to = date('Y-m-t', strtotime($from));
+            // Bound memory even for a large workforce: fetch one month at a time.
+            foreach (array_chunk($workers, 100) as $group) {
+                $group_ids = array(); foreach ($group as $w) $group_ids[] = (int)$w->id;
+                $days = $this->Workforce_plan_model->days($from, $to, $group_ids, $planner);
+                for ($d = $from; $d <= $to; $d = date('Y-m-d', strtotime($d . ' +1 day'))) {
+                    foreach ($group as $w) {
+                        $cell = $days[(int)$w->id][$d];
+                        // Match the calendar: a date before the worker joined
+                        // is not a planning gap or an employment expectation.
+                        if (!empty($w->join_date) && $d < $w->join_date) {
+                            $cell['kind'] = 'BeforeStart'; $cell['shift_id'] = 0;
+                            $cell['leave_type'] = ''; $cell['extra'] = NULL;
+                            $cell['replacement'] = NULL; $cell['plan_status'] = 'Not employed';
+                        }
+                        $ex = $cell['extra'];
+                        $sid = $cell['kind'] === 'Shift' ? (int)$cell['shift_id'] : ($ex ? (int)$ex->shift_id : 0);
+                        $sh = isset($shifts[$sid]) ? $shifts[$sid] : NULL;
+                        fputcsv($out, array($d, $safe($w->employee_id), $safe(trim($w->first_name . ' ' . $w->last_name)),
+                            $cell['kind'], $safe($sh ? $sh->name : ''),
+                            $sh ? substr($sh->start_time, 0, 5) : '', $sh ? substr($sh->end_time, 0, 5) : '',
+                            $safe($cell['leave_type']), $ex ? $ex->status : '', $ex ? $ex->compensation : '',
+                            $ex ? $ex->settlement : '', $ex ? $ex->confirmed_hours : '',
+                            $safe($ex ? $ex->payroll_reference : ''),
+                            $cell['replacement'] ? $cell['replacement']->work_date : '',
+                            $cell['plan_status']), ',', '"', '\\');
+                    }
+                }
+            }
+        }
+        fclose($out); exit;
+    }
+
+    public function roster_day_edit() {
+        if (!$this->is_supervisor()) { redirect('team/shift_roster'); return; }
+        if (!$this->Workforce_plan_model->ready()) { redirect('team/annual_roster'); return; }
+        $date = $this->_valid_date($this->input->get('date', TRUE));
+        $user = $this->_plan_worker((int)$this->input->get('user', TRUE));
+        if (!$date || !$user || (!empty($user->join_date) && $date < $user->join_date)) { show_404(); return; }
+        $map = $this->Workforce_plan_model->days($date, $date, array((int)$user->id), TRUE);
+        $data = array('worker' => $user, 'date' => $date,
+            'cell' => isset($map[(int)$user->id][$date]) ? $map[(int)$user->id][$date] : array('kind' => 'Unplanned', 'shift_id' => 0, 'extra' => NULL, 'replacement' => NULL),
+            'shifts' => $this->Team_model->get_shifts(),
+            'year_row' => $this->Workforce_plan_model->year((int)substr($date, 0, 4)),
+            'page_title' => 'Edit Roster Day');
+        $this->render('team/roster_day_edit', $data);
+    }
+
+    public function roster_day_save() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) { redirect('team/shift_roster'); return; }
+        $date = $this->_valid_date($this->input->post('date', TRUE));
+        $user = $this->_plan_worker((int)$this->input->post('user_id'));
+        $value = trim((string)$this->input->post('day_type', TRUE));
+        $reason = substr(trim((string)$this->input->post('reason', TRUE)), 0, 255);
+        $type = $value; $sid = 0;
+        if (strpos($value, 'shift:') === 0 && ctype_digit(substr($value, 6))) {
+            $type = 'Shift'; $sid = (int)substr($value, 6);
+        }
+        if (!$date || !$user || ($user && !empty($user->join_date) && $date < $user->join_date)
+            || !in_array($type, array('Shift', 'Off', 'Holiday', 'Unplanned'), TRUE)
+            || ($type === 'Shift' && (!$sid || !$this->Team_model->get_shift($sid)))) {
+            $this->session->set_flashdata('error', 'Choose a valid worker, date and shift or Off/Holiday.');
+            redirect('team/shift_roster'); return;
+        }
+        $res = $this->Workforce_plan_model->save_day((int)$user->id, $date, $type, $sid, $reason, $this->user_id);
+        $this->_roster_result($res, 'team/shift_roster?week=' . rawurlencode($this->Team_model->week_start_date($date)));
+    }
+
+    public function roster_pattern_save() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) { redirect('team/shift_roster'); return; }
+        $year = $this->_plan_year($this->input->post('year'));
+        $cycle_days = (int)$this->input->post('cycle_days');
+        $input = $this->input->post('pattern');
+        $posted_ids = $this->input->post('user_ids');
+        $ids = array(); $invalid = !is_array($posted_ids);
+        if (is_array($posted_ids)) foreach ($posted_ids as $value) {
+            if (!is_scalar($value) || !preg_match('/^[1-9][0-9]*$/D', (string)$value)) { $invalid = TRUE; continue; }
+            $ids[(int)$value] = (int)$value;
+        }
+        $ids = array_values($ids);
+        $valid_people = array(); foreach ($this->Team_model->get_plannable_staff() as $w) $valid_people[(int)$w->id] = TRUE;
+        $invalid = $invalid || !$ids || count($ids) > 100 || $cycle_days < 2 || $cycle_days > 56;
+        foreach ($ids as $id) if (!isset($valid_people[$id])) $invalid = TRUE;
+        $valid_shifts = array(); foreach ($this->Team_model->get_shifts() as $s) $valid_shifts[(int)$s->id] = TRUE;
+        $pattern = array();
+        if (is_array($input) && !$invalid) {
+            for ($i = 0; $i < $cycle_days; $i++) {
+                $v = isset($input[$i]) && is_scalar($input[$i]) ? (string)$input[$i] : '';
+                if ($v !== 'Off' && !(ctype_digit($v) && isset($valid_shifts[(int)$v]))) { $invalid = TRUE; break; }
+                $pattern[] = $v === 'Off' ? 'Off' : (int)$v;
+            }
+        } else $invalid = TRUE;
+        if ($invalid) {
+            $this->session->set_flashdata('error', 'Select up to 100 active workers and a complete 2–56-day rotation.');
+            redirect('team/annual_roster?year=' . $year); return;
+        }
+        $res = $this->Workforce_plan_model->apply_pattern($year, $ids, $pattern, $this->user_id,
+            substr(trim((string)$this->input->post('reason', TRUE)), 0, 255));
+        $this->_roster_result($res, 'team/annual_roster?year=' . $year . (count($ids) === 1 ? '&user=' . $ids[0] : ''));
+    }
+
+    public function roster_carry_legacy() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) { redirect('team/shift_roster'); return; }
+        $year = $this->_plan_year($this->input->post('year'));
+        $this->_roster_result($this->Workforce_plan_model->carry_legacy($year, $this->user_id), 'team/annual_roster?year=' . $year);
+    }
+
+    public function roster_publish() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) { redirect('team/shift_roster'); return; }
+        $year = $this->_plan_year($this->input->post('year'));
+        $this->_roster_result($this->Workforce_plan_model->publish($year, $this->user_id), 'team/annual_roster?year=' . $year);
+    }
+
+    public function roster_leave_save() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) { redirect('team/shift_roster'); return; }
+        $user = $this->_plan_worker((int)$this->input->post('user_id'));
+        $start = $this->_valid_date($this->input->post('start_date', TRUE));
+        $end = $this->_valid_date($this->input->post('end_date', TRUE));
+        $type = $this->input->post('leave_type', TRUE);
+        $year = $start ? (int)substr($start, 0, 4) : $this->_plan_year($this->input->post('year'));
+        if (!$user || !$start || !$end || $end < $start || strtotime($end) > strtotime($start . ' +365 days')
+            || ($user && !empty($user->join_date) && $start < $user->join_date)
+            || !in_array($type, Team_model::LEAVE_TYPES, TRUE)) {
+            $this->session->set_flashdata('error', 'Choose a worker, leave type and period after their join date (up to one year).');
+            redirect('team/annual_roster?year=' . $year); return;
+        }
+        $res = $this->Workforce_plan_model->add_leave((int)$user->id, $type, $start, $end,
+            substr((string)$this->input->post('note', TRUE), 0, 255), $this->user_id);
+        $this->_roster_result($res, 'team/annual_roster?year=' . $year . '&user=' . (int)$user->id . '#arLeave');
+    }
+
+    public function roster_leave_amend() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) { redirect('team/shift_roster'); return; }
+        $id = (int)$this->input->post('leave_id');
+        $uid = (int)$this->input->post('user_id');
+        $start = $this->_valid_date($this->input->post('start_date', TRUE));
+        $end = $this->_valid_date($this->input->post('end_date', TRUE));
+        $type = $this->input->post('leave_type', TRUE);
+        $year = $start ? (int)substr($start, 0, 4) : $this->_plan_year($this->input->post('year'));
+        if (!$id || !$start || !$end || $end < $start || strtotime($end) > strtotime($start . ' +365 days')
+            || !in_array($type, Team_model::LEAVE_TYPES, TRUE)) {
+            $this->session->set_flashdata('error', 'Choose a valid leave type and period of at most one year.');
+            redirect('team/annual_roster?year=' . $year . '&user=' . $uid . '#arLeave'); return;
+        }
+        $res = $this->Workforce_plan_model->amend_leave($id, $type, $start, $end,
+            substr((string)$this->input->post('note', TRUE), 0, 255),
+            substr((string)$this->input->post('reason', TRUE), 0, 255), $this->user_id);
+        $this->_roster_result($res, 'team/annual_roster?year=' . $year . '&user=' . $uid . '#arLeave');
+    }
+
+    public function roster_leave_end() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) { redirect('team/shift_roster'); return; }
+        $year = $this->_plan_year($this->input->post('year'));
+        $uid = (int)$this->input->post('user_id');
+        $res = $this->Workforce_plan_model->end_leave((int)$this->input->post('leave_id'),
+            substr((string)$this->input->post('reason', TRUE), 0, 255), $this->user_id);
+        $this->_roster_result($res, 'team/annual_roster?year=' . $year . '&user=' . $uid . '#arLeave');
+    }
+
+    public function roster_extra_save() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) { redirect('team/shift_roster'); return; }
+        $user = $this->_plan_worker((int)$this->input->post('user_id'));
+        $date = $this->_valid_date($this->input->post('work_date', TRUE));
+        $sid = (int)$this->input->post('shift_id');
+        $comp = (string)$this->input->post('compensation', TRUE);
+        $year = $date ? (int)substr($date, 0, 4) : $this->_plan_year($this->input->post('year'));
+        if (!$user || !$date || !$sid || !$this->Team_model->get_shift($sid) || !in_array($comp, array('TimeOff','Pay'), TRUE)) {
+            $this->session->set_flashdata('error', 'Choose an active worker, a planned Off date, a shift and a compensation method.');
+            redirect('team/annual_roster?year=' . $year); return;
+        }
+        $res = $this->Workforce_plan_model->plan_extra((int)$user->id, $date, $sid, $comp,
+            substr((string)$this->input->post('reason', TRUE), 0, 255), $this->user_id);
+        $this->_roster_result($res, 'team/annual_roster?year=' . $year . '&user=' . (int)$user->id . '#arExtra');
+    }
+
+    public function roster_extra_confirm() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) { redirect('team/shift_roster'); return; }
+        $year = $this->_plan_year($this->input->post('year'));
+        $uid = (int)$this->input->post('user_id');
+        $this->_roster_result($this->Workforce_plan_model->confirm_extra((int)$this->input->post('extra_id'), $this->user_id),
+            'team/annual_roster?year=' . $year . '&user=' . $uid . '#arExtra');
+    }
+
+    public function roster_extra_settle() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) { redirect('team/shift_roster'); return; }
+        $year = $this->_plan_year($this->input->post('year'));
+        $uid = (int)$this->input->post('user_id');
+        $action = (string)$this->input->post('action', TRUE);
+        $replacement = $this->_valid_date($this->input->post('replacement_date', TRUE));
+        if (!in_array($action, array('pay', 'schedule', 'take', 'undo'), TRUE) || ($action === 'schedule' && !$replacement)) {
+            $this->session->set_flashdata('error', 'Choose a valid settlement action and replacement date.');
+            redirect('team/annual_roster?year=' . $year . '&user=' . $uid); return;
+        }
+        $res = $this->Workforce_plan_model->settle_extra((int)$this->input->post('extra_id'), $action,
+            $replacement, substr(trim((string)$this->input->post('reason', TRUE)), 0, 255), $this->user_id);
+        $this->_roster_result($res, 'team/annual_roster?year=' . $year . '&user=' . $uid . '#arExtra');
+    }
+
+    public function roster_extra_cancel() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) { redirect('team/shift_roster'); return; }
+        $year = $this->_plan_year($this->input->post('year'));
+        $uid = (int)$this->input->post('user_id');
+        $res = $this->Workforce_plan_model->cancel_extra((int)$this->input->post('extra_id'),
+            substr(trim((string)$this->input->post('reason', TRUE)), 0, 255), $this->user_id);
+        $this->_roster_result($res, 'team/annual_roster?year=' . $year . '&user=' . $uid . '#arExtra');
+    }
+
+    private function _plan_year($value) {
+        $s = is_scalar($value) ? (string)$value : '';
+        $default = (int)date('Y');
+        return preg_match('/^(20[2-9][0-9]|2100)$/D', $s) ? (int)$s : $default;
+    }
+
+    private function _plan_worker($id) {
+        if ($id <= 0) return NULL;
+        $worker = $this->Team_model->get_by_id($id);
+        return $worker && in_array($worker->status, array('Active','On Leave'), TRUE) ? $worker : NULL;
+    }
+
+    private function _roster_result($result, $back) {
+        $this->session->set_flashdata(!empty($result['ok']) ? 'success' : 'error', (string)$result['message']);
+        redirect($back);
     }
 
     /** Create or update a shift type. */
@@ -1839,7 +2191,7 @@ class Team extends MY_Controller {
         ), $id ?: NULL);
 
         if (!$saved) {
-            $this->session->set_flashdata('error', 'The shift could not be saved. Nothing was written.');
+            $this->session->set_flashdata('error', 'The shift was not saved. If it is already used in a plan, create a new shift type for different hours.');
             redirect('team/shift_roster?week=' . $week);
             return;
         }
@@ -1872,35 +2224,13 @@ class Team extends MY_Controller {
         redirect('team/shift_roster?week=' . $week);
     }
 
-    /** Assign one worker to a shift for the displayed week (empty = clear). */
+    /** Retired write endpoint: the old one-shift-per-week assignments remain
+     * read-only history. Use a dated annual plan for all new scheduling. */
     public function assign_shift() {
         if (!$this->require_post()) return;
-        if (!$this->is_supervisor()) {
-            $this->session->set_flashdata('error', 'Access denied.');
-            redirect('team/shift_roster');
-        }
-
-        $week     = $this->_roster_week($this->input->post('week'));
-        $user_id  = (int)$this->input->post('user_id');
-        $shift_id = (int)$this->input->post('shift_id');
-
-        $worker = $user_id ? $this->Team_model->get_by_id($user_id) : NULL;
-        if (!$worker) {
-            $this->session->set_flashdata('error', 'Worker not found.');
-            redirect('team/shift_roster?week=' . $week);
-        }
-
-        if ($shift_id > 0 && !$this->Team_model->get_shift($shift_id)) {
-            $this->session->set_flashdata('error', 'Shift not found.');
-            redirect('team/shift_roster?week=' . $week);
-        }
-
-        $this->Team_model->set_shift_assignment($user_id, $shift_id ?: NULL, $week);
-        $this->session->set_flashdata('success',
-            $shift_id
-                ? 'Roster updated for ' . $worker->first_name . ' ' . $worker->last_name . '.'
-                : 'Shift cleared for ' . $worker->first_name . ' ' . $worker->last_name . '.');
-        redirect('team/shift_roster?week=' . $week);
+        if (!$this->is_supervisor()) { redirect('team/shift_roster'); return; }
+        $this->session->set_flashdata('error', 'Weekly assignment is retired. Use the annual pattern or edit a specific day instead.');
+        redirect('team/annual_roster');
     }
 
     public function report() {

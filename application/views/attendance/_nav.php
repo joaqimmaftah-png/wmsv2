@@ -11,11 +11,13 @@ $module_nav_items = array();
 if ($attendance_nav_personal) {
     $module_nav_items[] = array('key' => 'my_attendance', 'label' => 'My Attendance & Timesheet', 'path' => 'team/report?month=' . rawurlencode($attendance_nav_month));
     $module_nav_items[] = array('key' => 'on_site', 'label' => 'On-Site Status', 'path' => 'attendance');
+    $module_nav_items[] = array('key' => 'my_annual_roster', 'label' => 'My Annual Schedule', 'path' => 'team/annual_roster');
     $module_nav_items[] = array('key' => 'leave_request', 'label' => 'Leave Request', 'path' => 'team/leave_request');
 } else {
     if ($attendance_nav_role === 1) {
         $module_nav_items[] = array('key' => 'daily_attendance', 'label' => 'Daily Attendance', 'path' => 'team/attendance?date=' . rawurlencode($attendance_nav_date));
     }
+    $module_nav_items[] = array('key' => 'annual_roster', 'label' => 'Annual Workforce Plan', 'path' => 'team/annual_roster');
     $module_nav_items[] = array('key' => 'attendance_report', 'label' => 'Attendance & Timesheets', 'path' => 'team/report?month=' . rawurlencode($attendance_nav_month));
     $module_nav_items[] = array('key' => 'on_site', 'label' => 'On-Site Status', 'path' => 'attendance');
     $module_nav_items[] = array('key' => 'checkin_log', 'label' => 'Check-in Log', 'path' => 'attendance/log?date=' . rawurlencode($attendance_nav_date));
