@@ -8,7 +8,7 @@ class Team extends MY_Controller {
 
     public function __construct() {
         parent::__construct();
-        $this->load->model(array('Team_model', 'Attendance_model', 'Timesheet_model', 'Workforce_plan_model'));
+        $this->load->model(array('Team_model', 'Attendance_model', 'Timesheet_model', 'Workforce_plan_model', 'Workforce_cover_model'));
         $this->load->helper('attendance');
     }
 
@@ -1076,18 +1076,47 @@ class Team extends MY_Controller {
             redirect('team');
         }
 
-        // Keep legacy employee-requested leave separate from the annual plan;
-        // approving a request over a scheduled block would double-book days.
+        // Cover approval and legacy leave decisions take the same year lock.
+        // A candidate cannot become unavailable after being approved as cover,
+        // and reversing a sick request cannot silently strand the cover worker.
+        $from_year = max(2020, (int)substr($leave->start_date, 0, 4));
+        $to_year = min(2100, (int)substr($leave->end_date, 0, 4));
+        $years = $from_year <= $to_year ? range($from_year, $to_year) : array();
+        $began = $this->Workforce_cover_model->ready() && $years
+            ? $this->Workforce_cover_model->begin_years($years, $this->user_id)
+            : $this->db->trans_begin();
+        if (!$began) {
+            $this->session->set_flashdata('error', 'The leave decision could not lock its planning year. Nothing was changed.');
+            redirect('team'); return;
+        }
+        // The request may have changed while waiting for the year lock. Use its
+        // current state for the cover guard and the attendance reconciliation.
+        $leave = $this->Team_model->get_leave_request($id);
+        if (!$leave) {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('error', 'Leave request no longer exists.');
+            redirect('team'); return;
+        }
+        // Keep legacy employee-requested leave separate from supervisor-planned
+        // blocks, even when two decisions arrive at the same time.
         if ($status === 'Approved' && $this->Team_model->has_overlapping_leave(
                 $leave->user_id, $leave->start_date, $leave->end_date, (int)$id)) {
+            $this->db->trans_rollback();
             $this->session->set_flashdata('error', 'This request overlaps another request or supervisor-planned leave. Resolve the overlap first.');
+            redirect('team'); return;
+        }
+        if (($status === 'Approved' && $this->Workforce_plan_model->cover_conflict(
+                $leave->user_id, $leave->start_date, $leave->end_date, 'cover'))
+            || ($status !== 'Approved' && $leave->status === 'Approved'
+                && $this->Workforce_plan_model->cover_conflict(
+                    $leave->user_id, $leave->start_date, $leave->end_date, 'absent'))) {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('error', 'Cancel the affected sick-shift cover before changing this leave decision.');
             redirect('team'); return;
         }
 
         // Existing requests still reconcile to attendance as before; the new
         // supervisor-planned leave never pre-fills future actual attendance.
-        $this->db->trans_begin();
-
         $this->db->update('leave_requests', [
             'status'      => $status,
             'approved_by' => $this->user_id,
@@ -1830,7 +1859,7 @@ class Team extends MY_Controller {
         header('Content-Disposition: attachment; filename="WMS_Shift_Roster_' . $week . '.csv"');
         $out = fopen('php://output', 'w');
         fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, array('Date', 'Employee ID', 'Worker', 'Position', 'Plan', 'Shift', 'Start', 'End', 'Leave Type', 'Extra Work', 'Compensation', 'Worked Hours', 'Payroll Reference', 'Replacement For', 'Plan State'), ',', '"', '\\');
+        fputcsv($out, array('Date', 'Employee ID', 'Worker', 'Position', 'Plan', 'Shift', 'Start', 'End', 'Leave Type', 'Extra Work', 'Compensation', 'Worked Hours', 'Payroll Reference', 'Replacement For', 'Cover Duty', 'Sick Shift Cover', 'Plan State'), ',', '"', '\\');
         for ($i = 0; $i < 7; $i++) {
             $d = date('Y-m-d', strtotime($week . ' +' . $i . ' days'));
             foreach ($ctx['rows'] as $w) {
@@ -1844,7 +1873,10 @@ class Team extends MY_Controller {
                     $sh ? substr($sh->end_time, 0, 5) : ($extra_shift ? substr($extra_shift->end_time, 0, 5) : ''),
                     $safe($cell['leave_type']), $ex ? $ex->status : '', $ex ? $ex->compensation : '',
                     $ex ? $ex->confirmed_hours : '', $safe($ex ? $ex->payroll_reference : ''),
-                    $cell['replacement'] ? $cell['replacement']->work_date : '', $cell['plan_status']), ',', '"', '\\');
+                    $cell['replacement'] ? $cell['replacement']->work_date : '',
+                    !empty($cell['covering']) ? ($cell['covering']->cover_mode === 'OffCallIn' ? 'Off call-in cover' : 'On-shift duty cover') : '',
+                    !empty($cell['covered_by']) ? 'Covered' : ($cell['kind'] === 'Leave' && $cell['leave_type'] === 'Sick Leave' && !empty($cell['base_kind']) && $cell['base_kind'] === 'Shift' && $cell['plan_status'] === 'Published' ? 'Needs cover' : ''),
+                    $cell['plan_status']), ',', '"', '\\');
             }
         }
         fclose($out); exit;
@@ -1897,6 +1929,71 @@ class Team extends MY_Controller {
         $this->render('team/annual_roster', $data);
     }
 
+    /** Published sick Shift cover: automatic eligibility ranking, no automatic assignment. */
+    public function roster_cover() {
+        if (!$this->is_supervisor() && !$this->is_manager()) { show_404(); return; }
+        $ready = $this->Workforce_cover_model->ready();
+        $date = $this->_valid_date($this->input->get('date', TRUE));
+        $absent_id = (int)$this->input->get('user', TRUE);
+        $vacancy = NULL; $options = array('ready' => array(), 'call_in' => array(), 'blocked' => array());
+        if ($ready && ($absent_id || $this->input->get('date', TRUE))) {
+            if (!$date || !$absent_id) { show_404(); return; }
+            $vacancy = $this->Workforce_cover_model->vacancy($absent_id, $date);
+            if (!$vacancy) { show_404(); return; }
+            if (!$vacancy['cover']) $options = $this->Workforce_cover_model->shortlist($vacancy);
+        }
+        $month = (string)$this->input->get('month', TRUE);
+        if (!preg_match('/^(20[2-9][0-9]|2100)-(0[1-9]|1[0-2])$/D', $month))
+            $month = $vacancy ? substr($date, 0, 7) : date('Y-m');
+        $from = max(date('Y-m-d'), $month . '-01');
+        $to = date('Y-m-t', strtotime($month . '-01'));
+        $page = max(1, (int)$this->input->get('page', TRUE));
+        $queue = $ready && $from <= $to ? $this->Workforce_cover_model->queue($from, $to, $page) : array('rows' => array(), 'total' => 0);
+        $cover_person = $vacancy && $vacancy['cover']
+            ? $this->Team_model->get_by_id((int)$vacancy['cover']->cover_user_id) : NULL;
+        $review_issue = $vacancy && $vacancy['cover']
+            ? $this->Workforce_cover_model->review_issue($vacancy) : '';
+        $this->render('team/roster_cover', array(
+            'ready' => $ready, 'vacancy' => $vacancy, 'options' => $options,
+            'cover_person' => $cover_person, 'review_issue' => $review_issue,
+            'queue' => $queue, 'month' => $month,
+            'page' => $page, 'can_edit' => $this->is_supervisor(),
+            'page_title' => 'Sick Shift Cover',
+        ));
+    }
+
+    public function roster_cover_approve() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) { show_404(); return; }
+        $date = $this->_valid_date($this->input->post('date', TRUE));
+        $uid = (int)$this->input->post('user_id');
+        $candidate = (int)$this->input->post('cover_user_id');
+        $back = 'team/roster_cover' . ($date && $uid ? '?user=' . $uid . '&date=' . $date : '');
+        if (!$date || !$uid || !$candidate) {
+            $this->session->set_flashdata('error', 'Choose a sick Shift and a suggested worker.');
+            redirect($back); return;
+        }
+        $reason = $this->input->post('reason', TRUE);
+        $compensation = $this->input->post('compensation', TRUE);
+        $result = $this->Workforce_cover_model->approve($uid, $date, $candidate,
+            is_string($reason) ? substr(trim($reason), 0, 255) : '',
+            $this->input->post('capacity_checked') === '1',
+            $this->input->post('availability_confirmed') === '1',
+            is_string($compensation) ? $compensation : '', $this->user_id);
+        $this->_roster_result($result, $back);
+    }
+
+    public function roster_cover_cancel() {
+        if (!$this->require_post()) return;
+        if (!$this->is_supervisor()) { show_404(); return; }
+        $date = $this->_valid_date($this->input->post('date', TRUE));
+        $uid = (int)$this->input->post('user_id');
+        $reason = $this->input->post('reason', TRUE);
+        $result = $this->Workforce_cover_model->cancel((int)$this->input->post('cover_id'),
+            is_string($reason) ? substr(trim($reason), 0, 255) : '', $this->user_id);
+        $this->_roster_result($result, 'team/roster_cover' . ($date && $uid ? '?user=' . $uid . '&date=' . $date : ''));
+    }
+
     public function annual_roster_csv() {
         $planner = $this->is_supervisor() || $this->is_manager();
         $year = $this->_plan_year($this->input->get('year', TRUE));
@@ -1914,7 +2011,7 @@ class Team extends MY_Controller {
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="WMS_Annual_Workforce_Plan_' . $year . ($selected ? '_worker_' . $selected : '') . '.csv"');
         $out = fopen('php://output', 'w'); fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, array('Date','Employee ID','Worker','Plan','Shift','Start','End','Leave Type','Extra Work','Compensation','Settlement','Worked Hours','Payroll Reference','Replacement For','Plan State'), ',', '"', '\\');
+        fputcsv($out, array('Date','Employee ID','Worker','Plan','Shift','Start','End','Leave Type','Extra Work','Compensation','Settlement','Worked Hours','Payroll Reference','Replacement For','Cover Duty','Sick Shift Cover','Plan State'), ',', '"', '\\');
         for ($month = 1; $month <= 12; $month++) {
             $from = sprintf('%04d-%02d-01', $year, $month);
             $to = date('Y-m-t', strtotime($from));
@@ -1942,6 +2039,8 @@ class Team extends MY_Controller {
                             $ex ? $ex->settlement : '', $ex ? $ex->confirmed_hours : '',
                             $safe($ex ? $ex->payroll_reference : ''),
                             $cell['replacement'] ? $cell['replacement']->work_date : '',
+                            !empty($cell['covering']) ? ($cell['covering']->cover_mode === 'OffCallIn' ? 'Off call-in cover' : 'On-shift duty cover') : '',
+                            !empty($cell['covered_by']) ? 'Covered' : ($cell['kind'] === 'Leave' && $cell['leave_type'] === 'Sick Leave' && $cell['base_kind'] === 'Shift' && $cell['plan_status'] === 'Published' ? 'Needs cover' : ''),
                             $cell['plan_status']), ',', '"', '\\');
                     }
                 }
@@ -2191,7 +2290,7 @@ class Team extends MY_Controller {
         ), $id ?: NULL);
 
         if (!$saved) {
-            $this->session->set_flashdata('error', 'The shift was not saved. If it is already used in a plan, create a new shift type for different hours.');
+            $this->session->set_flashdata('error', 'The shift was not saved. A shift used in a roster, extra work or cover history cannot be edited; create a new type for different hours.');
             redirect('team/shift_roster?week=' . $week);
             return;
         }
@@ -2200,7 +2299,7 @@ class Team extends MY_Controller {
         redirect('team/shift_roster?week=' . $week);
     }
 
-    /** Delete a shift type that is not assigned to anybody. */
+    /** Delete only an unused shift type, never one retained in plan history. */
     public function shift_delete($id = NULL) {
         if (!$this->require_post()) return;
         if (!$this->is_supervisor()) {
@@ -2217,7 +2316,7 @@ class Team extends MY_Controller {
 
         if (!$this->Team_model->delete_shift($id)) {
             $this->session->set_flashdata('error',
-                'This shift is still assigned on the roster. Clear the assignments first.');
+                'This shift is referenced by a roster, extra work or cover history. Keep it for the audit trail; create a new shift type instead.');
         } else {
             $this->session->set_flashdata('success', 'Shift deleted.');
         }

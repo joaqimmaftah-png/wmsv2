@@ -89,7 +89,7 @@ $first_day = max($year . '-01-01', $today);
 .ar-day a:hover{text-decoration:underline}.ar-day.ar-shift,.ar-day.ar-off,.ar-day.ar-leave,.ar-day.ar-unplanned,.ar-day.ar-holiday,.ar-day.ar-before{border-color:transparent}
 .ar-table{border-collapse:collapse;width:100%;font-size:11.5px}.ar-table th,.ar-table td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--sep);vertical-align:middle}
 .ar-table th{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
-.ar-table td a{color:var(--blue);text-decoration:none;font-weight:700}.ar-table td a:hover{text-decoration:underline}
+.ar-table td a,.ar-link{color:var(--blue);text-decoration:none;font-weight:700}.ar-table td a:hover,.ar-link:hover{text-decoration:underline}
 .ar-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}.ar-fields .wide{grid-column:1/-1}
 .ar-fields label,.ar-pattern label{display:block;font-size:11px;font-weight:650;color:var(--t2);margin-bottom:5px}
 .ar-fields .form-control,.ar-fields .form-select,.ar-pattern .form-select{width:100%;min-width:0}
@@ -119,6 +119,7 @@ $first_day = max($year . '-01-01', $today);
       <strong><?= (int)$year ?></strong><a href="<?= $e($link(array('year' => $year + 1, 'user' => NULL, 'view' => NULL, 'month' => NULL))) ?>" aria-label="Next year">›</a></nav>
     <span class="ar-pill <?= $published ? 'published' : 'draft' ?>"><?= $published ? '● Published' : ($draft ? '○ Draft · planners only' : '○ Not started') ?></span>
     <a class="btn btn-ghost btn-sm" href="<?= site_url('team/shift_roster') ?>">Week view →</a>
+    <?php if ($is_planner): ?><a class="btn btn-ghost btn-sm" href="<?= site_url('team/roster_cover') ?>">Sick Shift Cover →</a><?php endif; ?>
     <?php if ($ready && ($is_planner || $published)): ?><a class="btn btn-ghost btn-sm" href="<?= site_url('team/annual_roster_csv?year=' . $year . ($chosen ? '&user=' . $chosen_id : '')) ?>">Export <?= $chosen ? 'worker' : 'year' ?> CSV</a><?php endif; ?>
   </div>
 </header>
@@ -243,9 +244,22 @@ $first_day = max($year . '-01-01', $today);
             <div class="ar-mini-grid"><?php foreach (array('M','T','W','T','F','S','S') as $weekday): ?><span class="ar-weekday"><?= $weekday ?></span><?php endforeach; ?>
               <?php for ($n = 0; $n < 42; $n++): $d = $grid->modify('+' . $n . ' days')->format('Y-m-d'); $is_in = substr($d,0,7) === $start->format('Y-m');
                 $cell = $is_in && isset($work[$d]) ? $work[$d] : NULL; $before = $chosen->join_date && $d < $chosen->join_date;
+                $cover_note = '';
+                if ($cell && !$before) {
+                    if (!empty($cell['covering'])) $cover_note = $cell['covering']->cover_mode === 'OffCallIn'
+                        ? 'Cover duty · authorised Off call-in' : 'Cover duty · on-shift';
+                    elseif (!empty($cell['covered_by'])) $cover_note = 'Cover arranged';
+                    elseif ($is_planner && $published && $d >= $today && $cell['kind'] === 'Leave'
+                        && $cell['leave_type'] === 'Sick Leave' && $cell['base_kind'] === 'Shift')
+                        $cover_note = 'Needs sick Shift cover';
+                }
+                $day_title = $d . ': ' . ($before ? 'Before joining' : ($cell ? $label($cell)
+                    . ($cell['extra'] ? ' · authorised extra work' : ($cell['replacement']
+                        ? ' · replacement Off for ' . $cell['replacement']->work_date : '')) : 'Needs plan'));
+                if ($cover_note) $day_title .= ' · ' . $cover_note;
               ?>
                 <?php if (!$is_in): ?><span class="ar-mute"><?= (int)substr($d,-2) ?></span>
-                <?php else: ?><a class="<?= $before ? 'ar-before' : ($cell ? $kind_class($cell) : 'ar-unplanned') ?> <?= $d === $today ? 'ar-today' : '' ?>" href="<?= $e($link(array('view' => 'month','month' => $m))) ?>#day-<?= $d ?>" title="<?= $e($d . ': ' . ($before ? 'Before joining' : ($cell ? $label($cell) . ($cell['extra'] ? ' · authorised extra work' : ($cell['replacement'] ? ' · replacement Off for ' . $cell['replacement']->work_date : '')) : 'Needs plan'))) ?>"><?= (int)substr($d,-2) ?><?= $cell && ($cell['extra'] || $cell['replacement']) ? '•' : '' ?></a><?php endif; ?>
+                <?php else: ?><a class="<?= $before ? 'ar-before' : ($cell ? $kind_class($cell) : 'ar-unplanned') ?> <?= $d === $today ? 'ar-today' : '' ?>" href="<?= $e($link(array('view' => 'month','month' => $m))) ?>#day-<?= $d ?>" title="<?= $e($day_title) ?>"><?= (int)substr($d,-2) ?><?= $cell && ($cell['extra'] || $cell['replacement'] || $cover_note) ? '•' : '' ?><?php if ($cover_note): ?><span class="sr-only"> · <?= $e($cover_note) ?></span><?php endif; ?></a><?php endif; ?>
               <?php endfor; ?>
             </div></article>
         <?php endfor; ?>
@@ -277,7 +291,10 @@ $first_day = max($year . '-01-01', $today);
                   <?php if ($sh): ?><small><?= substr($sh->start_time,0,5) ?>–<?= substr($sh->end_time,0,5) ?></small><?php endif; ?>
                   <?php if ($extra && !$before): ?><small><strong>Off · extra work <?= $extra->status === 'Confirmed' ? 'confirmed' : 'planned' ?></strong><br><?= isset($shifts_by_id[(int)$extra->shift_id]) ? $e($shifts_by_id[(int)$extra->shift_id]->name) : '' ?></small><?php endif; ?>
                   <?php if ($replacement && !$before): ?><small><strong>Replacement Off</strong><br>For work on <?= $e($replacement->work_date) ?> · <?= $e($replacement->settlement) ?></small><?php endif; ?>
-                  <?php if ($can_plan && $d >= $today && !$before && $cell && $cell['kind'] !== 'Leave' && !$extra && !$replacement): ?>
+                  <?php if ($cell && $cell['covering'] && !$before): ?><small><strong>Covering team Shift</strong> · <?= $cell['covering']->cover_mode === 'OffCallIn' ? 'authorised call-in' : 'on-shift duties' ?></small><?php endif; ?>
+                  <?php if ($cell && $cell['covered_by'] && !$before): ?><small><strong>Cover arranged</strong><?= $is_planner ? ' · worker #' . (int)$cell['covered_by']->cover_user_id : '' ?></small><?php endif; ?>
+                  <?php if ($is_planner && $cell && $cell['kind'] === 'Leave' && $cell['leave_type'] === 'Sick Leave' && $cell['base_kind'] === 'Shift' && $d >= $today && $published): ?><a href="<?= site_url('team/roster_cover?user=' . $chosen_id . '&date=' . $d) ?>"><?= $cell['covered_by'] ? 'Review cover ↗' : 'Find cover ↗' ?></a>
+                  <?php elseif ($can_plan && $d >= $today && !$before && $cell && $cell['kind'] !== 'Leave' && !$extra && !$replacement): ?>
                     <a href="<?= site_url('team/roster_day_edit?user=' . $chosen_id . '&date=' . $d) ?>">Edit day ↗</a>
                   <?php elseif ($can_plan && $cell && $cell['kind'] === 'Leave'): ?><a href="#arLeave">Manage leave ↓</a>
                   <?php elseif ($can_plan && $extra): ?><a href="#arExtra">Manage extra work ↓</a>
@@ -306,6 +323,7 @@ $first_day = max($year . '-01-01', $today);
       <?php foreach ($leaves as $leave): ?><div class="ar-record"><span class="ar-pill ar-leave"><?= $e($leave->leave_type) ?></span><strong><?= date('d M Y', strtotime($leave->start_date)) ?> – <?= date('d M Y', strtotime($leave->end_date)) ?></strong>
         <?php if (!empty($leave->partial)): ?><small class="ar-muted"> · Published portion of this year; other dates appear when their year is published.</small><?php endif; ?>
         <?php if ($leave->note): ?><div class="ar-muted" style="margin-top:5px"><?= $e($leave->note) ?></div><?php endif; ?>
+        <?php if ($is_planner && $published && $leave->leave_type === 'Sick Leave' && $leave->end_date >= $today): ?><div style="margin-top:8px"><a class="ar-link" href="<?= site_url('team/roster_cover?month=' . substr(max($leave->start_date, $today), 0, 7)) ?>">Find / review sick Shift cover ↗</a></div><?php endif; ?>
         <?php if ($can_plan && $leave->start_date >= $today): ?>
           <details style="margin-top:9px"><summary>Amend future leave</summary>
           <?= form_open('team/roster_leave_amend') ?><input type="hidden" name="year" value="<?= (int)$year ?>"><input type="hidden" name="user_id" value="<?= $chosen_id ?>"><input type="hidden" name="leave_id" value="<?= (int)$leave->id ?>">

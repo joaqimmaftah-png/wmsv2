@@ -43,6 +43,8 @@
           <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars((string)$w->position, ENT_QUOTES, 'UTF-8') ?></td>
           <td><span class="badge <?= $cell && in_array($cell['kind'], array('Off','Leave','Holiday'), TRUE) ? 'b-warning' : 'b-secondary' ?>" title="Scheduled expectation, not actual attendance"><?= htmlspecialchars((string)$expected, ENT_QUOTES, 'UTF-8') ?></span>
             <?php if ($cell && $cell['kind'] === 'Off' && $cell['extra']): ?><small style="display:block;color:var(--blue);">Authorised extra work · <?= htmlspecialchars((string)$cell['extra']->status, ENT_QUOTES, 'UTF-8') ?></small><?php endif; ?>
+            <?php if ($cell && !empty($cell['covering'])): ?><small style="display:block;color:var(--blue);font-weight:650">Covering sick Shift · <?= $cell['covering']->cover_mode === 'OffCallIn' ? 'authorised Off call-in' : 'on-shift duty' ?></small><?php endif; ?>
+            <?php if ($cell && !empty($cell['covered_by'])): ?><small style="display:block;color:var(--green);font-weight:650">Cover arranged</small><?php endif; ?>
           </td>
           <td>
             <label class="sr-only" for="attStatus<?= (int)$w->id ?>">Actual status for <?= htmlspecialchars($w->first_name.' '.$w->last_name, ENT_QUOTES, 'UTF-8') ?></label>

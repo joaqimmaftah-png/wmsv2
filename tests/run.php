@@ -388,7 +388,7 @@ check('Schema: seeds all 630 inspection_items', strpos($schemaSql, 'INSERT IGNOR
 
 $migFiles = glob(__DIR__ . '/../database/migrations/[0-9][0-9][0-9][0-9]_*.sql');
 sort($migFiles, SORT_STRING);
-is_same('Migrations: all 18 ordered SQL migrations present (0001..0018)', 18, count($migFiles));
+is_same('Migrations: all 19 ordered SQL migrations present (0001..0019)', 19, count($migFiles));
 foreach ($migFiles as $mf) {
     $bn  = basename($mf);
     $sum = hash_file('sha256', $mf);
@@ -409,6 +409,15 @@ check('Annual plan: distinct Off, Shift and Holiday states, Scheduled replacemen
     && strpos($annualSql, "enum('Open','Scheduled','Taken','Paid')") !== FALSE
     && strpos($annualSql, '`replaced_shift_id` int(11) DEFAULT NULL') !== FALSE
     && strpos($annualSql, 'CREATE TABLE IF NOT EXISTS `workforce_plan_events`') !== FALSE);
+$coverSql = file_get_contents(__DIR__ . '/../database/migrations/0019_sick_shift_cover.sql');
+check('Sick-shift cover: baseline includes the additive table before its ledger entry',
+    strpos($schemaSql, trim($coverSql)) !== FALSE
+    && strpos($schemaSql, 'CREATE TABLE IF NOT EXISTS `workforce_plan_cover`')
+        < strpos($schemaSql, "'0019', '0019_sick_shift_cover.sql'"));
+check('Sick-shift cover: absent/date unique, candidate index and linked Off-day evidence',
+    strpos($coverSql, 'UNIQUE KEY `uq_wpc_absent_date` (`absent_user_id`,`work_date`)') !== FALSE
+    && strpos($coverSql, 'KEY `idx_wpc_cover_date` (`cover_user_id`,`work_date`,`status`)') !== FALSE
+    && strpos($coverSql, 'FOREIGN KEY (`extra_day_id`) REFERENCES `workforce_plan_extra_days`') !== FALSE);
 check('Schema: users table defines optional `site` column and timesheet signatory settings without sample dates',
     strpos($schemaSql, '`site` varchar(100) DEFAULT NULL') !== FALSE
     && strpos($schemaSql, "'timesheet_prepared_by'") !== FALSE
@@ -550,10 +559,10 @@ foreach (range(1, 5) as $nav_role) {
     }
     $nav_counts[$nav_role] = $count;
 }
-is_same('NAV Supervisor expanded leaf count', 32, $nav_counts[1]);
+is_same('NAV Supervisor expanded leaf count', 33, $nav_counts[1]);
 is_same('NAV Technician expanded leaf count', 17, $nav_counts[2]);
 is_same('NAV Store Keeper expanded leaf count', 14, $nav_counts[3]);
-is_same('NAV Manager expanded leaf count', 26, $nav_counts[4]);
+is_same('NAV Manager expanded leaf count', 27, $nav_counts[4]);
 is_same('NAV CEO expanded leaf count', 1, $nav_counts[5]);
 $ceo_nav = wms_nav_tree(5);
 check('NAV CEO stays Executive-Summary-only', count($ceo_nav['groups']) === 0
@@ -744,6 +753,51 @@ check('Annual rotation: published days need reasons and planning never inserts a
     strpos($planSource, "status === 'Published' && strlen(trim(\$reason)) < 5") !== FALSE
     && strpos($planSource, "->insert('attendance'") === FALSE
     && strpos($planSource, "->update('attendance'") === FALSE);
+require_once APPPATH . 'models/Workforce_cover_model.php';
+$absentCover = (object)array('id'=>11,'role_id'=>2,'status'=>'Active','position'=>'Maintenance Technician',
+    'site'=>'Main Workshop','skill_level'=>'Expert','join_date'=>'2022-01-01');
+$candidateCover = (object)array('id'=>12,'role_id'=>2,'status'=>'Active','position'=>'Maintenance Technician',
+    'site'=>'main workshop','skill_level'=>'Specialist','join_date'=>'2022-01-01');
+$onShift = array('plan_status'=>'Published','kind'=>'Shift','shift_id'=>5,'extra'=>NULL,'replacement'=>NULL);
+$offShift = array('plan_status'=>'Published','kind'=>'Off','shift_id'=>0,'extra'=>NULL,'replacement'=>NULL);
+$assess = function ($person, $cell, $required = array(), $held = array(), $busy = FALSE,
+                    $actual = '', $jobs = 0, $recent = 0, $session = FALSE, $pending = FALSE) use ($absentCover) {
+    return Workforce_cover_model::assess($absentCover, $person, $cell, 5, $required, $held,
+        $busy, $actual, $jobs, $recent, $session, '2027-03-08', $pending);
+};
+$match = $assess($candidateCover, $onShift, array('Hydraulic Safety'), array('Hydraulic Safety'));
+is_same('Sick cover: same-site qualified worker on matching published Shift can share duties', 'Ready', $match['state']);
+is_same('Sick cover: same Shift only redistributes duties', 'OnShift', $match['mode']);
+is_same('Sick cover: a different scheduled Shift is not free capacity', 'Blocked',
+    $assess($candidateCover, array_merge($onShift, array('shift_id'=>4)))['state']);
+is_same('Sick cover: Off remains unavailable until a separate authorised call-in', 'CallIn', $assess($candidateCover, $offShift)['state']);
+$offShift['extra'] = (object)array('id'=>88,'status'=>'Planned','shift_id'=>5,'compensation'=>'TimeOff');
+is_same('Sick cover: authorised Off work is a separate eligible option', 'Ready', $assess($candidateCover, $offShift)['state']);
+$wrongExtra = clone $offShift['extra']; $wrongExtra->shift_id = 4;
+is_same('Sick cover: a call-in for another Shift cannot be reused', 'Blocked',
+    $assess($candidateCover, array_merge($offShift, array('extra'=>$wrongExtra)))['state']);
+is_same('Sick cover: a replacement Off cannot be called in', 'Blocked',
+    $assess($candidateCover, array_merge($offShift, array('replacement' => (object)array('id'=>44))))['state']);
+is_same('Sick cover: no candidate can be double booked on the same day', 'Blocked',
+    $assess($candidateCover, $onShift, array(), array(), TRUE)['state']);
+is_same('Sick cover: pending leave is not free capacity', 'Blocked',
+    $assess($candidateCover, $onShift, array(), array(), FALSE, '', 0, 0, FALSE, TRUE)['state']);
+is_same('Sick cover: actual Rest excludes a candidate', 'Blocked',
+    $assess($candidateCover, $onShift, array(), array(), FALSE, 'Rest')['state']);
+is_same('Sick cover: an open work session excludes a candidate', 'Blocked',
+    $assess($candidateCover, $onShift, array(), array(), FALSE, '', 0, 0, TRUE)['state']);
+check('Sick cover: workload and recent assignments reduce rank, not hidden eligibility',
+    $assess($candidateCover, $onShift, array(), array(), FALSE, '', 2, 2)['score'] < $match['score']);
+$otherSite = clone $candidateCover; $otherSite->site = 'Remote Yard';
+is_same('Sick cover: a different site cannot be silently matched', 'Blocked', $assess($otherSite, $onShift)['state']);
+$otherRole = clone $candidateCover; $otherRole->role_id = 3;
+is_same('Sick cover: a different role cannot be silently matched', 'Blocked', $assess($otherRole, $onShift)['state']);
+$lowerSkill = clone $candidateCover; $lowerSkill->skill_level = 'Junior';
+is_same('Sick cover: skill cannot be downgraded', 'Blocked', $assess($lowerSkill, $onShift)['state']);
+is_same('Sick cover: missing current certification blocks unsafe auto-suggestions', 'Blocked',
+    $assess($candidateCover, $onShift, array('Hydraulic Safety'), array())['state']);
+is_same('Sick cover: draft and legacy days cannot be assigned', 'Blocked',
+    $assess($candidateCover, array_merge($onShift, array('plan_status'=>'Draft')))['state']);
 
 class WmsQueryResultStub {
     private $rows;
@@ -1322,6 +1376,14 @@ check('TM-01 Stored XSS Hardening in team/view.php: worker photo, name, employee
 // TM-03 .. TM-10 Full PHP Render & XSS/Contrast/RBAC Audit of application/views/team/index.php
 $rosterById = array();
 foreach ($rosterRows as $rw) { $rosterById[(int)$rw->id] = $rw; }
+// Render both cover modes as they would be projected from a published plan;
+// an Off call-in must keep its Off badge instead of looking like a free shift.
+$rosterRows[0]->cover_mode_today = 'OnShift';
+$rosterRows[0]->planned_today = 'Shift · Cover duty';
+$rosterRows[0]->expected_on_site = TRUE;
+$rosterRows[1]->cover_mode_today = 'OffCallIn';
+$rosterRows[1]->planned_today = 'Off · Cover duty';
+$rosterRows[1]->expected_on_site = TRUE;
 
 $tmVars = array(
     'workers'        => array_slice($rosterRows, 0, 5),
@@ -1413,6 +1475,10 @@ check('TM-08 & TM-09 Dual View Mode + Accessible Staff Inspector Drawer rendered
     strpos($tmSupHtml, 'data-set-view="cards"') !== FALSE
     && strpos($tmSupHtml, 'class="tm-cards-grid"') !== FALSE
     && strpos($tmSupHtml, 'id="tmDrawer" role="dialog" aria-modal="true"') !== FALSE);
+check('Directory: cover duties visible in table and cards; Off call-in retains approved extra-work context',
+    substr_count($tmSupHtml, '>On-shift cover duty</span>') === 2
+    && substr_count($tmSupHtml, '>Off · call-in cover duty</span>') === 2
+    && strpos($tmSupHtml, '>Off · extra work approved</span>') !== FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
    Work Orders DataTable Audit & Redesign Suite (WO-01 .. WO-09)

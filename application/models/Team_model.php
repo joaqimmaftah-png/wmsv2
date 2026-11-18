@@ -179,6 +179,8 @@ class Team_model extends CI_Model {
                 } else {
                     $shift_names[$uid] = $kind === 'Off' && $cell['extra'] ? 'Off · authorised extra work' : $plan_label;
                 }
+                if (!empty($cell['covering'])) $plan_label .= ' · Cover duty';
+                if (!empty($cell['covered_by'])) $plan_label .= ' · Cover arranged';
                 if ($kind === 'Leave') $leave_today[$uid] = $cell['leave_type'];
             }
             $eff_status = $raw_status;
@@ -208,6 +210,8 @@ class Team_model extends CI_Model {
                 'effective_status'  => $eff_status,
                 'active_leave_type' => isset($leave_today[$uid]) ? $leave_today[$uid] : '',
                 'planned_today'     => $plan_label,
+                'cover_mode_today'  => $cell && $cell['plan_status'] === 'Published' && !empty($cell['covering'])
+                    ? (string)$cell['covering']->cover_mode : '',
                 'expected_on_site'  => $expected,
                 'on_site_today'     => isset($on_site_map[$uid]),
                 'current_shift'     => isset($shift_names[$uid]) ? $shift_names[$uid] : '',
@@ -780,6 +784,9 @@ class Team_model extends CI_Model {
             $sources['workforce_plan_extra_days'] = 'shift_id';
             $sources['workforce_plan_extra_days:replacement'] = 'replaced_shift_id';
         }
+        // Even a cancelled cover is part of the audit history and retains its
+        // original shift FK; do not offer to delete or edit that shift type.
+        if ($this->db->table_exists('workforce_plan_cover')) $sources['workforce_plan_cover'] = 'shift_id';
         foreach ($sources as $key => $column) {
             $table = explode(':', $key)[0];
             foreach ($this->db->select($column . ' AS shift_id, COUNT(*) AS cnt', FALSE)

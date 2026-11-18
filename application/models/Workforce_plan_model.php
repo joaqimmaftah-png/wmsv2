@@ -34,11 +34,23 @@ class Workforce_plan_model extends CI_Model {
             && $year->published_at <= date('Y-m-d H:i:s');
     }
 
+    /** Refuse changes that invalidate an approved cover. The caller already
+     * holds the year lock (or will take it before a legacy request decision). */
+    public function cover_conflict($uid, $from, $to, $side = 'either') {
+        if (!$this->db->table_exists('workforce_plan_cover') || $from > $to) return FALSE;
+        $this->db->where('status', 'Assigned')->where('work_date >=', $from)->where('work_date <=', $to);
+        if ($side === 'absent') $this->db->where('absent_user_id', (int)$uid);
+        elseif ($side === 'cover') $this->db->where('cover_user_id', (int)$uid);
+        else $this->db->group_start()->where('absent_user_id', (int)$uid)
+            ->or_where('cover_user_id', (int)$uid)->group_end();
+        return $this->db->count_all_results('workforce_plan_cover') > 0;
+    }
+
     /** One query per category, independent of workforce size. Draft data is
      * never exposed to a technician/store keeper (caller must authorize preview).
      * An unconverted week in a year without a live annual plan keeps its old
      * weekly assignment. Approved historical leave always takes precedence.
-     * @return array [user_id][Y-m-d] => {kind,shift_id,source,leave_type,extra,replacement,plan_status}
+     * @return array [user_id][Y-m-d] => {kind,shift_id,source,leave_type,extra,replacement,covering,covered_by,plan_status}
      */
     public function days($from, $to, array $user_ids, $preview = FALSE) {
         $ids = array_values(array_unique(array_filter(array_map('intval', $user_ids), function ($n) { return $n > 0; })));
@@ -81,6 +93,19 @@ class Workforce_plan_model extends CI_Model {
                   ->get('workforce_plan_extra_days')->result() as $r) {
             $replacements[(int)$r->user_id][$r->replacement_date] = $r;
         }
+        // A cover is a duty assignment layered on top of the worker's base
+        // Shift/Off, not an extra shift, and never actual attendance. Optional
+        // until 0019 is installed; only published years project assignments.
+        $covering = $covered_by = array();
+        if ($this->db->table_exists('workforce_plan_cover')) {
+            foreach ($this->db->where('status', 'Assigned')->where('work_date >=', $from)
+                      ->where('work_date <=', $to)->group_start()
+                      ->where_in('absent_user_id', $ids)->or_where_in('cover_user_id', $ids)->group_end()
+                      ->get('workforce_plan_cover')->result() as $r) {
+                $covering[(int)$r->cover_user_id][$r->work_date] = $r;
+                $covered_by[(int)$r->absent_user_id][$r->work_date] = $r;
+            }
+        }
         // Read-only compatibility for a year that has not yet been published.
         $old = array();
         $old_from = date('Y-m-d', strtotime($from . ' -6 days'));
@@ -111,16 +136,25 @@ class Workforce_plan_model extends CI_Model {
                 if ($legacy) {
                     $kind = 'Shift'; $sid = $old[$uid][$wk]; $source = 'Legacy';
                 }
+                $base_kind = $kind; $base_shift_id = $sid;
                 $leave = NULL;
                 if (($live || $draft) && isset($planned_leave[$uid][$d])) $leave = $planned_leave[$uid][$d];
                 if (isset($legacy_leave[$uid][$d])) $leave = $legacy_leave[$uid][$d];
                 if ($leave) { $kind = 'Leave'; $sid = 0; }
                 $out[$uid][$d] = array(
                     'kind' => $kind, 'shift_id' => $sid, 'source' => $source,
+                    'base_kind' => $base_kind, 'base_shift_id' => $base_shift_id,
                     'leave_type' => $leave ? (string)$leave->leave_type : '',
                     'leave_id' => $leave ? (int)$leave->id : 0,
                     'extra' => ($kind === 'Off' && $live && isset($extras[$uid][$d])) ? $extras[$uid][$d] : NULL,
                     'replacement' => ($kind === 'Off' && $live && isset($replacements[$uid][$d])) ? $replacements[$uid][$d] : NULL,
+                    'covering' => $live && isset($covering[$uid][$d])
+                        && (($covering[$uid][$d]->cover_mode === 'OnShift' && $kind === 'Shift' && $sid === (int)$covering[$uid][$d]->shift_id)
+                            || ($covering[$uid][$d]->cover_mode === 'OffCallIn' && $kind === 'Off' && isset($extras[$uid][$d])
+                                && (int)$extras[$uid][$d]->id === (int)$covering[$uid][$d]->extra_day_id))
+                        ? $covering[$uid][$d] : NULL,
+                    'covered_by' => $live && $kind === 'Leave' && $leave->leave_type === 'Sick Leave'
+                        && isset($covered_by[$uid][$d]) ? $covered_by[$uid][$d] : NULL,
                     'plan_status' => $legacy ? 'Legacy' : ($live ? 'Published' : ($draft ? 'Draft' : 'Legacy')),
                 );
             }
@@ -319,6 +353,8 @@ class Workforce_plan_model extends CI_Model {
         if (!$this->begin_years(array((int)substr($date, 0, 4)), $actor)) return array('ok' => FALSE, 'message' => 'Annual planning is unavailable; run migration 0018.');
         $year = (int)substr($date, 0, 4);
         $yr = $this->year($year);
+        if ($this->cover_conflict($uid, $date, $date))
+            return $this->fail('This date has approved sick-shift cover. Cancel that cover before changing either worker\'s base plan.');
         if ($yr->status === 'Published' && $type === 'Unplanned') return $this->fail('A published day cannot be cleared; replace it with a shift, Off or Holiday.');
         if ($yr->status === 'Published' && strlen(trim($reason)) < 5) return $this->fail('Give a reason (at least 5 characters) for changing a published plan.');
         if ($this->leave_conflict($uid, $date, $date)) return $this->fail('This date is on leave. Change the leave block before editing its schedule.');
@@ -364,6 +400,13 @@ class Workforce_plan_model extends CI_Model {
         if (!$this->begin_years(array($year), $actor)) return array('ok' => FALSE, 'message' => 'Annual planning is unavailable; run migration 0018.');
         $yr = $this->year($year);
         if ($yr->status === 'Published' && strlen(trim($reason)) < 5) return $this->fail('Give a reason (at least 5 characters) for replacing a published pattern.');
+        if ($this->db->table_exists('workforce_plan_cover')) {
+            $affected = $this->db->where('status', 'Assigned')->where('work_date >=', $start)
+                ->where('work_date <=', $end)->group_start()
+                ->where_in('absent_user_id', $ids)->or_where_in('cover_user_id', $ids)->group_end()
+                ->count_all_results('workforce_plan_cover');
+            if ($affected) return $this->fail('This rotation includes approved sick-shift cover. Cancel the affected cover before regenerating these workers.');
+        }
         $join_dates = array();
         foreach ($this->db->select('id, join_date')->where_in('id', $ids)
                      ->where_in('status', array('Active', 'On Leave'))->get('users')->result() as $person) {
@@ -481,6 +524,8 @@ class Workforce_plan_model extends CI_Model {
         $years = range((int)substr($start, 0, 4), (int)substr($end, 0, 4));
         if (!$this->begin_years($years, $actor)) return array('ok' => FALSE, 'message' => 'Annual planning is unavailable; run migration 0018.');
         if ($this->leave_conflict($uid, $start, $end)) return $this->fail('This period overlaps existing planned, approved or pending leave.');
+        if ($this->cover_conflict($uid, $start, $end, 'cover'))
+            return $this->fail('This worker is assigned to cover a sick Shift in this period. Cancel the cover before scheduling leave.');
         if ($this->db->where('user_id', (int)$uid)->where('status !=', 'Cancelled')
             ->where('work_date >=', $start)->where('work_date <=', $end)
             ->count_all_results('workforce_plan_extra_days')) return $this->fail('Cancel off-day extra work in this period before planning leave.');
@@ -512,6 +557,8 @@ class Workforce_plan_model extends CI_Model {
         $current = $this->db->where('id', (int)$id)->get('workforce_plan_leaves')->row();
         if (!$current || $current->status !== 'Scheduled' || $current->start_date !== $item->start_date || $current->end_date !== $item->end_date)
             return $this->fail('Leave was already changed; refresh the page.');
+        if ($this->cover_conflict($item->user_id, min($item->start_date, $start), max($item->end_date, $end)))
+            return $this->fail('Cancel approved sick-shift cover before amending this leave period.');
         $worker = $this->db->select('join_date')->where('id', (int)$current->user_id)->get('users')->row();
         if (!$worker || ($worker->join_date && $start < $worker->join_date))
             return $this->fail('Planned leave must start on or after the worker’s join date.');
@@ -541,6 +588,8 @@ class Workforce_plan_model extends CI_Model {
         // Re-read after locking; two planners cannot shorten the same period at once.
         $item = $this->db->where('id', (int)$id)->get('workforce_plan_leaves')->row();
         if (!$item || $item->status !== 'Scheduled' || $item->end_date < date('Y-m-d')) return $this->fail('Leave was already changed; refresh the page.');
+        if ($this->cover_conflict($item->user_id, max(date('Y-m-d'), $item->start_date), $item->end_date))
+            return $this->fail('Cancel approved sick-shift cover before ending this leave.');
         if ($item->start_date >= date('Y-m-d')) {
             $this->db->where('id', (int)$id)->update('workforce_plan_leaves', array(
                 'status' => 'Cancelled', 'cancelled_by' => $actor, 'cancelled_at' => date('Y-m-d H:i:s'),
@@ -562,6 +611,8 @@ class Workforce_plan_model extends CI_Model {
         if (strlen(trim($reason)) < 5) return array('ok' => FALSE, 'message' => 'Explain why work is needed on the off day.');
         if (!$this->begin_years(array((int)substr($date, 0, 4)), $actor)) return array('ok' => FALSE, 'message' => 'Annual planning is unavailable.');
         if (!$this->is_published($date)) return $this->fail('Publish this year first; an off-day call-in must be visible to the worker.');
+        if ($this->cover_conflict($uid, $date, $date, 'cover'))
+            return $this->fail('This person is already assigned sick-shift cover. Cancel the cover before changing the call-in.');
         $base = $this->db->where('user_id', (int)$uid)->where('work_date', $date)->get('workforce_plan_days')->row();
         if (!$base || $base->day_type !== 'Off') return $this->fail('Choose a planned Off day before arranging extra work.');
         if ($this->leave_conflict($uid, $date, $date)) return $this->fail('Leave takes precedence; change it before planning extra work.');
@@ -620,6 +671,8 @@ class Workforce_plan_model extends CI_Model {
             if (!$replacement || $replacement <= date('Y-m-d') || $replacement <= $row->work_date)
                 return $this->fail('Choose a future replacement date after the worked off day.');
             if (!$this->is_published($replacement)) return $this->fail('Publish the replacement year before assigning a compensatory Off day.');
+            if ($this->cover_conflict($row->user_id, $replacement, $replacement, 'cover'))
+                return $this->fail('This date has approved sick-shift cover. Cancel it before using the Shift as a replacement Off day.');
             if ($this->leave_conflict($row->user_id, $replacement, $replacement))
                 return $this->fail('Replacement cannot overlap leave.');
             $day = $this->db->where('user_id', $row->user_id)->where('work_date', $replacement)
@@ -690,6 +743,8 @@ class Workforce_plan_model extends CI_Model {
         if (!$this->begin_years(array((int)substr($row->work_date, 0, 4)), $actor)) return array('ok' => FALSE, 'message' => 'Annual planning is unavailable.');
         $row = $this->db->where('id', (int)$id)->get('workforce_plan_extra_days')->row();
         if (!$row || $row->status !== 'Planned' || $row->settlement !== 'Open') return $this->fail('This entry was changed; refresh the page.');
+        if ($this->cover_conflict($row->user_id, $row->work_date, $row->work_date, 'cover'))
+            return $this->fail('This call-in covers a sick Shift. Cancel the cover before cancelling extra work.');
         $att = $this->db->where('user_id', (int)$row->user_id)->where('date', $row->work_date)
             ->get('attendance')->row();
         if ($att && $att->status === 'Present')
