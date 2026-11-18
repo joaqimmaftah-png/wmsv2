@@ -768,9 +768,14 @@ $assess = function ($person, $cell, $required = array(), $held = array(), $busy 
 $match = $assess($candidateCover, $onShift, array('Hydraulic Safety'), array('Hydraulic Safety'));
 is_same('Sick cover: same-site qualified worker on matching published Shift can share duties', 'Ready', $match['state']);
 is_same('Sick cover: same Shift only redistributes duties', 'OnShift', $match['mode']);
+is_same('Sick cover: a different scheduled Shift is not free capacity', 'Blocked',
+    $assess($candidateCover, array_merge($onShift, array('shift_id'=>4)))['state']);
 is_same('Sick cover: Off remains unavailable until a separate authorised call-in', 'CallIn', $assess($candidateCover, $offShift)['state']);
 $offShift['extra'] = (object)array('id'=>88,'status'=>'Planned','shift_id'=>5,'compensation'=>'TimeOff');
 is_same('Sick cover: authorised Off work is a separate eligible option', 'Ready', $assess($candidateCover, $offShift)['state']);
+$wrongExtra = clone $offShift['extra']; $wrongExtra->shift_id = 4;
+is_same('Sick cover: a call-in for another Shift cannot be reused', 'Blocked',
+    $assess($candidateCover, array_merge($offShift, array('extra'=>$wrongExtra)))['state']);
 is_same('Sick cover: a replacement Off cannot be called in', 'Blocked',
     $assess($candidateCover, array_merge($offShift, array('replacement' => (object)array('id'=>44))))['state']);
 is_same('Sick cover: no candidate can be double booked on the same day', 'Blocked',

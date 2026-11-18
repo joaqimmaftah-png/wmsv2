@@ -285,6 +285,16 @@ class Workforce_cover_model extends CI_Model {
         if (!$capacity_checked) return array('ok' => FALSE, 'message' => 'Confirm the candidate has capacity and the required qualifications.');
         if (!$this->begin_years(array((int)substr($date, 0, 4)), $actor))
             return array('ok' => FALSE, 'message' => 'Cannot lock the cover year. Check migration 0019.');
+        // Annual-plan/leave writers serialize on the year. Profile and
+        // certification editors do not: hold both worker rows and their current
+        // certificates until the eligibility recheck and approval commit.
+        $workers = $this->db->query('SELECT id FROM users WHERE id IN (?, ?) ORDER BY id FOR UPDATE',
+            array((int)$absent_id, (int)$candidate_id));
+        if (!$workers || count($workers->result()) !== 2)
+            return $this->fail('Choose two distinct, existing workers for this cover.');
+        $certificates = $this->db->query('SELECT id FROM certifications WHERE user_id IN (?, ?) ORDER BY user_id, id FOR UPDATE',
+            array((int)$absent_id, (int)$candidate_id));
+        if (!$certificates) return $this->fail('Cannot lock current qualifications for review.');
         $vacancy = $this->vacancy($absent_id, $date);
         if (!$vacancy) return $this->fail('This is no longer a published sick Shift. Refresh the cover finder.');
         if ($vacancy['cover']) return $this->fail('This sick Shift has already been covered. Refresh before editing.');

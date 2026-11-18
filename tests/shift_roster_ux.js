@@ -99,8 +99,9 @@ assert.ok(cover.includes('function assess(') && cover.includes('function approve
 assert.ok(coverView.includes("form_open('team/roster_cover_approve'") && coverView.includes('availability_confirmed')
   && coverView.includes('capacity_checked') && coverView.includes('name="compensation"'),
   'Off-day call-in needs explicit attestation and compensation; no fabricated site match');
-assert.ok(cover.includes("'extra_created_for_cover' => $created") && model.includes('function cover_conflict('),
-  'compensation exceptions stay linked to cover and disruptive plan changes are guarded');
+assert.ok(cover.includes("'extra_created_for_cover' => $created") && model.includes('function cover_conflict(')
+  && cover.includes('ORDER BY id FOR UPDATE') && cover.includes('ORDER BY user_id, id FOR UPDATE'),
+  'linked compensation and locked worker/certificate rechecks protect approval');
 assert.ok(annual.includes('Find / review sick Shift cover') && annual.includes('$cover_note')
   && annual.includes('Cover arranged') && week.includes('Find cover')
   && attendance.includes('Covering sick Shift'), 'cover is visible in year, month, week and actual attendance context');
