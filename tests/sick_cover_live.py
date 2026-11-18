@@ -156,6 +156,18 @@ try:
     assert cover(absent, D1) == c1, 'Repeated POST must not create another cover'
     assert count(f"SELECT COUNT(*) FROM attendance WHERE user_id={on_shift} AND date='{D1}'") == 0
     assert 'Cover arranged' in text(worker, roster)
+    assert 'Cover arranged' in text(worker, f'/team/annual_roster?year={FUTURE}&user={absent}')
+    db(f"UPDATE users SET site='Remote Yard' WHERE id={on_shift}")
+    review = text(admin, url1)
+    assert 'Cover needs review.' in review and 'Work site is missing or does not match' in review
+    db(f"UPDATE users SET site='Main Workshop' WHERE id={on_shift}")
+    db(f"UPDATE certifications SET expiry_date='{dt.date.today().isoformat()}' "
+       f"WHERE user_id={on_shift} AND cert_name='Hydraulic Safety'")
+    review = text(admin, url1)
+    assert 'Cover needs review.' in review and 'Missing current certificate: Hydraulic Safety' in review
+    db(f"UPDATE certifications SET expiry_date='{FUTURE}-12-31' "
+       f"WHERE user_id={on_shift} AND cert_name='Hydraulic Safety'")
+    assert 'Cover needs review.' not in text(admin, url1)
     pay_calendar = f'/team/annual_roster?year={FUTURE}&user={on_shift}&view=month&month={int(D1[5:7])}'
     assert 'Covering team Shift' in text(pay_worker, pay_calendar)
     assert 'Find cover' not in text(pay_worker, pay_calendar)

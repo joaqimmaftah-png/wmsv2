@@ -93,15 +93,17 @@ assert.ok(ctl.includes('public function roster_cover()') && ctl.includes('Workfo
   'planners see an automatic shortlist for a dated sick Shift');
 assert.ok(cover.includes('function vacancy(') && cover.includes("'Sick Leave'") && cover.includes("'Published'"),
   'only a published sick Shift is coverable');
-assert.ok(cover.includes('function assess(') && cover.includes('function approve(') && cover.includes('function cancel('),
-  'cover matching, supervisor approval and cancellation are separate');
+assert.ok(cover.includes('function assess(') && cover.includes('function approve(') && cover.includes('function cancel(')
+  && cover.includes('function review_issue(') && coverView.includes('Cover needs review.'),
+  'cover matching, supervisor approval, live review and cancellation are separate');
 assert.ok(coverView.includes("form_open('team/roster_cover_approve'") && coverView.includes('availability_confirmed')
   && coverView.includes('capacity_checked') && coverView.includes('name="compensation"'),
   'Off-day call-in needs explicit attestation and compensation; no fabricated site match');
 assert.ok(cover.includes("'extra_created_for_cover' => $created") && model.includes('function cover_conflict('),
   'compensation exceptions stay linked to cover and disruptive plan changes are guarded');
-assert.ok(annual.includes('Find / review sick Shift cover') && week.includes('Find cover')
-  && attendance.includes('Covering sick Shift'), 'cover is visible in plan, week and actual attendance context');
+assert.ok(annual.includes('Find / review sick Shift cover') && annual.includes('$cover_note')
+  && annual.includes('Cover arranged') && week.includes('Find cover')
+  && attendance.includes('Covering sick Shift'), 'cover is visible in year, month, week and actual attendance context');
 assert.ok(navigation.includes("'Sick Shift Cover'") && navigation.includes("'team/roster_cover' => array(1, 4)"),
   'only planners can reach the finder from navigation');
 console.log('Annual workforce plan & sick-shift cover structural checks passed.');

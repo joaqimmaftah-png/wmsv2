@@ -244,9 +244,22 @@ $first_day = max($year . '-01-01', $today);
             <div class="ar-mini-grid"><?php foreach (array('M','T','W','T','F','S','S') as $weekday): ?><span class="ar-weekday"><?= $weekday ?></span><?php endforeach; ?>
               <?php for ($n = 0; $n < 42; $n++): $d = $grid->modify('+' . $n . ' days')->format('Y-m-d'); $is_in = substr($d,0,7) === $start->format('Y-m');
                 $cell = $is_in && isset($work[$d]) ? $work[$d] : NULL; $before = $chosen->join_date && $d < $chosen->join_date;
+                $cover_note = '';
+                if ($cell && !$before) {
+                    if (!empty($cell['covering'])) $cover_note = $cell['covering']->cover_mode === 'OffCallIn'
+                        ? 'Cover duty · authorised Off call-in' : 'Cover duty · on-shift';
+                    elseif (!empty($cell['covered_by'])) $cover_note = 'Cover arranged';
+                    elseif ($is_planner && $published && $d >= $today && $cell['kind'] === 'Leave'
+                        && $cell['leave_type'] === 'Sick Leave' && $cell['base_kind'] === 'Shift')
+                        $cover_note = 'Needs sick Shift cover';
+                }
+                $day_title = $d . ': ' . ($before ? 'Before joining' : ($cell ? $label($cell)
+                    . ($cell['extra'] ? ' · authorised extra work' : ($cell['replacement']
+                        ? ' · replacement Off for ' . $cell['replacement']->work_date : '')) : 'Needs plan'));
+                if ($cover_note) $day_title .= ' · ' . $cover_note;
               ?>
                 <?php if (!$is_in): ?><span class="ar-mute"><?= (int)substr($d,-2) ?></span>
-                <?php else: ?><a class="<?= $before ? 'ar-before' : ($cell ? $kind_class($cell) : 'ar-unplanned') ?> <?= $d === $today ? 'ar-today' : '' ?>" href="<?= $e($link(array('view' => 'month','month' => $m))) ?>#day-<?= $d ?>" title="<?= $e($d . ': ' . ($before ? 'Before joining' : ($cell ? $label($cell) . ($cell['extra'] ? ' · authorised extra work' : ($cell['replacement'] ? ' · replacement Off for ' . $cell['replacement']->work_date : '')) : 'Needs plan'))) ?>"><?= (int)substr($d,-2) ?><?= $cell && ($cell['extra'] || $cell['replacement']) ? '•' : '' ?></a><?php endif; ?>
+                <?php else: ?><a class="<?= $before ? 'ar-before' : ($cell ? $kind_class($cell) : 'ar-unplanned') ?> <?= $d === $today ? 'ar-today' : '' ?>" href="<?= $e($link(array('view' => 'month','month' => $m))) ?>#day-<?= $d ?>" title="<?= $e($day_title) ?>"><?= (int)substr($d,-2) ?><?= $cell && ($cell['extra'] || $cell['replacement'] || $cover_note) ? '•' : '' ?><?php if ($cover_note): ?><span class="sr-only"> · <?= $e($cover_note) ?></span><?php endif; ?></a><?php endif; ?>
               <?php endfor; ?>
             </div></article>
         <?php endfor; ?>

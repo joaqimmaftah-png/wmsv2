@@ -1951,9 +1951,12 @@ class Team extends MY_Controller {
         $queue = $ready && $from <= $to ? $this->Workforce_cover_model->queue($from, $to, $page) : array('rows' => array(), 'total' => 0);
         $cover_person = $vacancy && $vacancy['cover']
             ? $this->Team_model->get_by_id((int)$vacancy['cover']->cover_user_id) : NULL;
+        $review_issue = $vacancy && $vacancy['cover']
+            ? $this->Workforce_cover_model->review_issue($vacancy) : '';
         $this->render('team/roster_cover', array(
             'ready' => $ready, 'vacancy' => $vacancy, 'options' => $options,
-            'cover_person' => $cover_person, 'queue' => $queue, 'month' => $month,
+            'cover_person' => $cover_person, 'review_issue' => $review_issue,
+            'queue' => $queue, 'month' => $month,
             'page' => $page, 'can_edit' => $this->is_supervisor(),
             'page_title' => 'Sick Shift Cover',
         ));

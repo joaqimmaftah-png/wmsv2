@@ -117,7 +117,7 @@ class Workforce_cover_model extends CI_Model {
 
     /** Bulk reads; no candidate-by-candidate SQL. Ranking is recalculated on
      * the approval POST while holding the same year lock as leave and day edits. */
-    public function shortlist(array $vacancy) {
+    public function shortlist(array $vacancy, $ignore_cover_id = 0) {
         $absent = $vacancy['absent']; $date = $vacancy['date']; $shift_id = (int)$vacancy['shift']->id;
         $people = $this->db->where('status', 'Active')->where('role_id', (int)$absent->role_id)
             ->where('id !=', (int)$absent->id)->order_by('first_name')->get('users')->result();
@@ -133,8 +133,9 @@ class Workforce_cover_model extends CI_Model {
             $certs[(int)$cert->user_id][] = (string)$cert->cert_name;
         }
         $reserved = array();
-        foreach ($this->db->select('cover_user_id')->where('work_date', $date)->where('status', 'Assigned')
-                     ->get('workforce_plan_cover')->result() as $row) $reserved[(int)$row->cover_user_id] = TRUE;
+        foreach ($this->db->select('id, cover_user_id')->where('work_date', $date)->where('status', 'Assigned')
+                     ->get('workforce_plan_cover')->result() as $row)
+            if ((int)$row->id !== (int)$ignore_cover_id) $reserved[(int)$row->cover_user_id] = TRUE;
         $pending = array();
         foreach ($this->db->select('user_id')->where_in('user_id', array_slice($ids, 1))
                      ->where('status', 'Pending')->where('start_date <=', $date)
@@ -185,6 +186,28 @@ class Workforce_cover_model extends CI_Model {
         });
         unset($group);
         return $out;
+    }
+
+    /** A current assignment can become unsafe after a profile/certificate or
+     * attendance change. Show the conflict on review; never silently treat it
+     * as a fresh approval. Only the assignment's own reservation is ignored. */
+    public function review_issue(array $vacancy) {
+        if (empty($vacancy['cover'])) return '';
+        $assigned = $vacancy['cover'];
+        $options = $this->shortlist($vacancy, (int)$assigned->id);
+        foreach ($options as $group) foreach ($group as $entry) {
+            if ((int)$entry['worker']->id !== (int)$assigned->cover_user_id) continue;
+            if ($entry['state'] === 'Blocked') return $entry['reason'];
+            if ($entry['state'] === 'CallIn') return $assigned->cover_mode === 'OffCallIn'
+                ? 'The separate authorised Off-day call-in is no longer active.'
+                : 'The worker is now Off; a separate authorised call-in would be required.';
+            if ($entry['mode'] !== $assigned->cover_mode
+                || ($assigned->cover_mode === 'OffCallIn'
+                    && (!$entry['extra'] || (int)$entry['extra']->id !== (int)$assigned->extra_day_id)))
+                return 'The worker’s published Shift or Off-day authorisation has changed.';
+            return '';
+        }
+        return 'The cover worker is no longer active in the required job role.';
     }
 
     /** One month at a time. Every row is a *published* sick Shift, even if no
