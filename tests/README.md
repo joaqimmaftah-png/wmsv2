@@ -72,6 +72,12 @@ change the result.
 
 On a **disposable** MySQL 8 or MariaDB 10.4 database migrated to 0018, the CI workflow also runs `tests/annual_plan_live.py` with a PHP HTTP server and test accounts created via `scripts/create-admin.php`. It exercises full-year generation and publication, manager/worker access, date overrides, cross-year leave clipping, the leave reminder bell, manual attendance, both Off-day compensation routes, payroll CSV safety and reversible replacement Off days. It requires `WMS_TEST_DESTRUCTIVE=1` and DB environment variables; **never run it on production**. CI runs it after the existing UI/end-to-end suite so its published test schedule cannot affect earlier checks.
 
+## Sick-shift cover verification
+
+`php tests/run.php` exercises the finder policy (published Shift, matching site/role/position/skill and certificate, Off call-in, existing cover, leave, actual attendance, workload ranking) and `node tests/shift_roster_ux.js` checks role-gated links and approval forms. Neither test executes SQL or real HTTP.
+
+On a **disposable database migrated to 0019**, `tests/sick_cover_live.py` runs **after** `tests/annual_plan_live.py` and reuses its published future year plus five CI roster workers. It tests permissions, an uncovered/no-candidate vacancy, certificate and site conflicts, server-side revalidation, duplicate-assignment rejection, Off-day availability attestation and compensation, cancellation, annual roster/CSV projections, legacy approved Sick Leave, and the separation from attendance. It needs a running PHP server, MySQL CLI, the CI fixture accounts and `WMS_TEST_DESTRUCTIVE=1`; **never run it on production**. The database job also verifies that 0019 applies to an existing 0018 schema on both supported engines.
+
 ## What the dependency-free unit runner does not cover
 
 - Database behavior, migrations and report SQL; use the separate real-database

@@ -69,7 +69,7 @@ def session(email):
     return op
 
 
-def submit(op, path, fields, token_path, expected_status=200):
+def submit(op, path, fields, token_path):
     token = csrf(text(op, token_path))
     payload = urllib.parse.urlencode(list(fields.items()) + [('csrf_token_wms', token)], doseq=True).encode()
     try:
@@ -78,7 +78,7 @@ def submit(op, path, fields, token_path, expected_status=200):
         r = error
     code, url, raw = r.status, r.geturl(), r.read()
     html = raw.decode('utf-8', 'replace')
-    assert code == expected_status and not re.search(r'Fatal error|Database Error|Uncaught', html), (path, code, url, html[:400])
+    assert code == 200 and not re.search(r'Fatal error|Database Error|Uncaught', html), (path, code, url, html[:400])
     return url, html
 
 
@@ -88,11 +88,11 @@ def cover(uid, date):
     return rows[0] if rows else None
 
 
-def approve(op, absent, date, candidate, token_path, expected_status=200, **fields):
+def approve(op, absent, date, candidate, token_path, **fields):
     return submit(op, '/team/roster_cover_approve', {
         'user_id': absent, 'date': date, 'cover_user_id': candidate,
         'reason': 'Supervisor checked qualified shift coverage', **fields,
-    }, token_path, expected_status)
+    }, token_path)
 
 
 try:
@@ -144,8 +144,8 @@ try:
     assert 'CI Remote' in shortlist and 'Work site is missing or does not match' in shortlist
     manager_preview = text(manager, url1)
     assert 'CI Payroll' in manager_preview and 'name="cover_user_id"' not in manager_preview
-    approve(manager, absent, D1, on_shift, '/users/profile', expected_status=404, capacity_checked='1')
-    assert cover(absent, D1) is None, 'Manager must never approve'
+    denied_url, _ = approve(manager, absent, D1, on_shift, '/users/profile', capacity_checked='1')
+    assert denied_url.endswith('/dashboard') and cover(absent, D1) is None, 'Manager must never approve'
     approve(admin, absent, D1, on_shift, url1)
     assert cover(absent, D1) is None, 'Capacity check is required'
     approve(admin, absent, D1, on_shift, url1, capacity_checked='1')
@@ -206,9 +206,9 @@ try:
     assert 'Covering team Shift' in text(admin, backup_calendar)
     status, _, data = page(admin, f'/team/annual_roster_csv?year={FUTURE}&user={off}')
     assert status == 200 and b'Off call-in cover' in data
-    submit(manager, '/team/roster_cover_cancel', {'cover_id': c2[0], 'date': D2, 'user_id': absent,
-                                                  'reason': 'Manager cannot cancel'}, '/users/profile', expected_status=404)
-    assert cover(absent, D2) == c2
+    denied_url, _ = submit(manager, '/team/roster_cover_cancel', {'cover_id': c2[0], 'date': D2, 'user_id': absent,
+                                                  'reason': 'Manager cannot cancel'}, '/users/profile')
+    assert denied_url.endswith('/dashboard') and cover(absent, D2) == c2
     submit(admin, '/team/roster_cover_cancel', {'cover_id': c2[0], 'date': D2, 'user_id': absent,
                                                 'reason': 'Worker no longer available'}, url2)
     assert cover(absent, D2)[2] == 'Cancelled'

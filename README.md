@@ -61,7 +61,7 @@ passwords. See [`SYSTEM.md` §18](SYSTEM.md) for the full register.
 | Pending Spare Parts | Matches parts requested on open work orders against stock; Allocate → Issue reservations; in-app availability alerts when stock arrives |
 | Suppliers & Orders | Supplier master with contacts and part catalogue; purchase-order pipeline with measured lead-time estimates; partial deliveries, GRN (goods receipt note) per delivery, order documents |
 | Lubricants | Lube types, per-equipment-type specifications, consumption recording with variance, monthly budget, PM-driven requirement vs actual compliance |
-| Team | Staff list on the same `users` table, daily attendance, leave requests/approval with automatic attendance days and per-type balances, certifications with expiry refresh and document upload, monthly attendance report, editable shift roster (shift types + weekly assignments) |
+| Team | Staff directory, separate actual attendance, certifications, approved exceptional leave requests, published annual Shift/Off/leave plans and reminders, supervisor-approved sick Shift cover with ranked candidates and compensated Off-day call-ins, weekly roster and exports |
 | Attendance punches | QR + GPS check-in / check-out: geofenced sites (coordinates + radius + accuracy limit), a supervisor's site screen showing a signed code that rotates every minute, a phone page that records a server-timestamped punch only when both the code and the position check out, supervisor corrections with a reason, and an optional gate that limits work-order assignment to technicians who are on site — see [`ATTENDANCE_WORKFLOW.md`](ATTENDANCE_WORKFLOW.md) |
 | Users & Settings | Role-based user administration (Supervisor only); system settings; sign-in security screen (throttling policy + security events) |
 | Reports | Daily/weekly/monthly reports, MTTR/MTBF, lube compliance, store registers (issue/receipt/reorder), asset register (+ Excel import), annual report/plan, service-kit recommendations, workshop daily/weekly reports, and the W36 weekly fleet report (screen, Excel, print, publish/freeze) |
@@ -346,6 +346,13 @@ so even changes in different weeks wait for one another. Deploy all instances
 together; older code or direct SQL that bypasses the lock is unsafe. Validate
 migrations, concurrent operations and role workflows on the actual production
 database version in staging before resuming writes.
+
+Migration **0018** adds published annual Shift/Off/leave plans without changing
+actual attendance; **0019** adds the Sick Shift Cover finder. Supervisors must
+approve ranked replacements. An Off-day worker needs an explicitly authorised
+Pay/replacement-Off call-in and confirmed availability. See
+[`database/migrations/README.md`](database/migrations/README.md#sick-shift-cover-rollout-0019)
+for matching rules, rollout and reconciliation instructions.
 
 ## Deployment (cPanel production checklist)
 
