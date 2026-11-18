@@ -307,15 +307,33 @@ class Workforce_cover_model extends CI_Model {
         if ($candidate['state'] === 'CallIn') {
             if (!$availability_confirmed || !in_array($compensation, array('Pay','TimeOff'), TRUE))
                 return $this->fail('An Off day requires confirmed worker availability and a Pay or replacement-Off route.');
+            // The worker/date exception is unique. A cancelled, unused call-in
+            // can be explicitly reauthorised on the same date, with new terms
+            // and a new event; inserting another row would violate that key.
+            // Never resurrect confirmed work or alter a live exception.
+            $previous_extra = $this->db->where('user_id', (int)$candidate_id)
+                ->where('work_date', $date)->get('workforce_plan_extra_days')->row();
+            if ($previous_extra && ($previous_extra->status !== 'Cancelled' || $previous_extra->settlement !== 'Open'))
+                return $this->fail('The Off-day call-in changed. Refresh the candidate list.');
             // Extra work and cover are authorised atomically, with independent
             // evidence and compensation. Never turn the base Off into a Shift.
-            $this->db->insert('workforce_plan_extra_days', array(
-                'user_id' => (int)$candidate_id, 'work_date' => $date,
-                'shift_id' => (int)$vacancy['shift']->id, 'status' => 'Planned',
-                'compensation' => $compensation, 'settlement' => 'Open',
+            $extra_values = array('shift_id' => (int)$vacancy['shift']->id,
+                'status' => 'Planned', 'compensation' => $compensation, 'settlement' => 'Open',
+                'replacement_date' => NULL, 'replaced_shift_id' => NULL,
                 'reason' => trim($reason), 'approved_by' => (int)$actor,
-                'approved_at' => date('Y-m-d H:i:s')));
-            $extra_id = (int)$this->db->insert_id(); $created = 1;
+                'approved_at' => date('Y-m-d H:i:s'),
+                'confirmed_by' => NULL, 'confirmed_at' => NULL, 'confirmed_hours' => NULL,
+                'payroll_reference' => NULL, 'settled_by' => NULL, 'settled_at' => NULL);
+            if ($previous_extra) {
+                $extra_id = (int)$previous_extra->id;
+                $this->db->where('id', $extra_id)->update('workforce_plan_extra_days', $extra_values);
+            } else {
+                $extra_values['user_id'] = (int)$candidate_id;
+                $extra_values['work_date'] = $date;
+                $this->db->insert('workforce_plan_extra_days', $extra_values);
+                $extra_id = (int)$this->db->insert_id();
+            }
+            $created = 1;
             $this->event((int)substr($date, 0, 4), $candidate_id, $date, 'Off-day work planned',
                 array('shift_id' => (int)$vacancy['shift']->id, 'compensation' => $compensation,
                     'purpose' => 'Sick shift cover', 'reason' => trim($reason)), $actor);

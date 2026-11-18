@@ -1034,8 +1034,11 @@ $clean_reset_url = site_url('team') . ($view_mode !== 'table' ? ('?view=' . rawu
               <?php endif; ?>
               <?php if ($w->planned_today !== '' && $w->expected_on_site === FALSE): ?>
                 <span class="badge b-secondary" style="margin-top:4px;font-size:10px;" title="Published plan; live on-site status is tracked separately">Not expected on site · <?= htmlspecialchars($w->planned_today, ENT_QUOTES, 'UTF-8') ?></span>
-              <?php elseif ($w->planned_today === 'Off' && $w->expected_on_site === TRUE): ?>
+              <?php elseif (strpos($w->planned_today, 'Off') === 0 && $w->expected_on_site === TRUE): ?>
                 <span class="badge b-warning" style="margin-top:4px;font-size:10px;">Off · extra work approved</span>
+              <?php endif; ?>
+              <?php if (!empty($w->cover_mode_today)): ?>
+                <span class="badge b-warning" style="margin-top:4px;font-size:10px;" title="Published sick-shift cover; actual attendance is separate"><?= $w->cover_mode_today === 'OffCallIn' ? 'Off · call-in cover duty' : 'On-shift cover duty' ?></span>
               <?php endif; ?>
             </td>
 
@@ -1211,6 +1214,9 @@ $clean_reset_url = site_url('team') . ($view_mode !== 'table' ? ('?view=' . rawu
                   <span class="tm-site-pill"><?= htmlspecialchars($w->site, ENT_QUOTES, 'UTF-8') ?></span>
                 <?php else: ?>
                   <span style="font-size:11.5px;color:var(--t3);"><?= htmlspecialchars(ucfirst($w->role_name), ENT_QUOTES, 'UTF-8') ?></span>
+                <?php endif; ?>
+                <?php if (!empty($w->cover_mode_today)): ?>
+                  <span class="badge b-warning" title="Published sick-shift cover; actual attendance is separate"><?= $w->cover_mode_today === 'OffCallIn' ? 'Off · call-in cover duty' : 'On-shift cover duty' ?></span>
                 <?php endif; ?>
               </div>
               <div class="tm-row-actions">

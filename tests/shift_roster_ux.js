@@ -15,6 +15,8 @@ const coverView = src('application/views/team/roster_cover.php');
 const navigation = src('application/helpers/navigation_helper.php');
 const attendance = src('application/views/team/attendance.php');
 const teamModel = src('application/models/Team_model.php');
+const teamView = src('application/views/team/index.php');
+const usersCtl = src('application/controllers/Users.php');
 
 // Day-level planning is never the retired one-shift-per-week write workflow.
 assert.match(ctl, /function _build_shift_roster_dataset\(/);
@@ -107,4 +109,12 @@ assert.ok(annual.includes('Find / review sick Shift cover') && annual.includes('
   && attendance.includes('Covering sick Shift'), 'cover is visible in year, month, week and actual attendance context');
 assert.ok(navigation.includes("'Sick Shift Cover'") && navigation.includes("'team/roster_cover' => array(1, 4)"),
   'only planners can reach the finder from navigation');
+assert.ok(cover.includes("$previous_extra->status !== 'Cancelled'") && cover.includes("->update('workforce_plan_extra_days', $extra_values)"),
+  'a cancelled, unused Off-day exception can be explicitly reauthorised on the same unique worker/date');
+assert.ok(teamModel.includes("$sources['workforce_plan_cover'] = 'shift_id'")
+  && usersCtl.includes("array('workforce_plan_cover', 'absent_user_id')")
+  && usersCtl.includes("array('workforce_plan_cover', 'cover_user_id')"),
+  'historical cover prevents shift and account deletion even after cancellation');
+assert.ok(teamModel.includes("'cover_mode_today'") && teamView.includes('Off · call-in cover duty')
+  && teamView.includes('On-shift cover duty'), 'the staff directory labels both types of cover separately');
 console.log('Annual workforce plan & sick-shift cover structural checks passed.');

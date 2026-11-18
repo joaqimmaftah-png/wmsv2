@@ -2290,7 +2290,7 @@ class Team extends MY_Controller {
         ), $id ?: NULL);
 
         if (!$saved) {
-            $this->session->set_flashdata('error', 'The shift was not saved. If it is already used in a plan, create a new shift type for different hours.');
+            $this->session->set_flashdata('error', 'The shift was not saved. A shift used in a roster, extra work or cover history cannot be edited; create a new type for different hours.');
             redirect('team/shift_roster?week=' . $week);
             return;
         }
@@ -2299,7 +2299,7 @@ class Team extends MY_Controller {
         redirect('team/shift_roster?week=' . $week);
     }
 
-    /** Delete a shift type that is not assigned to anybody. */
+    /** Delete only an unused shift type, never one retained in plan history. */
     public function shift_delete($id = NULL) {
         if (!$this->require_post()) return;
         if (!$this->is_supervisor()) {
@@ -2316,7 +2316,7 @@ class Team extends MY_Controller {
 
         if (!$this->Team_model->delete_shift($id)) {
             $this->session->set_flashdata('error',
-                'This shift is still assigned on the roster. Clear the assignments first.');
+                'This shift is referenced by a roster, extra work or cover history. Keep it for the audit trail; create a new shift type instead.');
         } else {
             $this->session->set_flashdata('success', 'Shift deleted.');
         }

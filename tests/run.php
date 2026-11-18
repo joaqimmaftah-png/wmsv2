@@ -1376,6 +1376,14 @@ check('TM-01 Stored XSS Hardening in team/view.php: worker photo, name, employee
 // TM-03 .. TM-10 Full PHP Render & XSS/Contrast/RBAC Audit of application/views/team/index.php
 $rosterById = array();
 foreach ($rosterRows as $rw) { $rosterById[(int)$rw->id] = $rw; }
+// Render both cover modes as they would be projected from a published plan;
+// an Off call-in must keep its Off badge instead of looking like a free shift.
+$rosterRows[0]->cover_mode_today = 'OnShift';
+$rosterRows[0]->planned_today = 'Shift · Cover duty';
+$rosterRows[0]->expected_on_site = TRUE;
+$rosterRows[1]->cover_mode_today = 'OffCallIn';
+$rosterRows[1]->planned_today = 'Off · Cover duty';
+$rosterRows[1]->expected_on_site = TRUE;
 
 $tmVars = array(
     'workers'        => array_slice($rosterRows, 0, 5),
@@ -1467,6 +1475,10 @@ check('TM-08 & TM-09 Dual View Mode + Accessible Staff Inspector Drawer rendered
     strpos($tmSupHtml, 'data-set-view="cards"') !== FALSE
     && strpos($tmSupHtml, 'class="tm-cards-grid"') !== FALSE
     && strpos($tmSupHtml, 'id="tmDrawer" role="dialog" aria-modal="true"') !== FALSE);
+check('Directory: cover duties visible in table and cards; Off call-in retains approved extra-work context',
+    substr_count($tmSupHtml, '>On-shift cover duty</span>') === 2
+    && substr_count($tmSupHtml, '>Off · call-in cover duty</span>') === 2
+    && strpos($tmSupHtml, '>Off · extra work approved</span>') !== FALSE);
 
 /* ─────────────────────────────────────────────────────────────────────────
    Work Orders DataTable Audit & Redesign Suite (WO-01 .. WO-09)

@@ -157,17 +157,36 @@ try:
     assert count(f"SELECT COUNT(*) FROM attendance WHERE user_id={on_shift} AND date='{D1}'") == 0
     assert 'Cover arranged' in text(worker, roster)
     assert 'Cover arranged' in text(worker, f'/team/annual_roster?year={FUTURE}&user={absent}')
-    db(f"UPDATE users SET site='Remote Yard' WHERE id={on_shift}")
+    # An actual account edit (not just a direct SQL change) must flag an
+    # already approved assignment; correcting the profile clears the warning.
+    profile = db(f"SELECT first_name,last_name,email,role_id,position,skill_level,status,COALESCE(phone,'') "
+                 f"FROM users WHERE id={on_shift}")[0]
+    profile_fields = dict(zip(('first_name', 'last_name', 'email', 'role_id',
+                               'position', 'skill_level', 'status', 'phone'), profile))
+    edit_url = f'/users/edit/{on_shift}'
+    submit(admin, edit_url, {**profile_fields, 'site': 'Remote Yard'}, edit_url)
+    assert db(f'SELECT site FROM users WHERE id={on_shift}')[0][0] == 'Remote Yard'
     review = text(admin, url1)
     assert 'Cover needs review.' in review and 'Work site is missing or does not match' in review
-    db(f"UPDATE users SET site='Main Workshop' WHERE id={on_shift}")
-    db(f"UPDATE certifications SET expiry_date='{dt.date.today().isoformat()}' "
-       f"WHERE user_id={on_shift} AND cert_name='Hydraulic Safety'")
+    submit(admin, edit_url, {**profile_fields, 'site': 'Main Workshop'}, edit_url)
+    submit(admin, edit_url, {**profile_fields, 'site': 'Main Workshop', 'status': 'Inactive'}, edit_url)
+    assert 'Cover needs review.' in text(admin, url1)
+    submit(admin, edit_url, {**profile_fields, 'site': 'Main Workshop'}, edit_url)
+    # A supervisor's certificate renewal/correction is also reflected in the
+    # cover review; stored certification.status is not the matching criterion.
+    cert_id = int(db(f"SELECT id FROM certifications WHERE user_id={on_shift} "
+                     f"AND cert_name='Hydraulic Safety'")[0][0])
+    cert_edit = f'/team/edit_certification/{cert_id}'
+    cert_profile = f'/team/view/{on_shift}'
+    cert_fields = {'cert_name': 'Hydraulic Safety', 'issued_date': dt.date.today().isoformat()}
+    submit(admin, cert_edit, {**cert_fields, 'expiry_date': dt.date.today().isoformat()}, cert_profile)
     review = text(admin, url1)
     assert 'Cover needs review.' in review and 'Missing current certificate: Hydraulic Safety' in review
-    db(f"UPDATE certifications SET expiry_date='{FUTURE}-12-31' "
-       f"WHERE user_id={on_shift} AND cert_name='Hydraulic Safety'")
+    submit(admin, cert_edit, {**cert_fields, 'expiry_date': f'{FUTURE}-12-31'}, cert_profile)
     assert 'Cover needs review.' not in text(admin, url1)
+    # Historic references cannot be deleted with the user account.
+    _, refusal = submit(admin, f'/users/delete/{on_shift}', {}, edit_url)
+    assert 'sick-shift duty cover(s)' in refusal and cover(absent, D1) == c1
     pay_calendar = f'/team/annual_roster?year={FUTURE}&user={on_shift}&view=month&month={int(D1[5:7])}'
     assert 'Covering team Shift' in text(pay_worker, pay_calendar)
     assert 'Find cover' not in text(pay_worker, pay_calendar)
@@ -227,10 +246,20 @@ try:
     assert db(f"SELECT status FROM workforce_plan_extra_days WHERE id={c2[4]}")[0][0] == 'Cancelled'
     assert db(f"SELECT day_type FROM workforce_plan_days WHERE user_id={off} AND work_date='{D2}'")[0][0] == 'Off'
     assert 'Needs cover' in text(admin, url2)
+    # The cancelled exception still owns the unique worker/date key. A fresh,
+    # expressly agreed call-in reauthorises that unused row, preserving its id
+    # and audit trail instead of failing with a duplicate-key error.
+    approve(admin, absent, D2, off, url2, capacity_checked='1',
+            availability_confirmed='1', compensation='Pay')
+    assert cover(absent, D2)[0] == c2[0] and cover(absent, D2)[4] == c2[4]
+    assert db(f"SELECT status,compensation FROM workforce_plan_extra_days WHERE id={c2[4]}")[0] == ['Planned', 'Pay']
+    submit(admin, '/team/roster_cover_cancel', {'cover_id': c2[0], 'date': D2, 'user_id': absent,
+                                                'reason': 'Change cover to on-shift worker'}, url2)
+    assert db(f"SELECT status FROM workforce_plan_extra_days WHERE id={c2[4]}")[0][0] == 'Cancelled'
     approve(admin, absent, D2, on_shift, url2, capacity_checked='1')
     assert cover(absent, D2)[0] == c2[0] and cover(absent, D2)[3] == 'OnShift'
     assert count(f"SELECT COUNT(*) FROM workforce_plan_events WHERE user_id={absent} "
-                 f"AND event_type IN ('Sick cover assigned','Sick cover cancelled') AND work_date='{D2}'") == 3
+                 f"AND event_type IN ('Sick cover assigned','Sick cover cancelled') AND work_date='{D2}'") == 5
 
     # Approved exceptional Sick Leave requests are also eligible, and cannot
     # be reversed while a cover still relies on their published absence.
@@ -255,6 +284,22 @@ try:
     assert db(f'SELECT status FROM leave_requests WHERE id={leave_id}')[0][0] == 'Rejected'
     status, _, _ = page(admin, req_url)
     assert status == 404, 'Rejected sick leave no longer needs cover'
+
+    # A shift type referenced ONLY by cancelled cover history must not be
+    # offered for deletion. The model should explain the refusal before a
+    # database FK error; an active plan-day reference is not needed for this.
+    db(f"INSERT INTO shifts (name,start_time,end_time) "
+       f"VALUES ('CI Cover History {FUTURE}','05:00:00','13:00:00')")
+    historic_shift = int(db(f"SELECT id FROM shifts WHERE name='CI Cover History {FUTURE}' "
+                            f"ORDER BY id DESC LIMIT 1")[0][0])
+    history_date = (dt.date.fromisoformat(D3) + dt.timedelta(days=7)).isoformat()
+    db(f"INSERT INTO workforce_plan_cover "
+       f"(absent_user_id,work_date,shift_id,cover_user_id,cover_mode,status,reason) "
+       f"VALUES ({second},'{history_date}',{historic_shift},{on_shift},'OnShift',"
+       f"'Cancelled','Historical shift definition')")
+    _, refusal = submit(admin, f'/team/shift_delete/{historic_shift}', {'week': D1}, '/team/shift_roster')
+    assert 'referenced by a roster, extra work or cover history' in refusal
+    assert count(f'SELECT COUNT(*) FROM shifts WHERE id={historic_shift}') == 1
 
     print('SICK SHIFT COVER LIVE HTTP + DATABASE CHECKS PASSED')
 except BaseException:

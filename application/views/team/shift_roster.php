@@ -235,7 +235,7 @@ $all_days = $summary['worker_days'];
   <div class="sr-shift-row">
     <?php if ($used): ?>
       <strong><?= $esc($sh->name) ?></strong><span class="sr-micro" style="margin:0"><?= substr($sh->start_time, 0, 5) ?>–<?= substr($sh->end_time, 0, 5) ?> · <?= $esc($sh->description) ?></span>
-      <small style="color:var(--t3)">Locked · <?= $used ?> schedule reference<?= $used === 1 ? '' : 's' ?>. Create a new shift for different hours.</small>
+      <small style="color:var(--t3)">Locked · <?= $used ?> roster or history reference<?= $used === 1 ? '' : 's' ?>. Create a new shift for different hours.</small>
     <?php else: ?>
     <?= form_open('team/shift_save', array('class' => 'flex ai-c gap-10', 'style' => 'flex-wrap:wrap')) ?>
       <input type="hidden" name="shift_id" value="<?= $sid ?>"><input type="hidden" name="week" value="<?= $week_start ?>">
