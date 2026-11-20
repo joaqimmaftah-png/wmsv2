@@ -21,6 +21,17 @@
   </div>
   <?= form_open('team/attendance') ?>
   <input type="hidden" name="date" value="<?= htmlspecialchars((string)($date), ENT_QUOTES, 'UTF-8') ?>">
+  <div id="attWorkerTools" class="flex ai-c jb gap-10" style="flex-wrap:wrap;padding:12px 16px 0;" hidden>
+    <div class="flex ai-c gap-10" style="flex-wrap:wrap;">
+      <label for="attWorkerSearch" class="sr-only">Search team members</label>
+      <input id="attWorkerSearch" type="search" class="form-control" placeholder="Search name, employee ID, position…" style="width:min(330px,75vw);">
+      <label for="attWorkerPageSize" style="font-size:12px;color:var(--t3);">Rows per page</label>
+      <select id="attWorkerPageSize" class="form-select" style="width:auto;">
+        <option value="25" selected>25</option><option value="50">50</option><option value="100">100</option><option value="all">All</option>
+      </select>
+    </div>
+    <span id="attWorkerSummary" aria-live="polite" style="font-size:12px;color:var(--t3);"></span>
+  </div>
   <div style="overflow-x:auto;">
     <table class="tbl" style="margin-top:12px;">
       <thead>
@@ -37,7 +48,7 @@
           if ($cell && $cell['plan_status'] === 'Legacy' && $cell['kind'] === 'Unplanned') $expected = 'No published plan';
           elseif ($cell && $cell['plan_status'] === 'Legacy') $expected .= ' · legacy';
         ?>
-        <tr>
+        <tr data-attendance-worker data-search="<?= htmlspecialchars(trim((string)$w->employee_id . ' ' . (string)$w->first_name . ' ' . (string)$w->last_name . ' ' . (string)$w->position), ENT_QUOTES, 'UTF-8') ?>">
           <td class="mono" style="font-size:11px;color:var(--t3);"><?= htmlspecialchars((string)$w->employee_id, ENT_QUOTES, 'UTF-8') ?></td>
           <td class="fw-600" style="font-size:12.5px;"><?= htmlspecialchars($w->first_name.' '.$w->last_name, ENT_QUOTES, 'UTF-8') ?></td>
           <td style="font-size:12px;color:var(--t3);"><?= htmlspecialchars((string)$w->position, ENT_QUOTES, 'UTF-8') ?></td>
@@ -68,11 +79,50 @@
         <?php endforeach; else: ?>
         <tr><td colspan="8" style="text-align:center;padding:48px;color:var(--t3);">No workers found</td></tr>
         <?php endif; ?>
+        <tr id="attNoWorkerMatches" hidden><td colspan="8" style="text-align:center;padding:32px;color:var(--t3);">No team members match this search.</td></tr>
       </tbody>
     </table>
   </div>
-  <div class="flex ai-c gap-10" style="justify-content:flex-end;padding:20px 22px 22px;">
+  <div id="attWorkerPager" class="flex ai-c jb gap-10" style="flex-wrap:wrap;padding:12px 22px 0;" hidden>
+    <button id="attWorkerPrev" type="button" class="btn btn-ghost btn-sm">← Previous</button>
+    <span id="attWorkerPage" aria-live="polite" style="font-size:12px;color:var(--t3);"></span>
+    <button id="attWorkerNext" type="button" class="btn btn-ghost btn-sm">Next →</button>
+  </div>
+  <div class="flex ai-c jb gap-10" style="flex-wrap:wrap;padding:16px 22px 22px;">
+    <small style="color:var(--t3);">Search and pages only change what is visible. Saving submits the full team form; blank “Not recorded” rows remain untouched.</small>
     <button type="submit" class="btn btn-primary">Save Attendance</button>
   </div>
   <?= form_close() ?>
 </div>
+<script>
+(function(){
+  var rows=Array.prototype.slice.call(document.querySelectorAll('tr[data-attendance-worker]'));
+  if(!rows.length)return;
+  var tools=document.getElementById('attWorkerTools'), search=document.getElementById('attWorkerSearch');
+  var size=document.getElementById('attWorkerPageSize'), summary=document.getElementById('attWorkerSummary');
+  var pager=document.getElementById('attWorkerPager'), previous=document.getElementById('attWorkerPrev');
+  var next=document.getElementById('attWorkerNext'), pageLabel=document.getElementById('attWorkerPage');
+  var noMatches=document.getElementById('attNoWorkerMatches'), page=1;
+  tools.hidden=false;
+  function render(){
+    var query=search.value.trim().toLowerCase();
+    var matches=rows.filter(function(row){return (row.getAttribute('data-search')||'').toLowerCase().indexOf(query)!==-1;});
+    var pageSize=size.value==='all'?Math.max(matches.length,1):Math.max(1,parseInt(size.value,10)||25);
+    var pageCount=Math.max(1,Math.ceil(matches.length/pageSize));
+    page=Math.max(1,Math.min(page,pageCount));
+    var start=(page-1)*pageSize, end=Math.min(start+pageSize,matches.length);
+    rows.forEach(function(row){row.hidden=true;});
+    matches.slice(start,end).forEach(function(row){row.hidden=false;});
+    noMatches.hidden=matches.length!==0;
+    summary.textContent=matches.length?'Showing '+(start+1)+'–'+end+' of '+matches.length+' team members':'Showing 0 of 0 team members';
+    pager.hidden=pageCount<=1;
+    pageLabel.textContent='Page '+page+' of '+pageCount;
+    previous.disabled=page<=1;next.disabled=page>=pageCount;
+  }
+  search.addEventListener('input',function(){page=1;render();});
+  size.addEventListener('change',function(){page=1;render();});
+  previous.addEventListener('click',function(){page--;render();});
+  next.addEventListener('click',function(){page++;render();});
+  render();
+})();
+</script>

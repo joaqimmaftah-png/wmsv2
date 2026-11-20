@@ -93,6 +93,12 @@ assert.ok(navigation.includes("'Annual Workforce Plan'") && navigation.includes(
   'role-scoped navigation offers the annual calendar');
 assert.ok(attendance.includes('Published plan') && attendance.includes('Not recorded') && attendance.includes('Actual status'),
   'actual attendance remains separate and unrecorded days do not become Present by default');
+assert.ok(attendance.includes('id="attWorkerSearch"') && attendance.includes('id="attWorkerPageSize"')
+  && attendance.includes('attWorkerPrev') && attendance.includes('attWorkerNext')
+  && attendance.includes('data-attendance-worker') && attendance.includes('Showing '),
+  'daily attendance roster supports searching and paging through all returned team members');
+assert.ok(attendance.includes('Saving submits the full team form') && attendance.includes('row.hidden=true'),
+  'pagination only hides rows; save still submits all entered attendance across pages');
 assert.ok(teamModel.includes('planned_today') && teamModel.includes('expected_on_site') && teamModel.includes('on_site_today'),
   'staff directory has both expected and actual site state');
 assert.ok(ctl.includes('public function roster_cover()') && ctl.includes('Workforce_cover_model->shortlist('),
