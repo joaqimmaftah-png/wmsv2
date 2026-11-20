@@ -191,6 +191,18 @@ $first_day = max($year . '-01-01', $today);
         <button type="button" class="btn btn-ghost btn-sm ar-preset" data-cycle="6" data-work="4">4 on / 2 Off</button>
         <button type="button" class="btn btn-ghost btn-sm ar-preset" data-cycle="8" data-work="4">4 on / 4 Off</button>
       </div>
+      <div class="ar-split" style="margin-top:9px" aria-label="Nine-day day and night rotation">
+        <label for="arDayShift" style="margin:0">Day shift</label>
+        <select id="arDayShift" class="form-select" style="max-width:190px">
+          <option value="">Select day shift</option><?php foreach ($shifts as $shift): ?><option value="<?= (int)$shift->id ?>"><?= $e($shift->name) ?></option><?php endforeach; ?>
+        </select>
+        <label for="arNightShift" style="margin:0">Night shift</label>
+        <select id="arNightShift" class="form-select" style="max-width:190px">
+          <option value="">Select night shift</option><?php foreach ($shifts as $shift): ?><option value="<?= (int)$shift->id ?>"><?= $e($shift->name) ?></option><?php endforeach; ?>
+        </select>
+        <button type="button" class="btn btn-ghost btn-sm" id="arNineDayPreset" <?= count($shifts) < 2 ? 'disabled title="Create at least two shift types first"' : '' ?>>3 days / 3 nights / 3 Off · 9-day cycle</button>
+      </div>
+      <small class="ar-muted">Choose the two shift types first. The preset fills three day shifts, three night shifts and three Off days, starting January 1.</small>
       <div style="margin-top:12px"><label>Assign this rotation to (up to 100 staff)</label>
       <div class="ar-pattern-people" role="group" aria-label="Workers to schedule">
         <?php foreach ($all_workers as $person): ?><label><input type="checkbox" name="user_ids[]" value="<?= (int)$person->id ?>" <?= $chosen_id === (int)$person->id ? 'checked' : '' ?>><span><?= $e($person->first_name . ' ' . $person->last_name) ?> <small class="ar-muted"><?= $e($person->employee_id) ?></small></span></label><?php endforeach; ?>
@@ -401,6 +413,17 @@ $first_day = max($year . '-01-01', $today);
     var n=parseInt(button.dataset.cycle,10),work=parseInt(button.dataset.work,10);cycle.value=n;
     days.forEach(function(row,i){row.querySelector('select').value=(i%n)<work && row.querySelector('select option[value!="Off"]') ? row.querySelector('select option[value!="Off"]').value : 'Off';});sync();
   });});
+  var nineDayPreset=document.getElementById('arNineDayPreset');
+  if(nineDayPreset) nineDayPreset.addEventListener('click',function(){
+    var dayShift=document.getElementById('arDayShift').value, nightShift=document.getElementById('arNightShift').value;
+    if(!dayShift||!nightShift){alert('Select both a day shift and a night shift.');return;}
+    if(dayShift===nightShift){alert('Choose different shift types for the day and night blocks.');return;}
+    cycle.value=9;
+    days.forEach(function(row,i){var phase=i%9,select=row.querySelector('select');
+      select.value=phase<3?dayShift:(phase<6?nightShift:'Off');
+    });
+    sync();
+  });
   form.addEventListener('submit',function(ev){var selected=form.querySelectorAll('input[name="user_ids[]"]:checked').length;
     if(!selected||selected>100){ev.preventDefault();alert('Select between 1 and 100 workers.');}});
 })();
