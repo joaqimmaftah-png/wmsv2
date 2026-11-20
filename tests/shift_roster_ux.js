@@ -66,6 +66,10 @@ assert.ok(annual.includes('ar-mini-grid') && annual.includes('ar-month-nav') && 
   'month navigation and dated states exist');
 assert.ok(annual.includes("form_open('team/roster_pattern_save'") && annual.includes('4 on / 4 Off'),
   'rotation builder covers common day-based cycles');
+assert.ok(annual.includes('3 days / 3 nights / 3 Off · 9-day cycle')
+  && annual.includes('id="arDayShift"') && annual.includes('id="arNightShift"')
+  && annual.includes('cycle.value=9') && annual.includes('phase<3?dayShift:(phase<6?nightShift:\'Off\')'),
+  'the nine-day preset assigns three day shifts, three night shifts and three Off days using chosen shift types');
 assert.ok(annual.includes("form_open('team/roster_publish'") && annual.includes('$coverage[\'missing\']'),
   'publishing has a coverage gate');
 assert.ok(annual.includes('form_open(\'team/roster_leave_save\'') && annual.includes("form_open('team/roster_leave_amend'"),
