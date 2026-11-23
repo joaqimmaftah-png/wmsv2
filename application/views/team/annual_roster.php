@@ -17,12 +17,37 @@ $link = function ($changes = array()) use ($base, $year, $chosen_id, $calendar_v
         'month' => $calendar_view === 'month' ? $month : NULL);
     return $base . '?' . http_build_query(array_filter(array_merge($p, $changes), function ($v) { return $v !== NULL && $v !== ''; }));
 };
-$label = function ($cell) use ($shifts_by_id) {
-    if ($cell['kind'] === 'Shift') return isset($shifts_by_id[$cell['shift_id']]) ? $shifts_by_id[$cell['shift_id']]->name : 'Shift';
-    if ($cell['kind'] === 'Leave') return $cell['leave_type'] ?: 'Leave';
-    return $cell['kind'] === 'Unplanned' ? 'Needs plan' : $cell['kind'];
+$calendar_keys = array(
+    'ar-shift-day' => array('D', 'Day shift'),
+    'ar-shift-night' => array('N', 'Night shift'),
+    'ar-off' => array('O', 'Off (unavailable)'),
+);
+$kind_class = function ($cell, $before) use ($shifts_by_id) {
+    if ($before) return 'ar-before';
+    if (!$cell) return 'ar-unplanned';
+    if ($cell['kind'] !== 'Shift') return 'ar-' . strtolower($cell['kind']);
+    $shift = $shifts_by_id[$cell['shift_id']] ?? NULL;
+    if (!$shift) return 'ar-shift';
+    $start = $shift->start_time ?? '';
+    $end = $shift->end_time ?? '';
+    $clock = '/^(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9])?$/D';
+    if (!preg_match($clock, $start) || !preg_match($clock, $end)) return 'ar-shift';
+    $time_order = strcmp(str_pad($end, 8, ':00'), str_pad($start, 8, ':00'));
+    if ($time_order === 0) return 'ar-shift';
+    // Overnight clocks work for custom shifts too. A named Night shift can also start after midnight.
+    return $time_order < 0 || preg_match('/\b(?:night|nuit)\b/i', $shift->name) ? 'ar-shift-night' : 'ar-shift-day';
 };
-$kind_class = function ($cell) { return 'ar-' . strtolower($cell['kind']); };
+$label = function ($cell, $class) use ($shifts_by_id, $calendar_keys) {
+    if ($class === 'ar-before') return 'Before joining';
+    if (!$cell || $cell['kind'] === 'Unplanned') return 'Needs plan';
+    if ($cell['kind'] === 'Shift') {
+        $name = $shifts_by_id[$cell['shift_id']]->name ?? 'Shift';
+        $category = $calendar_keys[$class][1] ?? '';
+        return $category !== '' && strcasecmp($name, $category) !== 0 ? $name . ' · ' . $category : $name;
+    }
+    if ($cell['kind'] === 'Leave') return $cell['leave_type'] ?: 'Leave';
+    return $cell['kind'];
+};
 $counts = array('Shift' => 0, 'Off' => 0, 'Leave' => 0, 'Holiday' => 0, 'Unplanned' => 0);
 foreach ($work as $date => $cell) {
     if ($chosen && !empty($chosen->join_date) && $date < $chosen->join_date) continue;
@@ -64,21 +89,28 @@ $first_day = max($year . '-01-01', $today);
 .ar-pager a{color:var(--blue);text-decoration:none;font-weight:700}.ar-pager a:hover{text-decoration:underline}
 .ar-legend{display:flex;gap:10px;flex-wrap:wrap;padding:10px 16px;background:var(--surface-2);border-bottom:1px solid var(--sep);font-size:10.5px;color:var(--t2)}
 .ar-dot{height:9px;width:9px;display:inline-block;border-radius:3px;margin-right:4px;vertical-align:middle}
-.ar-shift{background:var(--blue-fill);color:var(--blue)}.ar-off{background:rgba(12,123,123,.11);color:var(--teal)}
+.ar-key{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:4px;margin-right:4px;font-size:9px;font-weight:750;font-style:normal;vertical-align:middle}
+.ar-shift{background:var(--gray-fill);color:var(--t2)}
+.ar-shift-day{background:#c8e6ff;color:#174b7a}.ar-shift-night{background:#38347a;color:#fff}.ar-off{background:#d8f3e6;color:#125d4c}
 .ar-leave{background:var(--purple-fill);color:var(--purple)}.ar-holiday{background:var(--amber-fill);color:var(--amber)}
 .ar-unplanned{background:var(--red-fill);color:var(--red)}.ar-before{background:var(--gray-fill);color:var(--t3)}
 .ar-switch{display:inline-flex;border:1px solid var(--sep);border-radius:var(--r-xs);padding:2px;gap:2px}
 .ar-switch a{font-size:11px;font-weight:600;color:var(--t2);text-decoration:none;padding:5px 9px;border-radius:var(--r-xs)}.ar-switch a[aria-current="page"]{background:var(--blue-fill);color:var(--blue)}
 .ar-month-nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.ar-month-nav a{font-size:11px;text-decoration:none;color:var(--t2);padding:5px 7px;border:1px solid var(--sep);border-radius:var(--r-xs)}
 .ar-month-nav a[aria-current="page"]{background:var(--blue);color:white;border-color:var(--blue)}
-.ar-year-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:16px}
+/* Fit up to three months across the calendar even when either sidebar is open. */
+.ar-year-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,max(200px,calc((100% - 24px) / 3))),1fr));gap:12px;padding:16px}
 .ar-mini{border:1px solid var(--sep);border-radius:var(--r-sm);padding:11px;background:var(--surface)}
 .ar-mini-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;gap:7px}
 .ar-mini-head a{font-size:12px;font-weight:750;color:var(--t1);text-decoration:none}.ar-mini-head a:hover{color:var(--blue)}
 .ar-mini-head small{color:var(--t3);font-size:10px}.ar-mini-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
-.ar-mini-grid span,.ar-mini-grid a{min-width:0;text-align:center;font-size:10px;line-height:23px;height:23px;border-radius:4px;text-decoration:none}
+.ar-mini-grid span,.ar-mini-grid a{min-width:0;text-align:center;font-size:10px;line-height:23px;height:23px;border-radius:4px;text-decoration:none;white-space:nowrap}
+.ar-mini-grid a{position:relative}
+.ar-mini-code{font-size:9px;font-weight:750;margin-left:1px}
+.ar-mini-exception{position:absolute;top:3px;right:3px;width:4px;height:4px;border-radius:50%;background:currentColor}
 .ar-mini-grid .ar-weekday{font-size:9px;color:var(--t3);font-weight:650}.ar-mini-grid .ar-mute{opacity:.24}
-.ar-mini-grid a:hover{outline:2px solid var(--blue);outline-offset:-2px}.ar-mini-grid .ar-today{outline:2px solid var(--blue);outline-offset:-2px;font-weight:750}
+.ar-mini-grid a:is(:hover,:focus-visible),.ar-mini-grid .ar-today{outline:2px solid var(--blue);outline-offset:-2px}.ar-mini-grid .ar-today{font-weight:750}
+.ar-mini-grid .ar-shift-night:is(:hover,:focus-visible,.ar-today),.ar-day.ar-shift-night.ar-today{outline-color:#d8d2ff}
 .ar-month-wrap{padding:16px;overflow-x:auto}.ar-month-grid{min-width:680px;display:grid;grid-template-columns:45px repeat(7,minmax(82px,1fr));gap:5px}
 .ar-month-grid .ar-weekday{font-size:10px;font-weight:700;color:var(--t3);text-align:center;padding:3px}
 .ar-week-link{display:flex;align-items:flex-start;justify-content:center;padding-top:12px;font-size:10px;text-decoration:none;color:var(--blue);font-weight:700}
@@ -86,7 +118,9 @@ $first_day = max($year . '-01-01', $today);
 .ar-day.ar-outside{opacity:.3;background:var(--surface-2)}.ar-day.ar-today{outline:2px solid var(--blue);outline-offset:-2px}
 .ar-day-num{font-size:11px;font-weight:700;color:var(--t1)}.ar-day-state{font-size:11px;font-weight:650;line-height:1.35}
 .ar-day small{color:var(--t2);font-size:10px;line-height:1.35}.ar-day a{color:var(--blue);font-size:10px;font-weight:700;text-decoration:none;margin-top:auto}
-.ar-day a:hover{text-decoration:underline}.ar-day.ar-shift,.ar-day.ar-off,.ar-day.ar-leave,.ar-day.ar-unplanned,.ar-day.ar-holiday,.ar-day.ar-before{border-color:transparent}
+.ar-day a:hover{text-decoration:underline}.ar-day:is(.ar-shift,.ar-shift-day,.ar-shift-night,.ar-off,.ar-leave,.ar-unplanned,.ar-holiday,.ar-before){border-color:transparent}
+.ar-day:is(.ar-shift-day,.ar-shift-night,.ar-off) :is(.ar-day-num,small,a){color:inherit}
+.ar-day:is(.ar-shift-day,.ar-shift-night,.ar-off) a{text-decoration:underline;text-underline-offset:2px}
 .ar-table{border-collapse:collapse;width:100%;font-size:11.5px}.ar-table th,.ar-table td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--sep);vertical-align:middle}
 .ar-table th{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
 .ar-table td a,.ar-link{color:var(--blue);text-decoration:none;font-weight:700}.ar-table td a:hover,.ar-link:hover{text-decoration:underline}
@@ -106,10 +140,9 @@ $first_day = max($year . '-01-01', $today);
 .ar-record .ar-pill{margin-right:6px}.ar-record .ar-fields{margin:12px 0}.ar-record form{margin-top:8px}
 .ar-focus{scroll-margin-top:90px}.ar-empty{padding:35px 16px;text-align:center;color:var(--t2);font-size:12px;line-height:1.55}
 .ar-events{padding:2px 16px 12px}.ar-event{border-bottom:1px solid var(--sep);padding:9px 0;font-size:11px;color:var(--t2)}.ar-event b{color:var(--t1)}
-@media(max-width:1150px){.ar-year-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:850px){.ar-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.ar-layout{grid-template-columns:1fr}.ar-people{max-height:240px}}
-@media(max-width:590px){.ar-year-grid{grid-template-columns:1fr}.ar-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ar-pattern-days{grid-template-columns:repeat(2,minmax(0,1fr))}.ar-pattern-people{grid-template-columns:1fr}.ar-head h1{font-size:22px}}
-@media print{.ar-no-print,.ar-actions,.ar-staff-form,.ar-people,.ar-pager{display:none!important}.ar-layout{display:block}.ar-panel{break-inside:avoid}.ar-year-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:590px){.ar-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ar-pattern-days{grid-template-columns:repeat(2,minmax(0,1fr))}.ar-pattern-people{grid-template-columns:1fr}.ar-head h1{font-size:22px}}
+@media print{.ar-no-print,.ar-actions,.ar-staff-form,.ar-people,.ar-pager{display:none!important}.ar-layout{display:block}.ar-panel{break-inside:avoid}.ar-year-grid{grid-template-columns:repeat(3,1fr)}.ar-legend,.ar-mini-grid,.ar-month-grid{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
 <header class="ar-head">
   <div><div class="ar-kicker">Workforce / Annual planning</div><h1><?= $is_planner ? 'Annual Workforce Plan' : 'My Annual Schedule' ?></h1>
@@ -241,7 +274,13 @@ $first_day = max($year . '-01-01', $today);
           <a href="<?= $e($link(array('view' => 'month', 'month' => $month))) ?>#arCalendar" <?= $calendar_view === 'month' ? 'aria-current="page"' : '' ?>>Month</a>
           <a href="<?= site_url('team/shift_roster?week=' . $year . '-' . sprintf('%02d', $month) . '-01&q=' . rawurlencode($chosen->employee_id)) ?>">Week ↗</a>
         </div></div>
-      <div class="ar-legend"><span><i class="ar-dot ar-shift"></i>Shift</span><span><i class="ar-dot ar-off"></i>Off (unavailable)</span><span><i class="ar-dot ar-leave"></i>Leave</span><span><i class="ar-dot ar-holiday"></i>Holiday</span><span><i class="ar-dot ar-unplanned"></i>Needs plan</span><span>● Extra work is shown <em>on top of</em> Off</span></div>
+      <div class="ar-legend">
+        <?php foreach ($calendar_keys as $class => list($code, $name)): ?>
+          <span><i class="ar-key <?= $class ?>" aria-hidden="true"><?= $code ?></i><?= $name ?></span>
+        <?php endforeach; ?>
+        <span><i class="ar-dot ar-leave" aria-hidden="true"></i>Leave</span><span><i class="ar-dot ar-holiday" aria-hidden="true"></i>Holiday</span><span><i class="ar-dot ar-unplanned" aria-hidden="true"></i>Needs plan</span>
+        <span>• Extra work, replacement Off or sick-shift cover</span>
+      </div>
       <?php if (!$ready || (!$year_row && !$is_planner)): ?>
         <div class="ar-empty">No published plan is available for this year. The <a href="<?= site_url('team/shift_roster') ?>">weekly view</a> may show earlier legacy shifts.</div>
       <?php elseif ($calendar_view === 'year'): ?>
@@ -254,24 +293,29 @@ $first_day = max($year . '-01-01', $today);
         ?>
           <article class="ar-mini"><div class="ar-mini-head"><a href="<?= $e($link(array('view' => 'month', 'month' => $m))) ?>#arCalendar"><?= $start->format('F') ?> ↗</a><small><?= $mini_shifts ?> shifts</small></div>
             <div class="ar-mini-grid"><?php foreach (array('M','T','W','T','F','S','S') as $weekday): ?><span class="ar-weekday"><?= $weekday ?></span><?php endforeach; ?>
-              <?php for ($n = 0; $n < 42; $n++): $d = $grid->modify('+' . $n . ' days')->format('Y-m-d'); $is_in = substr($d,0,7) === $start->format('Y-m');
-                $cell = $is_in && isset($work[$d]) ? $work[$d] : NULL; $before = $chosen->join_date && $d < $chosen->join_date;
-                $cover_note = '';
-                if ($cell && !$before) {
-                    if (!empty($cell['covering'])) $cover_note = $cell['covering']->cover_mode === 'OffCallIn'
-                        ? 'Cover duty · authorised Off call-in' : 'Cover duty · on-shift';
-                    elseif (!empty($cell['covered_by'])) $cover_note = 'Cover arranged';
-                    elseif ($is_planner && $published && $d >= $today && $cell['kind'] === 'Leave'
-                        && $cell['leave_type'] === 'Sick Leave' && $cell['base_kind'] === 'Shift')
-                        $cover_note = 'Needs sick Shift cover';
-                }
-                $day_title = $d . ': ' . ($before ? 'Before joining' : ($cell ? $label($cell)
-                    . ($cell['extra'] ? ' · authorised extra work' : ($cell['replacement']
-                        ? ' · replacement Off for ' . $cell['replacement']->work_date : '')) : 'Needs plan'));
-                if ($cover_note) $day_title .= ' · ' . $cover_note;
-              ?>
+              <?php for ($n = 0; $n < 42; $n++): $d = $grid->modify('+' . $n . ' days')->format('Y-m-d'); $is_in = substr($d,0,7) === $start->format('Y-m'); ?>
                 <?php if (!$is_in): ?><span class="ar-mute"><?= (int)substr($d,-2) ?></span>
-                <?php else: ?><a class="<?= $before ? 'ar-before' : ($cell ? $kind_class($cell) : 'ar-unplanned') ?> <?= $d === $today ? 'ar-today' : '' ?>" href="<?= $e($link(array('view' => 'month','month' => $m))) ?>#day-<?= $d ?>" title="<?= $e($day_title) ?>"><?= (int)substr($d,-2) ?><?= $cell && ($cell['extra'] || $cell['replacement'] || $cover_note) ? '•' : '' ?><?php if ($cover_note): ?><span class="sr-only"> · <?= $e($cover_note) ?></span><?php endif; ?></a><?php endif; ?>
+                <?php else:
+                  $cell = $work[$d] ?? NULL;
+                  $before = $chosen->join_date && $d < $chosen->join_date;
+                  $class = $kind_class($cell, $before);
+                  $code = $calendar_keys[$class][0] ?? '';
+                  $note = $cover_note = '';
+                  if (!$before && $cell) {
+                      if ($cell['extra']) $note = ' · authorised extra work';
+                      elseif ($cell['replacement']) $note = ' · replacement Off for ' . $cell['replacement']->work_date;
+                      if (!empty($cell['covering'])) $cover_note = $cell['covering']->cover_mode === 'OffCallIn'
+                          ? 'Cover duty · authorised Off call-in' : 'Cover duty · on-shift';
+                      elseif (!empty($cell['covered_by'])) $cover_note = 'Cover arranged';
+                      elseif ($is_planner && $published && $d >= $today && $cell['kind'] === 'Leave'
+                          && $cell['leave_type'] === 'Sick Leave' && $cell['base_kind'] === 'Shift')
+                          $cover_note = 'Needs sick Shift cover';
+                  }
+                  if ($cover_note) $note .= ' · ' . $cover_note;
+                  $description = $e($d . ': ' . $label($cell, $class) . $note);
+                ?>
+                  <a class="<?= $class ?><?= $d === $today ? ' ar-today' : '' ?>" href="<?= $e($link(array('view' => 'month','month' => $m))) ?>#day-<?= $d ?>" title="<?= $description ?>" aria-label="<?= $description ?>"><?= (int)substr($d,-2) ?><?php if ($code): ?><small class="ar-mini-code" aria-hidden="true"><?= $code ?></small><?php endif; ?><?php if ($note): ?><i class="ar-mini-exception" aria-hidden="true"></i><?php endif; ?></a>
+                <?php endif; ?>
               <?php endfor; ?>
             </div></article>
         <?php endfor; ?>
@@ -291,15 +335,15 @@ $first_day = max($year . '-01-01', $today);
               <a class="ar-week-link" href="<?= site_url('team/shift_roster?week=' . $wk . '&q=' . rawurlencode($chosen->employee_id)) ?>" title="Open week starting <?= $wk ?>">W<?= date('W', strtotime($wk)) ?> ↗</a>
               <?php for ($n = 0; $n < 7; $n++): $d = $grid_start->modify('+' . ($w * 7 + $n) . ' days')->format('Y-m-d');
                 $inside = substr($d,0,7) === $month_start->format('Y-m');
-                $cell = isset($work[$d]) ? $work[$d] : NULL;
+                $cell = $inside ? ($work[$d] ?? NULL) : NULL;
                 $before = $chosen->join_date && $d < $chosen->join_date;
-                $class = $before ? 'ar-before' : ($cell ? $kind_class($cell) : 'ar-unplanned');
-                $sh = $cell && $cell['kind'] === 'Shift' && isset($shifts_by_id[$cell['shift_id']]) ? $shifts_by_id[$cell['shift_id']] : NULL;
+                $class = $inside ? $kind_class($cell, $before) : 'ar-outside';
+                $sh = !$before && $cell && $cell['kind'] === 'Shift' ? ($shifts_by_id[$cell['shift_id']] ?? NULL) : NULL;
                 $extra = $cell ? $cell['extra'] : NULL;
                 $replacement = $cell ? $cell['replacement'] : NULL;
               ?>
-              <div id="day-<?= $d ?>" class="ar-day <?= $inside ? $class : 'ar-outside' ?> <?= $d === $today ? 'ar-today' : '' ?>"><span class="ar-day-num"><?= date('j', strtotime($d)) ?> <?= !$inside ? date('M',strtotime($d)) : '' ?></span>
-                <?php if ($inside): ?><span class="ar-day-state"><?= $e($before ? 'Before joining' : ($cell ? $label($cell) : 'Needs plan')) ?></span>
+              <div id="day-<?= $d ?>" class="ar-day <?= $class ?><?= $d === $today ? ' ar-today' : '' ?>"><span class="ar-day-num"><?= date('j', strtotime($d)) ?> <?= !$inside ? date('M',strtotime($d)) : '' ?></span>
+                <?php if ($inside): ?><span class="ar-day-state"><?= $e($label($cell, $class)) ?></span>
                   <?php if ($sh): ?><small><?= substr($sh->start_time,0,5) ?>–<?= substr($sh->end_time,0,5) ?></small><?php endif; ?>
                   <?php if ($extra && !$before): ?><small><strong>Off · extra work <?= $extra->status === 'Confirmed' ? 'confirmed' : 'planned' ?></strong><br><?= isset($shifts_by_id[(int)$extra->shift_id]) ? $e($shifts_by_id[(int)$extra->shift_id]->name) : '' ?></small><?php endif; ?>
                   <?php if ($replacement && !$before): ?><small><strong>Replacement Off</strong><br>For work on <?= $e($replacement->work_date) ?> · <?= $e($replacement->settlement) ?></small><?php endif; ?>

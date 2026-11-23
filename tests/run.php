@@ -934,6 +934,84 @@ check('Annual projection: a publication timestamp in the future never exposes ba
     !$annualPlan->is_published('2026-03-02')
     && $annualPlan->days('2026-03-02', '2026-03-02', array(12))[12]['2026-03-02']['kind'] === 'Unplanned');
 
+$renderAnnualCalendar = function ($calendar_view) {
+    $year = 2027;
+    $month = 1;
+    $ready = TRUE;
+    $can_edit = $is_planner = FALSE;
+    $year_row = (object)array('status' => 'Published');
+    $chosen = (object)array('id' => 57, 'first_name' => 'Test', 'last_name' => 'Worker',
+        'employee_id' => 'EMP57', 'position' => 'Technician', 'join_date' => '2027-01-02');
+    $shifts = array(
+        (object)array('id' => 41, 'name' => 'Office', 'start_time' => '08:00:00', 'end_time' => '17:00:00'),
+        (object)array('id' => 78, 'name' => 'Crew B & relief', 'start_time' => '18:00:00', 'end_time' => '06:00:00'),
+        (object)array('id' => 84, 'name' => 'Night Shift', 'start_time' => '00:00:00', 'end_time' => '06:00:00'),
+        (object)array('id' => 85, 'name' => 'Invalid hours', 'start_time' => '06:00', 'end_time' => '06:00:00'),
+    );
+    $cell = function ($kind, $sid = 0, $details = array()) {
+        return $details + array('kind' => $kind, 'base_kind' => $kind, 'shift_id' => $sid, 'leave_type' => '',
+            'extra' => NULL, 'replacement' => NULL, 'covering' => NULL, 'covered_by' => NULL);
+    };
+    $year_days = array(57 => array(
+        '2027-01-01' => $cell('Shift', 41), // Before this worker joined.
+        '2027-01-02' => $cell('Shift', 41),
+        '2027-01-03' => $cell('Shift', 78, array('covering' => (object)array('cover_mode' => 'OnShift'))),
+        '2027-01-04' => $cell('Off'),
+        '2027-01-05' => $cell('Off', 0, array('extra' => (object)array('shift_id' => 78, 'status' => 'Planned'),
+            'covering' => (object)array('cover_mode' => 'OffCallIn'))),
+        '2027-01-06' => $cell('Off', 0, array('replacement' => (object)array('work_date' => '2027-01-05', 'settlement' => 'Scheduled'))),
+        '2027-01-07' => $cell('Leave', 0, array('leave_type' => 'Annual Leave')),
+        '2027-01-08' => $cell('Holiday'),
+        '2027-01-09' => $cell('Shift', 999), // Missing definition must not look like Off or a known shift.
+        '2027-01-10' => $cell('Shift', 84),
+        '2027-01-11' => $cell('Shift', 85),
+        '2027-01-13' => $cell('Leave', 0, array('leave_type' => 'Sick Leave', 'base_kind' => 'Shift',
+            'covered_by' => (object)array('cover_user_id' => 58))),
+    ));
+    $leaves = $extras = $leave_balance = array();
+    ob_start();
+    include APPPATH . 'views/team/annual_roster.php';
+    return ob_get_clean();
+};
+$annualYearHtml = $renderAnnualCalendar('year');
+$annualMonthHtml = $renderAnnualCalendar('month');
+foreach (array(
+    '01' => array('ar-before', '', 'Before joining'),
+    '02' => array('ar-shift-day', 'D', 'Office · Day shift'),
+    '03' => array('ar-shift-night', 'N', 'Crew B &amp; relief · Night shift', ' · Cover duty · on-shift', 'Covering team Shift</strong> · on-shift duties'),
+    '04' => array('ar-off', 'O', 'Off'),
+    '05' => array('ar-off', 'O', 'Off', ' · authorised extra work · Cover duty · authorised Off call-in', 'Covering team Shift</strong> · authorised call-in'),
+    '06' => array('ar-off', 'O', 'Off', ' · replacement Off for 2027-01-05', '<strong>Replacement Off</strong>'),
+    '07' => array('ar-leave', '', 'Annual Leave'),
+    '08' => array('ar-holiday', '', 'Holiday'),
+    '09' => array('ar-shift', '', 'Shift'),
+    '10' => array('ar-shift-night', 'N', 'Night Shift'),
+    '11' => array('ar-shift', '', 'Invalid hours'),
+    '12' => array('ar-unplanned', '', 'Needs plan'),
+    '13' => array('ar-leave', '', 'Sick Leave', ' · Cover arranged', '<strong>Cover arranged</strong>'),
+) as $day => $case) {
+    list($class, $code, $label) = $case;
+    $date = '2027-01-' . $day;
+    $note = $case[3] ?? '';
+    $month_note = $case[4] ?? '';
+    $accessible = $date . ': ' . $label . $note;
+    check('Annual calendar year: ' . $accessible,
+        preg_match('~<a class="' . $class . '(?: ar-today)?" href="[^"]*#day-' . $date . '"[^>]*>(.*?)</a>~', $annualYearHtml, $match)
+        && strpos($match[0], 'aria-label="' . $accessible . '"') !== FALSE
+        && $match[1] === (string)(int)$day . ($code ? '<small class="ar-mini-code" aria-hidden="true">' . $code . '</small>' : '')
+            . ($note ? '<i class="ar-mini-exception" aria-hidden="true"></i>' : ''));
+    check('Annual calendar month: ' . $date . ' ' . $label,
+        preg_match('~<div id="day-' . $date . '" class="ar-day ' . $class . '(?: ar-today)?">.*?</div>~s', $annualMonthHtml, $match)
+        && strpos($match[0], '<span class="ar-day-state">' . $label . '</span>') !== FALSE
+        && ($month_note === '' || strpos($match[0], $month_note) !== FALSE));
+}
+foreach (array('year' => $annualYearHtml, 'month' => $annualMonthHtml) as $mode => $calendarHtml) {
+    check('Annual calendar ' . $mode . ': legend names and keys the three main states',
+        strpos($calendarHtml, 'class="ar-key ar-shift-day" aria-hidden="true">D</i>Day shift') !== FALSE
+        && strpos($calendarHtml, 'class="ar-key ar-shift-night" aria-hidden="true">N</i>Night shift') !== FALSE
+        && strpos($calendarHtml, 'class="ar-key ar-off" aria-hidden="true">O</i>Off (unavailable)') !== FALSE);
+}
+
 class WmsSpyDb {
     public $queries = 0;
     public $users = array();
